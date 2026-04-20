@@ -449,7 +449,7 @@ function OceanJobGenerationMaster() {
               <Box px={10} py={5}>
                 <UnstyledButton onClick={() => handleView(row.original)}>
                   <Group gap={"sm"}>
-                    <IconEye size={16} style={{ color: "#105476" }} />
+                    <IconEye size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">View</Text>
                   </Group>
                 </UnstyledButton>
@@ -458,7 +458,7 @@ function OceanJobGenerationMaster() {
               <Box px={10} py={5}>
                 <UnstyledButton onClick={() => handleEdit(row.original)}>
                   <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <IconEdit size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">Edit</Text>
                   </Group>
                 </UnstyledButton>
@@ -647,7 +647,7 @@ function OceanJobGenerationMaster() {
                 width: "248px",
                 height: "36px",
                 border: "1px solid #D0D1D4",
-                "&:focus": { border: "1px solid #105476" },
+                "&:focus": { border: "1px solid #2563EB" },
               },
             }}
           />
@@ -660,10 +660,10 @@ function OceanJobGenerationMaster() {
               root: {
                 borderRadius: "4px",
                 backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                color: showFilters ? "#105476" : "#737780",
+                border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
+                color: showFilters ? "#2563EB" : "#737780",
                 "&:active": {
-                  border: "1px solid #105476",
+                  border: "1px solid #2563EB",
                   color: "#FFFFFF",
                 },
               },
@@ -675,17 +675,17 @@ function OceanJobGenerationMaster() {
             variant="filled"
             leftSection={<IconPlus size={14} />}
             size="sm"
-            color="#105476"
+            color="#2563EB"
             styles={{
               root: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
                 borderRadius: "4px",
                 color: "#FFFFFF",
                 fontSize: "14px",
                 fontFamily: "Inter",
                 fontstyle: "semibold",
                 "&:hover": {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                 },
               },
             }}
@@ -914,7 +914,7 @@ function OceanJobGenerationMaster() {
               disabled={isLoading}
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -935,7 +935,7 @@ function OceanJobGenerationMaster() {
       {isLoading ? (
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
             <Text c="dimmed">Loading ocean job data...</Text>
           </Stack>
         </Center>

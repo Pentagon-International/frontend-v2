@@ -489,7 +489,7 @@ function ExportShipmentMaster() {
       //             }
       //           >
       //             <Group gap={"sm"}>
-      //               <IconEdit size={16} style={{ color: "#105476" }} />
+      //               <IconEdit size={16} style={{ color: "#2563EB" }} />
       //               <Text size="sm">Edit</Text>
       //             </Group>
       //           </UnstyledButton>
@@ -594,7 +594,7 @@ function ExportShipmentMaster() {
       {showMasterTable && (
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-            <Text size="md" fw={600} c="#105476">
+            <Text size="md" fw={600} c="#2563EB">
               Export Booking Lists
             </Text>
 
@@ -612,7 +612,7 @@ function ExportShipmentMaster() {
                 variant={showFilters ? "filled" : "outline"}
                 leftSection={<IconFilter size={16} />}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
                 onClick={() => setShowFilters(!showFilters)}
               >
                 Filters
@@ -621,7 +621,7 @@ function ExportShipmentMaster() {
                 variant="filled"
                 leftSection={<IconPlus size={14} />}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
                 onClick={() => navigate("./create")}
               >
                 Create New
@@ -640,8 +640,8 @@ function ExportShipmentMaster() {
             >
               <Group justify="space-between" align="center">
                 <Group align="center" gap="xs">
-                  <IconFilter size={16} color="#105476" />
-                  <Text size="sm" fw={500} c="#105476">
+                  <IconFilter size={16} color="#2563EB" />
+                  <Text size="sm" fw={500} c="#2563EB">
                     Filters
                   </Text>
                 </Group>
@@ -765,7 +765,7 @@ function ExportShipmentMaster() {
                 <Button
                   size="xs"
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   leftSection={<IconFilterOff size={14} />}
                   onClick={clearAllFilters}
                 >
@@ -774,7 +774,7 @@ function ExportShipmentMaster() {
                 <Button
                   size="xs"
                   variant="filled"
-                  color="#105476"
+                  color="#2563EB"
                   leftSection={
                     isDataLoading ? (
                       <Loader size={14} />
@@ -795,7 +795,7 @@ function ExportShipmentMaster() {
           {isDataLoading ? (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Loader size="lg" color="#105476" />
+                <Loader size="lg" color="#2563EB" />
                 <Text c="dimmed">Loading export bookings...</Text>
               </Stack>
             </Center>

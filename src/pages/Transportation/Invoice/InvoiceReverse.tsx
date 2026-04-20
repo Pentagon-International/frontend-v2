@@ -1542,8 +1542,8 @@ function InvoiceReverse() {
     return (
       <Box p="md">
         <Stack align="center" justify="center" py="xl" gap="md">
-          <Loader size="lg" color="#105476" />
-          <Text size="sm" c="#105476" fw={500}>
+          <Loader size="lg" color="#2563EB" />
+          <Text size="sm" c="#2563EB" fw={500}>
             Loading invoice data...
           </Text>
         </Stack>
@@ -1556,12 +1556,12 @@ function InvoiceReverse() {
       <Box p="md">
         <Stack gap="md">
           <Group justify="space-between">
-            <Text size="xl" fw={600} c="#105476">
+            <Text size="xl" fw={600} c="#2563EB">
               {reversalPageTitle}
             </Text>
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(-1)}
             >
@@ -1591,8 +1591,8 @@ function InvoiceReverse() {
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text size="sm" c="#105476" fw={500}>
+            <Loader size="lg" color="#2563EB" />
+            <Text size="sm" c="#2563EB" fw={500}>
               {isPosting
                 ? "Posting..."
                 : saveResponse?.id
@@ -1604,7 +1604,7 @@ function InvoiceReverse() {
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
+          <Text size="xl" fw={600} c="#2563EB">
             {reversalPageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -1619,7 +1619,7 @@ function InvoiceReverse() {
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {saveResponse.document_no || documentNo || "—"}
@@ -1637,7 +1637,7 @@ function InvoiceReverse() {
                         ? "gray"
                         : saveResponse.status?.toUpperCase() === "POSTED"
                           ? "green"
-                          : "#105476"
+                          : "#2563EB"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -1649,14 +1649,14 @@ function InvoiceReverse() {
             {/* {documentNo && !saveResponse && (
               <Group gap="xs" wrap="nowrap">
                 <Text size="sm" fw={500} c="dimmed">Original Document No</Text>
-                <Badge size="sm" variant="light" color="#105476" styles={{ root: { textTransform: "none" } }}>
+                <Badge size="sm" variant="light" color="#2563EB" styles={{ root: { textTransform: "none" } }}>
                   {documentNo}
                 </Badge>
               </Group>
             )} */}
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(-1)}
             >
@@ -1898,7 +1898,7 @@ function InvoiceReverse() {
           <Box mt="md">
             <Tabs
               variant="default"
-              color="#105476"
+              color="#2563EB"
               value={chargesTabActive}
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
@@ -1921,7 +1921,7 @@ function InvoiceReverse() {
                       zIndex: 100,
                       backgroundColor: "white",
                       fontWeight: 600,
-                      color: "#105476",
+                      color: "#2563EB",
                     }}
                   >
                     {isAgentInvoice && (
@@ -2303,7 +2303,7 @@ function InvoiceReverse() {
                             gstRatesLoadingByIndex[index] &&
                             (!charge.tax_code ||
                               charge.tax_code.trim() === "") ? (
-                              <Loader size="xs" color="#105476" />
+                              <Loader size="xs" color="#2563EB" />
                             ) : null
                           }
                         />
@@ -2352,7 +2352,7 @@ function InvoiceReverse() {
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
                                 display === "" ? (
-                                <Loader size="xs" color="#105476" />
+                                <Loader size="xs" color="#2563EB" />
                               ) : null;
                             })()}
                             styles={{
@@ -2392,7 +2392,7 @@ function InvoiceReverse() {
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
                                 display === "" ? (
-                                <Loader size="xs" color="#105476" />
+                                <Loader size="xs" color="#2563EB" />
                               ) : null;
                             })()}
                             styles={{
@@ -2432,7 +2432,7 @@ function InvoiceReverse() {
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
                                 display === "" ? (
-                                <Loader size="xs" color="#105476" />
+                                <Loader size="xs" color="#2563EB" />
                               ) : null;
                             })()}
                             styles={{
@@ -2498,7 +2498,7 @@ function InvoiceReverse() {
                                 px={12}
                                 size="sm"
                                 variant="light"
-                                color="#105476"
+                                color="#2563EB"
                                 onClick={() => {
                                   const newCurrency = form.values.currency || "";
                                   form.insertListItem("charges", {
@@ -2542,7 +2542,7 @@ function InvoiceReverse() {
                         <Text size="sm" fw={500} c="dimmed" mb={4}>
                           Local Amount Total
                         </Text>
-                        <Text size="lg" fw={600} c="#105476">
+                        <Text size="lg" fw={600} c="#2563EB">
                           {form.values.charges
                             .reduce(
                               (sum, c) => sum + (c.amount_in_local ?? 0),
@@ -2557,7 +2557,7 @@ function InvoiceReverse() {
                         <Text size="sm" fw={500} c="dimmed" mb={4}>
                           IGST Total
                         </Text>
-                        <Text size="lg" fw={600} c="#105476">
+                        <Text size="lg" fw={600} c="#2563EB">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.igst;
@@ -2578,7 +2578,7 @@ function InvoiceReverse() {
                         <Text size="sm" fw={500} c="dimmed" mb={4}>
                           CGST Total
                         </Text>
-                        <Text size="lg" fw={600} c="#105476">
+                        <Text size="lg" fw={600} c="#2563EB">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.cgst;
@@ -2599,7 +2599,7 @@ function InvoiceReverse() {
                         <Text size="sm" fw={500} c="dimmed" mb={4}>
                           SGST Total
                         </Text>
-                        <Text size="lg" fw={600} c="#105476">
+                        <Text size="lg" fw={600} c="#2563EB">
                           {form.values.charges
                             .reduce((sum, c, idx) => {
                               const rate = gstRatesByChargeIndex[idx]?.sgst;
@@ -2623,7 +2623,7 @@ function InvoiceReverse() {
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
-                      <Loader size="md" color="#105476" />
+                      <Loader size="md" color="#2563EB" />
                       <Text size="sm" c="dimmed">
                         Loading GST breakup...
                       </Text>
@@ -2704,7 +2704,7 @@ function InvoiceReverse() {
                                 style={{
                                   fontSize: "13px",
                                   fontWeight: 600,
-                                  color: "#105476",
+                                  color: "#2563EB",
                                 }}
                               >
                                 Total:
@@ -2713,7 +2713,7 @@ function InvoiceReverse() {
                                 style={{
                                   fontSize: "13px",
                                   fontWeight: 600,
-                                  color: "#105476",
+                                  color: "#2563EB",
                                 }}
                               >
                                 {gstBreakup.total ?? "0.00"}
@@ -2746,7 +2746,7 @@ function InvoiceReverse() {
           <Group justify="flex-end" mt="xl">
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate(-1)}
             >
               Cancel
@@ -2755,7 +2755,7 @@ function InvoiceReverse() {
               <>
                 <Button
                   type="submit"
-                  color="#105476"
+                  color="#2563EB"
                   rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
                 >

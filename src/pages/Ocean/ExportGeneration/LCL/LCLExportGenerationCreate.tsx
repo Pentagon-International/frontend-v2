@@ -149,7 +149,7 @@ function LCLExportGenerationCreate() {
   return (
     <Container size="xl" py="md">
       <Stack gap="lg">
-        <Text size="xl" fw={600} c="#105476" mb="lg">
+        <Text size="xl" fw={600} c="#2563EB" mb="lg">
           Create LCL Export Generation{" "}
         </Text>
 

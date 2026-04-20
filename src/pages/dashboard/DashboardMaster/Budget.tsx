@@ -294,7 +294,7 @@ const Budget = ({
           // barMinHeight: 20,
 
           itemStyle: {
-            color: "#105476",
+            color: "#2563EB",
             borderRadius: [4, 4, 0, 0],
           },
           emphasis: {
@@ -369,7 +369,7 @@ const Budget = ({
         </Group>
         <Text
           size="sm"
-          c="#105476"
+          c="#2563EB"
           style={{
             textDecoration: "underline",
             cursor: "pointer",
@@ -452,7 +452,7 @@ const Budget = ({
       >
         {isLoadingBudget ? (
           <Center h={300}>
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
           </Center>
         ) : (
           <ReactECharts

@@ -365,7 +365,7 @@ function AirImportBookingCreate() {
             zIndex: 15,
           }}
         >
-          <Loader color="#105476" size="lg" />
+          <Loader color="#2563EB" size="lg" />
         </Center>
       )}
 
@@ -404,12 +404,12 @@ function AirImportBookingCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#105476"
+                c="#2563EB"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#105476",
+                  color: "#2563EB",
                   textAlign: "center",
                 }}
               >
@@ -439,7 +439,7 @@ function AirImportBookingCreate() {
                       active > 0
                         ? "none"
                         : active === 0
-                          ? "2px solid #105476"
+                          ? "2px solid #2563EB"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -450,7 +450,7 @@ function AirImportBookingCreate() {
                       active > 0
                         ? "white"
                         : active === 0
-                          ? "#105476"
+                          ? "#2563EB"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -459,19 +459,19 @@ function AirImportBookingCreate() {
                   {active > 0 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconUser size={20} color="#105476" fill="#E6F2F8" />
+                    <IconUser size={20} color="#2563EB" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
                   size="sm"
                   fw={400}
-                  c="#105476"
+                  c="#2563EB"
                   style={{
                     lineHeight: 1.3,
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#105476",
+                    color: "#2563EB",
                   }}
                 >
                   Import Booking
@@ -520,7 +520,7 @@ function AirImportBookingCreate() {
                       active > 1
                         ? "none"
                         : active === 1
-                          ? "2px solid #105476"
+                          ? "2px solid #2563EB"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -531,7 +531,7 @@ function AirImportBookingCreate() {
                       active > 1
                         ? "white"
                         : active === 1
-                          ? "#105476"
+                          ? "#2563EB"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -542,7 +542,7 @@ function AirImportBookingCreate() {
                   ) : (
                     <IconTruckDelivery
                       size={20}
-                      color="#105476"
+                      color="#2563EB"
                       fill="#E6F2F8"
                     />
                   )}
@@ -556,7 +556,7 @@ function AirImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#105476",
+                    color: "#2563EB",
                   }}
                 >
                   Party Details
@@ -605,7 +605,7 @@ function AirImportBookingCreate() {
                       active > 2
                         ? "none"
                         : active === 2
-                          ? "2px solid #105476"
+                          ? "2px solid #2563EB"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -616,7 +616,7 @@ function AirImportBookingCreate() {
                       active > 2
                         ? "white"
                         : active === 2
-                          ? "#105476"
+                          ? "#2563EB"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -625,7 +625,7 @@ function AirImportBookingCreate() {
                   {active > 2 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconPackage size={20} color="#105476" fill="#E6F2F8" />
+                    <IconPackage size={20} color="#2563EB" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
@@ -637,7 +637,7 @@ function AirImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#105476",
+                    color: "#2563EB",
                   }}
                 >
                   Cargo Details
@@ -686,7 +686,7 @@ function AirImportBookingCreate() {
                       active > 3
                         ? "none"
                         : active === 3
-                          ? "2px solid #105476"
+                          ? "2px solid #2563EB"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -697,7 +697,7 @@ function AirImportBookingCreate() {
                       active > 3
                         ? "white"
                         : active === 3
-                          ? "#105476"
+                          ? "#2563EB"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -706,7 +706,7 @@ function AirImportBookingCreate() {
                   {active > 3 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconMapPin size={20} color="#105476" fill="#E6F2F8" />
+                    <IconMapPin size={20} color="#2563EB" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
@@ -718,7 +718,7 @@ function AirImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#105476",
+                    color: "#2563EB",
                   }}
                 >
                   Pickup/Delivery
@@ -767,7 +767,7 @@ function AirImportBookingCreate() {
                       active > 4
                         ? "none"
                         : active === 4
-                          ? "2px solid #105476"
+                          ? "2px solid #2563EB"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -778,7 +778,7 @@ function AirImportBookingCreate() {
                       active > 4
                         ? "white"
                         : active === 4
-                          ? "#105476"
+                          ? "#2563EB"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -789,7 +789,7 @@ function AirImportBookingCreate() {
                   ) : (
                     <IconCurrencyDollar
                       size={20}
-                      color="#105476"
+                      color="#2563EB"
                       fill="#E6F2F8"
                     />
                   )}
@@ -803,7 +803,7 @@ function AirImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#105476",
+                    color: "#2563EB",
                   }}
                 >
                   Rate Details

@@ -349,7 +349,7 @@ const BarChart = ({
     return (
       <Box style={{ height: typeof height === "number" ? `${height}px` : height }}>
         <Center h="100%">
-          <Loader size="lg" color="#105476" />
+          <Loader size="lg" color="#2563EB" />
         </Center>
       </Box>
     );

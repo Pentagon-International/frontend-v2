@@ -160,7 +160,7 @@ const Navbar = ({
                       e.stopPropagation();
                       toggle();
                     }}
-                    style={{ position: "absolute", right: 0, color: "#105476" }}
+                    style={{ position: "absolute", right: 0, color: "#5A8AB0" }}
                     size={24}
                   />
                 </>
@@ -179,7 +179,7 @@ const Navbar = ({
                       e.stopPropagation();
                       toggle();
                     }}
-                    style={{ color: "#105476" }}
+                    style={{ color: "#5A8AB0" }}
                     size={24}
                   />
                 </>
@@ -209,7 +209,7 @@ const Navbar = ({
               {opened ? (
                 <SectionTitle title="Core" />
               ) : (
-                <Divider mb="xs" color="#D5D5D5" size="sm" />
+                <Divider mb="xs" color="#1A2D42" size="sm" />
               )}
               <SimpleNavLink
                 label="Dashboard"

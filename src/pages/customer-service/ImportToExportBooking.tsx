@@ -260,7 +260,7 @@ function ImportToExportBooking() {
                   }}
                 >
                   <Group gap={"sm"}>
-                    <IconCirclePlus size={16} style={{ color: "#105476" }} />
+                    <IconCirclePlus size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">Create Export Booking</Text>
                   </Group>
                 </UnstyledButton>
@@ -394,7 +394,7 @@ function ImportToExportBooking() {
     return (
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="center" align="center" style={{ minHeight: "200px" }}>
-          <Loader size="md" color="#105476" />
+          <Loader size="md" color="#2563EB" />
           <Text size="sm" c="dimmed">
             Loading import-to-export bookings...
           </Text>
@@ -423,7 +423,7 @@ function ImportToExportBooking() {
         opened={confirmModalOpened}
         onClose={() => setConfirmModalOpened(false)}
         title={
-          <Text fw={600} size="lg" c="#105476">
+          <Text fw={600} size="lg" c="#2563EB">
             Confirm to Create Export Shipment
           </Text>
         }
@@ -434,7 +434,7 @@ function ImportToExportBooking() {
         styles={{
           header: {
             backgroundColor: "#f8f9fa",
-            borderBottom: "2px solid #105476",
+            borderBottom: "2px solid #2563EB",
             paddingBottom: "12px",
           },
           body: {
@@ -446,7 +446,7 @@ function ImportToExportBooking() {
           <Stack gap="lg">
             {/* Basic Information */}
             <Box>
-              <Text size="sm" fw={600} c="#105476" mb="xs">
+              <Text size="sm" fw={600} c="#2563EB" mb="xs">
                 Shipment Information
               </Text>
               <Divider mb="sm" />
@@ -459,7 +459,7 @@ function ImportToExportBooking() {
                     <Text
                       size="sm"
                       fw={600}
-                      c="#105476"
+                      c="#2563EB"
                       style={{
                         fontFamily: "monospace",
                         letterSpacing: "0.5px",
@@ -504,7 +504,7 @@ function ImportToExportBooking() {
 
             {/* Customer & Route Information */}
             <Box>
-              <Text size="sm" fw={600} c="#105476" mb="xs">
+              <Text size="sm" fw={600} c="#2563EB" mb="xs">
                 Customer & Route Details
               </Text>
               <Divider mb="sm" />
@@ -572,7 +572,7 @@ function ImportToExportBooking() {
               selectedBooking.forwarder_name ||
               selectedBooking.notify_customer_name) && (
               <Box>
-                <Text size="sm" fw={600} c="#105476" mb="xs">
+                <Text size="sm" fw={600} c="#2563EB" mb="xs">
                   Party Details
                 </Text>
                 <Divider mb="sm" />
@@ -657,7 +657,7 @@ function ImportToExportBooking() {
             {selectedBooking.cargo_details &&
               selectedBooking.cargo_details.length > 0 && (
                 <Box>
-                  <Text size="sm" fw={600} c="#105476" mb="xs">
+                  <Text size="sm" fw={600} c="#2563EB" mb="xs">
                     Cargo Details
                   </Text>
                   <Divider mb="sm" />
@@ -702,7 +702,7 @@ function ImportToExportBooking() {
             {(selectedBooking.pickup_location ||
               selectedBooking.delivery_location) && (
               <Box>
-                <Text size="sm" fw={600} c="#105476" mb="xs">
+                <Text size="sm" fw={600} c="#2563EB" mb="xs">
                   Pickup & Delivery Details
                 </Text>
                 <Divider mb="sm" />
@@ -782,7 +782,7 @@ function ImportToExportBooking() {
               </Button>
               <Button
                 variant="filled"
-                color="#105476"
+                color="#2563EB"
                 onClick={handleConfirmCreateExport}
               >
                 Confirm & Create Export
@@ -800,7 +800,7 @@ function ImportToExportBooking() {
         withBorder
       >
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#105476"}>
+          <Text size="md" fw={600} c={"#2563EB"}>
             List of Import to Export Bookings
           </Text>
 
@@ -815,7 +815,7 @@ function ImportToExportBooking() {
                 { label: "Completed", value: "completed" },
               ]}
               size="xs"
-              color="#105476"
+              color="#2563EB"
             />
           </Group>
         </Group>

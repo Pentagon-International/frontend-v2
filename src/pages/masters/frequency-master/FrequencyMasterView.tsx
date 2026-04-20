@@ -77,10 +77,10 @@ function FrequencyMasterView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -93,8 +93,8 @@ function FrequencyMasterView() {
             w={100}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
             variant="outline"
@@ -139,7 +139,7 @@ function FrequencyMasterView() {
                 w={120}
                 styles={{
                   root: {
-                    color: "#105476",
+                    color: "#2563EB",
                     borderColor: "red",
                   },
                 }}
@@ -163,7 +163,7 @@ function FrequencyMasterView() {
               <Group mt={10} gap={"lg"}>
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   size="xs"
                   onClick={close}
                 >
@@ -188,8 +188,8 @@ function FrequencyMasterView() {
             w={120}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
             variant="outline"

@@ -133,7 +133,7 @@ export default function CallModeMaster() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEyeSpark size={16} color="#105476" />
+                      <IconEyeSpark size={16} color="#2563EB" />
                       <Text size="sm">View</Text>
                     </Group>
                   </UnstyledButton>
@@ -148,7 +148,7 @@ export default function CallModeMaster() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEdit size={16} color="#105476" />
+                      <IconEdit size={16} color="#2563EB" />
                       <Text size="sm">Edit</Text>
                     </Group>
                   </UnstyledButton>
@@ -176,7 +176,7 @@ export default function CallModeMaster() {
                       Are you sure? Do you want to delete this?
                     </Text>
                     <Group mt={10} gap="lg">
-                      <Button variant="outline" color="#105476" size="xs">
+                      <Button variant="outline" color="#2563EB" size="xs">
                         Not now
                       </Button>
                       <Button
@@ -238,7 +238,7 @@ export default function CallModeMaster() {
           </Button>
           <Menu shadow="md" width={160}>
             <Menu.Target>
-              <Button variant="outline" rightSection={<IconChevronDown size={16} />} size="xs" color="#105476">
+              <Button variant="outline" rightSection={<IconChevronDown size={16} />} size="xs" color="#2563EB">
                 Download
               </Button>
             </Menu.Target>
@@ -248,11 +248,11 @@ export default function CallModeMaster() {
               <Menu.Item>PDF</Menu.Item>
             </Menu.Dropdown>
           </Menu>
-          <Button variant="outline" leftSection={<IconUpload size={16} />} size="xs" color="#105476">
+          <Button variant="outline" leftSection={<IconUpload size={16} />} size="xs" color="#2563EB">
             Bulk Upload
           </Button>
           <Button
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/master/callmode-master-new")}

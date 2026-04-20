@@ -1,93 +1,87 @@
 import { createTheme, rem } from "@mantine/core";
 
 export const defaultTheme = createTheme({
-  // autoContrast: true,
-  
-  // Responsive breakpoints
   breakpoints: {
-    xs: '36em',   // 576px - Mobile
-    sm: '48em',   // 768px - Large Mobile/Small Tablet
-    md: '62em',   // 992px - Tablet
-    lg: '75em',   // 1200px - Desktop
-    xl: '88em',   // 1408px - Large Desktop
+    xs: "36em",
+    sm: "48em",
+    md: "62em",
+    lg: "75em",
+    xl: "88em",
   },
-  
-  // Define your brand colors based on red shades
+
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+
   colors: {
     primaryBrand: [
-      "#ffe5e5", // Lightest shade
-      "#ffcccc",
-      "#105476",
-      "#ff6666",
-      "#ff3333", // Primary brand color
-      "#ff1a1a",
-      "#e60000",
-      "#cc0000",
-      "#b30000",
-      "#800000", // Darkest shade
+      "#EFF6FF",
+      "#DBEAFE",
+      "#BFDBFE",
+      "#93C5FD",
+      "#60A5FA",
+      "#3B82F6",
+      "#2563EB",
+      "#1D4ED8",
+      "#1E40AF",
+      "#1E3A8A",
     ],
     secondaryBrand: [
-      "#fff3e0", // Complementary color
-      "#ffe0b2",
-      "#ffcc80",
-      "#ffb74d",
-      "#ffa726",
-      "#ff9800",
-      "#fb8c00",
-      "#f57c00",
-      "#ef6c00",
-      "#e65100",
+      "#F0FDF4",
+      "#DCFCE7",
+      "#BBF7D0",
+      "#86EFAC",
+      "#4ADE80",
+      "#22C55E",
+      "#16A34A",
+      "#15803D",
+      "#166534",
+      "#14532D",
     ],
-    // Replace the default blue if needed
     blue: [
-      "#e3f2fd",
-      "#bbdefb",
-      "#90caf9",
-      "#64b5f6",
-      "#42a5f5",
-      "#2196f3",
-      "#1e88e5",
-      "#1976d2",
-      "#1565c0",
-      "#0d47a1",
+      "#EFF6FF",
+      "#DBEAFE",
+      "#BFDBFE",
+      "#93C5FD",
+      "#60A5FA",
+      "#3B82F6",
+      "#2563EB",
+      "#1D4ED8",
+      "#1E40AF",
+      "#1E3A8A",
     ],
     gray: [
-      '#f8f9fa', // 0
-      '#f1f3f5',
-      '#e9ecef',
-      '#dee2e6',
-      '#ced4da',
-      '#adb5bd',
-      '#868e96',
-      '#495057',
-      '#343a40',
-      '#212529', // 9
+      "#F8FAFC",
+      "#F1F5F9",
+      "#E2E8F0",
+      "#CBD5E1",
+      "#94A3B8",
+      "#64748B",
+      "#475569",
+      "#334155",
+      "#1E293B",
+      "#0F172A",
     ],
   },
 
-  // Customize the shadows for different elements
   shadows: {
-    sm: "0px 1px 2px rgba(0, 0, 0, 0.05)",
-    md: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-    xl: "0px 4px 8px rgba(0, 0, 0, 0.15)",
+    xs: "0 1px 2px rgba(15, 23, 42, 0.04)",
+    sm: "0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)",
+    md: "0 4px 6px rgba(15, 23, 42, 0.05), 0 2px 4px rgba(15, 23, 42, 0.06)",
+    lg: "0 10px 15px rgba(15, 23, 42, 0.06), 0 4px 6px rgba(15, 23, 42, 0.05)",
+    xl: "0 20px 25px rgba(15, 23, 42, 0.08), 0 10px 10px rgba(15, 23, 42, 0.04)",
   },
 
-  // Define font family and styles for headings and body text
   headings: {
-    // fontFamily: "Rozha One, serif", // Using Rozha One for headings
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     sizes: {
-      h1: { fontSize: rem(48), fontWeight: "700" },
-      h2: { fontSize: rem(40), fontWeight: "600" },
-      h3: { fontSize: rem(32), fontWeight: "500" },
-      h4: { fontSize: rem(28), fontWeight: "500" },
-      h5: { fontSize: rem(24), fontWeight: "400" },
-      h6: { fontSize: rem(20), fontWeight: "400" },
+      h1: { fontSize: rem(32), fontWeight: "700", lineHeight: "1.2" },
+      h2: { fontSize: rem(26), fontWeight: "600", lineHeight: "1.3" },
+      h3: { fontSize: rem(22), fontWeight: "600", lineHeight: "1.35" },
+      h4: { fontSize: rem(18), fontWeight: "600", lineHeight: "1.4" },
+      h5: { fontSize: rem(16), fontWeight: "500", lineHeight: "1.5" },
+      h6: { fontSize: rem(14), fontWeight: "500", lineHeight: "1.5" },
     },
   },
 
-  // fontFamily: "Questrial, sans-serif", // Using Questrial for body text
-
-  // Control the spacing and padding (e.g., for margins or layout spacing)
   spacing: {
     xs: rem(4),
     sm: rem(8),
@@ -96,25 +90,25 @@ export const defaultTheme = createTheme({
     xl: rem(32),
   },
 
-  // Customize radius for buttons or cards
   radius: {
+    xs: rem(2),
     sm: rem(4),
-    md: rem(8),
-    lg: rem(16),
-    xl: rem(24),
+    md: rem(6),
+    lg: rem(10),
+    xl: rem(16),
   },
 
-  // Control typography
   fontSizes: {
-    xs: rem(12),
-    sm: rem(14),
-    md: rem(16),
-    lg: rem(18),
-    xl: rem(20),
+    xs: rem(11),
+    sm: rem(13),
+    md: rem(14),
+    lg: rem(16),
+    xl: rem(18),
   },
 
-  // Other miscellaneous configurations for consistency
   other: {
-    primaryGradient: "linear-gradient(45deg, #ff3333 0%, #e60000 100%)",
+    primaryGradient: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+    sidebarBg: "#0D1B2E",
+    pageBg: "#F0F4F8",
   },
 });

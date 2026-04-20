@@ -17,6 +17,13 @@ interface CallEntryProps {
   setSelectedPeriod: (period: string) => void;
 }
 
+const kpiCardBase = {
+  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+  height: "85px",
+  flex: 1,
+  position: "relative" as const,
+};
+
 const CallEntry = ({
   callEntrySummary,
   isLoadingCallEntry,
@@ -26,32 +33,27 @@ const CallEntry = ({
     <Box style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       {isLoadingCallEntry ? (
         <Center h={200}>
-          <Loader size="lg" color="#105476" />
+          <Loader size="lg" color="#2563EB" />
         </Center>
       ) : (
-        <Stack gap="lg" w="100%" style={{ flex: 1, padding: "8px" }}>
-          {/* First Row - Today and Closed */}
-          <Group gap="lg" justify="space-between" w="100%">
+        <Stack gap="md" w="100%" style={{ flex: 1, padding: "4px" }}>
+          {/* Row 1 — Today & Closed */}
+          <Group gap="md" justify="space-between" w="100%">
             {/* Today */}
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
+                ...kpiCardBase,
+                background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)",
+                border: "1px solid #BFDBFE",
                 cursor: "pointer",
-                background:
-                  "linear-gradient(to right, #FFFFFF 0%, #EBF7FC 100%)",
-                border: "1px solid #EBF7FC",
-                transition: "all 0.3s ease",
-                height: "85px",
-                flex: 1,
-                position: "relative",
               }}
               onClick={() => handleCallEntryViewAll("today")}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(16, 84, 118, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(37, 99, 235, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
@@ -59,18 +61,13 @@ const CallEntry = ({
               }}
             >
               <Box style={{ position: "absolute", top: "12px", right: "12px" }}>
-                <IconCalendar size={24} color="#105476" />
+                <IconCalendar size={22} color="#2563EB" />
               </Box>
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Today
                 </Text>
-                <Text
-                  size="1.75rem"
-                  fw={700}
-                  c="#105476"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#2563EB", lineHeight: 1 }}>
                   {callEntrySummary?.total_today || 0}
                 </Text>
               </Stack>
@@ -78,24 +75,19 @@ const CallEntry = ({
 
             {/* Closed */}
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
+                ...kpiCardBase,
+                background: "linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)",
+                border: "1px solid #BBF7D0",
                 cursor: "pointer",
-                background:
-                  "linear-gradient(to right, #FFFFFF 0%, #ECFCEB 100%)",
-                border: "1px solid #ECFCEB",
-                transition: "all 0.3s ease",
-                height: "85px",
-                flex: 1,
-                position: "relative",
               }}
               onClick={() => handleCallEntryViewAll("closed")}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(48, 128, 40, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(22, 163, 74, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
@@ -103,46 +95,36 @@ const CallEntry = ({
               }}
             >
               <Box style={{ position: "absolute", top: "12px", right: "12px" }}>
-                <IconCalendarCheck size={24} color="#308028" />
+                <IconCalendarCheck size={22} color="#16A34A" />
               </Box>
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Closed
                 </Text>
-                <Text
-                  size="1.75rem"
-                  fw={700}
-                  c="#308028"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#16A34A", lineHeight: 1 }}>
                   {callEntrySummary?.total_closed || 0}
                 </Text>
               </Stack>
             </Card>
           </Group>
 
-          {/* Second Row - Upcoming and Overdue */}
-          <Group gap="lg" justify="space-between" w="100%">
+          {/* Row 2 — Upcoming & Overdue */}
+          <Group gap="md" justify="space-between" w="100%">
             {/* Upcoming */}
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
+                ...kpiCardBase,
+                background: "linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)",
+                border: "1px solid #FDE68A",
                 cursor: "pointer",
-                background:
-                  "linear-gradient(to right, #FFFFFF 0%, #FCF7EB 100%)",
-                border: "1px solid #FCF7EB",
-                transition: "all 0.3s ease",
-                height: "85px",
-                flex: 1,
-                position: "relative",
               }}
               onClick={() => handleCallEntryViewAll("upcoming")}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(181, 137, 27, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(217, 119, 6, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
@@ -150,18 +132,13 @@ const CallEntry = ({
               }}
             >
               <Box style={{ position: "absolute", top: "12px", right: "12px" }}>
-                <IconClock size={24} color="#B5891B" />
+                <IconClock size={22} color="#D97706" />
               </Box>
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Upcoming
                 </Text>
-                <Text
-                  size="1.75rem"
-                  fw={700}
-                  c="#B5891B"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#D97706", lineHeight: 1 }}>
                   {callEntrySummary?.total_upcoming || 0}
                 </Text>
               </Stack>
@@ -169,24 +146,19 @@ const CallEntry = ({
 
             {/* Overdue */}
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
+                ...kpiCardBase,
+                background: "linear-gradient(135deg, #FFF5F5 0%, #FEE2E2 100%)",
+                border: "1px solid #FECACA",
                 cursor: "pointer",
-                background:
-                  "linear-gradient(to right, #FFFFFF 0%, #FCEBED 100%)",
-                border: "1px solid #FCEBED",
-                transition: "all 0.3s ease",
-                height: "85px",
-                flex: 1,
-                position: "relative",
               }}
               onClick={() => handleCallEntryViewAll("overdue")}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(138, 0, 13, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(220, 38, 38, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
@@ -194,18 +166,13 @@ const CallEntry = ({
               }}
             >
               <Box style={{ position: "absolute", top: "12px", right: "12px" }}>
-                <IconAlertTriangle size={24} color="#8A000D" />
+                <IconAlertTriangle size={22} color="#DC2626" />
               </Box>
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="dimmed" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Overdue
                 </Text>
-                <Text
-                  size="1.75rem"
-                  fw={700}
-                  c="#8A000D"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#DC2626", lineHeight: 1 }}>
                   {callEntrySummary?.total_overdue || 0}
                 </Text>
               </Stack>

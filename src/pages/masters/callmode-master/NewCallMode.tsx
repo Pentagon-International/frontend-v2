@@ -92,11 +92,11 @@ function NewCallMode() {
         <Divider my="md" />
         <Flex gap="sm" justify="space-between" align="center" w="100%">
           <Button
-            c={"#105476"}
+            c={"#2563EB"}
             variant="outline"
             styles={{
               root: {
-                borderColor: "#105476",
+                borderColor: "#2563EB",
               },
             }}
             leftSection={<IconArrowLeft size={16} />}
@@ -107,10 +107,10 @@ function NewCallMode() {
           <Flex gap="md">
             <Button
               variant="outline"
-              c={"#105476"}
+              c={"#2563EB"}
               styles={{
                 root: {
-                  borderColor: "#105476",
+                  borderColor: "#2563EB",
                 },
               }}
               onClick={() => navigate("/master/call-mode")}
@@ -119,7 +119,7 @@ function NewCallMode() {
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Submit

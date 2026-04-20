@@ -1109,7 +1109,7 @@ function OceanJobGenerationCreate() {
 
   return (
     <Box px="md" py="md" w="100%">
-      <Text size="xl" fw={600} c="#105476" mb="lg">
+      <Text size="xl" fw={600} c="#2563EB" mb="lg">
         {mode === "view"
           ? "View Ocean Job Generation"
           : mode === "edit"
@@ -1120,7 +1120,7 @@ function OceanJobGenerationCreate() {
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
-        color="#105476"
+        color="#2563EB"
       >
         <Tabs.List
           mb="md"
@@ -1137,8 +1137,8 @@ function OceanJobGenerationCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -1151,8 +1151,8 @@ function OceanJobGenerationCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -1165,8 +1165,8 @@ function OceanJobGenerationCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -1179,8 +1179,8 @@ function OceanJobGenerationCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 3 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 3 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
             }}
@@ -1508,7 +1508,7 @@ function OceanJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => {
                   const returnPath =
@@ -1524,7 +1524,7 @@ function OceanJobGenerationCreate() {
                 <Button variant="default" onClick={() => setActive((c) => c - 1)} disabled={active === 0}>
                   Previous
                 </Button>
-                <Button onClick={handleNext} color="#105476">
+                <Button onClick={handleNext} color="#2563EB">
                   Next
                 </Button>
               </Group>
@@ -1534,34 +1534,34 @@ function OceanJobGenerationCreate() {
 
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="md" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#2563EB" mb="md">
               Equipments:
             </Text>
 
             {/* Header Row for Equipments */}
             <Grid mb="xs">
               <Grid.Col span={2.4}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Container Type
                 </Text>
               </Grid.Col>
               <Grid.Col span={2.4}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Container Number
                 </Text>
               </Grid.Col>
               <Grid.Col span={2.4}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Custom Seal Number
                 </Text>
               </Grid.Col>
               <Grid.Col span={2.4}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Actual Seal Number
                 </Text>
               </Grid.Col>
               <Grid.Col span={0.4}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Actions
                 </Text>
               </Grid.Col>
@@ -1636,7 +1636,7 @@ function OceanJobGenerationCreate() {
                         !isReadOnly && (
                           <Button
                             variant="light"
-                            color="#105476"
+                            color="#2563EB"
                             mt={4}
                             leftSection={<IconPlus size={16} />}
                             onClick={() => {
@@ -1677,7 +1677,7 @@ function OceanJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => {
                   const returnPath =
@@ -1693,7 +1693,7 @@ function OceanJobGenerationCreate() {
                 <Button variant="default" onClick={() => setActive((c) => c - 1)}>
                   Previous
                 </Button>
-                <Button onClick={handleNext} color="#105476">
+                <Button onClick={handleNext} color="#2563EB">
                   Next
                 </Button>
               </Group>
@@ -1703,7 +1703,7 @@ function OceanJobGenerationCreate() {
 
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="md" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#2563EB" mb="md">
               Routing Details
             </Text>
 
@@ -1713,59 +1713,59 @@ function OceanJobGenerationCreate() {
               return (
                 <Grid mb="xs">
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       Transport Type
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       From Port
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       To Port
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={hasAnySea ? 1 : 1.5}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       Carrier
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={hasAnySea ? 1 : 1.5}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       Transport No
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       ETD
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       ETA
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       ATD
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       ATA
                     </Text>
                   </Grid.Col>
                   {hasAnySea && (
                     <Grid.Col span={1}>
-                      <Text size="sm" fw={500} c="#105476">
+                      <Text size="sm" fw={500} c="#2563EB">
                         Vessel
                       </Text>
                     </Grid.Col>
                   )}
                   <Grid.Col span={2}>
-                    <Text size="sm" fw={500} c="#105476">
+                    <Text size="sm" fw={500} c="#2563EB">
                       Actions
                     </Text>
                   </Grid.Col>
@@ -1996,7 +1996,7 @@ function OceanJobGenerationCreate() {
                           {index === routingDetails.length - 1 && (
                             <Button
                               variant="light"
-                              color="#105476"
+                              color="#2563EB"
                               size="xs"
                               leftSection={<IconPlus size={14} />}
                               onClick={() => {
@@ -2047,7 +2047,7 @@ function OceanJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => {
                   const returnPath =
@@ -2063,7 +2063,7 @@ function OceanJobGenerationCreate() {
                 <Button variant="default" onClick={() => setActive((c) => c - 1)}>
                   Previous
                 </Button>
-                <Button onClick={handleNext} color="#105476">
+                <Button onClick={handleNext} color="#2563EB">
                   Next
                 </Button>
               </Group>
@@ -2074,7 +2074,7 @@ function OceanJobGenerationCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="md" fw={600} c="#105476">
+              <Text size="md" fw={600} c="#2563EB">
                 Select Export Bookings
               </Text>
               <Group gap="md">
@@ -2090,7 +2090,7 @@ function OceanJobGenerationCreate() {
             {isLoadingBookings ? (
               <Center py="xl">
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
+                  <Loader size="lg" color="#2563EB" />
                   <Text c="dimmed">Loading bookings...</Text>
                 </Stack>
               </Center>
@@ -2112,7 +2112,7 @@ function OceanJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => {
                   const returnPath =
@@ -2141,7 +2141,7 @@ function OceanJobGenerationCreate() {
                   {editMode && (
                     <Button
                       variant="outline"
-                      color="#105476"
+                      color="#2563EB"
                       onClick={handleGenerateJob}
                       loading={isGeneratingJob}
                       disabled={isGeneratingJob}
@@ -2153,7 +2153,7 @@ function OceanJobGenerationCreate() {
               ) : (
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   onClick={() => {
                     const returnPath =
                       serviceType === "LCL"

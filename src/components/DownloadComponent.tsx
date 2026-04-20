@@ -330,7 +330,7 @@ export const DownloadComponent = ({
         )
       }
       size="xs"
-      color="#105476"
+      color="#2563EB"
       onClick={handleDownload}
       loading={loading}
       disabled={loading}

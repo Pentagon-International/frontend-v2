@@ -103,10 +103,10 @@ function FollowUpMasterView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -120,8 +120,8 @@ function FollowUpMasterView() {
             leftSection={<IconEdit size={16} />}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
             onClick={() =>
@@ -187,7 +187,7 @@ function FollowUpMasterView() {
                 leftSection={<IconTrash size={16} />}
                 styles={{
                   root: {
-                    color: "#105476",
+                    color: "#2563EB",
                     borderColor: "red",
                   },
                 }}
@@ -210,7 +210,7 @@ function FollowUpMasterView() {
               <Group mt={10} gap={"lg"}>
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   size="xs"
                   onClick={close}
                 >
@@ -238,11 +238,11 @@ function FollowUpMasterView() {
             onClick={() => navigate("/master/follow-up")}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
-            c={"#105476"}
+            c={"#2563EB"}
           >
             Back
           </Button>

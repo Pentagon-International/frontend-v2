@@ -83,7 +83,7 @@ function ForgotPasswordForm() {
             radius={"md"}
             fullWidth
             mt="20px"
-            color="#105476"
+            color="#2563EB"
             size="md"
             style={{
               display: "flex",

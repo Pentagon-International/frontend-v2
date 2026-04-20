@@ -386,8 +386,8 @@ function BranchMasterNew() {
             onClick={() => navigate("/master/branch")}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
           >
@@ -399,8 +399,8 @@ function BranchMasterNew() {
               onClick={() => navigate("/master/branch")}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
             >
@@ -408,7 +408,7 @@ function BranchMasterNew() {
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Submit

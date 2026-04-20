@@ -154,7 +154,7 @@ export default function FreightEdit() {
           >
             Back
           </Button>
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#2563EB">
             {isViewMode ? "View Freight" : "Edit Freight"}
           </Text>
         </Group>
@@ -164,7 +164,7 @@ export default function FreightEdit() {
             leftSection={<IconSave size={16} />}
             onClick={handleSubmit}
             loading={isLoading}
-            color="#105476"
+            color="#2563EB"
           >
             Save Changes
           </Button>

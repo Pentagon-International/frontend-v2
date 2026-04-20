@@ -1286,7 +1286,7 @@ function CallEntry() {
                 whiteSpace: "normal",
                 padding: "5px 15px",
                 color: "#3f3f3fff",
-                border: "1px solid #105476",
+                border: "1px solid #2563EB",
                 boxShadow: "0 2px 10px rgba(0,0,0, 0.2)",
                 wordBreak: "break-word",
               }}
@@ -1345,7 +1345,7 @@ function CallEntry() {
         Cell: ({ row }) => (
           <Badge
             size="sm"
-            bg={row.original.status === "CLOSE" ? "#dc3545" : "#105476"}
+            bg={row.original.status === "CLOSE" ? "#dc3545" : "#2563EB"}
           >
             {row.original.status || "ACTIVE"}
           </Badge>
@@ -1421,7 +1421,7 @@ function CallEntry() {
                   }}
                 >
                   <Group gap={"sm"}>
-                    <IconFileText size={16} style={{ color: "#105476" }} />
+                    <IconFileText size={16} style={{ color: "#2563EB" }} />
                     <Text
                       size="sm"
                       c={row.original.status === "CLOSE" ? "dimmed" : ""}
@@ -1477,7 +1477,7 @@ function CallEntry() {
                       }}
                     >
                       <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <IconEdit size={16} style={{ color: "#2563EB" }} />
                         <Text
                           size="sm"
                           c={row.original.status === "CLOSE" ? "dimmed" : ""}
@@ -1707,7 +1707,7 @@ function CallEntry() {
                     height: "36px",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
-                      border: "1px solid #105476",
+                      border: "1px solid #2563EB",
                     },
                   },
                 }}
@@ -1723,9 +1723,9 @@ function CallEntry() {
                     borderRadius: "4px",
                     backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                     border: showFilters
-                      ? "1px solid #105476"
+                      ? "1px solid #2563EB"
                       : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
+                    color: showFilters ? "#2563EB" : "#737780",
                   },
                 }}
               >
@@ -1778,14 +1778,14 @@ function CallEntry() {
                 size="sm"
                 styles={{
                   root: {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                     borderRadius: "4px",
                     color: "#FFFFFF",
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
                     "&:hover": {
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                     },
                   },
                 }}
@@ -2090,8 +2090,8 @@ function CallEntry() {
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
-                    color: "#105476",
-                    borderColor: "#105476",
+                    color: "#2563EB",
+                    borderColor: "#2563EB",
                     "&:hover": {
                       backgroundColor: "#f8f9fa",
                     },
@@ -2107,13 +2107,13 @@ function CallEntry() {
                 variant="filled"
                 styles={{
                   root: {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
                     "&:hover": {
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                     },
                   },
                 }}
@@ -2133,7 +2133,7 @@ function CallEntry() {
         {isLoading ? (
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
+              <Loader size="lg" color="#2563EB" />
               <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                 Loading call entries...
               </Text>
@@ -2175,7 +2175,7 @@ function CallEntry() {
                   }}
                   variant="outline"
                   size="sm"
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Back to Dashboard
                 </Button>
@@ -2239,7 +2239,7 @@ function CallEntry() {
               Cancel
             </Button>
             <Button
-              color="#105476"
+              color="#2563EB"
               onClick={handleCloseCallEntryConfirm}
               disabled={!remark.trim() || isClosingCallEntry}
               loading={isClosingCallEntry}

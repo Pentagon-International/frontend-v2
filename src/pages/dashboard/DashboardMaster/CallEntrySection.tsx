@@ -35,27 +35,27 @@ const CallEntrySection = ({
   return (
     <Box
       style={{
-        border: "1px solid #F7F7F7",
-        borderRadius: "8px",
-        padding: "12px",
+        background: "#ffffff",
+        border: "1px solid #E2E8F0",
+        borderRadius: "10px",
+        padding: "16px",
         height: "100%",
         display: "flex",
         flexDirection: "column",
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)",
       }}
     >
       <Group justify="space-between" align="center" mb="md">
         <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
+          fw={600}
+          style={{ fontSize: "13.5px", color: "#1E293B", letterSpacing: 0.1 }}
         >
           Call Entry
         </Text>
         <Group gap="xs">
           <Text
             size="sm"
-            c="#105476"
+            c="#2563EB"
             style={{
               textDecoration: "underline",
               cursor: "pointer",

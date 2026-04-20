@@ -167,11 +167,11 @@ function NewPortMaster() {
           <Button
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
-            c={"#105476"}
+            c={"#2563EB"}
             variant="outline"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/port")}
@@ -181,11 +181,11 @@ function NewPortMaster() {
           <Flex gap={"md"}>
             <Button
               variant="outline"
-              c={"#105476"}
+              c={"#2563EB"}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
               onClick={() => navigate("/master/port")}
@@ -194,7 +194,7 @@ function NewPortMaster() {
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Submit

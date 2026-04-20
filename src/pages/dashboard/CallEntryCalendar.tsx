@@ -262,21 +262,21 @@ function CallEntryCalendar() {
           minHeight: viewMode === "weekly" ? 120 : 80,
           opacity: isCurrentMonth ? 1 : 0.5,
           backgroundColor: isToday ? "#f8f9fa" : "white",
-          border: isToday ? "2px solid #105476" : "1px solid #e9ecef",
+          border: isToday ? "2px solid #2563EB" : "1px solid #e9ecef",
         }}
       >
         <Flex justify="space-between" align="center" mb="xs">
           <Text
             size="sm"
             fw={isToday ? 600 : 400}
-            c={isToday ? "#105476" : "dimmed"}
+            c={isToday ? "#2563EB" : "dimmed"}
           >
             {displayText}
           </Text>
           <ActionIcon
             size="sm"
             variant="light"
-            color="#105476"
+            color="#2563EB"
             onClick={() => handleCreateEntry(date)}
           >
             <IconPlus size={18} />
@@ -294,7 +294,7 @@ function CallEntryCalendar() {
                 <Badge
                   size="xs"
                   variant="light"
-                  color="#105476"
+                  color="#2563EB"
                   style={{
                     cursor: "pointer",
                     maxWidth: "100%",
@@ -350,11 +350,11 @@ function CallEntryCalendar() {
                   navigate("/call-entry");
                 }
               }}
-              color="#105476"
+              color="#2563EB"
             >
               Back to List
             </Button>
-            <Text size="lg" fw={600} c="#105476">
+            <Text size="lg" fw={600} c="#2563EB">
               Call Entry Calendar
             </Text>
           </Group>
@@ -364,7 +364,7 @@ function CallEntryCalendar() {
               <Button
                 variant={viewMode === "weekly" ? "filled" : "outline"}
                 onClick={() => setViewMode("weekly")}
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconCalendar size={16} />}
               >
                 Weekly
@@ -372,7 +372,7 @@ function CallEntryCalendar() {
               <Button
                 variant={viewMode === "monthly" ? "filled" : "outline"}
                 onClick={() => setViewMode("monthly")}
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconCalendarEvent size={16} />}
               >
                 Monthly
@@ -406,7 +406,7 @@ function CallEntryCalendar() {
             <ActionIcon
               variant="outline"
               onClick={handlePrevious}
-              color="#105476"
+              color="#2563EB"
             >
               <IconChevronLeft size={18} />
             </ActionIcon>
@@ -417,7 +417,7 @@ function CallEntryCalendar() {
                     "MMMM YYYY"
                   )}
             </Text>
-            <ActionIcon variant="outline" onClick={handleNext} color="#105476">
+            <ActionIcon variant="outline" onClick={handleNext} color="#2563EB">
               <IconChevronRight size={18} />
             </ActionIcon>
           </Group>
@@ -439,7 +439,7 @@ function CallEntryCalendar() {
                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                     (day) => (
                       <Grid.Col key={day} span={12 / 7}>
-                        <Text ta="center" fw={600} c="#105476">
+                        <Text ta="center" fw={600} c="#2563EB">
                           {day}
                         </Text>
                       </Grid.Col>
@@ -498,7 +498,7 @@ function CallEntryCalendar() {
                   <Stack gap="xs">
                     <Group justify="space-between">
                       <Text fw={600}>{entry.customer_name}</Text>
-                      <Badge variant="light" color="#105476">
+                      <Badge variant="light" color="#2563EB">
                         {entry.call_mode_name}
                       </Badge>
                     </Group>

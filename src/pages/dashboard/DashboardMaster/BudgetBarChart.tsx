@@ -220,7 +220,7 @@ const BudgetBarChart = ({
           >
             Budget vs Actual
           </Text>
-          <Badge color="#105476">
+          <Badge color="#2563EB">
             {payloadPeriod.payloadStart}  {"  -  "} {payloadPeriod.payloadEnd}
           </Badge>
         </Group>
@@ -309,7 +309,7 @@ const BudgetBarChart = ({
       <Group justify="end" align="center" mb="sm" gap="xs">
         <Text
           size="sm"
-          c="#105476"
+          c="#2563EB"
           style={{
             textDecoration: "underline",
             cursor: "pointer",

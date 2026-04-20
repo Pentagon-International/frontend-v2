@@ -193,7 +193,7 @@ function ImportShipmentCreate() {
         </Button> */}
 
         {/* <Title order={5}>Create Import Shipment</Title> */}
-        <Text size="xl" fw={600} c="#105476" mb="lg">
+        <Text size="xl" fw={600} c="#2563EB" mb="lg">
           Create Import Booking{" "}
         </Text>
 

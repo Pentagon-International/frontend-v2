@@ -594,7 +594,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {/* Header */}
       {/* <Paper shadow="xs" p="lg" mb="md" withBorder> */}
         {/* <Group justify="space-between" mb="md">
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#2563EB">
             Job Ledger
           </Text>
           <Group>
@@ -605,15 +605,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               onClick={toggleFilters}
               styles={{
                 root: {
-                  backgroundColor: showFilters ? "#105476" : "transparent",
+                  backgroundColor: showFilters ? "#2563EB" : "transparent",
                   borderRadius: "4px",
-                  color: showFilters ? "white" : "#105476",
+                  color: showFilters ? "white" : "#2563EB",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "semibold",
-                  border: "1px solid #105476",
+                  border: "1px solid #2563EB",
                   "&:hover": {
-                    backgroundColor: showFilters ? "#105476" : "#E0F5FF",
+                    backgroundColor: showFilters ? "#2563EB" : "#E0F5FF",
                   },
                 },
               }}
@@ -760,8 +760,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     onClick={clearAllFilters}
                     variant="outline"
                     style={{
-                      borderColor: "#105476",
-                      color: "#105476",
+                      borderColor: "#2563EB",
+                      color: "#2563EB",
                       fontSize: "12px",
                       fontFamily: "Inter",
                     }}
@@ -773,7 +773,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     onClick={handleApplyFilters}
                     variant="filled"
                     style={{
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                       color: "white",
                       fontSize: "12px",
                       fontFamily: "Inter",
@@ -841,7 +841,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {/* Tabs Section */}
       <Paper shadow="xs" p="lg" mb="md" withBorder>
                 <Group justify="space-between" mb="md">
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#2563EB">
             Job Ledger
           </Text>
           <Group gap="md">
@@ -849,7 +849,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               <Text
                 size="lg"
                 fw={600}
-                c="#105476"
+                c="#2563EB"
                 style={{ fontFamily: "Inter" }}
               >
                 Segment:
@@ -862,7 +862,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               <Text
                 size="lg"
                 fw={600}
-                c="#105476"
+                c="#2563EB"
                 style={{ fontFamily: "Inter" }}
               >
                 Job:
@@ -878,15 +878,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               onClick={toggleFilters}
               styles={{
                 root: {
-                  backgroundColor: showFilters ? "#105476" : "transparent",
+                  backgroundColor: showFilters ? "#2563EB" : "transparent",
                   borderRadius: "4px",
-                  color: showFilters ? "white" : "#105476",
+                  color: showFilters ? "white" : "#2563EB",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "semibold",
-                  border: "1px solid #105476",
+                  border: "1px solid #2563EB",
                   "&:hover": {
-                    backgroundColor: showFilters ? "#105476" : "#E0F5FF",
+                    backgroundColor: showFilters ? "#2563EB" : "#E0F5FF",
                   },
                 },
               }}
@@ -901,11 +901,11 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               styles={{
                 root: {
                   borderRadius: "4px",
-                  color: "#105476",
+                  color: "#2563EB",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "semibold",
-                  border: "1px solid #105476",
+                  border: "1px solid #2563EB",
                   "&:hover": {
                     backgroundColor: "#E0F5FF",
                   },
@@ -1059,8 +1059,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     onClick={clearAllFilters}
                     variant="outline"
                     style={{
-                      borderColor: "#105476",
-                      color: "#105476",
+                      borderColor: "#2563EB",
+                      color: "#2563EB",
                       fontSize: "12px",
                       fontFamily: "Inter",
                     }}
@@ -1072,7 +1072,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     onClick={handleApplyFilters}
                     variant="filled"
                     style={{
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                       color: "white",
                       fontSize: "12px",
                       fontFamily: "Inter",
@@ -1112,7 +1112,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       justifyContent: "center",
                     }}
                   >
-                    <Loader size="md" color="#105476" />
+                    <Loader size="md" color="#2563EB" />
                   </Box>
                 )}
                 <MantineReactTable table={table} />
@@ -1177,7 +1177,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       <Text size="sm" c="dimmed">
                         Total Neutral
                       </Text>
-                      <Text size="lg" fw={600} c="#105476">
+                      <Text size="lg" fw={600} c="#2563EB">
                         {totals.totalNeutral.toFixed(2)}
                       </Text>
                     </Stack>

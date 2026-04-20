@@ -120,7 +120,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
     <Box mb="lg">
       {/* Header */}
       <Group justify="space-between" align="center" mb="md">
-        <Text size="md" fw={600} c="#105476">
+        <Text size="md" fw={600} c="#2563EB">
           Service Details ({services.length})
         </Text>
         {services.length > 3 && (
@@ -149,11 +149,11 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
           {/* Previous Button */}
           <ActionIcon
             variant="filled"
-            color="#105476"
+            color="#2563EB"
             size="lg"
             onClick={handlePrevious}
             style={{
-              backgroundColor: "#105476",
+              backgroundColor: "#2563EB",
               color: "white",
               boxShadow: "0 2px 8px rgba(16, 84, 118, 0.2)",
               transition: "all 0.3s ease",
@@ -185,7 +185,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
                     maxWidth: "300px",
                     height: "50px",
                     backgroundColor: isSelected ? "#f0f7ff" : "#ffffff",
-                    borderColor: isSelected ? "#105476" : "#e9ecef",
+                    borderColor: isSelected ? "#2563EB" : "#e9ecef",
                     borderWidth: isSelected ? 2 : 1,
                     transform: isSelected ? "scale(1.02)" : "scale(1)",
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -203,7 +203,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
                   onMouseEnter={(e) => {
                     if (!isSelected) {
                       e.currentTarget.style.transform = "scale(1.01)";
-                      e.currentTarget.style.borderColor = "#105476";
+                      e.currentTarget.style.borderColor = "#2563EB";
                       e.currentTarget.style.boxShadow =
                         "0 4px 8px rgba(16, 84, 118, 0.1)";
                     }
@@ -228,7 +228,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
                     </Badge>
                     <Text
                       size="xs"
-                      c={isSelected ? "#105476" : "dimmed"}
+                      c={isSelected ? "#2563EB" : "dimmed"}
                       fw={isSelected ? 600 : 400}
                     >
                       {service.trade}
@@ -239,7 +239,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
                   <Group justify="center" align="center" gap={4}>
                     <Text
                       size="xs"
-                      c={isSelected ? "#105476" : "#666"}
+                      c={isSelected ? "#2563EB" : "#666"}
                       fw={500}
                       ta="center"
                       lineClamp={1}
@@ -252,7 +252,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
                     </Text>
                     <Text
                       size="xs"
-                      c={isSelected ? "#105476" : "#666"}
+                      c={isSelected ? "#2563EB" : "#666"}
                       fw={500}
                       ta="center"
                       lineClamp={1}
@@ -271,11 +271,11 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
           {/* Next Button */}
           <ActionIcon
             variant="filled"
-            color="#105476"
+            color="#2563EB"
             size="lg"
             onClick={handleNext}
             style={{
-              backgroundColor: "#105476",
+              backgroundColor: "#2563EB",
               color: "white",
               boxShadow: "0 2px 8px rgba(16, 84, 118, 0.2)",
               transition: "all 0.3s ease",
@@ -292,7 +292,7 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
         style={{
           height: "2px",
           background:
-            "linear-gradient(90deg, transparent 0%, #105476 20%, #105476 80%, transparent 100%)",
+            "linear-gradient(90deg, transparent 0%, #2563EB 20%, #2563EB 80%, transparent 100%)",
           margin: "24px 0",
           borderRadius: "1px",
         }}

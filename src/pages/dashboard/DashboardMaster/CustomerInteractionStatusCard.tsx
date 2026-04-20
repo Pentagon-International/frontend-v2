@@ -29,136 +29,115 @@ const CustomerInteractionStatusCard = ({
     <Box>
       {loading ? (
         <Center h={200}>
-          <Loader size="lg" color="#105476" />
+          <Loader size="lg" color="#2563EB" />
         </Center>
       ) : (
-        <Grid gutter="lg">
-          {/* Gain Section */}
+        <Grid gutter="md">
+          {/* Gain */}
           <Grid.Col span={4}>
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
                 cursor: "pointer",
-                background: "#F5FAF5",
-                border: "1px solid transparent",
-                borderImage: "linear-gradient(135deg, #EFFFED, #ECFCEB) 1",
-                transition: "all 0.3s ease",
-                height: "85px",
+                background: "linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)",
+                border: "1px solid #BBF7D0",
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                height: "88px",
               }}
               onClick={onGainClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(48, 128, 40, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(22, 163, 74, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
                 e.currentTarget.style.boxShadow = "";
               }}
             >
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="#22252B" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Gain
                 </Text>
-                <Text
-                  size="1.5rem"
-                  fw={500}
-                  c="#308028"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.6rem", fontWeight: 700, color: "#16A34A", lineHeight: 1 }}>
                   {data?.gain || 0}
                 </Text>
-                <Text size="xs" c="dimmed" mt={2}>
+                <Text style={{ fontSize: "11px", color: "#86EFAC" }}>
                   Salesperson: {data?.gainSalesperson || 0}
                 </Text>
               </Stack>
             </Card>
           </Grid.Col>
 
-          {/* Not Visited Section */}
+          {/* Not Visited */}
           <Grid.Col span={4}>
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
                 cursor: "pointer",
-                background: "#FAF8F5",
-                border: "1px solid transparent",
-                borderImage: "linear-gradient(135deg, #FFFAED, #FCF7EB) 1",
-                transition: "all 0.3s ease",
-                height: "85px",
+                background: "linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)",
+                border: "1px solid #FDE68A",
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                height: "88px",
               }}
               onClick={onNotVisitedClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(181, 137, 27, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(217, 119, 6, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
                 e.currentTarget.style.boxShadow = "";
               }}
             >
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="#22252B" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Not Visited
                 </Text>
-                <Text
-                  size="1.5rem"
-                  fw={500}
-                  c="#B5891B"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.6rem", fontWeight: 700, color: "#D97706", lineHeight: 1 }}>
                   {data?.notVisited || 0}
                 </Text>
-                <Text size="xs" c="dimmed" mt={2}>
+                <Text style={{ fontSize: "11px", color: "#FCD34D" }}>
                   Salesperson: {data?.notVisitedSalesperson || 0}
                 </Text>
               </Stack>
             </Card>
           </Grid.Col>
 
-          {/* Lost Section */}
+          {/* Lost */}
           <Grid.Col span={4}>
             <Card
-              shadow="sm"
+              shadow="xs"
               p="md"
               radius="md"
               style={{
                 cursor: "pointer",
-                background: "#FAF5F5",
-                border: "1px solid transparent",
-                borderImage: "linear-gradient(135deg, #FFEDEF, #FFEDEF) 1",
-                transition: "all 0.3s ease",
-                height: "85px",
+                background: "linear-gradient(135deg, #FFF5F5 0%, #FEE2E2 100%)",
+                border: "1px solid #FECACA",
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                height: "88px",
               }}
               onClick={onLostClick}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(138, 0, 13, 0.15)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(220, 38, 38, 0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
                 e.currentTarget.style.boxShadow = "";
               }}
             >
-              <Stack align="flex-start" gap={4} justify="center" h="100%">
-                <Text size="xs" c="#22252B" fw={500}>
+              <Stack align="flex-start" gap={3} justify="center" h="100%">
+                <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Lost
                 </Text>
-                <Text
-                  size="1.5rem"
-                  fw={500}
-                  c="#8A000D"
-                  style={{ lineHeight: 1 }}
-                >
+                <Text style={{ fontSize: "1.6rem", fontWeight: 700, color: "#DC2626", lineHeight: 1 }}>
                   {data?.lost || 0}
                 </Text>
-                <Text size="xs" c="dimmed" mt={2}>
+                <Text style={{ fontSize: "11px", color: "#FCA5A5" }}>
                   Salesperson: {data?.lostSalesperson || 0}
                 </Text>
               </Stack>

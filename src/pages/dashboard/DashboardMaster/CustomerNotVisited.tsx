@@ -138,7 +138,7 @@ const CustomerNotVisited = ({
           Cell: ({ row }) => (
             <Text
               size="sm"
-              style={{ cursor: "pointer", color: "#105476" }}
+              style={{ cursor: "pointer", color: "#2563EB" }}
               onClick={row.original.onClick}
             >
               {row.original.label}
@@ -173,7 +173,7 @@ const CustomerNotVisited = ({
           Cell: ({ row }) => (
             <Text
               size="sm"
-              style={{ cursor: "pointer", color: "#105476" }}
+              style={{ cursor: "pointer", color: "#2563EB" }}
               onClick={row.original.onClick}
             >
               {row.original.label}
@@ -277,7 +277,7 @@ const CustomerNotVisited = ({
         </Text>
         {/* <Text
           size="md"
-          c="#105476"
+          c="#2563EB"
           style={{
             textDecoration: "underline",
             cursor: "pointer",
@@ -325,7 +325,7 @@ const CustomerNotVisited = ({
           <Text size="xs" c="dimmed">
             {summaryData.primaryLabel}
           </Text>
-          <Badge color="#105476" size="lg" variant="filled">
+          <Badge color="#2563EB" size="lg" variant="filled">
             {/* {summaryData.primary} */} 0
           </Badge>
         </Stack>
@@ -343,7 +343,7 @@ const CustomerNotVisited = ({
             <Text size="xs" c="dimmed">
               Salesperson
             </Text>
-            <Text size="sm" fw={600} c="#105476">
+            <Text size="sm" fw={600} c="#2563EB">
               {summaryData.secondaryLabel}
             </Text>
           </Stack>
@@ -354,7 +354,7 @@ const CustomerNotVisited = ({
       <Box>
         {loading ? (
           <Center py="xl">
-            <Loader size="md" color="#105476" />
+            <Loader size="md" color="#2563EB" />
           </Center>
         ) : filteredDisplayData.length === 0 ? (
           <Center py="xl">
@@ -373,7 +373,7 @@ const CustomerNotVisited = ({
                 <Button
                   variant="subtle"
                   size="xs"
-                  color="#105476"
+                  color="#2563EB"
                   onClick={handleViewAll}
                 >
                   View More

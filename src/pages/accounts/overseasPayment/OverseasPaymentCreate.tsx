@@ -1786,8 +1786,8 @@ payload.is_agent = true;
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text size="sm" c="#105476" fw={500}>
+            <Loader size="lg" color="#2563EB" />
+            <Text size="sm" c="#2563EB" fw={500}>
               {isPosting
                 ? _isReversal
                   ? "Updating payment reversal..."
@@ -1805,7 +1805,7 @@ payload.is_agent = true;
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
+          <Text size="xl" fw={600} c="#2563EB">
             {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -1818,7 +1818,7 @@ payload.is_agent = true;
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {saveResponse.payment_no ||
@@ -1841,7 +1841,7 @@ payload.is_agent = true;
                         ? "gray"
                         : statusUpper === "POSTED"
                           ? "green"
-                          : "#105476"
+                          : "#2563EB"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -1861,7 +1861,7 @@ payload.is_agent = true;
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {(reversePaymentSaveResponse?.reverse_payment_no ??
@@ -1888,7 +1888,7 @@ payload.is_agent = true;
                         ? "gray"
                         : reversalStatusUpper === "POSTED"
                           ? "green"
-                          : "#105476"
+                          : "#2563EB"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -1899,7 +1899,7 @@ payload.is_agent = true;
             )}
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(backPath)}
             >
@@ -2113,7 +2113,7 @@ payload.is_agent = true;
             {/* Party details section - card with border - same as Receipt */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#105476">
+                <Text size="sm" fw={600} c="#2563EB">
                   Party details
                 </Text>
                 <Box mt="xs">
@@ -2123,7 +2123,7 @@ payload.is_agent = true;
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#105476",
+                      color: "#2563EB",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2410,7 +2410,7 @@ payload.is_agent = true;
                                 invoiceModalDetailRowIndex === idx &&
                                 (filterSupplierInvoiceLoading ||
                                   filterSupplierInvoiceFetching) ? (
-                                  <Loader size="xs" color="#105476" />
+                                  <Loader size="xs" color="#2563EB" />
                                 ) : (
                                   <IconFileInvoice size={18} />
                                 )
@@ -2428,7 +2428,7 @@ payload.is_agent = true;
             {/* Adjustment section - card with border - same as Receipt */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#105476">
+                <Text size="sm" fw={600} c="#2563EB">
                   Adjustments
                 </Text>
                 <Box mt="xs">
@@ -2438,7 +2438,7 @@ payload.is_agent = true;
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#105476",
+                      color: "#2563EB",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2662,7 +2662,7 @@ payload.is_agent = true;
             }}
             title="Select Supplier Invoice"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
           >
             {filterSupplierInvoiceLoading || filterSupplierInvoiceFetching ? (
               <Text size="sm" c="dimmed">
@@ -2711,7 +2711,7 @@ payload.is_agent = true;
                 <Group justify="flex-end" mt="md">
                   <Button
                     variant="outline"
-                    color="#105476"
+                    color="#2563EB"
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
@@ -2723,7 +2723,7 @@ payload.is_agent = true;
                     Cancel
                   </Button>
                   <Button
-                    color="#105476"
+                    color="#2563EB"
                     onClick={handleSelectSupplierInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
@@ -2742,7 +2742,7 @@ payload.is_agent = true;
               size="xl"
               centered
               style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
+              styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
             >
               <Stack gap="xs">
                 {form.values.supporting_documents.map((doc, index) => (
@@ -3004,7 +3004,7 @@ payload.is_agent = true;
                           form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
-                          color="#105476"
+                          color="#2563EB"
                           onClick={() => {
                             form.setFieldValue("supporting_documents", [
                               ...form.values.supporting_documents,
@@ -3023,7 +3023,7 @@ payload.is_agent = true;
                   form.values.supporting_documents.length === 0 && (
                   <Button
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     leftSection={<IconPlus size={16} />}
                     onClick={() => {
                       form.setFieldValue("supporting_documents", [
@@ -3050,7 +3050,7 @@ payload.is_agent = true;
               size="sm"
               styles={{
                 root: {
-                  borderColor: "#105476",
+                  borderColor: "#2563EB",
                   color: "#666",
                   fontSize: "13px",
                   fontFamily: "Inter",
@@ -3077,7 +3077,7 @@ payload.is_agent = true;
             </Button>
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate(backPath)}
             >
               Cancel
@@ -3086,7 +3086,7 @@ payload.is_agent = true;
               <>
                 <Button
                   type="submit"
-                  color="#105476"
+                  color="#2563EB"
                   loading={isSubmitting}
                   rightSection={
                     isSubmitting ? null : <IconChevronRight size={16} />

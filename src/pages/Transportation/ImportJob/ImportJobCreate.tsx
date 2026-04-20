@@ -2994,7 +2994,7 @@ function ImportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#105476" size="lg" />
+        <Loader color="#2563EB" size="lg" />
       </Center>
     );
   }
@@ -3003,7 +3003,7 @@ function ImportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap={"md"}>
-          <Text size="xl" fw={600} c="#105476">
+          <Text size="xl" fw={600} c="#2563EB">
             {mode === "view"
               ? "View Import Job"
               : mode === "edit"
@@ -3011,7 +3011,7 @@ function ImportJobCreate() {
                 : "Create Import Job"}
           </Text>
           {jobData?.job_id && (
-            <Badge color="#105476" radius="md" size="md">
+            <Badge color="#2563EB" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
           )}
@@ -3019,7 +3019,7 @@ function ImportJobCreate() {
         {!isReadOnly && (
           <Group gap="xs">
             <Button
-              color="#105476"
+              color="#2563EB"
               variant={canCreateJob ? "filled" : "outline"}
               onClick={handleSubmit}
               loading={isSubmitting}
@@ -3036,7 +3036,7 @@ function ImportJobCreate() {
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
-                    color="#105476"
+                    color="#2563EB"
                     size="lg"
                     styles={{
                       root: {
@@ -3092,7 +3092,7 @@ function ImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconEye size={16} color="#105476" />
+                          <IconEye size={16} color="#2563EB" />
                         </Box>
                       }
                       styles={{
@@ -3137,7 +3137,7 @@ function ImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconEye size={16} color="#105476" />
+                          <IconEye size={16} color="#2563EB" />
                         </Box>
                       }
                       styles={{
@@ -3176,7 +3176,7 @@ function ImportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconDownload size={16} color="#105476" />
+                        <IconDownload size={16} color="#2563EB" />
                       </Box>
                     }
                     styles={{
@@ -3215,7 +3215,7 @@ function ImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#105476" />
+                          <IconFileInvoice size={16} color="#2563EB" />
                         </Box>
                       }
                       styles={{
@@ -3309,7 +3309,7 @@ function ImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#105476" />
+                          <IconFileInvoice size={16} color="#2563EB" />
                         </Box>
                       }
                       styles={{
@@ -3357,7 +3357,7 @@ function ImportJobCreate() {
           if (v === null) return;
           setActive(Number(v));
         }}
-        color="#105476"
+        color="#2563EB"
       >
         <Tabs.List
           mb="md"
@@ -3374,8 +3374,8 @@ function ImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -3388,8 +3388,8 @@ function ImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -3402,8 +3402,8 @@ function ImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -3416,8 +3416,8 @@ function ImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 3 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 3 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
             }}
@@ -3430,8 +3430,8 @@ function ImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 4 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 4 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 4 ? 600 : 400,
             }}
@@ -3445,8 +3445,8 @@ function ImportJobCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 5 ? "3px solid #105476" : "none",
-                color: "#105476",
+                borderBottom: active === 5 ? "3px solid #2563EB" : "none",
+                color: "#2563EB",
                 fontSize: 16,
                 fontWeight: active === 5 ? 600 : 400,
               }}
@@ -3461,7 +3461,7 @@ function ImportJobCreate() {
           <Box mt="md">
             {/* MBL Details Section */}
             <Group align="center" mb="md">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="lg" fw={600} c="#2563EB">
                 MBL Details
               </Text>
             </Group>
@@ -3728,7 +3728,7 @@ function ImportJobCreate() {
 
             {/* Carrier Details Section */}
             <Group justify="space-between" align="center" mb="sm">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="lg" fw={600} c="#2563EB">
                 Carrier Details
               </Text>
             </Group>
@@ -3828,13 +3828,13 @@ function ImportJobCreate() {
 
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
+            <Text size="lg" fw={600} c="#2563EB" mb="md">
               Party Details
             </Text>
 
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#105476">
+                <Text fw={600} c="#2563EB">
                   Shipper Details
                 </Text>
               </Grid.Col>
@@ -3963,7 +3963,7 @@ function ImportJobCreate() {
 
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#105476">
+                <Text fw={600} c="#2563EB">
                   Consignee Details
                 </Text>
               </Grid.Col>
@@ -4092,7 +4092,7 @@ function ImportJobCreate() {
 
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#105476">
+                <Text fw={600} c="#2563EB">
                   Carrier Agent Details
                 </Text>
               </Grid.Col>
@@ -4244,7 +4244,7 @@ function ImportJobCreate() {
         {/* Tab 3: Routings */}
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#105476" mb="md">
+            <Text size="lg" fw={600} c="#2563EB" mb="md">
               Routings{" "}
               {routingsForm.values?.routings?.length > 1 &&
                 `(${routingsForm.values?.routings?.length})`}
@@ -4739,7 +4739,7 @@ function ImportJobCreate() {
                             // leftSection={<IconPlus size={16} />}
                             size="lg"
                             variant="light"
-                            color="#105476"
+                            color="#2563EB"
                             onClick={addRouting}
                             style={{ marginTop: "1.75rem" }}
                           >
@@ -4772,7 +4772,7 @@ function ImportJobCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="flex-start" mb="md">
-              <Text size="lg" fw={600} c="#105476" mb="md">
+              <Text size="lg" fw={600} c="#2563EB" mb="md">
                 Container Details{" "}
                 {containerDetailsForm.values.containers.length > 1 &&
                   `(${containerDetailsForm.values.containers.length})`}
@@ -4781,7 +4781,7 @@ function ImportJobCreate() {
                 <Group gap="sm"> */}
                   {/* <Button
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     leftSection={<IconPlus size={16} />}
                     onClick={addContainer}
                   >
@@ -4789,7 +4789,7 @@ function ImportJobCreate() {
                   </Button> */}
                   {/* <Button
                     variant={canSaveContainerDetails ? "filled" : "outline"}
-                    color="#105476"
+                    color="#2563EB"
                     onClick={handleSaveContainerDetails}
                     disabled={!canSaveContainerDetails}
                     style={{
@@ -4810,7 +4810,7 @@ function ImportJobCreate() {
                 mb="xs"
                 style={{
                   fontWeight: 600,
-                  color: "#105476",
+                  color: "#2563EB",
                 }}
                 gutter="sm"
               >
@@ -5059,7 +5059,7 @@ function ImportJobCreate() {
                                                           size="sm"
                                                           px={12}
                                                             variant="light"
-                                                            color="#105476"
+                                                            color="#2563EB"
                                                             onClick={addContainer}
                                                           ><IconPlus size={16} /></Button>
       )}
@@ -5074,14 +5074,14 @@ function ImportJobCreate() {
         <Tabs.Panel value="4">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-              <Text size="lg" fw={600} c="#105476">
+              <Text size="lg" fw={600} c="#2563EB">
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
                 <Group gap="sm">
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   size="sm"
                   onClick={() => {
                   const toStr = (v: unknown) => String(v ?? "").trim();
@@ -5184,7 +5184,7 @@ function ImportJobCreate() {
                 </Button>
                 <Button
                   variant="light"
-                  color="#105476"
+                  color="#2563EB"
                   size="sm"
                   leftSection={<IconFileInvoice size={16} />}
                   styles={{
@@ -5274,12 +5274,12 @@ function ImportJobCreate() {
         {mode === "edit" && jobData?.id && (
           <Tabs.Panel value="5">
             <Box mt="md">
-              <Text size="md" fw={600} c="#105476" mb="md">
+              <Text size="md" fw={600} c="#2563EB" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
                 <Center py="xl">
-                  <Loader color="#105476" size="lg" />
+                  <Loader color="#2563EB" size="lg" />
                 </Center>
               ) : (
                 <ScrollArea>
@@ -5375,12 +5375,12 @@ function ImportJobCreate() {
                                         {isExpanded ? (
                                           <IconChevronUp
                                             size={14}
-                                            color="#105476"
+                                            color="#2563EB"
                                           />
                                         ) : (
                                           <IconChevronDown
                                             size={14}
-                                            color="#105476"
+                                            color="#2563EB"
                                           />
                                         )}
                                       </Box>
@@ -5414,7 +5414,7 @@ function ImportJobCreate() {
                                         ? "yellow"
                                         : isPosted
                                           ? "green"
-                                          : "#105476"
+                                          : "#2563EB"
                                     }
                                   >
                                     {row.status ?? "-"}
@@ -5432,7 +5432,7 @@ function ImportJobCreate() {
                                     <Menu.Target>
                                       <ActionIcon
                                         variant="subtle"
-                                        color="#105476"
+                                        color="#2563EB"
                                         size="sm"
                                         styles={{
                                           root: {
@@ -5474,7 +5474,7 @@ function ImportJobCreate() {
                                           >
                                             <IconEye
                                               size={16}
-                                              color="#105476"
+                                              color="#2563EB"
                                             />
                                           </Box>
                                         }
@@ -5529,7 +5529,7 @@ function ImportJobCreate() {
                                             >
                                               <IconEdit
                                                 size={16}
-                                                color="#105476"
+                                                color="#2563EB"
                                               />
                                             </Box>
                                           }
@@ -5584,7 +5584,7 @@ function ImportJobCreate() {
                                             >
                                               <IconRefresh
                                                 size={16}
-                                                color="#105476"
+                                                color="#2563EB"
                                               />
                                             </Box>
                                           }
@@ -5648,7 +5648,7 @@ function ImportJobCreate() {
                                       <Text
                                         size="sm"
                                         fw={600}
-                                        c="#105476"
+                                        c="#2563EB"
                                         mb="xs"
                                       >
                                         Reverse invoices
@@ -5765,7 +5765,7 @@ function ImportJobCreate() {
                                                     <Badge
                                                       size="sm"
                                                       variant="light"
-                                                      color="#105476"
+                                                      color="#2563EB"
                                                     >
                                                       {rev.status ?? "-"}
                                                     </Badge>
@@ -5787,7 +5787,7 @@ function ImportJobCreate() {
                                                       <Menu.Target>
                                                         <ActionIcon
                                                           variant="subtle"
-                                                          color="#105476"
+                                                          color="#2563EB"
                                                           size="sm"
                                                           styles={{
                                                             root: {
@@ -5840,7 +5840,7 @@ function ImportJobCreate() {
                                                             >
                                                               <IconEye
                                                                 size={16}
-                                                                color="#105476"
+                                                                color="#2563EB"
                                                               />
                                                             </Box>
                                                           }
@@ -5956,7 +5956,7 @@ function ImportJobCreate() {
         <Group>
           <Button
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() =>
               navigate("/SeaExport/import-job", {
@@ -5975,7 +5975,7 @@ function ImportJobCreate() {
               <Button
                 leftSection={<IconChevronLeft size={16} />}
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 onClick={handlePrev}
               >
                 Previous
@@ -5992,7 +5992,7 @@ function ImportJobCreate() {
             >
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconPlus size={16} />}
                 onClick={() => navigateToHouseCreate()}
                 disabled={!canAddHBL}
@@ -6007,7 +6007,7 @@ function ImportJobCreate() {
           {active === 0 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
               loading={isSubmitting}
             >
@@ -6018,7 +6018,7 @@ function ImportJobCreate() {
           {active === 1 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
             >
               Next
@@ -6028,7 +6028,7 @@ function ImportJobCreate() {
           {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
             >
               Next
@@ -6037,7 +6037,7 @@ function ImportJobCreate() {
           {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
             >
               Next
@@ -6046,7 +6046,7 @@ function ImportJobCreate() {
           {active === 4 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
               loading={isSubmitting}
             >
@@ -6058,7 +6058,7 @@ function ImportJobCreate() {
       {/* Housing Details Display - Show at the top (all steps) */}
       {housingDetails.length > 0 && (
         <Box mb="xl">
-          <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
+          <Text size="lg" fw={600} c="#2563EB" mb="md" mt="md">
             House Bill of Lading ({housingDetails.length})
           </Text>
           <Stack gap="md">
@@ -6066,7 +6066,7 @@ function ImportJobCreate() {
               <Card key={index} shadow="sm" padding="lg" radius="md" withBorder>
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
-                    <Badge color="#105476" size="lg">
+                    <Badge color="#2563EB" size="lg">
                       HBL {index + 1}
                     </Badge>
                     <Badge
@@ -6089,7 +6089,7 @@ function ImportJobCreate() {
                       </Badge>
                     )}
                     {house.shipment_id && (
-                      <Badge color="#105476" variant="light">
+                      <Badge color="#2563EB" variant="light">
                         Shipment Id : {house.shipment_id}
                       </Badge>
                     )}
@@ -6098,7 +6098,7 @@ function ImportJobCreate() {
                     <Group gap="xs">
                       <Button
                         variant="light"
-                        color="#105476"
+                        color="#2563EB"
                         size="xs"
                         leftSection={<IconEdit size={14} />}
                         onClick={() => handleEditHousingDetail(index)}
@@ -6118,7 +6118,7 @@ function ImportJobCreate() {
                         <Menu.Target>
                           <ActionIcon
                             variant="subtle"
-                            color="#105476"
+                            color="#2563EB"
                             size="lg"
                             styles={{
                               root: {
@@ -6157,7 +6157,7 @@ function ImportJobCreate() {
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconEye size={16} color="#105476" />
+                                <IconEye size={16} color="#2563EB" />
                               </Box>
                             }
                             styles={{
@@ -6197,7 +6197,7 @@ function ImportJobCreate() {
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconEye size={16} color="#105476" />
+                                <IconEye size={16} color="#2563EB" />
                               </Box>
                             }
                             styles={{
@@ -6284,7 +6284,7 @@ function ImportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#105476" mb="xs">
+                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
                       Destination Agent
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -6302,7 +6302,7 @@ function ImportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#105476" mb="xs">
+                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
                       Shipper
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -6320,7 +6320,7 @@ function ImportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#105476" mb="xs">
+                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
                       Consignee
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -6338,7 +6338,7 @@ function ImportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={12}>
-                    <Text size="sm" fw={600} c="#105476" mb="xs">
+                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
                       Notify Customer
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -6401,7 +6401,7 @@ function ImportJobCreate() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Download PDF
                 </Button>
@@ -6410,7 +6410,7 @@ function ImportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#105476" />
+                <Loader size="lg" color="#2563EB" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>
@@ -6458,7 +6458,7 @@ function ImportJobCreate() {
             <Button variant="outline" onClick={handleCloseDoConfig}>
               Cancel
             </Button>
-            <Button color="#105476" onClick={handleGenerateDeliveryOrderFromConfig}>
+            <Button color="#2563EB" onClick={handleGenerateDeliveryOrderFromConfig}>
               Generate PDF
             </Button>
           </Group>
@@ -6507,7 +6507,7 @@ function ImportJobCreate() {
                 <Button
                   onClick={handleDownloadDoPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Download PDF
                 </Button>
@@ -6516,7 +6516,7 @@ function ImportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#105476" />
+                <Loader size="lg" color="#2563EB" />
                 <Text c="dimmed">Generating Delivery Order PDF preview...</Text>
               </Stack>
             </Center>

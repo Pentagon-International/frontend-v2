@@ -28,25 +28,25 @@ export default function ReportsPage() {
       items: [
         {
           label: "Job Profit",
-          icon: <IconReportMoney size={28} color="#105476" />,
+          icon: <IconReportMoney size={28} color="#2563EB" />,
           path: "/reports/job-profit",
         },
         {
           label: "Statement of Accounts",
-          icon: <IconReceipt size={28} color="#105476" />,
+          icon: <IconReceipt size={28} color="#2563EB" />,
         },
         {
           label: "Job Ledger",
-          icon: <IconBook2 size={28} color="#105476" />,
+          icon: <IconBook2 size={28} color="#2563EB" />,
         },
         {
           label: "Subledger Outstanding",
-          icon: <IconFileAnalytics size={28} color="#105476" />,
+          icon: <IconFileAnalytics size={28} color="#2563EB" />,
           path: "/reports/subledger-outstanding",
         },
         {
           label: "Aging Report",
-          icon: <IconClockHour4 size={28} color="#105476" />,
+          icon: <IconClockHour4 size={28} color="#2563EB" />,
           path: "/reports/aging-outstanding",
         },
       ],
@@ -56,20 +56,20 @@ export default function ReportsPage() {
       items: [
         {
           label: "Balance Sheet",
-          icon: <IconScale size={28} color="#105476" />,
+          icon: <IconScale size={28} color="#2563EB" />,
         },
         {
           label: "Profit and Loss",
-          icon: <IconChartBar size={28} color="#105476" />,
+          icon: <IconChartBar size={28} color="#2563EB" />,
         },
         {
           label: "Trial Balance",
-          icon: <IconReport size={28} color="#105476" />,
+          icon: <IconReport size={28} color="#2563EB" />,
           path: "/reports/trial-balance",
         },
         {
           label: "Budget vs Actual",
-          icon: <IconChartArcs3 size={28} color="#105476" />,
+          icon: <IconChartArcs3 size={28} color="#2563EB" />,
         },
       ],
     },
@@ -80,7 +80,7 @@ export default function ReportsPage() {
       <Stack gap="lg">
         {sections.map((section) => (
           <Box key={section.title}>
-            <Text size="sm" fw={600} c="#105476" mb="md">
+            <Text size="sm" fw={600} c="#2563EB" mb="md">
               {section.title}
             </Text>
             <Grid gutter="md" columns={12}>

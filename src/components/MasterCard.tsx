@@ -50,7 +50,7 @@ export default function MasterCard({ icon, label, onClick }: MasterCardProps) {
         p="sm"
         px="md"
         style={{
-          border: `1px solid ${hovered ? "#105476" : "#E3E8F0"}`,
+          border: `1px solid ${hovered ? "#2563EB" : "#E3E8F0"}`,
           borderRadius: "12px",
           width: "100%",
           backgroundColor: hovered ? "#EEF0FA" : "white",

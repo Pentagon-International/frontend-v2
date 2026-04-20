@@ -1532,8 +1532,8 @@ function PaymentRequest() {
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text size="sm" c="#105476" fw={500}>
+            <Loader size="lg" color="#2563EB" />
+            <Text size="sm" c="#2563EB" fw={500}>
               {requestFetchLoading
                 ? "Loading payment request..."
                 : "Saving payment request..."}
@@ -1545,7 +1545,7 @@ function PaymentRequest() {
       <Stack gap="md">
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
+          <Text size="xl" fw={600} c="#2563EB">
             Payment Request
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -1559,7 +1559,7 @@ function PaymentRequest() {
                     <Badge
                       size="sm"
                       variant="light"
-                      color="#105476"
+                      color="#2563EB"
                       styles={{ root: { textTransform: "none" } }}
                     >
                       {saveResponse.request_no}
@@ -1591,7 +1591,7 @@ function PaymentRequest() {
             )}
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(-1)}
             >
@@ -1601,7 +1601,7 @@ function PaymentRequest() {
               <Menu.Target>
                 <ActionIcon
                   variant="subtle"
-                  color="#105476"
+                  color="#2563EB"
                   size="lg"
                   styles={{
                     root: {
@@ -1641,7 +1641,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1679,7 +1679,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1717,7 +1717,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1755,7 +1755,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1793,7 +1793,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1831,7 +1831,7 @@ function PaymentRequest() {
                         justifyContent: "center",
                       }}
                     >
-                      <IconFileInvoice size={16} color="#105476" />
+                      <IconFileInvoice size={16} color="#2563EB" />
                     </Box>
                   }
                   styles={{
@@ -1890,7 +1890,7 @@ function PaymentRequest() {
             <Box
               px="md"
               py="xs"
-              style={{ backgroundColor: "#105476" }}
+              style={{ backgroundColor: "#2563EB" }}
             >
               <Group justify="space-between" align="center" wrap="nowrap">
                 <Text
@@ -2012,7 +2012,7 @@ function PaymentRequest() {
                         <Text
                           size="sm"
                           fw={value && value !== "—" ? 600 : 400}
-                          c={value && value !== "—" ? "#105476" : "dimmed"}
+                          c={value && value !== "—" ? "#2563EB" : "dimmed"}
                           style={{ fontFamily: "Inter" }}
                         >
                           {value || "—"}
@@ -2271,7 +2271,7 @@ function PaymentRequest() {
                     form.setFieldValue("cinv", e.currentTarget.checked)
                   }
                   disabled={isReadOnly}
-                  color="#105476"
+                  color="#2563EB"
                   styles={{
                     label: { fontSize: "13px", fontFamily: "Inter" },
                   }}
@@ -2430,7 +2430,7 @@ function PaymentRequest() {
               <Button
                 type="button"
                 variant="light"
-                color="#105476"
+                color="#2563EB"
                 size="sm"
                 onClick={handleCalculateGst}
                 loading={isSubmitting}
@@ -2442,7 +2442,7 @@ function PaymentRequest() {
               <Button
                 type="button"
                 variant="light"
-                color="#105476"
+                color="#2563EB"
                 size="sm"
                 disabled={isReadOnly}
               >
@@ -2463,7 +2463,7 @@ function PaymentRequest() {
                 zIndex: 100,
                 backgroundColor: "white",
                 fontWeight: 600,
-                color: "#105476",
+                color: "#2563EB",
               }}
             >
               <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
@@ -2954,7 +2954,7 @@ function PaymentRequest() {
                     rightSection={
                       sacCodeLoadingByIndex[index] &&
                       (!charge.tax_code || charge.tax_code.trim() === "") ? (
-                        <Loader size="xs" color="#105476" />
+                        <Loader size="xs" color="#2563EB" />
                       ) : null
                     }
                     styles={{
@@ -2987,7 +2987,7 @@ function PaymentRequest() {
                         )
                       }
                       disabled={isReadOnly}
-                      color="#105476"
+                      color="#2563EB"
                       styles={{
                         label: { fontSize: "13px", fontFamily: "Inter" },
                       }}
@@ -3031,7 +3031,7 @@ function PaymentRequest() {
                           px={8}
                           size="sm"
                           variant="light"
-                          color="#105476"
+                          color="#2563EB"
                           onClick={() => {
                             const newChargeCurrency =
                               defaultBranchCurrency || "";
@@ -3080,7 +3080,7 @@ function PaymentRequest() {
                     paddingRight: "8px",
                   }}
                 >
-                  <Text size="sm" fw={600} c="#105476">
+                  <Text size="sm" fw={600} c="#2563EB">
                     Total
                   </Text>
                 </Box>
@@ -3088,7 +3088,7 @@ function PaymentRequest() {
 
               {/* Local Amt column */}
               <Grid.Col span={0.9}>
-                <Text size="sm" fw={700} c="#105476">
+                <Text size="sm" fw={700} c="#2563EB">
                   {form.values.charges
                     .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
                     .toFixed(2)}
@@ -3104,7 +3104,7 @@ function PaymentRequest() {
           <Group justify="space-between" mt="xl">
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate(-1)}
             >
               Cancel
@@ -3113,7 +3113,7 @@ function PaymentRequest() {
               {!isReadOnly && !isApprovedStatus && (
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   onClick={() => {
                     if (supportingDocuments.length === 0) {
                       setSupportingDocuments([{ name: "", file: null }]);
@@ -3167,7 +3167,7 @@ function PaymentRequest() {
                   )}
                   <Button
                     type="submit"
-                    color="#105476"
+                    color="#2563EB"
                     rightSection={<IconChevronRight size={16} />}
                     loading={isSubmitting}
                   >
@@ -3389,7 +3389,7 @@ function PaymentRequest() {
                 {!isReadOnly && index === supportingDocuments.length - 1 && (
                   <Button
                     variant="light"
-                    color="#105476"
+                    color="#2563EB"
                     onClick={() => {
                       setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
                     }}
@@ -3404,7 +3404,7 @@ function PaymentRequest() {
           {supportingDocuments.length === 0 && (
             <Button
               variant="light"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconPlus size={16} />}
               disabled={isReadOnly}
               onClick={() => {

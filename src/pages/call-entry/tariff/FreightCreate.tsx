@@ -740,7 +740,7 @@ function FreightCreate() {
               zIndex: 15,
             }}
           >
-            <Loader color="#105476" size="lg" />
+            <Loader color="#2563EB" size="lg" />
           </Center>
         )}
 
@@ -780,12 +780,12 @@ function FreightCreate() {
                         <Text
                           size="md"
                           fw={600}
-                          c="#105476"
+                          c="#2563EB"
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#105476",
+                            color: "#2563EB",
                             textAlign: "Left",
                           }}
                         >
@@ -808,7 +808,7 @@ function FreightCreate() {
                               <Menu.Target>
                                 <ActionIcon
                                   variant="subtle"
-                                  color="#105476"
+                                  color="#2563EB"
                                   size="md"
                                   styles={{
                                     root: {
@@ -848,7 +848,7 @@ function FreightCreate() {
                                         justifyContent: "center",
                                       }}
                                     >
-                                      <IconSparkles size={16} color="#105476" />
+                                      <IconSparkles size={16} color="#2563EB" />
                                     </Box>
                                   }
                                   styles={{
@@ -926,7 +926,7 @@ function FreightCreate() {
                             size="sm"
                             px={0}
                             w={"100%"}
-                            color="#105476"
+                            color="#2563EB"
                             onClick={() => openOrigin()}
                           >
                             <IconInfoCircle size={16} />
@@ -983,7 +983,7 @@ function FreightCreate() {
                             size="sm"
                             px={0}
                             w={"100%"}
-                            color="#105476"
+                            color="#2563EB"
                             onClick={() => openDestination()}
                           >
                             <IconInfoCircle size={16} />
@@ -1101,12 +1101,12 @@ function FreightCreate() {
                         <Text
                           size="md"
                           fw={600}
-                          c="#105476"
+                          c="#2563EB"
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#105476",
+                            color: "#2563EB",
                             textAlign: "Left",
                           }}
                         >
@@ -1444,7 +1444,7 @@ function FreightCreate() {
                                     px={12}
                                     size="sm"
                                     variant="light"
-                                    color="#105476"
+                                    color="#2563EB"
                                     onClick={() =>
                                       gridForm.insertListItem("tariff_charges", {
                                         customer_code: "",
@@ -1475,13 +1475,13 @@ function FreightCreate() {
                         <Text 
                         size="md"
                           fw={600}
-                          c="#105476"
+                          c="#2563EB"
                           pt={4}
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#105476",
+                            color: "#2563EB",
                             textAlign: "Left",
                           }}
                         >
@@ -1513,7 +1513,7 @@ function FreightCreate() {
                                       </Text>
                                     </Grid.Col>
                                     <Grid.Col span={!isViewMode ? 1.25 : 1.5}>
-                                      <Text size="md" pl="sm" fw={600} c="#105476">
+                                      <Text size="md" pl="sm" fw={600} c="#2563EB">
                                         {total.toLocaleString("en-US", {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
@@ -1569,7 +1569,7 @@ function FreightCreate() {
                         type="submit"
                         size="sm"
                         style={{
-                          backgroundColor: "#105476",
+                          backgroundColor: "#2563EB",
                           fontSize: "13px",
                           fontFamily: "Inter",
                           fontStyle: "medium",
@@ -1604,7 +1604,7 @@ function FreightCreate() {
           {isLoadingCharges && (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Text size="lg" fw={600} c="#105476">
+                <Text size="lg" fw={600} c="#2563EB">
                   Redirecting to create quotation...
                 </Text>
                 <Text size="sm" c="dimmed">
@@ -1709,7 +1709,7 @@ function FreightCreate() {
 
               {/* Container Details - Multiple containers like enquiry create */}
               <Stack gap="md">
-                <Text size="sm" fw={600} c="#105476">
+                <Text size="sm" fw={600} c="#2563EB">
                   Container Details
                 </Text>
                 {quoteForm.values.container_details.map((_, containerIndex) => (
@@ -1822,7 +1822,7 @@ function FreightCreate() {
                         <Grid.Col span={1}>
                           <Button
                             variant="light"
-                            color="#105476"
+                            color="#2563EB"
                             mt={containerIndex === 0 ? 25 : 0}
                             size="sm"
                             onClick={() =>

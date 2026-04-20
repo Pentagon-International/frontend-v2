@@ -217,7 +217,7 @@ export default function DocumentAllocationList() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#105476" }} />
+                      <IconEye size={16} style={{ color: "#2563EB" }} />
                       <Text size="sm">View</Text>
                     </Group>
                   </UnstyledButton>
@@ -233,7 +233,7 @@ export default function DocumentAllocationList() {
                         }}
                       >
                         <Group gap="sm">
-                          <IconEdit size={16} style={{ color: "#105476" }} />
+                          <IconEdit size={16} style={{ color: "#2563EB" }} />
                           <Text size="sm">Edit</Text>
                         </Group>
                       </UnstyledButton>
@@ -391,7 +391,7 @@ export default function DocumentAllocationList() {
               variant="filled"
               leftSection={<IconPlus size={14} />}
               size="sm"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate("/document-allocation/create")}
             >
               Create
@@ -458,10 +458,10 @@ export default function DocumentAllocationList() {
           </Grid>
 
           <Group justify="end" mt="sm" p="sm" pb="md">
-            <Button size="sm" variant="outline" color="#105476" leftSection={<IconFilterOff size={16} />} onClick={clearAllFilters}>
+            <Button size="sm" variant="outline" color="#2563EB" leftSection={<IconFilterOff size={16} />} onClick={clearAllFilters}>
               Clear Filters
             </Button>
-            <Button size="sm" variant="filled" color="#105476" leftSection={<IconFilter size={16} />} onClick={applyFilters}>
+            <Button size="sm" variant="filled" color="#2563EB" leftSection={<IconFilter size={16} />} onClick={applyFilters}>
               Apply Filters
             </Button>
           </Group>
@@ -471,7 +471,7 @@ export default function DocumentAllocationList() {
       {isFetching ? (
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
             <Text c="dimmed">Loading document allocations...</Text>
           </Stack>
         </Center>

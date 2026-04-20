@@ -246,7 +246,7 @@ export default function SearchableMultiSelect({
       withRemoveButton={!disabled && !readOnly}
       onRemove={() => handleValueRemove(item.value)}
       styles={{
-        root: { fontSize: "12px", backgroundColor: "#105476", color: "#ffffff" },
+        root: { fontSize: "12px", backgroundColor: "#2563EB", color: "#ffffff" },
         remove: { color: "#ffffff" },
       }}
     >
@@ -260,7 +260,7 @@ export default function SearchableMultiSelect({
     return (
       <Combobox.Option value={item.value} key={item.value} active={isSelected}>
         <Group gap="sm">
-          {isSelected ? <CheckIcon size={12} color="#105476" /> : <span style={{ width: 12 }} />}
+          {isSelected ? <CheckIcon size={12} color="#2563EB" /> : <span style={{ width: 12 }} />}
           <span style={{ fontSize: "13px", fontFamily: "Inter" }}>{item.label}</span>
         </Group>
       </Combobox.Option>

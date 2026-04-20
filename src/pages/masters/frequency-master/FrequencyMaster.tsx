@@ -118,7 +118,7 @@ export default function FrequencyMaster() {
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Item
-                  icon={<IconEye size={16} color="#105476" />}
+                  icon={<IconEye size={16} color="#2563EB" />}
                   onClick={() =>
                     navigate("/master/frequency-view", {
                       state: row.original,
@@ -128,7 +128,7 @@ export default function FrequencyMaster() {
                   View
                 </Menu.Item>
                 <Menu.Item
-                  icon={<IconEdit size={16} color="#105476" />}
+                  icon={<IconEdit size={16} color="#2563EB" />}
                   onClick={() =>
                     navigate("/master/frequency-edit", {
                       state: row.original,
@@ -151,7 +151,7 @@ export default function FrequencyMaster() {
                     <Group mt="xs">
                       <Button
                         variant="outline"
-                        color="#105476"
+                        color="#2563EB"
                         size="xs"
                         onClick={() => {}}
                       >
@@ -218,7 +218,7 @@ export default function FrequencyMaster() {
                 variant="outline"
                 rightSection={<IconChevronDown size={16} />}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
               >
                 Download
               </Button>
@@ -234,13 +234,13 @@ export default function FrequencyMaster() {
             variant="outline"
             leftSection={<IconUpload size={16} />}
             size="xs"
-            color="#105476"
+            color="#2563EB"
           >
             Bulk Upload
           </Button>
 
           <Button
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/master/frequency-new")}

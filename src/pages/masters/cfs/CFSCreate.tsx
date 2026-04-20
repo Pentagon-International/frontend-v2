@@ -219,12 +219,12 @@ export default function CFSCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#105476"
+                c="#2563EB"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#105476",
+                  color: "#2563EB",
                   textAlign: "center",
                 }}
               >
@@ -437,7 +437,7 @@ export default function CFSCreate() {
                     loading={isSubmitting}
                     disabled={isSubmitting}
                     style={{
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

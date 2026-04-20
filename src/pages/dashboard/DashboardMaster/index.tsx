@@ -7418,10 +7418,10 @@ const Dashboard = () => {
           <Group
             gap={0}
             style={{
-              backgroundColor: "#f1f3f5",
-              borderRadius: "6px",
-              padding: "2px",
-              height: "32px",
+              backgroundColor: "#E8EDF5",
+              borderRadius: "8px",
+              padding: "3px",
+              height: "34px",
               display: "flex",
               alignItems: "center",
             }}
@@ -7432,16 +7432,16 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "overall" ? "#ffffff" : "transparent",
-                color: activeTab === "overall" ? "#000000" : "#666",
+                  activeTab === "overall" ? "#2563EB" : "transparent",
+                color: activeTab === "overall" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "overall" ? 600 : 400,
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 boxShadow:
                   activeTab === "overall"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    ? "0 2px 6px rgba(37, 99, 235, 0.30)"
                     : "none",
-                transition: "all 0.2s ease",
+                transition: "all 0.18s ease",
                 fontSize: "12px",
                 padding: "4px 12px",
               }}
@@ -7454,16 +7454,16 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
-                color: activeTab === "pipeline-Report" ? "#000000" : "#666",
+                  activeTab === "pipeline-Report" ? "#2563EB" : "transparent",
+                color: activeTab === "pipeline-Report" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 boxShadow:
                   activeTab === "pipeline-Report"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    ? "0 2px 6px rgba(37, 99, 235, 0.30)"
                     : "none",
-                transition: "all 0.2s ease",
+                transition: "all 0.18s ease",
                 fontSize: "12px",
                 padding: "4px 12px",
               }}
@@ -7476,16 +7476,16 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "booking" ? "#ffffff" : "transparent",
-                  color: activeTab === "booking" ? "#000000" : "#666",
+                  activeTab === "booking" ? "#2563EB" : "transparent",
+                  color: activeTab === "booking" ? "#ffffff" : "#64748B",
                   fontWeight: activeTab === "booking" ? 600 : 400,
                   border: "none",
-                  borderRadius: "4px",
+                  borderRadius: "6px",
                   boxShadow:
                   activeTab === "booking"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    ? "0 2px 6px rgba(37, 99, 235, 0.30)"
                     : "none",
-                    transition: "all 0.2s ease",
+                    transition: "all 0.18s ease",
                     fontSize: "12px",
                     padding: "4px 12px",
                   }}
@@ -7498,16 +7498,16 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "customer-service" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service" ? "#000000" : "#666",
+                  activeTab === "customer-service" ? "#2563EB" : "transparent",
+                color: activeTab === "customer-service" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "customer-service" ? 600 : 400,
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 boxShadow:
                   activeTab === "customer-service"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    ? "0 2px 6px rgba(37, 99, 235, 0.30)"
                     : "none",
-                transition: "all 0.2s ease",
+                transition: "all 0.18s ease",
                 fontSize: "12px",
                 padding: "4px 12px",
               }}
@@ -7520,16 +7520,16 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "customer-service-import" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service-import" ? "#000000" : "#666",
+                  activeTab === "customer-service-import" ? "#2563EB" : "transparent",
+                color: activeTab === "customer-service-import" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "customer-service-import" ? 600 : 400,
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 boxShadow:
                   activeTab === "customer-service-import"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
+                    ? "0 2px 6px rgba(37, 99, 235, 0.30)"
                     : "none",
-                transition: "all 0.2s ease",
+                transition: "all 0.18s ease",
                 fontSize: "12px",
                 padding: "4px 12px",
               }}
@@ -7893,7 +7893,7 @@ const Dashboard = () => {
           setCurrentEmailData(null);
         }}
         title={
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#1E293B">
             {detailedViewType === "enquiry"
               ? "Send Email - Enquiry Conversion"
               : "Send Email - Outstanding Details"}
@@ -7969,7 +7969,7 @@ const Dashboard = () => {
               onClick={handleSendEmail}
               loading={sendingEmail}
               leftSection={<IconSend size={16} />}
-              color="#105476"
+              color="blue"
             >
               Send
             </Button>

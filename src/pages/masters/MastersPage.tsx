@@ -57,47 +57,47 @@ export default function MastersPage() {
         title: "Organization Masters",
         items: [
           {
-            icon: <IconBuildingSkyscraper size={28} color="#105476" />,
+            icon: <IconBuildingSkyscraper size={28} color="#2563EB" />,
             label: "Group Company",
           },
           {
-            icon: <IconBuildingEstate size={28} color="#105476" />,
+            icon: <IconBuildingEstate size={28} color="#2563EB" />,
             label: "Company",
           },
-          { icon: <IconSitemap size={28} color="#105476" />, label: "Branch" },
-          { icon: <IconUserHexagon size={28} color="#105476" />, label: "User" },
+          { icon: <IconSitemap size={28} color="#2563EB" />, label: "Branch" },
+          { icon: <IconUserHexagon size={28} color="#2563EB" />, label: "User" },
         ],
       },
       {
         title: "Customer & Partner Masters",
         items: [
-          { icon: <IconUsers size={28} color="#105476" />, label: "Customer" },
+          { icon: <IconUsers size={28} color="#2563EB" />, label: "Customer" },
           {
-            icon: <IconTruck size={28} color="#105476" />,
+            icon: <IconTruck size={28} color="#2563EB" />,
             label: "Vendor",
           },
           {
-            icon: <IconUsersGroup size={28} color="#105476" />,
+            icon: <IconUsersGroup size={28} color="#2563EB" />,
             label: "Customer Type",
           },
-          { icon: <IconInfinity size={28} color="#105476" />, label: "Follow-up" },
+          { icon: <IconInfinity size={28} color="#2563EB" />, label: "Follow-up" },
           {
-            icon: <IconSquareRotated size={28} color="#105476" />,
+            icon: <IconSquareRotated size={28} color="#2563EB" />,
             label: "Frequency",
           },
           {
-            icon: <IconWorld size={28} color="#105476" />,
+            icon: <IconWorld size={28} color="#2563EB" />,
             label: "Network Master",
           },
           // Conditionally include Sales Co-ordinator Reassignation
           ...(hasManagerOrStaffAccess
             ? [
                 {
-                  icon: <IconExchange size={28} color="#105476" />,
+                  icon: <IconExchange size={28} color="#2563EB" />,
                   label: "Sales Co-ordinator Reassignation",
                 },
                 {
-                  icon: <IconUserCheck size={28} color="#105476" />,
+                  icon: <IconUserCheck size={28} color="#2563EB" />,
                   label: "Customer Relationship Mapping",
                 },
               ]
@@ -107,21 +107,21 @@ export default function MastersPage() {
       {
         title: "Logistics & Operations Masters",
         items: [
-          { icon: <IconAnchor size={28} color="#105476" />, label: "Port" },
+          { icon: <IconAnchor size={28} color="#2563EB" />, label: "Port" },
           {
-            icon: <IconContainer size={28} color="#105476" />,
+            icon: <IconContainer size={28} color="#2563EB" />,
             label: "Container Type",
           },
           {
-            icon: <IconFileStack size={28} color="#105476" />,
+            icon: <IconFileStack size={28} color="#2563EB" />,
             label: "Terms of Shipment",
           },
           {
-            icon: <IconTruckDelivery size={28} color="#105476" />,
+            icon: <IconTruckDelivery size={28} color="#2563EB" />,
             label: "Service",
           },
           {
-            icon: <IconBuildingEstate size={28} color="#105476" />,
+            icon: <IconBuildingEstate size={28} color="#2563EB" />,
             label: "CFS Master",
           },
         ],
@@ -130,11 +130,11 @@ export default function MastersPage() {
         title: "Communication & Interaction Masters",
         items: [
           {
-            icon: <IconBrandRedux size={28} color="#105476" />,
+            icon: <IconBrandRedux size={28} color="#2563EB" />,
             label: "Call Mode",
           },
           {
-            icon: <IconFileStack size={28} color="#105476" />,
+            icon: <IconFileStack size={28} color="#2563EB" />,
             label: "Create Customer-PAN",
           },
         ],
@@ -143,35 +143,35 @@ export default function MastersPage() {
         title: "Accounts",
         items: [
           {
-            icon: <IconCurrencyDollar size={28} color="#105476" />,
+            icon: <IconCurrencyDollar size={28} color="#2563EB" />,
             label: "Charge",
           },
           {
-            icon: <IconCalculator size={28} color="#105476" />,
+            icon: <IconCalculator size={28} color="#2563EB" />,
             label: "TDS Section",
           },
           {
-            icon: <IconCalculator size={28} color="#105476" />,
+            icon: <IconCalculator size={28} color="#2563EB" />,
             label: "TDS Rate Section",
           },
           {
-            icon: <IconChartBar size={28} color="#105476" />,
+            icon: <IconChartBar size={28} color="#2563EB" />,
             label: "Chart of Accounts",
           },
           {
-            icon: <IconLink size={28} color="#105476" />,
+            icon: <IconLink size={28} color="#2563EB" />,
             label: "GL Charge Mapping",
           },
           {
-            icon: <IconReceiptTax size={28} color="#105476" />,
+            icon: <IconReceiptTax size={28} color="#2563EB" />,
             label: "GST SAC",
           },
           {
-            icon: <IconPercentage size={28} color="#105476" />,
+            icon: <IconPercentage size={28} color="#2563EB" />,
             label: "GST Rate",
           },
           {
-            icon: <IconLink size={28} color="#105476" />,
+            icon: <IconLink size={28} color="#2563EB" />,
             label: "GST Charge Mapping",
           },
         ],
@@ -194,7 +194,7 @@ export default function MastersPage() {
         >
           {sections.map((section) => (
             <Box key={section.title}>
-              <Text size="sm" fw={600} c="#105476" mb="md">
+              <Text size="sm" fw={600} c="#2563EB" mb="md">
                 {section.title}
               </Text>
               <Grid gutter="md" columns={12}>

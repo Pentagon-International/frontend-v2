@@ -670,7 +670,7 @@ function ExportJobMaster() {
                   height: "36px",
                   border: "1px solid #D0D1D4",
                   "&:focus": {
-                    border: "1px solid #105476",
+                    border: "1px solid #2563EB",
                   },
                 },
               }}
@@ -684,10 +684,10 @@ function ExportJobMaster() {
                 root: {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                  color: showFilters ? "#105476" : "#737780",
+                  border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
+                  color: showFilters ? "#2563EB" : "#737780",
                   "&:active": {
-                    border: "1px solid #105476",
+                    border: "1px solid #2563EB",
                     color: "#FFFFFF",
                   },
                 },
@@ -700,14 +700,14 @@ function ExportJobMaster() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "semibold",
                   "&:hover": {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                   },
                 },
               }}
@@ -946,7 +946,7 @@ function ExportJobMaster() {
               leftSection={<IconFilter size={16} />}
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -967,7 +967,7 @@ function ExportJobMaster() {
       {isLoading ? (
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
             <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
               Loading export jobs...
             </Text>
@@ -1001,7 +1001,7 @@ function ExportJobMaster() {
                 }}
               >
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
+                  <Loader size="lg" color="#2563EB" />
                   <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                     Refreshing data...
                   </Text>

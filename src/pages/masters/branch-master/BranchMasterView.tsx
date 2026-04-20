@@ -80,10 +80,10 @@ function BranchMasterView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -94,7 +94,7 @@ function BranchMasterView() {
             size="xs"
             w={100}
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconEdit size={16} />}
             onClick={() =>
               navigate("/master/branch-master-edit", {
@@ -166,7 +166,7 @@ function BranchMasterView() {
                 Are you sure? This action cannot be undone.
               </Text>
               <Group mt={10} gap={"lg"}>
-                <Button variant="outline" color="#105476" size="xs" onClick={close}>
+                <Button variant="outline" color="#2563EB" size="xs" onClick={close}>
                   Cancel
                 </Button>
                 <Button
@@ -187,7 +187,7 @@ function BranchMasterView() {
           <Button
             w={120}
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/branch")}
           >

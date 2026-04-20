@@ -3456,7 +3456,7 @@ function EnquiryCreate() {
         <Text color="red" size="lg" ta="center">
           Something went wrong: {error}
         </Text>
-        <Button mt="md" onClick={() => setError(null)} color="#105476">
+        <Button mt="md" onClick={() => setError(null)} color="#2563EB">
           Try Again
         </Button>
       </Box>
@@ -3507,12 +3507,12 @@ function EnquiryCreate() {
                   <Text
                     size="md"
                     fw={600}
-                    c="#105476"
+                    c="#2563EB"
                     style={{
                       fontFamily: "Inter",
                       fontStyle: "medium",
                       fontSize: "16px",
-                      color: "#105476",
+                      color: "#2563EB",
                       textAlign: "center",
                     }}
                   >
@@ -3553,7 +3553,7 @@ function EnquiryCreate() {
                             active > 0
                               ? "none"
                               : active === 0
-                                ? "2px solid #105476"
+                                ? "2px solid #2563EB"
                                 : "2px solid #d1d5db",
                           display: "flex",
                           alignItems: "center",
@@ -3564,7 +3564,7 @@ function EnquiryCreate() {
                             active > 0
                               ? "white"
                               : active === 0
-                                ? "#105476"
+                                ? "#2563EB"
                                 : "#9ca3af",
                           transition: "all 0.2s",
                           flexShrink: 0,
@@ -3578,19 +3578,19 @@ function EnquiryCreate() {
                           />
                         ) : (
                           // <IconCheck size={20} />
-                          <IconUser size={20} color="#105476" fill="#E6F2F8" />
+                          <IconUser size={20} color="#2563EB" fill="#E6F2F8" />
                         )}
                       </Box>
                       <Text
                         size="sm"
                         fw={400}
-                        c="#105476"
+                        c="#2563EB"
                         style={{
                           lineHeight: 1.3,
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#105476",
+                          color: "#2563EB",
                         }}
                       >
                         Customer Details
@@ -3639,7 +3639,7 @@ function EnquiryCreate() {
                             active > 1
                               ? "none"
                               : active === 1
-                                ? "2px solid #105476"
+                                ? "2px solid #2563EB"
                                 : "2px solid #d1d5db",
                           display: "flex",
                           alignItems: "center",
@@ -3650,7 +3650,7 @@ function EnquiryCreate() {
                             active > 1
                               ? "white"
                               : active === 1
-                                ? "#105476"
+                                ? "#2563EB"
                                 : "#9ca3af",
                           transition: "all 0.2s",
                           flexShrink: 0,
@@ -3665,7 +3665,7 @@ function EnquiryCreate() {
                         ) : (
                           <IconTruckDelivery
                             size={20}
-                            color="#105476"
+                            color="#2563EB"
                             fill="#E6F2F8"
                           />
                         )}
@@ -3679,7 +3679,7 @@ function EnquiryCreate() {
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#105476",
+                          color: "#2563EB",
                         }}
                       >
                         Service & Cargo Details
@@ -3729,7 +3729,7 @@ function EnquiryCreate() {
                                 active > 2
                                   ? "none"
                                   : active === 2
-                                    ? "2px solid #105476"
+                                    ? "2px solid #2563EB"
                                     : "2px solid #d1d5db",
                               display: "flex",
                               alignItems: "center",
@@ -3740,7 +3740,7 @@ function EnquiryCreate() {
                                 active > 2
                                   ? "white"
                                   : active === 2
-                                    ? "#105476"
+                                    ? "#2563EB"
                                     : "#9ca3af",
                               transition: "all 0.2s",
                               flexShrink: 0,
@@ -3755,7 +3755,7 @@ function EnquiryCreate() {
                             ) : (
                               <IconFileText
                                 size={20}
-                                color="#105476"
+                                color="#2563EB"
                                 fill="#E6F2F8"
                               />
                             )}
@@ -3769,7 +3769,7 @@ function EnquiryCreate() {
                               fontFamily: "Inter",
                               fontStyle: "regular",
                               fontSize: "13px",
-                              color: "#105476",
+                              color: "#2563EB",
                             }}
                           >
                             Quotation
@@ -3961,7 +3961,7 @@ function EnquiryCreate() {
                                 <Button
                                   size="xs"
                                   mb={4}
-                                  color="#105476"
+                                  color="#2563EB"
                                   onClick={() => {
                                     const customerCode =
                                       customerForm.values.customer_code;
@@ -3980,7 +3980,7 @@ function EnquiryCreate() {
                                 <Button
                                   size="xs"
                                   mb={4}
-                                  color="#105476"
+                                  color="#2563EB"
                                   variant="outline"
                                   onClick={() => {
                                     const customerCode =
@@ -4492,7 +4492,7 @@ function EnquiryCreate() {
                           onClick={() => handleNext()}
                           size="sm"
                           style={{
-                            backgroundColor: "#105476",
+                            backgroundColor: "#2563EB",
                             fontSize: "13px",
                             fontFamily: "Inter",
                             fontStyle: "medium",
@@ -5754,13 +5754,13 @@ function EnquiryCreate() {
                                     <Text
                                       size="md"
                                       fw={500}
-                                      c="#105476"
+                                      c="#2563EB"
                                       style={{
                                         paddingBottom: "4px",
                                         fontFamily: "Inter",
                                         fontStyle: "semibold",
                                         fontSize: "16px",
-                                        color: "#105476",
+                                        color: "#2563EB",
                                       }}
                                     >
                                       Cargo Details
@@ -6004,13 +6004,13 @@ function EnquiryCreate() {
                                           )}
                                         <Button
                                           variant="light"
-                                          color="#105476"
+                                          color="#2563EB"
                                           leftSection={<IconPlus size={16} />}
                                           styles={{
                                             root: {
                                               fontSize: "13px",
                                               fontWeight: 500,
-                                              color: "#105476",
+                                              color: "#2563EB",
                                               fontFamily: "Inter",
                                               fontStyle: "semibold",
                                             },
@@ -6353,7 +6353,7 @@ function EnquiryCreate() {
                                               <Grid
                                                 style={{
                                                   fontWeight: 600,
-                                                  color: "#105476",
+                                                  color: "#2563EB",
                                                   fontSize: "13px",
                                                   fontFamily: "Inter",
                                                   fontStyle: "medium",
@@ -7019,7 +7019,7 @@ function EnquiryCreate() {
                                               <Grid
                                                 style={{
                                                   fontWeight: 600,
-                                                  color: "#105476",
+                                                  color: "#2563EB",
                                                   fontSize: "13px",
                                                   fontFamily: "Inter",
                                                   fontStyle: "medium",
@@ -7633,7 +7633,7 @@ function EnquiryCreate() {
                                                 <Grid.Col span={0.75}>
                                                   <Button
                                                     variant="light"
-                                                    color="#105476"
+                                                    color="#2563EB"
                                                     mt={25}
                                                     onClick={() =>
                                                       serviceForm.insertListItem(
@@ -7700,12 +7700,12 @@ function EnquiryCreate() {
                     <Flex justify="end" align="center" mb="md" mt="md">
                       <Button
                         variant="subtle"
-                        color="#105476"
+                        color="#2563EB"
                         size="sm"
                         leftSection={<IconPlus size={16} />}
                         styles={{
                           root: {
-                            color: "#105476",
+                            color: "#2563EB",
                             fontWeight: 500,
                             fontSize: "13px",
                             fontFamily: "Inter",
@@ -7868,7 +7868,7 @@ function EnquiryCreate() {
                           size="sm"
                           styles={{
                             root: {
-                              borderColor: "#105476",
+                              borderColor: "#2563EB",
                               color: "#666",
                               fontSize: "13px",
                               fontFamily: "Inter",
@@ -7931,7 +7931,7 @@ function EnquiryCreate() {
                             onClick={() => handleNext()}
                             size="sm"
                             style={{
-                              backgroundColor: "#105476",
+                              backgroundColor: "#2563EB",
                               fontSize: "13px",
                               fontFamily: "Inter",
                               fontStyle: "medium",
@@ -7953,7 +7953,7 @@ function EnquiryCreate() {
                               size="sm"
                               disabled={isSubmitting}
                               style={{
-                                backgroundColor: "#105476",
+                                backgroundColor: "#2563EB",
                                 fontSize: "13px",
                                 fontFamily: "Inter",
                                 fontStyle: "medium",
@@ -7972,7 +7972,7 @@ function EnquiryCreate() {
                               }}
                               size="sm"
                               style={{
-                                backgroundColor: "#105476",
+                                backgroundColor: "#2563EB",
                                 fontSize: "13px",
                                 fontFamily: "Inter",
                                 fontStyle: "medium",
@@ -7991,7 +7991,7 @@ function EnquiryCreate() {
                                 onClick={() => handleNext()}
                                 size="sm"
                                 style={{
-                                  backgroundColor: "#105476",
+                                  backgroundColor: "#2563EB",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                   fontStyle: "medium",
@@ -8012,7 +8012,7 @@ function EnquiryCreate() {
                             onClick={() => handleNext()}
                             size="sm"
                             style={{
-                              backgroundColor: "#105476",
+                              backgroundColor: "#2563EB",
                               fontSize: "13px",
                               fontFamily: "Inter",
                               fontStyle: "medium",
@@ -8367,7 +8367,7 @@ function EnquiryCreate() {
                     customerForm.values.supporting_documents.length - 1 && (
                     <Button
                       variant="light"
-                      color="#105476"
+                      color="#2563EB"
                       onClick={() => {
                         customerForm.setFieldValue("supporting_documents", [
                           ...customerForm.values.supporting_documents,
@@ -8385,7 +8385,7 @@ function EnquiryCreate() {
             {customerForm.values.supporting_documents.length === 0 && (
               <Button
                 variant="light"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconPlus size={16} />}
                 onClick={() => {
                   customerForm.setFieldValue("supporting_documents", [
@@ -8420,7 +8420,7 @@ function EnquiryCreate() {
           title: {
             fontWeight: 700,
             fontSize: 20,
-            color: "#105476",
+            color: "#2563EB",
           },
         }}
       >
@@ -8444,7 +8444,7 @@ function EnquiryCreate() {
             <Box>
               <Grid>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>
+                  <Text size="md" fw={600} c="#2563EB" mb={4}>
                     Sales Person
                   </Text>
                   <Text size="sm" fw={500} mb="md">
@@ -8452,7 +8452,7 @@ function EnquiryCreate() {
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>
+                  <Text size="md" fw={600} c="#2563EB" mb={4}>
                     Sales Coordinator
                   </Text>
                   <Text
@@ -8465,7 +8465,7 @@ function EnquiryCreate() {
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#105476" mb={4}>
+                  <Text size="md" fw={600} c="#2563EB" mb={4}>
                     Customer Service
                   </Text>
                   <Text
@@ -8501,7 +8501,7 @@ function EnquiryCreate() {
               Cancel
             </Button>
             <Button
-              color="#105476"
+              color="#2563EB"
               onClick={handleUpdateSalespersonData}
               styles={{
                 root: {

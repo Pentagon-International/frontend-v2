@@ -182,9 +182,9 @@ function AirExportBookingMaster() {
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
     const label = statusUpper || "GENERATED";
-    let color: string = "#105476";
+    let color: string = "#2563EB";
     if (label === "BOOKED") color = "green";
-    else if (label === "GENERATED") color = "#105476";
+    else if (label === "GENERATED") color = "#2563EB";
     else if (label === "RECEIVED") color = "blue";
     else if (label === "CANCEL") color = "red";
     else color = "gray";
@@ -1104,7 +1104,7 @@ function AirExportBookingMaster() {
                       height: "36px",
                       border: "1px solid #D0D1D4",
                       "&:focus": {
-                        border: "1px solid #105476",
+                        border: "1px solid #2563EB",
                       },
                     },
                   }}
@@ -1120,9 +1120,9 @@ function AirExportBookingMaster() {
                       borderRadius: "4px",
                       backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                       border: showFilters
-                        ? "1px solid #105476"
+                        ? "1px solid #2563EB"
                         : "1px solid #737780",
-                      color: showFilters ? "#105476" : "#737780",
+                      color: showFilters ? "#2563EB" : "#737780",
                     },
                   }}
                 >
@@ -1134,14 +1134,14 @@ function AirExportBookingMaster() {
                   size="sm"
                   styles={{
                     root: {
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                       borderRadius: "4px",
                       color: "#FFFFFF",
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
                       "&:hover": {
-                        backgroundColor: "#105476",
+                        backgroundColor: "#2563EB",
                       },
                     },
                   }}
@@ -1316,8 +1316,8 @@ function AirExportBookingMaster() {
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
-                      color: "#105476",
-                      borderColor: "#105476",
+                      color: "#2563EB",
+                      borderColor: "#2563EB",
                       "&:hover": {
                         backgroundColor: "#f8f9fa",
                       },
@@ -1333,13 +1333,13 @@ function AirExportBookingMaster() {
                   variant="filled"
                   styles={{
                     root: {
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                       borderRadius: "4px",
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
                       "&:hover": {
-                        backgroundColor: "#105476",
+                        backgroundColor: "#2563EB",
                       },
                     },
                   }}
@@ -1363,7 +1363,7 @@ function AirExportBookingMaster() {
           {isDataLoading ? (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Loader size="lg" color="#105476" />
+                <Loader size="lg" color="#2563EB" />
                 <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                   Loading air export booking...
                 </Text>
@@ -1431,7 +1431,7 @@ function AirExportBookingMaster() {
         {createJobLoading ? (
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Loader size="md" color="#105476" />
+              <Loader size="md" color="#2563EB" />
               <Text c="dimmed" size="sm" style={{ fontFamily: "Inter" }}>
                 Creating job, please wait...
               </Text>
@@ -1457,8 +1457,8 @@ function AirExportBookingMaster() {
                 variant="outline"
                 styles={{
                   root: {
-                    borderColor: "#105476",
-                    color: "#105476",
+                    borderColor: "#2563EB",
+                    color: "#2563EB",
                     borderRadius: "4px",
                     fontFamily: "Inter",
                   },
@@ -1578,8 +1578,8 @@ function AirExportBookingMaster() {
                       variant="outline"
                       styles={{
                         root: {
-                          borderColor: "#105476",
-                          color: "#105476",
+                          borderColor: "#2563EB",
+                          color: "#2563EB",
                           borderRadius: "4px",
                           fontFamily: "Inter",
                         },
@@ -1599,7 +1599,7 @@ function AirExportBookingMaster() {
                     size="sm"
                     styles={{
                       root: {
-                        backgroundColor: "#105476",
+                        backgroundColor: "#2563EB",
                         borderRadius: "4px",
                         fontFamily: "Inter",
                         color: "#FFFFFF",

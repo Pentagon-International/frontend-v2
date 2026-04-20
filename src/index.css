@@ -1,80 +1,76 @@
-*{
-  transition: "width 0.2s ease-in-out",
-}
-body{
-    /* overflow: hidden; */
-    min-height: 100vh;
-    margin: 0;
-    padding: 0;
-    
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --sidebar-bg: #0D1B2E;
+  --sidebar-text: #7A9AB8;
+  --sidebar-text-active: #E8F4FF;
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-active-bg: rgba(59, 130, 246, 0.18);
+  --sidebar-active-border: #3B82F6;
+  --sidebar-section-title: #3D5470;
+  --sidebar-divider: #1A2D42;
+  --page-bg: #F0F4F8;
+  --header-bg: #ffffff;
+  --accent: #2563EB;
+  --accent-light: #DBEAFE;
+  --surface: #ffffff;
+  --border: #E2E8F0;
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
 }
 
-/* Add responsive styles for login page */
-@media (max-width: 768px) {
-  /* Mobile styles */
-  /* .login-container {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .login-image-section {
-    height: 40vh;
-    min-height: 250px;
-  }
-  
-  .login-form-section {
-    height: 60vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
-  /* Tablet styles */
-  /* .login-container {
-    min-height: 100vh;
-  }
-  
-  .login-image-section {
-    height: 100vh;
-  }
-  
-  .login-form-section {
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (min-width: 1025px) {
-  /* Desktop styles */
-  /* .login-container {
-    min-height: 100vh;
-  }
-  
-  .login-image-section {
-    height: 100vh;
-  }
-  
-  .login-form-section {
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+/* Smooth sidebar width transition */
+.mantine-AppShell-navbar {
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  min-width: unset !important;
 }
 
-/* Ensure proper form sizing on mobile */
-@media (max-width: 480px) {
-  /* .login-form-container {
-    padding: 12px !important;
-  }
-  
-  .login-form-container input,
-  .login-form-container button {
-    font-size: 16px !important; /* Prevents zoom on iOS */
-  /* } */ 
+/* Thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Sidebar-specific scrollbar (darker) */
+.mantine-AppShell-navbar ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mantine-AppShell-navbar ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Focus ring accessibility */
+:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
 }

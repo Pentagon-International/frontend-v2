@@ -377,7 +377,7 @@ function CoordinatorReassignationMaster() {
                     }}
                   >
                     <Group gap={"sm"} >
-                      <IconEdit size={16} style={{ color: "#105476" }} />
+                      <IconEdit size={16} style={{ color: "#2563EB" }} />
                       <Text size="sm">Edit</Text>
                     </Group>
                   </UnstyledButton>
@@ -558,7 +558,7 @@ function CoordinatorReassignationMaster() {
     <Box>
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Group justify="space-between" mb="md">
-        <Text size="lg" fw={600} c="#105476">
+        <Text size="lg" fw={600} c="#2563EB">
           Sales Co-ordinator Reassignation
         </Text>
         <Group gap="xs">
@@ -566,7 +566,7 @@ function CoordinatorReassignationMaster() {
             variant="outline"
             leftSection={<IconFilter size={16} />}
             size="xs"
-            color="#105476"
+            color="#2563EB"
             onClick={() => setShowFilters(!showFilters)}
           >
             Filters
@@ -575,7 +575,7 @@ function CoordinatorReassignationMaster() {
             variant="filled"
             leftSection={<IconPlus size={14} />}
             size="xs"
-            color="#105476"
+            color="#2563EB"
             onClick={() => navigate("./create")}
           >
             Create New
@@ -595,8 +595,8 @@ function CoordinatorReassignationMaster() {
         >
           <Group justify="space-between" align="center">
             <Group align="center" gap="xs">
-              <IconFilter size={16} color="#105476" />
-              <Text size="sm" fw={500} c="#105476">
+              <IconFilter size={16} color="#2563EB" />
+              <Text size="sm" fw={500} c="#2563EB">
                 Filters
               </Text>
             </Group>
@@ -698,7 +698,7 @@ function CoordinatorReassignationMaster() {
             <Button
               size="xs"
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconFilterOff size={14} />}
               onClick={clearAllFilters}
             >
@@ -707,7 +707,7 @@ function CoordinatorReassignationMaster() {
             <Button
               size="xs"
               variant="filled"
-              color="#105476"
+              color="#2563EB"
               leftSection={
                 isLoading ? <Loader size={14} /> : <IconFilter size={14} />
               }
@@ -724,7 +724,7 @@ function CoordinatorReassignationMaster() {
         {isLoading || isRefreshing ? (
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
+              <Loader size="lg" color="#2563EB" />
               <Text c="dimmed">Loading coordinator reassignation data...</Text>
             </Stack>
           </Center>

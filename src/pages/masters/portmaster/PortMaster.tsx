@@ -143,7 +143,7 @@ export default function PortMasterList() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEye size={16} style={{ color: "#105476" }} />
+                        <IconEye size={16} style={{ color: "#2563EB" }} />
                         <Text size="sm">View</Text>
                       </Group>
                     </UnstyledButton>
@@ -156,7 +156,7 @@ export default function PortMasterList() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <IconEdit size={16} style={{ color: "#2563EB" }} />
                         <Text size="sm">Edit</Text>
                       </Group>
                     </UnstyledButton>
@@ -186,7 +186,7 @@ export default function PortMasterList() {
                         Do you want to delete this?
                       </Text>
                       <Group mt={10} gap={"lg"}>
-                        <Button variant="outline" color="#105476" size="xs">
+                        <Button variant="outline" color="#2563EB" size="xs">
                           Not now
                         </Button>
                         <Button
@@ -261,7 +261,7 @@ export default function PortMasterList() {
   if (portLoading) {
     return (
       <Center py="xl">
-        <Loader size="lg" color="#105476" />
+        <Loader size="lg" color="#2563EB" />
       </Center>
     );
   }
@@ -305,7 +305,7 @@ export default function PortMasterList() {
                 variant="outline"
                 rightSection={<IconChevronDown size={16} />}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
               >
                 Download
               </Button>
@@ -320,12 +320,12 @@ export default function PortMasterList() {
             variant="outline"
             leftSection={<IconUpload size={16} />}
             size="xs"
-            color="#105476"
+            color="#2563EB"
           >
             Bulk Upload
           </Button>
           <Button
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/master/port-new")}

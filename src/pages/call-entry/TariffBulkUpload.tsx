@@ -66,13 +66,13 @@ function TariffBulkUpload() {
     <>
       <Box maw={420} mx="auto" mt={50}>
         <Group justify="space-between" mb="xs">
-          <Text fw={600} c={"#105476"} mb={5}>
+          <Text fw={600} c={"#2563EB"} mb={5}>
             Bulk Upload
           </Text>
           {/* <Anchor href="/template.xlsx" download c="blue" fz="sm"> */}
             <Group gap={4}>
               <UnstyledButton
-                c={"#105476"}
+                c={"#2563EB"}
                 // leftSection={<IconDownload size={18} />}
                 variant="outline"
                 onClick={handleDownload}
@@ -104,7 +104,7 @@ function TariffBulkUpload() {
               }}
               //   onClick={handleBoxClick}
             >
-              <IconUpload size={28} color="#105476" />
+              <IconUpload size={28} color="#2563EB" />
             </Box>
             <Text size="sm">Click to browse your file</Text>
 

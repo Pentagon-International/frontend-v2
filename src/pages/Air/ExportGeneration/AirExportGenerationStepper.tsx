@@ -1228,7 +1228,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
   return (
     <Box px={"lg"}>
       <Stepper
-        color="#105476"
+        color="#2563EB"
         active={active}
         onStepClick={handleStepClick}
         orientation="horizontal"
@@ -1238,7 +1238,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         <Stepper.Step label="1" description="Export Booking">
           <Box mt="md">
             {/* Export Shipment Section */}
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Export Booking
             </Text>
             <Grid mb="xl">
@@ -1516,7 +1516,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             </Grid>
 
             {/* Ocean Schedule Section */}
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Ocean Schedule
             </Text>
             <Grid mb="xl">
@@ -1614,54 +1614,54 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             </Grid>
 
             {/* Routing Details Section */}
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Routings Details
             </Text>
 
             {/* Header Row */}
             <Grid mb="sm">
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Move Type
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   From
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   To
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   ETD
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   ETA
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.5}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Carrier
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.5}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Flight No
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.25}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Status
                 </Text>
               </Grid.Col>
               <Grid.Col span={1.5}>
-                <Text size="sm" fw={500} c="#105476">
+                <Text size="sm" fw={500} c="#2563EB">
                   Actions
                 </Text>
               </Grid.Col>
@@ -1856,7 +1856,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                         {form.values.routingDetails.length - 1 === index && (
                           <Button
                             variant="light"
-                            color="#105476"
+                            color="#2563EB"
                             size="xs"
                             onClick={addRoutingDetail}
                           >
@@ -1883,13 +1883,13 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#105476"
+                color="#2563EB"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => navigate("../")}
               >
                 Back to List
               </Button>
-              <Button onClick={handleNext} color="#105476">
+              <Button onClick={handleNext} color="#2563EB">
                 Next
               </Button>
             </Group>
@@ -1899,12 +1899,12 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         {/* Step 2: Party Details */}
         <Stepper.Step label="2" description="Party Details">
           <Box mt="md">
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Party Details
             </Text>
 
             {/* Shipper Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Shipper Details
             </Text>
             <Grid mb="md">
@@ -1996,7 +1996,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* Consignee Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Consignee Details
             </Text>
             <Grid mb="md">
@@ -2088,7 +2088,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* Forwarder Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Forwarder Details
             </Text>
             <Grid mb="md">
@@ -2178,7 +2178,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* Destination Agent Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Destination Agent Details
             </Text>
             <Grid mb="md">
@@ -2270,7 +2270,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* Billing Customer Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Billing Customer Details
             </Text>
             <Grid mb="md">
@@ -2355,7 +2355,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* Notify Customer Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               Notify Customer Details
             </Text>
             <Grid mb="md">
@@ -2445,7 +2445,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             <Divider mb="md" />
 
             {/* CHA Details */}
-            <Text size="sm" fw={500} mb="sm" c="#105476">
+            <Text size="sm" fw={500} mb="sm" c="#2563EB">
               CHA Details
             </Text>
             <Grid mb="md">
@@ -2530,7 +2530,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               <Button variant="default" onClick={handlePrevious}>
                 Back
               </Button>
-              <Button onClick={handleNext} color="#105476">
+              <Button onClick={handleNext} color="#2563EB">
                 Next
               </Button>
             </Group>
@@ -2540,7 +2540,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         {/* Step 3: Cargo Details */}
         <Stepper.Step label="3" description="Cargo Details">
           <Box mt="md">
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Cargo Details
             </Text>
 
@@ -2586,7 +2586,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
             {/* Service-specific Cargo Details - Only show when service is selected */}
             {form.values.service && (
               <>
-                <Text size="sm" fw={500} mb="md" c="#105476">
+                <Text size="sm" fw={500} mb="md" c="#2563EB">
                   Cargo Details for {form.values.service}
                 </Text>
 
@@ -2747,7 +2747,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                               form.values.cargo_details.length - 1 && (
                               <Button
                                 variant="light"
-                                color="#105476"
+                                color="#2563EB"
                                 size="xs"
                                 onClick={() => {
                                   form.insertListItem("cargo_details", {
@@ -2793,7 +2793,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               <Button variant="default" onClick={handlePrevious}>
                 Back
               </Button>
-              <Button onClick={handleNext} color="#105476">
+              <Button onClick={handleNext} color="#2563EB">
                 Next
               </Button>
             </Group>
@@ -2803,13 +2803,13 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         {/* Step 4: Pickup/Delivery */}
         <Stepper.Step label="4" description="Pickup/Delivery">
           <Box mt="md">
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Pickup/Delivery Details
             </Text>
             <Grid style={{ maxWidth: "80%" }}>
               {/* Pickup Details Section */}
               <Grid.Col span={12}>
-                <Text size="sm" fw={500} mb="md" c="#105476">
+                <Text size="sm" fw={500} mb="md" c="#2563EB">
                   Pickup Details
                 </Text>
               </Grid.Col>
@@ -2955,7 +2955,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
 
               {/* Delivery Details Section */}
               <Grid.Col span={12}>
-                <Text size="sm" fw={500} mb="md" c="#105476">
+                <Text size="sm" fw={500} mb="md" c="#2563EB">
                   Delivery Details
                 </Text>
               </Grid.Col>
@@ -3084,7 +3084,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               <Button variant="default" onClick={handlePrevious}>
                 Back
               </Button>
-              <Button onClick={handleNext} color="#105476">
+              <Button onClick={handleNext} color="#2563EB">
                 Next
               </Button>
             </Group>
@@ -3094,7 +3094,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         {/* Step 5: Rate Details */}
         <Stepper.Step label="5" description="Rate Details">
           <Box mt="md">
-            <Text size="md" fw={600} mb="md" c="#105476">
+            <Text size="md" fw={600} mb="md" c="#2563EB">
               Rate Details
             </Text>
 
@@ -3118,8 +3118,8 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               <Grid
                 style={{
                   fontWeight: 600,
-                  color: "#105476",
-                  borderBottom: "2px solid #105476",
+                  color: "#2563EB",
+                  borderBottom: "2px solid #2563EB",
                   paddingBottom: "8px",
                   marginBottom: "16px",
                 }}
@@ -3297,7 +3297,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                         <Button
                           size="xs"
                           variant="light"
-                          color="#105476"
+                          color="#2563EB"
                           onClick={addNewCharge}
                         >
                           <IconPlus size={16} />
@@ -3324,7 +3324,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               mt="md"
               style={{
                 fontWeight: 600,
-                color: "#105476",
+                color: "#2563EB",
                 borderTop: "1px solid #ccc",
                 paddingTop: "0.5rem",
               }}
@@ -3358,7 +3358,7 @@ const AirExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
               <Button
                 rightSection={<IconCheck size={16} />}
                 onClick={handleSubmit}
-                color="#105476"
+                color="#2563EB"
                 loading={isSubmitting}
                 disabled={isSubmitting}
               >

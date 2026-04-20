@@ -80,9 +80,9 @@ function CustomerTypeEdit() {
           {...form.getInputProps("status")}
           styles={{
             root: { backgroundColor: "#E4E4E4", width: 150 },
-            indicator: { backgroundColor: "#105476" },
+            indicator: { backgroundColor: "#2563EB" },
             label: {
-              color: "#105476",
+              color: "#2563EB",
               "&[data-active]": { color: "#ffffff" },
             },
           }}
@@ -107,7 +107,7 @@ function CustomerTypeEdit() {
         <Flex justify="space-between" align="center" w="100%">
           <Button
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/customer-type")}
           >
@@ -116,14 +116,14 @@ function CustomerTypeEdit() {
           <Group>
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate("/master/customer-type")}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Update

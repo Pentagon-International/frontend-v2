@@ -227,7 +227,7 @@ function LoginForm() {
           >
             <Checkbox 
               checked={isChecked} 
-              color={"#105476"} 
+              color={"#2563EB"} 
               styles={{
                 root: { cursor: "pointer" },
                 label: { cursor: "pointer" },
@@ -244,7 +244,7 @@ function LoginForm() {
               size="sm"
               underline="always"
               style={{
-                color: "#105476",
+                color: "#2563EB",
                 fontSize: "13px",
                 fontWeight: 600,
               }}
@@ -256,7 +256,7 @@ function LoginForm() {
               size="sm"
               underline="always"
               style={{
-                color: "#105476",
+                color: "#2563EB",
                 fontSize: "13px",
                 fontWeight: 600,
               }}
@@ -271,7 +271,7 @@ function LoginForm() {
           radius={"md"}
           fullWidth
           mt="20px"
-          color="#105476"
+          color="#2563EB"
           size="md"
           style={{
             display: "flex",

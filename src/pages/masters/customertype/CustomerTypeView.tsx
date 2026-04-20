@@ -69,9 +69,9 @@ function CustomerTypeView() {
             radius="sm"
             styles={{
               root: { backgroundColor: "#E4E4E4", width: 150 },
-              indicator: { backgroundColor: "#105476" },
+              indicator: { backgroundColor: "#2563EB" },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": { color: "#ffffff" },
               },
             }}
@@ -80,7 +80,7 @@ function CustomerTypeView() {
             size="xs"
             w={100}
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconEdit size={16} />}
             onClick={() =>
               navigate("/master/customer-type-edit", {
@@ -136,7 +136,7 @@ function CustomerTypeView() {
                 Do you want to delete this?
               </Text>
               <Group mt={10} gap="lg">
-                <Button variant="outline" color="#105476" size="xs" onClick={close}>
+                <Button variant="outline" color="#2563EB" size="xs" onClick={close}>
                   Not now
                 </Button>
                 <Button
@@ -156,7 +156,7 @@ function CustomerTypeView() {
 
           <Button
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/customer-type")}
           >

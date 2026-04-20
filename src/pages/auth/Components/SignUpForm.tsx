@@ -126,7 +126,7 @@ function SignUpForm() {
           radius={"md"}
           fullWidth
           mt="lg"
-          color="#105476"
+          color="#2563EB"
           size="md"
           style={{
             display: "flex",

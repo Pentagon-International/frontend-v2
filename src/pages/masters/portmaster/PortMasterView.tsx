@@ -74,14 +74,14 @@ function PortMasterView() {
             styles={{
               root: {
                 backgroundColor: "#E4E4E4",
-                color: "#105476",
+                color: "#2563EB",
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -96,8 +96,8 @@ function PortMasterView() {
             leftSection={<IconEdit size={16} />}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
             onClick={() =>
@@ -171,7 +171,7 @@ function PortMasterView() {
                 leftSection={<IconTrash size={16} />}
                 styles={{
                   root: {
-                    color: "#105476",
+                    color: "#2563EB",
                     borderColor: "red",
                   },
                 }}
@@ -194,7 +194,7 @@ function PortMasterView() {
               <Group mt={10} gap="lg">
                 <Button
                   variant="outline"
-                  color="#105476"
+                  color="#2563EB"
                   size="xs"
                   onClick={close}
                 >
@@ -222,8 +222,8 @@ function PortMasterView() {
             onClick={() => navigate("/master/port")}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
           >

@@ -239,7 +239,7 @@ function Tariff() {
                   }
                 >
                   <Group gap={"sm"}>
-                    <IconEyeSpark size={16} style={{ color: "#105476" }} />
+                    <IconEyeSpark size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">View Tariff</Text>
                   </Group>
                 </UnstyledButton>
@@ -257,7 +257,7 @@ function Tariff() {
                   }
                 >
                   <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <IconEdit size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">Edit Tariff</Text>
                   </Group>
                 </UnstyledButton>
@@ -321,7 +321,7 @@ function Tariff() {
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-        <Text size="md" fw={600} c={"#105476"}>
+        <Text size="md" fw={600} c={"#2563EB"}>
           Lists of Tariffs
         </Text>
 
@@ -337,7 +337,7 @@ function Tariff() {
           />
 
           <Button
-            color={"#105476"}
+            color={"#2563EB"}
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/tariff-create")}

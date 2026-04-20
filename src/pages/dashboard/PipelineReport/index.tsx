@@ -3109,16 +3109,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 { label: "No. of Shipments ppp", value: "no_of_shipments" },
               ]}
               size="xs"
-              color="#105476"
+              color="#2563EB"
               styles={{
                 root: {
                   backgroundColor: "#f0f0f0",
                 },
                 indicator: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                 },
                 label: {
-                  color: "#105476",
+                  color: "#2563EB",
                   fontWeight: 500,
                   fontSize: "12px",
                   padding: "4px 8px",
@@ -3179,16 +3179,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 { label: "No. of Shipments", value: "no_of_shipments" },
               ]}
               size="xs"
-              color="#105476"
+              color="#2563EB"
               styles={{
                 root: {
                   backgroundColor: "#f0f0f0",
                 },
                 indicator: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                 },
                 label: {
-                  color: "#105476",
+                  color: "#2563EB",
                   fontWeight: 500,
                   fontSize: "12px",
                   padding: "4px 8px",
@@ -3249,16 +3249,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 { label: "No. of Shipments", value: "no_of_shipments" },
               ]}
               size="xs"
-              color="#105476"
+              color="#2563EB"
               styles={{
                 root: {
                   backgroundColor: "#f0f0f0",
                 },
                 indicator: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                 },
                 label: {
-                  color: "#105476",
+                  color: "#2563EB",
                   fontWeight: 500,
                   fontSize: "12px",
                   padding: "4px 8px",
@@ -3308,7 +3308,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     return (
       <Box>
         <Group justify="space-between" align="center">
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#2563EB">
             {/* Pipeline Report */}
           </Text>
           <Group gap="md" align="center">
@@ -3323,16 +3323,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                   { label: "No. of Shipments", value: "no_of_shipments" },
                 ]}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
                 styles={{
                   root: {
                     backgroundColor: "#f0f0f0",
                   },
                   indicator: {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                   },
                   label: {
-                    color: "#105476",
+                    color: "#2563EB",
                     fontWeight: 500,
                     fontSize: "12px",
                     padding: "4px 8px",
@@ -3365,8 +3365,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               value="salesperson"
               style={{
                 backgroundColor:
-                  activeTab === "salesperson" ? "#105476" : "transparent",
-                color: activeTab === "salesperson" ? "white" : "#105476",
+                  activeTab === "salesperson" ? "#2563EB" : "transparent",
+                color: activeTab === "salesperson" ? "white" : "#2563EB",
                 fontWeight: activeTab === "salesperson" ? 600 : 400,
               }}
             >
@@ -3376,8 +3376,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               value="product"
               style={{
                 backgroundColor:
-                  activeTab === "product" ? "#105476" : "transparent",
-                color: activeTab === "product" ? "white" : "#105476",
+                  activeTab === "product" ? "#2563EB" : "transparent",
+                color: activeTab === "product" ? "white" : "#2563EB",
                 fontWeight: activeTab === "product" ? 600 : 400,
               }}
             >
@@ -3387,8 +3387,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               value="region"
               style={{
                 backgroundColor:
-                  activeTab === "region" ? "#105476" : "transparent",
-                color: activeTab === "region" ? "white" : "#105476",
+                  activeTab === "region" ? "#2563EB" : "transparent",
+                color: activeTab === "region" ? "white" : "#2563EB",
                 fontWeight: activeTab === "region" ? 600 : 400,
               }}
             >
@@ -3429,7 +3429,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                   onClick={handleResetToBase}
                   variant="outline"
                   size="xs"
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Back to Dashboard
                 </Button>
@@ -3476,7 +3476,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                   onClick={handleResetToBase}
                   variant="outline"
                   size="xs"
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Back to Dashboard
                 </Button>
@@ -3544,16 +3544,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               { label: "No. of Shipments", value: "no_of_shipments" },
             ]}
             size="xs"
-            color="#105476"
+            color="#2563EB"
             styles={{
               root: {
                 backgroundColor: "#f0f0f0",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 fontWeight: 500,
                 fontSize: "12px",
                 padding: "4px 8px",

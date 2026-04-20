@@ -979,7 +979,7 @@ function LeadList() {
                 whiteSpace: "normal",
                 padding: "5px 15px",
                 color: "#3f3f3fff",
-                border: "1px solid #105476",
+                border: "1px solid #2563EB",
                 boxShadow: "0 2px 10px rgba(0,0,0, 0.2)",
                 wordBreak: "break-word",
               }}
@@ -989,7 +989,7 @@ function LeadList() {
                 size="sm"
                 style={{
                   cursor: hasMessages ? "pointer" : "default",
-                  color: hasMessages ? "#105476" : "inherit",
+                  color: hasMessages ? "#2563EB" : "inherit",
                   textDecoration: hasMessages ? "underline" : "none",
                 }}
                 truncate
@@ -1054,7 +1054,7 @@ function LeadList() {
                   }}
                 >
                   <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <IconEdit size={16} style={{ color: "#2563EB" }} />
                     <Text size="sm">Edit</Text>
                   </Group>
                 </UnstyledButton>
@@ -1252,7 +1252,7 @@ function LeadList() {
                     height: "36px",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
-                      border: "1px solid #105476",
+                      border: "1px solid #2563EB",
                     },
                   },
                 }}
@@ -1267,10 +1267,10 @@ function LeadList() {
                   root: {
                     borderRadius: "4px",
                     backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
+                    border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
+                    color: showFilters ? "#2563EB" : "#737780",
                     "&:active": {
-                      border: "1px solid #105476",
+                      border: "1px solid #2563EB",
                       color: "#FFFFFF",
                     },
                   },
@@ -1284,14 +1284,14 @@ function LeadList() {
                 size="sm"
                 styles={{
                   root: {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                     borderRadius: "4px",
                     color: "#FFFFFF",
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontStyle: "semibold",
                     "&:hover": {
-                      backgroundColor: "#105476",
+                      backgroundColor: "#2563EB",
                     },
                   },
                 }}
@@ -1448,7 +1448,7 @@ function LeadList() {
                 disabled={isLoading}
                 styles={{
                   root: {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
@@ -1474,7 +1474,7 @@ function LeadList() {
         {(isLoading || isFetching) ? (
           <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
+              <Loader size="lg" color="#2563EB" />
               <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                 Loading leads...
               </Text>
@@ -1600,7 +1600,7 @@ function LeadList() {
         onClose={closeRemarkModal}
         title={
           <Stack gap={4}>
-            <Text size="lg" fw={600} c="#105476">
+            <Text size="lg" fw={600} c="#2563EB">
               Conversation
             </Text>
             {selectedLeadForRemark && (
@@ -1695,7 +1695,7 @@ function LeadList() {
                             <Text
                               size="xs"
                               fw={600}
-                              c="#105476"
+                              c="#2563EB"
                               mb={4}
                               style={{
                                 paddingLeft: isSentByMe ? "0" : "8px",
@@ -1710,7 +1710,7 @@ function LeadList() {
                           {/* Message Bubble */}
                           <Box
                             style={{
-                              backgroundColor: isSentByMe ? "#105476" : "#ffffff",
+                              backgroundColor: isSentByMe ? "#2563EB" : "#ffffff",
                               color: isSentByMe ? "#ffffff" : "#333",
                               padding: "10px 14px",
                               borderRadius: isSentByMe
@@ -1770,7 +1770,7 @@ function LeadList() {
                 <Button
                   variant="outline"
                   onClick={closeRemarkModal}
-                  color="#105476"
+                  color="#2563EB"
                   size="sm"
                 >
                   Close
@@ -1787,7 +1787,7 @@ function LeadList() {
               <Button
                 variant="outline"
                 onClick={closeRemarkModal}
-                color="#105476"
+                color="#2563EB"
                 size="sm"
               >
                 Close

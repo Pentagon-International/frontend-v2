@@ -1,53 +1,24 @@
 import {
-  Avatar,
   Box,
-  Center,
   Flex,
   Group,
-  Image,
   Indicator,
-  Menu,
   Text,
   UnstyledButton,
 } from "@mantine/core";
-import {
-  IconArrowRight,
-  IconBell,
-  IconChevronRight,
-  IconChevronsRight,
-  IconLayoutSidebarLeftCollapse,
-  IconLayoutSidebarRightCollapse,
-  IconUser,
-} from "@tabler/icons-react";
+import { IconBell } from "@tabler/icons-react";
 import { useState } from "react";
 import { useLayoutStore } from "../store/useLayoutStore";
 import useAuthStore from "../store/authStore";
 import ProfileDrawer from "./ProfileDrawer";
-import PentLogo from "../assets/images/pentagon-prime.svg";
-
-// interface HeaderProps {
-//   title: string;
-// }
 
 function MainSectionHeader() {
   const title = useLayoutStore((state) => state.title);
   const [profileDrawerOpened, setProfileDrawerOpened] = useState(false);
 
   const user = useAuthStore((state) => state.user);
-  // const logout = useAuthStore((state) => state.logout);
-
   const fullName = user?.full_name || "User";
   const email = user?.email || "";
-
-  console.log("MainSectionHeader render:", { user, fullName, email });
-
-  const handleProfileClick = () => {
-    setProfileDrawerOpened(true);
-  };
-
-  const handleProfileDrawerClose = () => {
-    setProfileDrawerOpened(false);
-  };
 
   return (
     <>
@@ -55,66 +26,95 @@ function MainSectionHeader() {
         justify="space-between"
         align="center"
         bg="white"
-        mih={30}
-        style={{padding:"0 24px"}}
-        //   style={{ borderBottom: "1px solid #f0f0f0" }}
+        style={{ padding: "0 24px", minHeight: "54px" }}
       >
+        {/* Page title with enterprise blue left accent */}
         <Box
           style={{
-            borderLeft: "3px solid #14597A", // Unique accent bar
+            borderLeft: "3px solid #2563EB",
             paddingLeft: 12,
           }}
         >
           <Text
-            fw={700}
-            fz={22}
+            fw={600}
             style={{
-              color: "#2C3E50",
-              letterSpacing: 0.5,
+              fontSize: "17px",
+              color: "#1E293B",
+              letterSpacing: 0.1,
+              lineHeight: 1.3,
             }}
           >
             {title}
           </Text>
         </Box>
-        {/* Right section */}
 
-        <Group gap="xl" align="center" wrap="nowrap">
-          {/* Notification with dot */}
+        {/* Right section */}
+        <Group gap="lg" align="center" wrap="nowrap">
+          {/* Notification bell */}
           <Indicator
-            size={6}
+            size={7}
             color="red"
             style={{ cursor: "pointer" }}
             offset={2}
           >
-            <IconBell size={24} stroke={2} color="#105476" />
+            <IconBell
+              size={20}
+              stroke={1.5}
+              color="#64748B"
+              aria-label="Notifications"
+            />
           </Indicator>
 
-          {/* User info */}
-          <UnstyledButton onClick={handleProfileClick} px={0}>
+          {/* User profile */}
+          <UnstyledButton
+            onClick={() => setProfileDrawerOpened(true)}
+            px={0}
+            aria-label="Open profile menu"
+          >
             <Group gap="sm" align="center" wrap="nowrap">
-              <Box style={{ lineHeight: 1 }}>
-                <Text size="sm" ta="right" c="#212629ff" fw={500}>
+              <Box style={{ lineHeight: 1.35, textAlign: "right" }}>
+                <Text
+                  style={{
+                    fontSize: "13.5px",
+                    color: "#1E293B",
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                  }}
+                >
                   {fullName}
                 </Text>
-                <Text size="xs" c="dimmed">
+                <Text
+                  style={{
+                    fontSize: "12px",
+                    color: "#94A3B8",
+                    lineHeight: 1.2,
+                  }}
+                >
                   {email}
                 </Text>
               </Box>
+
+              {/* Avatar — gradient square with rounded corners */}
               <Flex
                 justify="center"
                 align="center"
-                fw={400}
+                aria-hidden="true"
                 style={{
-                  fontFamily: "Outfit",
-                  width: "36px",
-                  height: "36px",
-                  color: "white",
-                  padding: "4px",
-                  borderRadius: "50%",
-                  backgroundColor: "#105476",
+                  width: "34px",
+                  height: "34px",
+                  color: "#ffffff",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+                  fontFamily: "'Inter', sans-serif",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  flexShrink: 0,
+                  letterSpacing: 0,
+                  userSelect: "none",
                 }}
-              >{fullName.slice(0,1)}</Flex>
-
+              >
+                {fullName.slice(0, 1).toUpperCase()}
+              </Flex>
             </Group>
           </UnstyledButton>
         </Group>
@@ -122,7 +122,7 @@ function MainSectionHeader() {
 
       <ProfileDrawer
         opened={profileDrawerOpened}
-        onClose={handleProfileDrawerClose}
+        onClose={() => setProfileDrawerOpened(false)}
       />
     </>
   );

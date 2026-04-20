@@ -1,56 +1,56 @@
+// Section icon colors — vibrant, designed for dark sidebar background
 export const sectionIconColors: Record<string, string> = {
-  Dashboard: "#10B563",
-  Sales: "#10B563",
-  "Customer Service": "#6010B5",
-  
-  Road: "#10A4B5",
-  Air: "#10A4B5",
-  "Ocean": "#10A4B5",
+  Dashboard: "#34D399",
+  Sales: "#34D399",
+  "Customer Service": "#A78BFA",
 
-  Accounts: "#1034B5",
-  Masters: "#1034B5",
-  Settings: "#1034B5",
-  Jobcreation: "#1034B5",
-  Invoice: "#1034B5",
+  Road: "#38BDF8",
+  Air: "#38BDF8",
+  Ocean: "#38BDF8",
 
-  Reports: "#B5105D",
-  Help: "#B5105D",
+  Accounts: "#60A5FA",
+  Masters: "#60A5FA",
+  Settings: "#60A5FA",
+  Jobcreation: "#60A5FA",
+  Invoice: "#60A5FA",
 
-  Collapse: "#105476",
+  Reports: "#F472B6",
+  Help: "#F472B6",
+
+  Collapse: "#60A5FA",
 };
 
+// Inactive icon box background — subtle tinted overlays for dark sidebar
 export const sectionIconBackground: Record<string, string> = {
-  Dashboard: "#EDFCF5",
-  Sales: "#EDFCF5",
-  "Customer Service": "#F5EDFC",
+  Dashboard: "rgba(52, 211, 153, 0.12)",
+  Sales: "rgba(52, 211, 153, 0.12)",
+  "Customer Service": "rgba(167, 139, 250, 0.12)",
 
-  Road: "#EDFBFC",
-  Air: "#EDFBFC",
-  "Ocean": "#EDFBFC",
+  Road: "rgba(56, 189, 248, 0.12)",
+  Air: "rgba(56, 189, 248, 0.12)",
+  Ocean: "rgba(56, 189, 248, 0.12)",
 
-  Accounts: "#EDF1FC",
-  Masters: "#EDF1FC",
-  Settings: "#EDF1FC",
-  Jobcreation: "#EDF1FC",
-  Invoice: "#EDF1FC",
+  Accounts: "rgba(96, 165, 250, 0.12)",
+  Masters: "rgba(96, 165, 250, 0.12)",
+  Settings: "rgba(96, 165, 250, 0.12)",
+  Jobcreation: "rgba(96, 165, 250, 0.12)",
+  Invoice: "rgba(96, 165, 250, 0.12)",
 
-  Reports: "#FCEDF4",
-  Help: "#FCEDF4",
+  Reports: "rgba(244, 114, 182, 0.12)",
+  Help: "rgba(244, 114, 182, 0.12)",
 
-  Collapse: "#105476",
+  Collapse: "rgba(96, 165, 250, 0.12)",
 };
 
-// 🎨 Base style fragments
 const baseRoot = {
-  padding: "4px 6px",
-  fontWeight: 500,
+  padding: "3px 6px",
+  fontWeight: 400,
   margin: 0,
-  fontSize:"16px",
-  minHeight:"36px"
+  fontSize: "13.5px",
+  minHeight: "34px",
 };
 
-
-// 🔹 Main navigation link
+// Main navigation link styles (dark sidebar)
 export const getLinkStyles = (
   isActive: boolean,
   key: string,
@@ -58,80 +58,86 @@ export const getLinkStyles = (
   activeNav?: String,
   isSidebarCollapsed?: Boolean,
 ) => {
-
   return {
     root: {
       ...baseRoot,
-      borderRadius: key!=="Tariff" ? 8 : 0,
-      borderTopRightRadius: 8,
-      borderBottomRightRadius: 8,
-      transition: "background-color 0.3s ease",
+      borderRadius: key !== "Tariff" ? 6 : 0,
+      borderTopRightRadius: 6,
+      borderBottomRightRadius: 6,
+      transition: "background-color 0.15s ease, color 0.15s ease",
       width: "100%",
-      backgroundColor: isActive? "#F5FCFF" : "transparent",
-      borderLeft: key==="Tariff" ? (isActive ? "1px solid #105476" : "1px solid #E8E8E8") : "",
-      color: isActive ? "#105476" : "#444955",
-      fontWeight: isActive ? 600 : 500,
+      backgroundColor: isActive ? "rgba(59, 130, 246, 0.18)" : "transparent",
+      borderLeft: key === "Tariff"
+        ? (isActive ? "2px solid #3B82F6" : "2px solid rgba(255,255,255,0.08)")
+        : "",
+      color: isActive ? "#E8F4FF" : "#7A9AB8",
+      fontWeight: isActive ? 600 : 400,
       marginBottom: 0,
       "&:hover": {
-        backgroundColor:"#F5FCFF"
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
+        color: "#C0D4E8",
       },
     },
     section: {
-      marginInlineEnd: isSidebarCollapsed && key!=="Tariff" ? 0 : "8px", 
+      marginInlineEnd: isSidebarCollapsed && key !== "Tariff" ? 0 : "8px",
     },
   };
 };
 
-// 🔹 Generic sub-link
+// Generic sub-link styles (dark sidebar)
 export const getSubLinkStyles = (isActive: boolean, key: string) => {
-
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive? "#F5FCFF" : "transparent",
-      color: isActive ? "#105476" : "#444955",
-      borderLeft: isActive ? "1px solid #105476" : "1px solid #E8E8E8",
-      borderTopRightRadius: 8,
-      borderBottomRightRadius: 8, 
-      fontWeight: isActive ? 600 : 500,
+      backgroundColor: isActive ? "rgba(59, 130, 246, 0.18)" : "transparent",
+      color: isActive ? "#E8F4FF" : "#7A9AB8",
+      borderLeft: isActive
+        ? "2px solid #3B82F6"
+        : "2px solid rgba(255,255,255,0.08)",
+      borderTopRightRadius: 6,
+      borderBottomRightRadius: 6,
+      fontWeight: isActive ? 600 : 400,
       "&:hover": {
-        backgroundColor:"#F5FCFF"
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
+        color: "#C0D4E8",
       },
     },
   };
 };
 
-// 🔹 Tariff sub-link (extra indent + special colors)
+// Tariff sub-link (extra indent)
 export const getTariffSubLinkStyles = (isActive: boolean, key: string) => {
-
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive? "#F5FCFF" : "transparent",
-      color: isActive ? "#105476" : "#444955",
-      borderLeft: isActive ? "1px solid #105476" : "1px solid #E8E8E8",
-      fontWeight: isActive ? 600 : 500,
+      backgroundColor: isActive ? "rgba(59, 130, 246, 0.18)" : "transparent",
+      color: isActive ? "#E8F4FF" : "#7A9AB8",
+      borderLeft: isActive
+        ? "2px solid #3B82F6"
+        : "2px solid rgba(255,255,255,0.08)",
+      fontWeight: isActive ? 600 : 400,
       "&:hover": {
-        backgroundColor:"#F5FCFF"
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
+        color: "#C0D4E8",
       },
     },
   };
 };
 
-// 🔹 Customer Service sub-link (same as generic but with padding + fontFamily)
+// Customer Service sub-link
 export const getCustomerServiceSubLinkStyles = (
   isActive: boolean,
-  key: string
+  key: string,
 ) => {
-
   return {
     root: {
       ...baseRoot,
-      backgroundColor: isActive? "#F5FCFF" : "transparent",
-      color: isActive ? "#105476" : "#444955",
-      fontWeight: isActive ? 600 : 500,
+      backgroundColor: isActive ? "rgba(59, 130, 246, 0.18)" : "transparent",
+      color: isActive ? "#E8F4FF" : "#7A9AB8",
+      fontWeight: isActive ? 600 : 400,
       "&:hover": {
-         backgroundColor:"#F5FCFF"
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
+        color: "#C0D4E8",
       },
     },
   };

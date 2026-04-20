@@ -83,10 +83,10 @@ function GroupCompanyView() {
                   width: "150px",
                 },
                 indicator: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                 },
                 label: {
-                  color: "#105476",
+                  color: "#2563EB",
                   "&[data-active]": {
                     color: "#ffffff",
                   },
@@ -99,11 +99,11 @@ function GroupCompanyView() {
               w={100}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
-              c={"#105476"}
+              c={"#2563EB"}
               variant="outline"
               leftSection={<IconEdit size={16} />}
               onClick={() =>
@@ -154,7 +154,7 @@ function GroupCompanyView() {
                   w={120}
                   styles={{
                     root: {
-                      color: "#105476",
+                      color: "#2563EB",
                       borderColor: "red",
                     },
                   }}
@@ -179,7 +179,7 @@ function GroupCompanyView() {
                 <Group mt={10} gap={"lg"}>
                   <Button
                     variant="outline"
-                    color="#105476"
+                    color="#2563EB"
                     size="xs"
                     onClick={close}
                   >
@@ -203,11 +203,11 @@ function GroupCompanyView() {
               w={120}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
-              c={"#105476"}
+              c={"#2563EB"}
               variant="outline"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate("/master/group-company")}

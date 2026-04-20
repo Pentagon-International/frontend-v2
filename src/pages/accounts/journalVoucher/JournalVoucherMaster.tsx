@@ -334,7 +334,7 @@ function JournalVoucherMaster() {
         header: "Document No",
         size: 150,
         Cell: ({ cell }) => (
-          <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter" }}>
+          <Text size="sm" fw={600} c="#2563EB" style={{ fontFamily: "Inter" }}>
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -399,7 +399,7 @@ function JournalVoucherMaster() {
             <Text
               size="sm"
               fw={500}
-              c={Math.abs(num) > 0.005 ? "red" : "#105476"}
+              c={Math.abs(num) > 0.005 ? "red" : "#2563EB"}
               style={{ fontFamily: "Inter" }}
             >
               {val || "-"}
@@ -476,7 +476,7 @@ function JournalVoucherMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <IconEdit size={16} style={{ color: "#2563EB" }} />
                         <Text size="sm" style={{ fontFamily: "Inter" }}>
                           Edit
                         </Text>
@@ -497,7 +497,7 @@ function JournalVoucherMaster() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#105476" }} />
+                      <IconEye size={16} style={{ color: "#2563EB" }} />
                       <Text size="sm" style={{ fontFamily: "Inter" }}>
                         View
                       </Text>
@@ -518,7 +518,7 @@ function JournalVoucherMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconReceiptRefund size={16} style={{ color: "#105476" }} />
+                        <IconReceiptRefund size={16} style={{ color: "#2563EB" }} />
                         <Text size="sm" style={{ fontFamily: "Inter" }}>
                           JV Reversal
                         </Text>
@@ -702,7 +702,7 @@ function JournalVoucherMaster() {
                   height: "36px",
                   border: "1px solid #D0D1D4",
                   "&:focus": {
-                    border: "1px solid #105476",
+                    border: "1px solid #2563EB",
                   },
                 },
               }}
@@ -717,11 +717,11 @@ function JournalVoucherMaster() {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                   border: showFilters
-                    ? "1px solid #105476"
+                    ? "1px solid #2563EB"
                     : "1px solid #737780",
-                  color: showFilters ? "#105476" : "#737780",
+                  color: showFilters ? "#2563EB" : "#737780",
                   "&:active": {
-                    border: "1px solid #105476",
+                    border: "1px solid #2563EB",
                     color: "#FFFFFF",
                   },
                 },
@@ -734,14 +734,14 @@ function JournalVoucherMaster() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontstyle: "semibold",
                   "&:hover": {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                   },
                 },
               }}
@@ -902,7 +902,7 @@ function JournalVoucherMaster() {
               leftSection={<IconFilter size={16} />}
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -924,7 +924,7 @@ function JournalVoucherMaster() {
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
             <Text c="dimmed" style={{ fontFamily: "Inter" }}>
               Loading journal vouchers...
             </Text>

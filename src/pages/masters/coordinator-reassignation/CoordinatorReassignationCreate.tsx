@@ -191,14 +191,14 @@ function CoordinatorReassignationCreate() {
   return (
     <Box component="form" onSubmit={form.onSubmit(handleSubmit)} px="lg" py="md">
       <Group justify="space-between" mb="md">
-        <Text size="lg" fw={600} c="#105476">
+        <Text size="lg" fw={600} c="#2563EB">
           {isEditMode
             ? "Edit Sales Co-ordinator Reassignation"
             : "Create Sales Co-ordinator Reassignation"}
         </Text>
         <Button
           variant="outline"
-          color="#105476"
+          color="#2563EB"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => navigate("/master/sales-co-ordinator-reassignation")}
         >
@@ -316,14 +316,14 @@ function CoordinatorReassignationCreate() {
           <Group justify="flex-end" mt="xl">
             <Button
               variant="outline"
-              color="#105476"
+              color="#2563EB"
               onClick={() => navigate("/master/sales-co-ordinator-reassignation")}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               leftSection={<IconCheck size={16} />}
               loading={isSubmitting}
               disabled={isSubmitting}

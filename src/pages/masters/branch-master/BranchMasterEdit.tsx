@@ -116,9 +116,9 @@ function BranchMasterEdit() {
           {...form.getInputProps("status")}
           styles={{
             root: { width: 150, backgroundColor: "#E4E4E4" },
-            indicator: { backgroundColor: "#105476" },
+            indicator: { backgroundColor: "#2563EB" },
             label: {
-              color: "#105476",
+              color: "#2563EB",
               "&[data-active]": { color: "#ffffff" },
             },
           }}
@@ -186,8 +186,8 @@ function BranchMasterEdit() {
             onClick={() => navigate("/master/branch")}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
           >
@@ -199,8 +199,8 @@ function BranchMasterEdit() {
               onClick={() => navigate("/master/branch")}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
             >
@@ -208,7 +208,7 @@ function BranchMasterEdit() {
             </Button>
             <Button
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Update

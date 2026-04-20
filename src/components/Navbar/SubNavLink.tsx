@@ -39,7 +39,7 @@ export const SubNavLink = ({
   const style = getSubLinkStyles(activeSubNav === label, label);
   const isActive = activeSubNav === label;
   const iconColor = sectionIconColors[parent] || "white";
-  const iconBackground = sectionIconBackground[parent] || "#105476";
+  const iconBackground = sectionIconBackground[parent] || "#2563EB";
 
   return (
     <NavLink
@@ -50,7 +50,7 @@ export const SubNavLink = ({
             height: 24,
             borderRadius: 4,
             backgroundColor: "transparent",
-            color: isActive ? "#105476" : "#444955",
+            color: isActive ? "#60A5FA" : "#4A6880",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

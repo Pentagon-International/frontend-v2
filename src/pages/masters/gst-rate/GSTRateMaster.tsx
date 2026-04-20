@@ -169,7 +169,7 @@ export default function GSTRateMasterList() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <IconEdit size={16} style={{ color: "#2563EB" }} />
                         <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
                       </Group>
                     </UnstyledButton>
@@ -309,7 +309,7 @@ export default function GSTRateMasterList() {
       >
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
+            <Loader size="lg" color="#2563EB" />
             <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
               Loading GST Rate data...
             </Text>
@@ -378,14 +378,14 @@ export default function GSTRateMasterList() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#105476",
+                  backgroundColor: "#2563EB",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontstyle: "semibold",
                   "&:hover": {
-                    backgroundColor: "#105476",
+                    backgroundColor: "#2563EB",
                   },
                 },
               }}

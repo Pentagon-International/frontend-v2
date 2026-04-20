@@ -76,10 +76,10 @@ function ContainerTypeView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#105476",
+                backgroundColor: "#2563EB",
               },
               label: {
-                color: "#105476",
+                color: "#2563EB",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -92,7 +92,7 @@ function ContainerTypeView() {
             w={100}
             variant="outline"
             styles={{
-              root: { color: "#105476", borderColor: "#105476" },
+              root: { color: "#2563EB", borderColor: "#2563EB" },
             }}
             leftSection={<IconEdit size={16} />}
             onClick={() =>
@@ -142,7 +142,7 @@ function ContainerTypeView() {
                 w={120}
                 variant="outline"
                 styles={{
-                  root: { color: "#105476", borderColor: "red" },
+                  root: { color: "#2563EB", borderColor: "red" },
                 }}
                 c="red"
                 leftSection={<IconTrash size={16} />}
@@ -161,7 +161,7 @@ function ContainerTypeView() {
                 Are you sure?<br />Do you want to delete this?
               </Text>
               <Group mt={10} gap="lg">
-                <Button variant="outline" color="#105476" size="xs" onClick={close}>
+                <Button variant="outline" color="#2563EB" size="xs" onClick={close}>
                   Not now
                 </Button>
                 <Button
@@ -183,7 +183,7 @@ function ContainerTypeView() {
             w={120}
             variant="outline"
             styles={{
-              root: { color: "#105476", borderColor: "#105476" },
+              root: { color: "#2563EB", borderColor: "#2563EB" },
             }}
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/container-type")}

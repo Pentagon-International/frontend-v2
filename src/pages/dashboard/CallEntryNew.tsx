@@ -1623,7 +1623,7 @@ function CallEntryNew() {
           <Button
             size="xs"
             variant="filled"
-            color="#105476"
+            color="#2563EB"
             style={{
               fontSize: "11px",
               fontWeight: 500,
@@ -2012,7 +2012,7 @@ function CallEntryNew() {
         }}
       >
         <Stack align="center" gap="xs">
-          <Loader size="xl" color="#105476" />
+          <Loader size="xl" color="#2563EB" />
           <Text
             size="xl"
             color="dimmed"
@@ -2067,12 +2067,12 @@ function CallEntryNew() {
               <Text
                 size="md"
                 fw={600}
-                c="#105476"
+                c="#2563EB"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#105476",
+                  color: "#2563EB",
                   textAlign: "center",
                 }}
               >
@@ -2141,7 +2141,7 @@ function CallEntryNew() {
                       </Group>
                       {isLoadingProfiling ? (
                         <Center style={{ minHeight: "200px" }}>
-                          <Loader size="lg" color="#105476" />
+                          <Loader size="lg" color="#2563EB" />
                         </Center>
                       ) : (
                         <>
@@ -2565,7 +2565,7 @@ function CallEntryNew() {
                     <Group mt="md" justify="apart">
                       <Button
                         variant="outline"
-                        c={"#105476"}
+                        c={"#2563EB"}
                         leftSection={<IconPlus size={16} />}
                         onClick={handleAddProfile}
                         styles={{
@@ -2580,11 +2580,11 @@ function CallEntryNew() {
                       <Group>
                         <Button
                           variant="outline"
-                          c="#105476"
+                          c="#2563EB"
                           styles={{
                             root: {
-                              color: "#105476",
-                              borderColor: "#105476",
+                              color: "#2563EB",
+                              borderColor: "#2563EB",
                               fontFamily: "Inter, sans-serif",
                             },
                           }}
@@ -2621,7 +2621,7 @@ function CallEntryNew() {
                       </Group>
                       {isLoadingParticipants ? (
                         <Center style={{ minHeight: "200px" }}>
-                          <Loader size="lg" color="#105476" />
+                          <Loader size="lg" color="#2563EB" />
                         </Center>
                       ) : (
                         <>
@@ -2981,7 +2981,7 @@ function CallEntryNew() {
                     <Group justify="space-between">
                       <Button
                         variant="outline"
-                        c="#105476"
+                        c="#2563EB"
                         leftSection={<IconPlus size={16} />}
                         onClick={addParticipant}
                         styles={{
@@ -2993,11 +2993,11 @@ function CallEntryNew() {
                       <Group>
                         <Button
                           variant="outline"
-                          c="#105476"
+                          c="#2563EB"
                           styles={{
                             root: {
-                              color: "#105476",
-                              borderColor: "#105476",
+                              color: "#2563EB",
+                              borderColor: "#2563EB",
                               fontFamily: "Inter, sans-serif",
                             },
                           }}
@@ -3045,7 +3045,7 @@ function CallEntryNew() {
 
                     {isLoadingNearbyCustomers ? (
                       <Box ta="center" py="xl">
-                        <Loader size="lg" color="#105476" />
+                        <Loader size="lg" color="#2563EB" />
                         <Text
                           mt="md"
                           c="dimmed"
@@ -3187,7 +3187,7 @@ function CallEntryNew() {
                       <Menu.Target>
                         <ActionIcon
                           variant="subtle"
-                          color="#105476"
+                          color="#2563EB"
                           size="lg"
                           styles={{
                             root: {
@@ -3226,7 +3226,7 @@ function CallEntryNew() {
                                 justifyContent: "center",
                               }}
                             >
-                              <IconUserScan size={16} color="#105476" />
+                              <IconUserScan size={16} color="#2563EB" />
                             </Box>
                           }
                           disabled={
@@ -3303,7 +3303,7 @@ function CallEntryNew() {
                                 justifyContent: "center",
                               }}
                             >
-                              <IconUserScan size={16} color="#105476" />
+                              <IconUserScan size={16} color="#2563EB" />
                             </Box>
                           }
                           styles={{
@@ -3367,7 +3367,7 @@ function CallEntryNew() {
                                 justifyContent: "center",
                               }}
                             >
-                              <IconPlus size={16} color="#105476" />
+                              <IconPlus size={16} color="#2563EB" />
                             </Box>
                           }
                           styles={{
@@ -3429,7 +3429,7 @@ function CallEntryNew() {
                                 justifyContent: "center",
                               }}
                             >
-                              <IconUserScan size={16} color="#105476" />
+                              <IconUserScan size={16} color="#2563EB" />
                             </Box>
                           }
                           styles={{
@@ -3914,7 +3914,7 @@ function CallEntryNew() {
                           isSubmittingCallEntry
                         }
                         style={{
-                          backgroundColor: "#105476",
+                          backgroundColor: "#2563EB",
                           fontSize: "13px",
                           fontFamily: "Inter",
                           fontStyle: "medium",

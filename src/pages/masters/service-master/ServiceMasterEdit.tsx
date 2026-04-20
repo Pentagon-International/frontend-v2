@@ -131,9 +131,9 @@ function ServiceMasterEdit() {
           {...editForm.getInputProps("status")}
           styles={{
             root: { backgroundColor: "#E4E4E4", width: 150 },
-            indicator: { backgroundColor: "#105476" },
+            indicator: { backgroundColor: "#2563EB" },
             label: {
-              color: "#105476",
+              color: "#2563EB",
               "&[data-active]": { color: "#fff" },
             },
           }}
@@ -202,7 +202,7 @@ function ServiceMasterEdit() {
             leftSection={<IconArrowLeft size={16} />}
             onClick={handleBack}
             styles={{
-              root: { color: "#105476", borderColor: "#105476" },
+              root: { color: "#2563EB", borderColor: "#2563EB" },
             }}
           >
             Back
@@ -213,7 +213,7 @@ function ServiceMasterEdit() {
               variant="outline"
               onClick={() => navigate("/master/service")}
               styles={{
-                root: { color: "#105476", borderColor: "#105476" },
+                root: { color: "#2563EB", borderColor: "#2563EB" },
               }}
             >
               Cancel
@@ -221,7 +221,7 @@ function ServiceMasterEdit() {
             <Button
               w={130}
               type="submit"
-              color="#105476"
+              color="#2563EB"
               rightSection={<IconCheck size={16} />}
             >
               Update

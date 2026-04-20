@@ -104,14 +104,14 @@ function TermsOfShipmentEdit() {
           styles={{
             root: {
               backgroundColor: "#E4E4E4",
-              color: "#105476",
+              color: "#2563EB",
               width: "150px",
             },
             indicator: {
-              backgroundColor: "#105476",
+              backgroundColor: "#2563EB",
             },
             label: {
-              color: "#105476",
+              color: "#2563EB",
               "&[data-active]": {
                 color: "#ffffff",
               },
@@ -192,11 +192,11 @@ function TermsOfShipmentEdit() {
             w={130}
             styles={{
               root: {
-                color: "#105476",
-                borderColor: "#105476",
+                color: "#2563EB",
+                borderColor: "#2563EB",
               },
             }}
-            c="#105476"
+            c="#2563EB"
             variant="outline"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() =>
@@ -212,11 +212,11 @@ function TermsOfShipmentEdit() {
               w={130}
               styles={{
                 root: {
-                  color: "#105476",
-                  borderColor: "#105476",
+                  color: "#2563EB",
+                  borderColor: "#2563EB",
                 },
               }}
-              c="#105476"
+              c="#2563EB"
               variant="outline"
               onClick={() => navigate("/master/terms-of-shipment")}
             >
@@ -225,7 +225,7 @@ function TermsOfShipmentEdit() {
             <Button
               w={130}
               type="submit"
-              color="#105476"
+              color="#2563EB"
               variant="filled"
               rightSection={<IconCheck size={16} />}
             >

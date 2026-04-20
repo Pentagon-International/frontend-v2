@@ -2251,11 +2251,11 @@ function HouseCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#105476">
+          <Text size="xl" fw={600} c="#2563EB">
             {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
-            <Badge color="#105476" size="md" variant="light">
+            <Badge color="#2563EB" size="md" variant="light">
               Shipment ID: {editData.shipment_id}
             </Badge>
           )}
@@ -2264,7 +2264,7 @@ function HouseCreate() {
         <Group>
           {/* <Button
             variant="outline"
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() =>
               navigate("/SeaExport/import-job/create", {
@@ -2289,7 +2289,7 @@ function HouseCreate() {
             Back to Export Job
           </Button> */}
           <Button
-            color="#105476"
+            color="#2563EB"
             variant="outline"
             onClick={() => {
               if (active === 0) {
@@ -2355,7 +2355,7 @@ function HouseCreate() {
             <Menu.Target>
               <ActionIcon
                 variant="subtle"
-                color="#105476"
+                color="#2563EB"
                 size="lg"
                 styles={{
                   root: {
@@ -2395,7 +2395,7 @@ function HouseCreate() {
                       justifyContent: "center",
                     }}
                   >
-                    <IconCalendar size={16} color="#105476" />
+                    <IconCalendar size={16} color="#2563EB" />
                   </Box>
                 }
                 styles={{
@@ -2451,7 +2451,7 @@ function HouseCreate() {
                       justifyContent: "center",
                     }}
                   >
-                    <IconFileInvoice size={16} color="#105476" />
+                    <IconFileInvoice size={16} color="#2563EB" />
                   </Box>
                 }
                 styles={{
@@ -2510,7 +2510,7 @@ function HouseCreate() {
       >
         <Stack gap="md">
           {form.values.event_modal_rows.length > 0 && (
-            <Grid gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
+            <Grid gutter="sm" style={{ fontWeight: 600, color: "#2563EB" }}>
               <Grid.Col span={5}>
                 <RequiredLabel label="Event Type" required={false} />
               </Grid.Col>
@@ -2588,7 +2588,7 @@ function HouseCreate() {
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
-        color="#105476"
+        color="#2563EB"
       >
         <Tabs.List
           mb="md"
@@ -2605,8 +2605,8 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -2619,8 +2619,8 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -2633,8 +2633,8 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -2647,8 +2647,8 @@ function HouseCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 3 ? "3px solid #105476" : "none",
-              color: "#105476",
+              borderBottom: active === 3 ? "3px solid #2563EB" : "none",
+              color: "#2563EB",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
             }}
@@ -2662,8 +2662,8 @@ function HouseCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 4 ? "3px solid #105476" : "none",
-                color: "#105476",
+                borderBottom: active === 4 ? "3px solid #2563EB" : "none",
+                color: "#2563EB",
                 fontSize: 16,
                 fontWeight: active === 4 ? 600 : 400,
               }}
@@ -2675,7 +2675,7 @@ function HouseCreate() {
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">
-            <Text size="md" fw={600} c="#105476">
+            <Text size="md" fw={600} c="#2563EB">
               Shipment Details
             </Text>
           </Group>
@@ -2919,7 +2919,7 @@ function HouseCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             {/* Shipper Section */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#2563EB" mb="xs">
               Shipper
             </Text>
             <Grid mb="xs">
@@ -3043,7 +3043,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Consignee Section */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#2563EB" mb="xs">
               Consignee
             </Text>
             <Grid mb="xs">
@@ -3183,7 +3183,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Notify Customer 1 Details */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#2563EB" mb="xs">
               Notify Customer 1 Details
             </Text>
             <Grid mb="xs">
@@ -3331,7 +3331,7 @@ function HouseCreate() {
             </Grid>
 
             {/* Notify Customer 2 Details */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#2563EB" mb="xs">
               Notify Customer 2 Details
             </Text>
             <Grid mb="xs">
@@ -3478,7 +3478,7 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
             {/* Destination Agent Section */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+            <Text size="md" mt="md" fw={600} c="#2563EB" mb="xs">
               Destination Agent
             </Text>
             <Grid mb="xs">
@@ -3656,7 +3656,7 @@ function HouseCreate() {
 
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="md" fw={600} c="#105476" mb="md">
+            <Text size="md" fw={600} c="#2563EB" mb="md">
               Cargo Details
             </Text>
 
@@ -3693,7 +3693,7 @@ function HouseCreate() {
                 mb="xs"
                 style={{
                   fontWeight: 600,
-                  color: "#105476",
+                  color: "#2563EB",
                 }}
                 gutter="sm"
               >
@@ -3864,7 +3864,7 @@ function HouseCreate() {
                         <Button
                           size="sm"
                           variant="light"
-                          color="#105476"
+                          color="#2563EB"
                           px={12}
                           onClick={() => {
                             setCargoDetails([
@@ -3893,7 +3893,7 @@ function HouseCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="md" fw={600} c="#105476">
+              <Text size="md" fw={600} c="#2563EB">
                 Charges
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
@@ -3902,7 +3902,7 @@ function HouseCreate() {
                 <Group gap="xs">
                   <Button
                     variant="outline"
-                    color="#105476"
+                    color="#2563EB"
                     onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
                       const prepaidCharges = (fullDetail.charges ?? []).filter(
@@ -3937,7 +3937,7 @@ function HouseCreate() {
                   </Button>
                   <Button
                     variant="outline"
-                    color="#105476"
+                    color="#2563EB"
                     onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
                       const prepaidCharges = (fullDetail.charges ?? []).filter(
@@ -4023,7 +4023,7 @@ function HouseCreate() {
                 mb="xs"
                 style={{
                   fontWeight: 600,
-                  color: "#105476",
+                  color: "#2563EB",
                 }}
                 gutter="sm"
               >
@@ -4455,7 +4455,7 @@ function HouseCreate() {
                     {chargesForm.values.charges.length - 1 === index && (
                       <ActionIcon
                         variant="light"
-                        color="#105476"
+                        color="#2563EB"
                         onClick={() => {
                           chargesForm.insertListItem("charges", {
                             charge_id: null,
@@ -4500,12 +4500,12 @@ function HouseCreate() {
         {isEditMode && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="md" fw={600} c="#105476" mb="md">
+              <Text size="md" fw={600} c="#2563EB" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
                 <Center py="xl">
-                  <Loader color="#105476" size="lg" />
+                  <Loader color="#2563EB" size="lg" />
                 </Center>
               ) : (
                 <ScrollArea>
@@ -4607,12 +4607,12 @@ function HouseCreate() {
                                         {isExpanded ? (
                                           <IconChevronUp
                                             size={14}
-                                            color="#105476"
+                                            color="#2563EB"
                                           />
                                         ) : (
                                           <IconChevronDown
                                             size={14}
-                                            color="#105476"
+                                            color="#2563EB"
                                           />
                                         )}
                                       </Box>
@@ -4646,7 +4646,7 @@ function HouseCreate() {
                                         ? "yellow"
                                         : isPosted
                                           ? "green"
-                                          : "#105476"
+                                          : "#2563EB"
                                     }
                                   >
                                     {row.status ?? "-"}
@@ -4664,7 +4664,7 @@ function HouseCreate() {
                                     <Menu.Target>
                                       <ActionIcon
                                         variant="subtle"
-                                        color="#105476"
+                                        color="#2563EB"
                                         size="sm"
                                         styles={{
                                           root: {
@@ -4706,7 +4706,7 @@ function HouseCreate() {
                                           >
                                             <IconEye
                                               size={16}
-                                              color="#105476"
+                                              color="#2563EB"
                                             />
                                           </Box>
                                         }
@@ -4760,7 +4760,7 @@ function HouseCreate() {
                                             >
                                               <IconEdit
                                                 size={16}
-                                                color="#105476"
+                                                color="#2563EB"
                                               />
                                             </Box>
                                           }
@@ -4814,7 +4814,7 @@ function HouseCreate() {
                                             >
                                               <IconRefresh
                                                 size={16}
-                                                color="#105476"
+                                                color="#2563EB"
                                               />
                                             </Box>
                                           }
@@ -4878,7 +4878,7 @@ function HouseCreate() {
                                       <Text
                                         size="sm"
                                         fw={600}
-                                        c="#105476"
+                                        c="#2563EB"
                                         mb="xs"
                                       >
                                         Reverse invoices
@@ -4992,7 +4992,7 @@ function HouseCreate() {
                                                   <Badge
                                                     size="sm"
                                                     variant="light"
-                                                    color="#105476"
+                                                    color="#2563EB"
                                                   >
                                                     {rev.status ?? "-"}
                                                   </Badge>
@@ -5014,7 +5014,7 @@ function HouseCreate() {
                                                     <Menu.Target>
                                                       <ActionIcon
                                                         variant="subtle"
-                                                        color="#105476"
+                                                        color="#2563EB"
                                                         size="sm"
                                                         styles={{
                                                           root: {
@@ -5065,7 +5065,7 @@ function HouseCreate() {
                                                           >
                                                             <IconEye
                                                               size={16}
-                                                              color="#105476"
+                                                              color="#2563EB"
                                                             />
                                                           </Box>
                                                         }
@@ -5180,7 +5180,7 @@ function HouseCreate() {
       <Group justify="space-between" mt="xl">
         <Button
           variant="outline"
-          color="#105476"
+          color="#2563EB"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
             // Determine navigation path based on edit mode
@@ -5230,7 +5230,7 @@ function HouseCreate() {
           {active < 3 && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
             >
               Next
@@ -5239,7 +5239,7 @@ function HouseCreate() {
           {active === 3 && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#105476"
+              color="#2563EB"
               onClick={handleNext}
             >
               Save HAWB
@@ -5288,7 +5288,7 @@ function HouseCreate() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#105476"
+                  color="#2563EB"
                 >
                   Download PDF
                 </Button>
@@ -5297,7 +5297,7 @@ function HouseCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#105476" />
+                <Loader size="lg" color="#2563EB" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>

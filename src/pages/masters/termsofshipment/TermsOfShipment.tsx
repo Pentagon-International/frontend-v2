@@ -121,7 +121,7 @@ export default function TermsOfShipmentList() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#105476", marginRight: 6 }} />
+                      <IconEye size={16} style={{ color: "#2563EB", marginRight: 6 }} />
                       <Text size="sm">View</Text>
                     </Group>
                   </UnstyledButton>
@@ -138,7 +138,7 @@ export default function TermsOfShipmentList() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEdit size={16} style={{ color: "#105476", marginRight: 6 }} />
+                      <IconEdit size={16} style={{ color: "#2563EB", marginRight: 6 }} />
                       <Text size="sm">Edit</Text>
                     </Group>
                   </UnstyledButton>
@@ -174,7 +174,7 @@ export default function TermsOfShipmentList() {
                       Do you want to delete this?
                     </Text>
                     <Group mt={10} gap="lg">
-                      <Button variant="outline" color="#105476" size="xs">
+                      <Button variant="outline" color="#2563EB" size="xs">
                         Not now
                       </Button>
                       <Button
@@ -270,7 +270,7 @@ export default function TermsOfShipmentList() {
                 variant="outline"
                 rightSection={<IconChevronDown size={16} />}
                 size="xs"
-                color="#105476"
+                color="#2563EB"
               >
                 Download
               </Button>
@@ -286,13 +286,13 @@ export default function TermsOfShipmentList() {
             variant="outline"
             leftSection={<IconUpload size={16} />}
             size="xs"
-            color="#105476"
+            color="#2563EB"
           >
             Bulk Upload
           </Button>
 
           <Button
-            color="#105476"
+            color="#2563EB"
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/master/terms-of-shipment-new")}
