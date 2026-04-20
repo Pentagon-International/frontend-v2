@@ -2776,7 +2776,7 @@ console.log("currentQuotation: ", currentQuotation);
           fontSize: "14px",
           fontstyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -2790,7 +2790,7 @@ console.log("currentQuotation: ", currentQuotation);
           right: 0,
           minWidth: "80px",
           zIndex: 2,
-          backgroundColor: "#FBFBFB",
+          backgroundColor: "#F8FAFC",
           boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
@@ -2801,8 +2801,8 @@ console.log("currentQuotation: ", currentQuotation);
           fontSize: "14px",
           fontFamily: "Inter",
           fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -2866,7 +2866,7 @@ console.log("currentQuotation: ", currentQuotation);
             <Text
               size="md"
               fw={600}
-              c={"#444955"}
+              c={"#1E293B"}
               style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
               {pageTitle}
@@ -2928,7 +2928,7 @@ console.log("currentQuotation: ", currentQuotation);
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "regular",
-                    color: "#333740",
+                    color: "#334155",
                     minWidth: "24px",
                     minHeight: "24px",
                     width: "248px",
@@ -2989,7 +2989,7 @@ console.log("currentQuotation: ", currentQuotation);
               justify="space-between"
               align="center"
               style={{
-                backgroundColor: "#FAFAFA",
+                backgroundColor: "#F8FAFC",
                 padding: "8px 8px",
                 borderRadius: "8px",
               }}
@@ -2997,7 +2997,7 @@ console.log("currentQuotation: ", currentQuotation);
               <Text
                 size="sm"
                 fw={600}
-                c="#000000"
+                c="#1E293B"
                 style={{ fontFamily: "Inter", fontSize: "14px" }}
               >
                 Filters

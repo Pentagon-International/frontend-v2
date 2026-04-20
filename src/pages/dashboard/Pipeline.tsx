@@ -719,7 +719,7 @@ function Pipeline() {
           fontSize: "14px",
           fontstyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -734,7 +734,7 @@ function Pipeline() {
             right: 0,
             minWidth: "80px",
             zIndex: 2,
-            backgroundColor: "#FBFBFB",
+            backgroundColor: "#F8FAFC",
             boxShadow: "0px -2px 4px 0px #00000040",
           };
           break;
@@ -748,8 +748,8 @@ function Pipeline() {
           fontSize: "14px",
           fontFamily: "Inter",
           fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -790,7 +790,7 @@ function Pipeline() {
             <Text
               size="md"
               fw={600}
-              c={"#444955"}
+              c={"#1E293B"}
               style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
               List of Pipelines
@@ -824,7 +824,7 @@ function Pipeline() {
                     borderRadius: "4px",
                     fontFamily: "Inter",
                     fontstyle: "regular",
-                    color: "#333740",
+                    color: "#334155",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
                       border: "1px solid #2563EB",
@@ -892,8 +892,8 @@ function Pipeline() {
               height: "fit-content",
             }}
           >
-            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
-              <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#F8FAFC", padding: "8px 8px", borderRadius: "8px" }}>
+              <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>
                 Filter
               </Text>
               <ActionIcon
@@ -1105,7 +1105,7 @@ function Pipeline() {
                     fontWeight: 600,
                     height: "36px",
                     border: "1px solid #D0D1D4",
-                    color: "#444955",
+                    color: "#1E293B",
                   },
                 }}
               >

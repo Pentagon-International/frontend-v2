@@ -431,7 +431,7 @@ export default function PaymentReversalMaster() {
           padding: "8px 16px",
           fontSize: "14px",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -445,7 +445,7 @@ export default function PaymentReversalMaster() {
               right: 0,
               minWidth: "80px",
               zIndex: 2,
-              backgroundColor: "#FBFBFB",
+              backgroundColor: "#F8FAFC",
               boxShadow: "0px -2px 4px 0px #00000040",
             }
           : {};
@@ -455,8 +455,8 @@ export default function PaymentReversalMaster() {
           padding: "8px 16px",
           fontSize: "14px",
           fontFamily: "Inter",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
@@ -494,7 +494,7 @@ export default function PaymentReversalMaster() {
           <Text
             size="md"
             fw={600}
-            c="#444955"
+            c="#1E293B"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
             Payment Reversal List
@@ -517,7 +517,7 @@ export default function PaymentReversalMaster() {
               styles={{
                 input: {
                   borderRadius: "4px", fontSize: "14px", fontFamily: "Inter",
-                  color: "#333740", height: "36px", border: "1px solid #D0D1D4",
+                  color: "#334155", height: "36px", border: "1px solid #D0D1D4",
                   "&:focus": { border: "1px solid #2563EB" },
                 },
               }}
@@ -545,8 +545,8 @@ export default function PaymentReversalMaster() {
 
       {showFilters && (
         <Box tt="capitalize" mb="sm" p="sm" style={{ borderRadius: "8px", border: "1px solid #E0E0E0", flexShrink: 0, height: "fit-content" }}>
-          <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "4px 8px" }}>
-            <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>Filter</Text>
+          <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#F8FAFC", padding: "4px 8px" }}>
+            <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>Filter</Text>
             <ActionIcon variant="subtle" color="gray" onClick={() => setShowFilters(false)} aria-label="Close filters" size="sm">
               <IconX size={18} />
             </ActionIcon>
@@ -635,7 +635,7 @@ export default function PaymentReversalMaster() {
 
           <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
             <Button size="sm" variant="default" onClick={clearAllFilters} leftSection={<IconX size={16} />}
-              styles={{ root: { borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", border: "1px solid #D0D1D4", color: "#444955" } }}>
+              styles={{ root: { borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", border: "1px solid #D0D1D4", color: "#1E293B" } }}>
               Clear Filters
             </Button>
             <Button size="sm" onClick={applyFilters} loading={isLoading} disabled={isLoading} leftSection={<IconFilter size={16} />}

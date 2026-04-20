@@ -125,7 +125,7 @@ const OutstandingBarChart = ({
         <Text
           size="md"
           fw={500}
-          c="#22252B"
+          c="#1E293B"
           style={{ fontFamily: "Inter, sans-serif" }}
         >
           Outstanding vs Overdue

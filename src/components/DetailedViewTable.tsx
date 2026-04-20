@@ -1225,7 +1225,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         padding: "12px 16px",
         fontSize: "13px",
         fontWeight: 400,
-        backgroundColor: "#E0E0E0",
+        backgroundColor: "#E2E8F0",
         color: "#000000",
         top: 0,
         zIndex: 3,

@@ -597,7 +597,7 @@ function PaymentRequestApproval() {
         padding: "8px 16px",
         fontSize: "13px",
         fontFamily: "Inter",
-        color: "#333740",
+        color: "#334155",
         backgroundColor: "#ffffff",
         ...(column.id === "actions"
           ? {
@@ -615,8 +615,8 @@ function PaymentRequestApproval() {
         padding: "8px 16px",
         fontSize: "13px",
         fontFamily: "Inter",
-        color: "#444955",
-        backgroundColor: "#FBFBFB",
+        color: "#1E293B",
+        backgroundColor: "#F8FAFC",
         top: 0,
         zIndex: 3,
         borderBottom: "1px solid #F3F3F3",
@@ -625,7 +625,7 @@ function PaymentRequestApproval() {
               position: "sticky" as const,
               right: 0,
               zIndex: 4,
-              backgroundColor: "#FBFBFB",
+              backgroundColor: "#F8FAFC",
               boxShadow: "0px -2px 4px 0px #00000040",
             }
           : {}),
@@ -673,7 +673,7 @@ function PaymentRequestApproval() {
           <Text
             size="md"
             fw={600}
-            c="#444955"
+            c="#1E293B"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
             Payment Request Approval
@@ -695,7 +695,7 @@ function PaymentRequestApproval() {
               styles={{
                 input: {
                   borderRadius: "4px", fontSize: "13px", fontFamily: "Inter",
-                  color: "#333740", height: "36px", border: "1px solid #D0D1D4",
+                  color: "#334155", height: "36px", border: "1px solid #D0D1D4",
                   "&:focus": { border: "1px solid #2563EB" },
                 },
               }}
@@ -764,14 +764,14 @@ function PaymentRequestApproval() {
             mb="sm"
             px="md"
             style={{
-              backgroundColor: "#FAFAFA",
+              backgroundColor: "#F8FAFC",
               padding: "4px 8px",
             }}
           >
             <Text
               size="sm"
               fw={600}
-              c="#000000"
+              c="#1E293B"
               style={{ fontFamily: "Inter", fontSize: "14px" }}
             >
               Filter
@@ -907,7 +907,7 @@ function PaymentRequestApproval() {
                   fontWeight: 600,
                   height: "36px",
                   border: "1px solid #D0D1D4",
-                  color: "#444955",
+                  color: "#1E293B",
                 },
               }}
             >

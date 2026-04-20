@@ -968,7 +968,7 @@ export default function VendorMaster() {
           fontSize: "14px",
           fontstyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -982,7 +982,7 @@ export default function VendorMaster() {
           right: 0,
           minWidth: "80px",
           zIndex: 2,
-          backgroundColor: "#FBFBFB",
+          backgroundColor: "#F8FAFC",
           boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
@@ -993,8 +993,8 @@ export default function VendorMaster() {
           fontSize: "14px",
           fontFamily: "Inter",
           fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -1035,7 +1035,7 @@ export default function VendorMaster() {
             <Text
               size="md"
               fw={600}
-              c={"#444955"}
+              c={"#1E293B"}
               style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
               Vendor Master List
@@ -1067,7 +1067,7 @@ export default function VendorMaster() {
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "regular",
-                    color: "#333740",
+                    color: "#334155",
                     minWidth: "24px",
                     minHeight: "24px",
                     width: "248px",
@@ -1148,14 +1148,14 @@ export default function VendorMaster() {
               mb="sm"
               px="md"
               style={{
-                backgroundColor: "#FAFAFA",
+                backgroundColor: "#F8FAFC",
                 padding: "4px 8px",
               }}
             >
               <Text
                 size="sm"
                 fw={600}
-                c="#000000"
+                c="#1E293B"
                 style={{ fontFamily: "Inter", fontSize: "14px" }}
               >
                 Filter
@@ -1392,7 +1392,7 @@ export default function VendorMaster() {
                     fontWeight: 600,
                     height: "36px",
                     border: "1px solid #D0D1D4",
-                    color: "#444955",
+                    color: "#1E293B",
                   },
                 }}
               >

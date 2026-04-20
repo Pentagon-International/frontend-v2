@@ -985,7 +985,7 @@ function AirExportBookingMaster() {
           fontSize: "14px",
           fontstyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -999,7 +999,7 @@ function AirExportBookingMaster() {
           right: 0,
           minWidth: "80px",
           zIndex: 2,
-          backgroundColor: "#FBFBFB",
+          backgroundColor: "#F8FAFC",
           boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
@@ -1010,8 +1010,8 @@ function AirExportBookingMaster() {
           fontSize: "14px",
           fontFamily: "Inter",
           fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -1066,7 +1066,7 @@ function AirExportBookingMaster() {
               <Text
                 size="md"
                 fw={600}
-                c={"#444955"}
+                c={"#1E293B"}
                 style={{ fontFamily: "Inter", fontSize: "16px" }}
               >
                 Air Export Booking Lists
@@ -1097,7 +1097,7 @@ function AirExportBookingMaster() {
                       borderRadius: "4px",
                       fontSize: "14px",
                       fontFamily: "Inter",
-                      color: "#333740",
+                      color: "#334155",
                       minWidth: "24px",
                       minHeight: "24px",
                       width: "248px",
@@ -1169,7 +1169,7 @@ function AirExportBookingMaster() {
                 align="center"
                 mb="lg"
                 style={{
-                  backgroundColor: "#FAFAFA",
+                  backgroundColor: "#F8FAFC",
                   padding: "8px 8px",
                   borderRadius: "8px",
                 }}
@@ -1177,7 +1177,7 @@ function AirExportBookingMaster() {
                 <Text
                   size="sm"
                   fw={600}
-                  c="#000000"
+                  c="#1E293B"
                   style={{ fontFamily: "Inter", fontSize: "14px" }}
                 >
                   Filters
@@ -1418,7 +1418,7 @@ function AirExportBookingMaster() {
           }
         }}
         title={
-          <Text fw={600} size="md" c="#444955" style={{ fontFamily: "Inter" }}>
+          <Text fw={600} size="md" c="#1E293B" style={{ fontFamily: "Inter" }}>
             Create Job
           </Text>
         }
@@ -1525,7 +1525,7 @@ function AirExportBookingMaster() {
                       border: "1px solid #E0E0E0",
                       borderRadius: "6px",
                       padding: "12px 16px",
-                      backgroundColor: "#FAFAFA",
+                      backgroundColor: "#F8FAFC",
                     }}
                   >
                     <Stack gap="xs">
@@ -1534,14 +1534,14 @@ function AirExportBookingMaster() {
                           <Text
                             size="sm"
                             fw={600}
-                            c="#444955"
+                            c="#1E293B"
                             style={{ fontFamily: "Inter" }}
                           >
                             Job ID:
                           </Text>
                           <Text
                             size="sm"
-                            c="#333740"
+                            c="#334155"
                             style={{ fontFamily: "Inter" }}
                           >
                             {String(jobDetailsId)}
@@ -1553,14 +1553,14 @@ function AirExportBookingMaster() {
                           <Text
                             size="sm"
                             fw={600}
-                            c="#444955"
+                            c="#1E293B"
                             style={{ fontFamily: "Inter" }}
                           >
                             Job No:
                           </Text>
                           <Text
                             size="sm"
-                            c="#333740"
+                            c="#334155"
                             style={{ fontFamily: "Inter" }}
                           >
                             {String(jobNo)}

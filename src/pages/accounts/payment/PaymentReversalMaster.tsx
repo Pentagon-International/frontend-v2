@@ -327,7 +327,7 @@ export default function PaymentReversalMaster() {
           padding: "8px 16px",
           fontSize: "14px",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -341,7 +341,7 @@ export default function PaymentReversalMaster() {
               right: 0,
               minWidth: "80px",
               zIndex: 2,
-              backgroundColor: "#FBFBFB",
+              backgroundColor: "#F8FAFC",
               boxShadow: "0px -2px 4px 0px #00000040",
             }
           : {};
@@ -351,8 +351,8 @@ export default function PaymentReversalMaster() {
           padding: "8px 16px",
           fontSize: "14px",
           fontFamily: "Inter",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           borderBottom: "1px solid #F3F3F3",
           ...extraStyles,
         },
@@ -390,7 +390,7 @@ export default function PaymentReversalMaster() {
           <Text
             size="md"
             fw={600}
-            c="#444955"
+            c="#1E293B"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
             Payment Reversal List

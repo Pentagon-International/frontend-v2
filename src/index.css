@@ -1,6 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
+  /* Override Mantine default border to match ERP palette */
+  --mantine-color-default-border: #E2E8F0;
+
   --sidebar-bg: #0D1B2E;
   --sidebar-text: #7A9AB8;
   --sidebar-text-active: #E8F4FF;
@@ -73,4 +76,50 @@ body {
 :focus-visible {
   outline: 2px solid #3B82F6;
   outline-offset: 2px;
+}
+
+/* ─── Landing page Card / Paper shells ───────────────────────────── */
+/* Ensure all withBorder cards use the ERP border palette */
+.mantine-Card-root {
+  border-color: #E2E8F0;
+}
+
+/* MantineReactTable paper wrapper */
+.mantine-Paper-root {
+  border-color: #E2E8F0;
+}
+
+/* ─── Table header cells (MantineReactTable) ─────────────────────── */
+.mantine-Table-thead th {
+  background-color: #F8FAFC !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  border-bottom-color: #E2E8F0 !important;
+  letter-spacing: 0.02em;
+}
+
+/* Table row hover */
+.mantine-Table-tbody tr:hover td {
+  background-color: #F8FAFC !important;
+}
+
+/* ─── Filter panel ───────────────────────────────────────────────── */
+.erp-filter-panel {
+  background: #ffffff;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.erp-filter-header {
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #E2E8F0;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ─── Pagination bar ─────────────────────────────────────────────── */
+.erp-pagination {
+  border-top: 1px solid #E2E8F0;
+  background: #ffffff;
 }

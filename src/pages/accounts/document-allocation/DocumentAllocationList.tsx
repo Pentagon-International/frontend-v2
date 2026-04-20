@@ -307,7 +307,7 @@ export default function DocumentAllocationList() {
           fontSize: "14px",
           fontstyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -321,7 +321,7 @@ export default function DocumentAllocationList() {
           right: 0,
           minWidth: "80px",
           zIndex: 2,
-          backgroundColor: "#FBFBFB",
+          backgroundColor: "#F8FAFC",
           boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
@@ -332,8 +332,8 @@ export default function DocumentAllocationList() {
           fontSize: "14px",
           fontFamily: "Inter",
           fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -356,7 +356,7 @@ export default function DocumentAllocationList() {
     <Card shadow="sm" pt="md" pb="sm" px="lg" radius="md" withBorder style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1 }}>
       <Box>
         <Group justify="space-between" align="center" mb="md">
-          <Text size="md" fw={600} c="#444955" style={{ fontFamily: "Inter", fontSize: "16px" }}>
+          <Text size="md" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "16px" }}>
             Document Allocation Lists
           </Text>
 
@@ -402,8 +402,8 @@ export default function DocumentAllocationList() {
 
       {showFilters && (
         <Box mb="xs" style={{ borderRadius: "8px", border: "1px solid #E0E0E0", flexShrink: 0, height: "fit-content" }}>
-          <Group justify="space-between" align="center" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
-            <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
+          <Group justify="space-between" align="center" style={{ backgroundColor: "#F8FAFC", padding: "8px 8px", borderRadius: "8px" }}>
+            <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>
               Filters
             </Text>
           </Group>
