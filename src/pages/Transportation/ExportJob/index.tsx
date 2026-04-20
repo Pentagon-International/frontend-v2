@@ -165,6 +165,7 @@ function ExportJobMaster() {
 
     if (!shouldRestore) {
       setIsRestoring(false);
+      setIsInitialLoad(false);
       return;
     }
 
@@ -183,6 +184,7 @@ function ExportJobMaster() {
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
+    setIsInitialLoad(false);
   }, [location.key]);
 
   const currentPage = pagination.pageIndex + 1;

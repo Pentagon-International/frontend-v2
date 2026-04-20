@@ -163,6 +163,7 @@ function ImportJobMaster() {
 
     if (!shouldRestore) {
       setIsRestoring(false);
+      setIsInitialLoad(false);
       return;
     }
 
@@ -181,6 +182,7 @@ function ImportJobMaster() {
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
+    setIsInitialLoad(false);
   }, [location.key]);
 
   const currentPage = pagination.pageIndex + 1;
