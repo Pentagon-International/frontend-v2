@@ -46,6 +46,7 @@ function MainSectionHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [hoveredResultKey, setHoveredResultKey] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<GlobalSearchResponse | null>(
     null,
   );
@@ -397,13 +398,13 @@ function MainSectionHeader() {
             {title}
           </Text>
         </Box>
-        {/* Right section */}
 
-        <Group gap="xl" align="center" wrap="nowrap">
+        {/* Center section: global search */}
+        <Box style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 10px" }}>
           <Popover
             opened={searchOpen}
             onChange={setSearchOpen}
-            position="bottom-end"
+            position="bottom"
             shadow="md"
             width={420}
           >
@@ -411,8 +412,12 @@ function MainSectionHeader() {
               <TextInput
                 value={searchText}
                 onChange={(e) => setSearchText(e.currentTarget.value)}
-                placeholder="Search"
-                w={360}
+                placeholder="Search…"
+                w="100%"
+                maw={420}
+                radius="xl"
+                size="sm"
+                leftSection={<IconSearch size={14} />}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -432,10 +437,37 @@ function MainSectionHeader() {
                     {searchLoading ? <Loader size={16} /> : <IconSearch size={18} />}
                   </ActionIcon>
                 }
+                styles={{
+                  input: {
+                    height: 36,
+                    fontSize: 13,
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #e5e7eb",
+                    transition: "box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease",
+                    boxShadow: "0 1px 2px rgba(16, 24, 40, 0.06)",
+                    outline: "none",
+                    "&:focus, &:focus-within": {
+                      borderColor: "#105476",
+                      boxShadow: "0 0 0 4px rgba(16, 84, 118, 0.12)",
+                      backgroundColor: "#ffffff",
+                    },
+                  },
+                  section: {
+                    color: "#6b7280",
+                  },
+                }}
               />
             </Popover.Target>
-            <Popover.Dropdown>
-              <Stack gap="xs">
+            <Popover.Dropdown
+              style={{
+                padding: 12,
+                borderRadius: 14,
+                border: "1px solid #e5e7eb",
+                backgroundColor: "#ffffff",
+                boxShadow: "0 10px 30px rgba(16, 24, 40, 0.12)",
+              }}
+            >
+              <Stack gap={10}>
                 {searchError ? (
                   <Text size="sm" c="red">
                     {searchError}
@@ -444,19 +476,32 @@ function MainSectionHeader() {
 
                 {searchResults?.type === "multiple" ? (
                   <>
-                    <Text size="sm" fw={600}>
-                      Results ({searchResults.total_results ?? multipleItems.length})
-                    </Text>
-                    <ScrollArea h={240} type="auto">
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text size="sm" fw={700} c="#0f172a">
+                        Results
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {searchResults.total_results ?? multipleItems.length}
+                      </Text>
+                    </Group>
+                    <ScrollArea h={260} type="auto">
                       <Stack gap={6}>
                         {multipleItems.map((it) => (
+                          (() => {
+                            const k = `${it.module}-${it.id}-${it.display_id ?? ""}`;
+                            const isHovered = hoveredResultKey === k;
+                            return (
                           <UnstyledButton
-                            key={`${it.module}-${it.id}-${it.display_id ?? ""}`}
+                            key={k}
                             onClick={() => void openModuleEdit(it)}
+                            onMouseEnter={() => setHoveredResultKey(k)}
+                            onMouseLeave={() => setHoveredResultKey(null)}
                             style={{
                               padding: "10px 10px",
                               borderRadius: 10,
-                              border: "1px solid #eef2f6",
+                              border: isHovered ? "1px solid #cbd5e1" : "1px solid #eef2f6",
+                              backgroundColor: isHovered ? "#f8fafc" : "#ffffff",
+                              transition: "background-color 120ms ease, border-color 120ms ease",
                             }}
                           >
                             <Group justify="space-between" wrap="nowrap">
@@ -473,6 +518,8 @@ function MainSectionHeader() {
                               <IconChevronRight size={18} color="#105476" />
                             </Group>
                           </UnstyledButton>
+                            );
+                          })()
                         ))}
                         {!multipleItems.length ? (
                           <Text size="sm" c="dimmed">
@@ -498,37 +545,37 @@ function MainSectionHeader() {
               </Stack>
             </Popover.Dropdown>
           </Popover>
+        </Box>
 
-          {/* User info */}
-          <UnstyledButton onClick={handleProfileClick} px={0}>
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Box style={{ lineHeight: 1 }}>
-                <Text size="sm" ta="right" c="#212629ff" fw={500}>
-                  {fullName}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {email}
-                </Text>
-              </Box>
-              <Flex
-                justify="center"
-                align="center"
-                fw={400}
-                style={{
-                  fontFamily: "Outfit",
-                  width: "36px",
-                  height: "36px",
-                  color: "white",
-                  padding: "4px",
-                  borderRadius: "50%",
-                  backgroundColor: "#105476",
-                }}
-              >
-                {fullName.slice(0, 1)}
-              </Flex>
-            </Group>
-          </UnstyledButton>
-        </Group>
+        {/* Right section: user info */}
+        <UnstyledButton onClick={handleProfileClick} px={0}>
+          <Group gap="sm" align="center" wrap="nowrap">
+            <Box style={{ lineHeight: 1 }}>
+              <Text size="sm" ta="right" c="#212629ff" fw={500}>
+                {fullName}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {email}
+              </Text>
+            </Box>
+            <Flex
+              justify="center"
+              align="center"
+              fw={400}
+              style={{
+                fontFamily: "Outfit",
+                width: "36px",
+                height: "36px",
+                color: "white",
+                padding: "4px",
+                borderRadius: "50%",
+                backgroundColor: "#105476",
+              }}
+            >
+              {fullName.slice(0, 1)}
+            </Flex>
+          </Group>
+        </UnstyledButton>
       </Flex>
 
       <ProfileDrawer
