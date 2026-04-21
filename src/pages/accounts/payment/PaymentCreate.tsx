@@ -1341,31 +1341,62 @@ export default function PaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
-    const partyLocalTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    const adjLocalTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
-      ToastNotification({
-        type: "error",
-        message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
-      });
-      return;
+    const hasAdjustments = (values.adjustments ?? []).some((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+
+    if (hasAdjustments) {
+      const partyAmountTotal =
+        (values.details ?? []).reduce(
+          (sum, d) =>
+            sum +
+            (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
+          0,
+        ) ?? 0;
+      const adjCurrTotal =
+        (values.adjustments ?? []).reduce(
+          (sum, a) =>
+            sum +
+            (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+              ? a.adj_curr_amount
+              : 0),
+          0,
+        ) ?? 0;
+      const partyLocalTotal =
+        (values.details ?? []).reduce(
+          (sum, d) =>
+            sum +
+            (d.local_amount != null && Number.isFinite(d.local_amount)
+              ? d.local_amount
+              : 0),
+          0,
+        ) ?? 0;
+      const adjLocalTotal =
+        (values.adjustments ?? []).reduce(
+          (sum, a) =>
+            sum +
+            (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+              ? a.adj_local_amount
+              : 0),
+          0,
+        ) ?? 0;
+
+      if (partyAmountTotal < adjCurrTotal || partyLocalTotal < adjLocalTotal) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Party Details Amount/Local Amount cannot be less than Adj Curr Amount/Adj Local Amount in Charge Details.",
+        });
+        return;
+      }
     }
     setIsSubmitting(true);
     try {
