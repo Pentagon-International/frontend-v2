@@ -1352,52 +1352,37 @@ export default function PaymentCreate({
       const hasDocument = (a.document_no ?? "").trim() !== "";
       return hasAmounts || hasDocument;
     });
-
-    if (hasAdjustments) {
-      const partyAmountTotal =
-        (values.details ?? []).reduce(
-          (sum, d) =>
-            sum +
-            (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-          0,
-        ) ?? 0;
-      const adjCurrTotal =
-        (values.adjustments ?? []).reduce(
-          (sum, a) =>
-            sum +
-            (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-              ? a.adj_curr_amount
-              : 0),
-          0,
-        ) ?? 0;
-      const partyLocalTotal =
-        (values.details ?? []).reduce(
-          (sum, d) =>
-            sum +
-            (d.local_amount != null && Number.isFinite(d.local_amount)
-              ? d.local_amount
-              : 0),
-          0,
-        ) ?? 0;
-      const adjLocalTotal =
-        (values.adjustments ?? []).reduce(
-          (sum, a) =>
-            sum +
-            (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-              ? a.adj_local_amount
-              : 0),
-          0,
-        ) ?? 0;
-
-      if (partyAmountTotal < adjCurrTotal || partyLocalTotal < adjLocalTotal) {
-        ToastNotification({
-          type: "error",
-          message:
-            "Party Details Amount/Local Amount cannot be less than Adj Curr Amount/Adj Local Amount in Charge Details.",
-        });
-        return;
-      }
+    const partyLocalTotal =
+      (values.details ?? []).reduce(
+        (sum, d) =>
+          sum +
+          (d.local_amount != null && Number.isFinite(d.local_amount)
+            ? d.local_amount
+            : 0),
+        0,
+      ) ?? 0;
+    const adjLocalTotal =
+      (values.adjustments ?? []).reduce(
+        (sum, a) =>
+          sum +
+          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+            ? a.adj_local_amount
+            : 0),
+        0,
+      ) ?? 0;
+    // Validation aligned with Receipt: when adjustments exist, Party total
+    // should not be less than total allocation amount.
+    if (hasAdjustments && partyLocalTotal < adjLocalTotal) {
+      ToastNotification({
+        type: "error",
+        message:
+          "The total Local Amount of Payment cannot be less than the total Local Amount of Invoice.",
+      });
+      return;
     }
+    // Important: allow saving "open payment" (no adjustments),
+    // same as Receipt. So we DO NOT restrict party totals when allocations are empty.
+    // Also, unlike the earlier logic, we don't block when partyLocalTotal > adjLocalTotal.
     setIsSubmitting(true);
     try {
       if (_isReversal) {

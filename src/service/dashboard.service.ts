@@ -271,6 +271,8 @@ export interface EnquiryConversionAggregatedData {
 export interface BudgetDataItem {
   salesperson?: string;
   month?: string;
+  trade_type?: string | null;
+  service_type?: string | null;
   actual_budget: number;
   sales_budget: number;
 }

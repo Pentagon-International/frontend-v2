@@ -3148,6 +3148,8 @@ const Dashboard = () => {
                 sales_budget: budgetItem.sales_budget || 0,
                 incentive_amount: budgetItem.incentive_amount || 0,
               };
+              dataRow.trade_type = budgetItem.trade_type ?? "-";
+              dataRow.service_type = budgetItem.service_type ?? "-";
 
               // Only add achieved column for salesperson type
               if (budgetType === "salesperson") {
@@ -3166,6 +3168,8 @@ const Dashboard = () => {
                 actual_budget: budgetItem.actual_budget || 0,
                 sales_budget: budgetItem.sales_budget || 0,
               };
+              row.trade_type = budgetItem.trade_type ?? "-";
+              row.service_type = budgetItem.service_type ?? "-";
 
               // Only add achieved column for salesperson type
               if (budgetType === "salesperson") {
@@ -7167,11 +7171,13 @@ const Dashboard = () => {
       setIsLoadingBudget(true);
       try {
         if (budgetDrillLevel === 0) {
-          setBudgetSelectedCompany(params?.name || null);
-          setSelectedCompany(params?.name || null);
+          const clickedCompanyName =
+            params?.data?.company_name || params?.name || null;
+          setBudgetSelectedCompany(clickedCompanyName);
+          setSelectedCompany(clickedCompanyName);
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
-              company: params?.name,
+              company: clickedCompanyName,
               start_month: budgetStartMonth,
               end_month: budgetEndMonth,
               type: budgetType,
@@ -7205,7 +7211,8 @@ const Dashboard = () => {
 
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
-              company: budgetSelectedCompany,
+              // budgetSelectedCompany can be null on this drill path; always send company
+              company: companyName,
               salesman: fullSalespersonName,
               start_month: budgetStartMonth,
               end_month: budgetEndMonth,

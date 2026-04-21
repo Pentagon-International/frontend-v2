@@ -66,21 +66,6 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-function getRoeValue(
-  currency: string,
-  countryCode: string | undefined,
-): number {
-  const currencyUpper = currency?.toUpperCase();
-  if (countryCode === "IN") {
-    if (currencyUpper === "INR") return 1;
-    if (currencyUpper === "USD") return 88.75;
-  } else if (countryCode === "AE") {
-    if (currencyUpper === "AED") return 1;
-    if (currencyUpper === "USD") return 3.67;
-  }
-  return 1;
-}
-
 // Header daybook: document_type PMT for Payment
 const fetchDaybookPMT = async () => {
   try {
@@ -141,6 +126,8 @@ function clampAmount(value: number | null | undefined): number | null {
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
+  /** GL account code (used for allocations filter) */
+  account_code?: string;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -167,31 +154,38 @@ type AdjustmentRow = {
   adj_local_amount: number | null;
 };
 
-/** Supplier invoice item from filter/supplier-invoice response */
-type SupplierInvoiceItem = {
+type InvoiceCombinedItem = {
   id?: number;
-  crj_number?: string;
-  date?: string;
-  approved_amount?: string | number;
-  Inv_crn_amount?: string | number;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  total?: number | string;
+  document_amount?: number | string;
+  daybook_id?: number | string;
+  day_book_id?: number | string;
+  daybook_name?: string;
+  day_book_type?: string;
+  day_book_document_type?: string;
+  currency_id?: number | string;
   currency_code?: string;
-  day_book_id?: number;
-  agent_name?: string;
-  agent_code?: string;
+  roe?: number | string;
+  amount?: number | string;
+  amount_in_local?: number | string;
   [key: string]: unknown;
 };
 
-const fetchFilterSupplierInvoice = async (
-  agentName: string,
-): Promise<SupplierInvoiceItem[]> => {
+const fetchOutstandingAllocations = async (payload: {
+  account_code: string;
+  subledger_code: string;
+}): Promise<InvoiceCombinedItem[]> => {
   const response = await postAPICall(
-    URL.supplierInvoiceFilter,
-    { filters: { status: "POSTED", agent_name: agentName } },
+    URL.outstandingAllocations,
+    payload,
     API_HEADER,
   );
   const res = response as
-    | { data?: SupplierInvoiceItem[] }
-    | SupplierInvoiceItem[];
+    | { data?: InvoiceCombinedItem[] }
+    | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -470,12 +464,10 @@ export default function OverseasPaymentCreate({
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
     number | null
   >(null);
-  const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
-    null,
-  );
-  const [supplierInvoiceList, setSupplierInvoiceList] = useState<
-    SupplierInvoiceItem[]
-  >([]);
+  /** When set, allocations API is triggered (or served from cache) for this filter */
+  const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
+    useState<{ account_code: string; subledger_code: string } | null>(null);
+  const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
@@ -543,14 +535,21 @@ export default function OverseasPaymentCreate({
   });
 
   const {
-    data: filterSupplierInvoiceData,
-    isLoading: filterSupplierInvoiceLoading,
-    isFetching: filterSupplierInvoiceFetching,
-    isError: filterSupplierInvoiceError,
+    data: filterInvoiceData,
+    isLoading: filterInvoiceLoading,
+    isFetching: filterInvoiceFetching,
+    isError: filterInvoiceError,
   } = useQuery({
-    queryKey: ["filterSupplierInvoice", invoiceModalBillTo ?? ""],
-    queryFn: () => fetchFilterSupplierInvoice(invoiceModalBillTo!),
-    enabled: invoiceModalOpen && !!invoiceModalBillTo,
+    queryKey: [
+      "outstandingAllocations",
+      invoiceModalAllocationFilter?.account_code ?? "",
+      invoiceModalAllocationFilter?.subledger_code ?? "",
+    ],
+    queryFn: () => fetchOutstandingAllocations(invoiceModalAllocationFilter!),
+    enabled:
+      invoiceModalOpen &&
+      !!invoiceModalAllocationFilter?.account_code &&
+      !!invoiceModalAllocationFilter?.subledger_code,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -823,105 +822,15 @@ export default function OverseasPaymentCreate({
 
   const userCountryCode = user?.country?.country_code;
 
-  useEffect(() => {
-    const curr = form.values.currency?.trim().toUpperCase();
-    if (!curr || !localCurrency) return;
-    if (curr === localCurrency.toUpperCase()) {
-      form.setFieldValue("roe", 1);
-    } else {
-      form.setFieldValue("roe", getRoeValue(curr, userCountryCode));
-    }
-  }, [form.values.currency, localCurrency, userCountryCode]);
+  // Overseas Payment: no amount/ROE auto-sync. Keep effect for dependency symmetry.
+  useEffect(() => {}, [form.values.currency, localCurrency, userCountryCode]);
 
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
     .join(";");
-  useEffect(() => {
-    const sum = (form.values.details ?? []).reduce(
-      (s, d) =>
-        s +
-        (d.local_amount != null && Number.isFinite(d.local_amount)
-          ? d.local_amount
-          : 0),
-      0,
-    );
-    const headerLocal = clampAmount(sum);
-    const roeVal = form.values.roe;
-    const derivedHeaderAmount =
-      headerLocal != null &&
-      roeVal != null &&
-      Number.isFinite(roeVal) &&
-      roeVal !== 0
-        ? clampAmount(headerLocal / roeVal)
-        : null;
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
-    }
-    if (
-      derivedHeaderAmount != null &&
-      form.values.amount !== derivedHeaderAmount
-    ) {
-      form.setFieldValue("amount", derivedHeaderAmount);
-    }
-  }, [partyLocalAmountsSnapshot]);
+  useEffect(() => {}, [partyLocalAmountsSnapshot]);
 
-  useEffect(() => {
-    const amt = form.values.amount;
-    const roeVal = form.values.roe;
-    const local =
-      amt != null &&
-      Number.isFinite(amt) &&
-      roeVal != null &&
-      Number.isFinite(roeVal)
-        ? clampAmount(amt * roeVal)
-        : null;
-    if (form.values.local_amount !== local) {
-      form.setFieldValue("local_amount", local);
-    }
-  }, [form.values.amount, form.values.roe]);
-
-  const syncPartyDetailsFromAllocations = (
-    adjustmentsToUse?: AdjustmentRow[],
-  ) => {
-    const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
-    form.values.details.forEach((row, idx) => {
-      const partyCode = (row.customer_code ?? "").toString().trim();
-      const partyDisplay = (row.customer_display ?? "").toString().trim();
-      const matchingAllocations = adjustments.filter(
-        (a) =>
-          (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-          (partyDisplay &&
-            (a.subledger_display ?? "").toString().trim() === partyDisplay),
-      );
-      if (matchingAllocations.length === 0) return;
-      const sum = matchingAllocations.reduce(
-        (s, a) =>
-          s +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      );
-      const local = clampAmount(sum);
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const derivedAmount =
-        local != null &&
-        roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(local / roeVal)
-          : null;
-      if (form.values.details[idx].local_amount !== local) {
-        form.setFieldValue(`details.${idx}.local_amount`, local);
-      }
-      if (
-        derivedAmount != null &&
-        form.values.details[idx].amount !== derivedAmount
-      ) {
-        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-      }
-    });
-  };
+  useEffect(() => {}, [form.values.amount, form.values.roe]);
 
   const detailsSnapshotForLocal = form.values.details
     .map(
@@ -929,17 +838,7 @@ export default function OverseasPaymentCreate({
         `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
     )
     .join(";");
-  useEffect(() => {
-    form.values.details.forEach((row, idx) => {
-      const amt = row.amount;
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const local =
-        amt != null && Number.isFinite(amt) ? clampAmount(amt * roeVal) : null;
-      if (form.values.details[idx].local_amount !== local) {
-        form.setFieldValue(`details.${idx}.local_amount`, local);
-      }
-    });
-  }, [detailsSnapshotForLocal, localCurrency]);
+  useEffect(() => {}, [detailsSnapshotForLocal, localCurrency]);
 
   const showChequeSection = form.values.type === "CHEQUE";
 
@@ -965,20 +864,23 @@ export default function OverseasPaymentCreate({
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
-    const agentName =
-      row?.customer_display?.trim() || row?.customer_code?.trim();
-    if (!agentName) return;
+    const accountCode = (row?.account_code ?? "").toString().trim();
+    const subledgerCode = (row?.customer_code ?? "").toString().trim();
+    if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
-    setInvoiceModalBillTo(agentName);
+    setInvoiceModalAllocationFilter({
+      account_code: accountCode,
+      subledger_code: subledgerCode,
+    });
     setInvoiceModalOpen(true);
-    setSupplierInvoiceList([]);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
-    if (!invoiceModalOpen || !filterSupplierInvoiceData) return;
-    const list = filterSupplierInvoiceData;
-    setSupplierInvoiceList(list);
+    if (!invoiceModalOpen || !filterInvoiceData) return;
+    const list = filterInvoiceData;
+    setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
         .map((a) => (a.document_no ?? "").toString().trim())
@@ -987,22 +889,22 @@ export default function OverseasPaymentCreate({
     const alreadySelected = new Set<number>();
     existingDocNos.forEach((docNo) => {
       const idx = list.findIndex(
-        (inv) => (inv.crj_number ?? "").toString().trim() === docNo,
+        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
       );
       if (idx >= 0) alreadySelected.add(idx);
     });
     setSelectedInvoiceIndices(alreadySelected);
-  }, [invoiceModalOpen, filterSupplierInvoiceData]);
+  }, [invoiceModalOpen, filterInvoiceData]);
 
   useEffect(() => {
-    if (invoiceModalOpen && filterSupplierInvoiceError) {
+    if (invoiceModalOpen && filterInvoiceError) {
       ToastNotification({
         type: "error",
-        message: "Failed to load supplier invoices",
+        message: "Failed to load documents",
       });
-      setSupplierInvoiceList([]);
+      setInvoiceList([]);
     }
-  }, [invoiceModalOpen, filterSupplierInvoiceError]);
+  }, [invoiceModalOpen, filterInvoiceError]);
 
   const toggleInvoiceSelection = (idx: number) => {
     setSelectedInvoiceIndices((prev) => {
@@ -1013,13 +915,13 @@ export default function OverseasPaymentCreate({
     });
   };
 
-  const handleSelectSupplierInvoice = () => {
+  const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
       ToastNotification({
         type: "warning",
-        message: "Please select at least one supplier invoice",
+        message: "Please select at least one document",
       });
       return;
     }
@@ -1032,41 +934,67 @@ export default function OverseasPaymentCreate({
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
     const managedDocNos = new Set(
-      supplierInvoiceList
-        .map((inv) => (inv.crj_number ?? "").toString().trim())
+      invoiceList
+        .map((inv) => (inv.document_no ?? "").toString().trim())
         .filter(Boolean),
     );
     const isManagedRow = (a: AdjustmentRow) =>
       managedDocNos.has((a.document_no ?? "").toString().trim());
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
-      const inv = supplierInvoiceList[listIdx];
-      const docDate = inv.date != null ? parseDocumentDate(inv.date) : null;
-      const approvedNum =
-        typeof inv.approved_amount === "number"
-          ? inv.approved_amount
-          : typeof inv.approved_amount === "string"
-            ? parseFloat(inv.approved_amount) || null
-            : null;
-      const invCrnNum =
-        typeof inv.Inv_crn_amount === "number"
-          ? inv.Inv_crn_amount
-          : typeof inv.Inv_crn_amount === "string"
-            ? parseFloat(inv.Inv_crn_amount) || null
-            : null;
-      const amountNum = approvedNum ?? invCrnNum;
-      const daybookId = inv.day_book_id;
+      const inv = invoiceList[listIdx];
+      const docDate =
+        inv.document_date != null
+          ? parseDocumentDate(inv.document_date as string)
+          : null;
+      const totalNum =
+        inv.amount != null
+          ? typeof inv.amount === "number"
+            ? inv.amount
+            : typeof inv.amount === "string"
+              ? parseFloat(inv.amount) || null
+              : null
+          : typeof inv.total === "number"
+            ? inv.total
+            : typeof inv.total === "string"
+              ? parseFloat(inv.total) || null
+              : null;
+      const localTotalNum =
+        inv.amount_in_local != null
+          ? typeof inv.amount_in_local === "number"
+            ? inv.amount_in_local
+            : typeof inv.amount_in_local === "string"
+              ? parseFloat(inv.amount_in_local) || null
+              : null
+          : null;
+      const invRoe =
+        inv.roe != null
+          ? typeof inv.roe === "number"
+            ? inv.roe
+            : typeof inv.roe === "string"
+              ? parseFloat(inv.roe) || null
+              : null
+          : null;
+      const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
-        type: "Supplier Invoice",
+        type:
+          ((inv.day_book_document_type as string) ??
+            (inv.day_book_type as string) ??
+            "") as string,
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
-        document_no: (inv.crj_number ?? "").toString(),
+        document_no: (inv.document_no ?? "").toString(),
         doc_date: docDate,
         currency: (inv.currency_code ?? localCurrency).toString().trim(),
-        roe: 1,
-        adj_curr_amount: amountNum,
-        adj_local_amount: amountNum,
+        roe: invRoe,
+        adj_curr_amount: totalNum,
+        adj_local_amount:
+          localTotalNum != null
+            ? localTotalNum
+            : totalNum != null && invRoe != null
+              ? clampAmount(totalNum * invRoe)
+              : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
       };
     });
@@ -1087,11 +1015,11 @@ export default function OverseasPaymentCreate({
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
     form.setFieldValue("adjustments", nextAdjustments);
-    syncPartyDetailsFromAllocations(nextAdjustments);
+    // Overseas Payment: do not auto-sync party amounts from adjustments.
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
-    setInvoiceModalBillTo(null);
-    setSupplierInvoiceList([]);
+    setInvoiceModalAllocationFilter(null);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
@@ -1280,32 +1208,6 @@ export default function OverseasPaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
-    const partyLocalTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    const adjLocalTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
-      ToastNotification({
-        type: "error",
-        message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
-      });
-      return;
-    }
     setIsSubmitting(true);
     try {
       if (_isReversal) {
@@ -2168,7 +2070,7 @@ payload.is_agent = true;
                           <SearchableSelect
                             key={partyKey}
                             placeholder="Account Name"
-                            apiEndpoint={URL.agent}
+                            apiEndpoint={URL.chartOfAccounts}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
                             disabled={useNonEditableStyleOnly ? false : isReadOnly}
@@ -2176,19 +2078,13 @@ payload.is_agent = true;
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                sl_code?: string;
+                                account_name?: string;
                               };
-                              const name =
-                                orig?.agent_name ??
-                                orig?.customer_name ??
-                                orig?.name ??
-                                "";
-                              const code =
-                                orig?.agent_code ?? orig?.customer_code ?? "";
+                              const name = orig?.account_name ?? "";
+                              const subledgerCode = orig?.sl_code ?? "";
+                              const glAccountCode = orig?.gl_account_code ?? "";
                               const sid =
                                 orig?.id != null
                                   ? orig.id
@@ -2201,8 +2097,12 @@ payload.is_agent = true;
                                 sid,
                               );
                               form.setFieldValue(
+                                `details.${idx}.account_code`,
+                                glAccountCode,
+                              );
+                              form.setFieldValue(
                                 `details.${idx}.customer_code`,
-                                code || (value ?? ""),
+                                subledgerCode || (value ?? ""),
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
@@ -2218,32 +2118,20 @@ payload.is_agent = true;
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_account_code?: string;
+                                account_name?: string;
                               };
                               return {
-                                value: String(
-                                  i?.id ??
-                                    i?.agent_code ??
-                                    i?.customer_code ??
-                                    "",
-                                ),
+                                value: String(i?.id ?? ""),
                                 label: String(
-                                  i?.agent_name ??
-                                    i?.customer_name ??
-                                    i?.name ??
-                                    "",
+                                  `${String(i?.gl_account_code ?? "").trim()} - ${String(i?.account_name ?? "").trim()}`.trim(),
                                 ),
                               };
                             }}
                             searchFields={[
-                              "agent_name",
-                              "agent_code",
-                              "customer_name",
-                              "customer_code",
+                              "account_name",
+                              "gl_account_code",
+                              "sl_code",
                             ]}
                             returnOriginalData
                             styles={partyFieldStyles}
@@ -2395,21 +2283,21 @@ payload.is_agent = true;
                               type="button"
                               variant="subtle"
                               size="sm"
-                              title="Get supplier invoice details"
+                              title="Get document details"
                               disabled={
                                 isReadOnly ||
                                 _isReversal ||
                                 (invoiceModalDetailRowIndex === idx &&
-                                  (filterSupplierInvoiceLoading ||
-                                    filterSupplierInvoiceFetching)) ||
+                                  (filterInvoiceLoading ||
+                                    filterInvoiceFetching)) ||
                                 (!form.values.details[idx].customer_code &&
                                   !form.values.details[idx].customer_display)
                               }
                               onClick={() => openInvoiceModal(idx)}
                               leftSection={
                                 invoiceModalDetailRowIndex === idx &&
-                                (filterSupplierInvoiceLoading ||
-                                  filterSupplierInvoiceFetching) ? (
+                                (filterInvoiceLoading ||
+                                  filterInvoiceFetching) ? (
                                   <Loader size="xs" color="#105476" />
                                 ) : (
                                   <IconFileInvoice size={18} />
@@ -2549,7 +2437,6 @@ payload.is_agent = true;
                       <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Adj Curr Amount"
-                          min={0}
                           hideControls
                           value={
                             form.values.adjustments[idx].adj_curr_amount ??
@@ -2557,9 +2444,11 @@ payload.is_agent = true;
                           }
                           onChange={(v) => {
                             const newCurr =
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null;
+                              v == null || v === ""
+                                ? null
+                                : typeof v === "string"
+                                  ? parseFloat(v) || 0
+                                  : v;
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
                               newCurr,
@@ -2571,29 +2460,15 @@ payload.is_agent = true;
                               rowRoe != null &&
                               Number.isFinite(rowRoe)
                             ) {
-                              newLocal = clampAmount(newCurr * rowRoe);
+                              newLocal = newCurr * rowRoe;
                               form.setFieldValue(
                                 `adjustments.${idx}.adj_local_amount`,
                                 newLocal,
                               );
                             }
-                            const effectiveAdjustments =
-                              form.values.adjustments.map((a, i) =>
-                                i === idx
-                                  ? {
-                                      ...a,
-                                      adj_curr_amount: newCurr,
-                                      adj_local_amount:
-                                        newLocal ?? a.adj_local_amount,
-                                    }
-                                  : a,
-                              );
-                            syncPartyDetailsFromAllocations(
-                              effectiveAdjustments,
-                            );
+                            // Overseas Payment: do not auto-sync party amounts from adjustments.
                           }}
                           decimalScale={2}
-                          max={AMOUNT_MAX}
                           styles={
                             isReadOnly || _isReversal
                               ? adjustmentFieldStyles
@@ -2605,7 +2480,6 @@ payload.is_agent = true;
                       <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Adj local amount"
-                          min={0}
                           hideControls
                           readOnly
                           value={
@@ -2613,7 +2487,6 @@ payload.is_agent = true;
                             undefined
                           }
                           decimalScale={2}
-                          max={AMOUNT_MAX}
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
@@ -2656,17 +2529,17 @@ payload.is_agent = true;
             onClose={() => {
               setInvoiceModalOpen(false);
               setInvoiceModalDetailRowIndex(null);
-              setInvoiceModalBillTo(null);
-              setSupplierInvoiceList([]);
+              setInvoiceModalAllocationFilter(null);
+              setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
             }}
-            title="Select Supplier Invoice"
+            title="Select Document"
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-            {filterSupplierInvoiceLoading || filterSupplierInvoiceFetching ? (
+            {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
-                Loading supplier invoices...
+                Loading documents...
               </Text>
             ) : (
               <>
@@ -2680,12 +2553,14 @@ payload.is_agent = true;
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
-                      <Table.Th>CRJ Number</Table.Th>
-                      <Table.Th>Date</Table.Th>
+                      <Table.Th>Document Number</Table.Th>
+                      <Table.Th>Document Doc Type</Table.Th>
+                      <Table.Th>Document Date</Table.Th>
+                      <Table.Th>Document Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {supplierInvoiceList.map((inv, idx) => (
+                    {invoiceList.map((inv, idx) => (
                       <Table.Tr key={idx}>
                         <Table.Td>
                           <Checkbox
@@ -2693,19 +2568,31 @@ payload.is_agent = true;
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.crj_number ?? "—"}</Table.Td>
                         <Table.Td>
-                          {formatDocumentDateDisplay(inv.date)}
+                          {(inv.document_no ?? "—").toString()}
+                        </Table.Td>
+                        <Table.Td>
+                          {(
+                            (inv.day_book_document_type as string) ??
+                            (inv.day_book_type as string) ??
+                            "—"
+                          ).toString()}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatDocumentDateDisplay(inv.document_date as string)}
+                        </Table.Td>
+                        <Table.Td>
+                          {(inv.amount ?? inv.total ?? "—").toString()}
                         </Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
                 </Table>
-                {supplierInvoiceList.length === 0 &&
-                  !filterSupplierInvoiceLoading &&
-                  !filterSupplierInvoiceFetching && (
+                {invoiceList.length === 0 &&
+                  !filterInvoiceLoading &&
+                  !filterInvoiceFetching && (
                     <Text size="sm" c="dimmed" mt="sm">
-                      No posted supplier invoices found for this agent.
+                      No documents found.
                     </Text>
                   )}
                 <Group justify="flex-end" mt="md">
@@ -2715,8 +2602,8 @@ payload.is_agent = true;
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
-                      setInvoiceModalBillTo(null);
-                      setSupplierInvoiceList([]);
+                      setInvoiceModalAllocationFilter(null);
+                      setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
                     }}
                   >
@@ -2724,7 +2611,7 @@ payload.is_agent = true;
                   </Button>
                   <Button
                     color="#105476"
-                    onClick={handleSelectSupplierInvoice}
+                    onClick={handleSelectInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
                     Select
