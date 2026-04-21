@@ -549,7 +549,7 @@ function MainSectionHeader() {
 
         {/* Right: v0-style actions + profile */}
         <Group gap={8} align="center" wrap="nowrap" style={{ flexShrink: 0 }}>
-          <Tooltip label="Notifications">
+          {/* <Tooltip label="Notifications">
             <ActionIcon variant="subtle" color="gray" size="md" aria-label="Notifications">
               <IconBell size={18} />
             </ActionIcon>
@@ -558,7 +558,7 @@ function MainSectionHeader() {
             <ActionIcon variant="subtle" color="gray" size="md" aria-label="Help">
               <IconHelp size={18} />
             </ActionIcon>
-          </Tooltip>
+          </Tooltip> */}
           <UnstyledButton
             onClick={handleProfileClick}
             aria-label="Open profile menu"

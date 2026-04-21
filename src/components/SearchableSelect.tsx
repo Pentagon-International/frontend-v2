@@ -30,7 +30,8 @@ interface SearchableSelectProps {
   size?: string; // Add size prop
   returnOriginalData?: boolean; // New prop to control whether to return original data
   additionalParams?: Record<string, string>; // Additional query parameters to add to the API call
-  styles?: Record<string, any>; // Styles prop for label and input styling
+  styles?: Record<string, unknown>; // Styles prop for label and input styling
+  classNames?: Record<string, string>;
 }
 
 export default function SearchableSelect({
@@ -54,6 +55,7 @@ export default function SearchableSelect({
   returnOriginalData = false, // Default to false for backward compatibility
   additionalParams,
   styles,
+  classNames,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -329,6 +331,7 @@ export default function SearchableSelect({
     <>
       <Select
         label={label}
+        classNames={classNames}
         comboboxProps={{
           zIndex: dropdownZIndex,
         }}

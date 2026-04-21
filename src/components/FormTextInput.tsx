@@ -35,7 +35,7 @@ const applyFormat = (value: string, format: TextFormatType): string => {
 };
 
 const FormTextInput = React.forwardRef<HTMLInputElement, FormTextInputProps>(
-  ({ format = "initcap", onChange, value, defaultValue, ...props }, ref) => {
+  ({ format = "initcap", onChange, value, defaultValue, styles: userStyles, ...props }, ref) => {
   const isControlled = value !== undefined;
 
   const [internalValue, setInternalValue] = useState<string>(
@@ -58,12 +58,17 @@ const FormTextInput = React.forwardRef<HTMLInputElement, FormTextInputProps>(
     onChange?.(e);
   };
 
+    const base = getStandardFieldStyles();
     return (
       <TextInput
         ref={ref}
         radius="sm"
         size="sm"
-        styles={getStandardFieldStyles()}
+        styles={{
+          ...userStyles,
+          label: { ...base.label, ...userStyles?.label },
+          input: { ...base.input, ...userStyles?.input },
+        }}
         {...props}
         value={displayValue}
         onChange={handleChange}

@@ -17,6 +17,9 @@ import {
   Select,
   Checkbox,
   Paper,
+  MantineProvider,
+  createTheme,
+  rem,
 } from "@mantine/core";
 import {
   IconFilter,
@@ -24,7 +27,6 @@ import {
   IconDots,
   IconEdit,
   IconX,
-  IconRefresh,
   IconDownload,
   IconArrowRight,
   IconSettings,
@@ -38,7 +40,6 @@ import {
   IconChevronsLeft,
   IconChevronsRight,
   IconEye,
-  IconCopy,
   IconFileText,
   IconBriefcase,
   IconCircleX,
@@ -59,9 +60,67 @@ import FormTextInput from "../../../components/FormTextInput";
 
 const LIST_KEY = "AIR_EXPORT_BOOKING_MASTER";
 
+/** Scoped subtree: only Geist / Geist Mono (see `index.css`). */
+const AIR_EXPORT_GEIST_ROOT_CLASS = "air-export-booking-geist-root";
+const AIR_EXPORT_GEIST_MONO_CLASS = "air-export-geist-mono";
+
+/** Sans + mono: Geist files only; generic `sans-serif` / `monospace` are not additional typefaces. */
+const V0_FONT_SANS = "'Geist', sans-serif";
+const V0_FONT_MONO = "'Geist Mono', monospace";
+
+const v0RootTypography = {
+  fontFamily: V0_FONT_SANS,
+  fontSize: 14,
+  lineHeight: 1.5,
+  WebkitFontSmoothing: "antialiased" as const,
+  MozOsxFontSmoothing: "grayscale" as const,
+};
+
+const v0ModalStyles = {
+  content: { fontFamily: V0_FONT_SANS },
+  body: { fontFamily: V0_FONT_SANS, fontSize: 14 },
+  header: { fontFamily: V0_FONT_SANS },
+  title: { fontFamily: V0_FONT_SANS },
+};
+
+const v0ModalClassNames = {
+  content: AIR_EXPORT_GEIST_ROOT_CLASS,
+  body: AIR_EXPORT_GEIST_ROOT_CLASS,
+  inner: AIR_EXPORT_GEIST_ROOT_CLASS,
+};
+
+const v0MenuStyles = {
+  dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
+};
+
+const AIR_EXPORT_FILTER_SELECT_CLASSNAMES = {
+  dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+  option: AIR_EXPORT_GEIST_ROOT_CLASS,
+};
+
+const AIR_EXPORT_FILTER_FIELD_FONT_STYLES = {
+  input: { fontFamily: V0_FONT_SANS },
+  label: { fontFamily: V0_FONT_SANS },
+};
+
+/** Mantine theme slice: v0 uses Geist + Tailwind defaults (text-xs 12px, text-sm 14px, text-lg 18px). */
+const airExportV0MantineTheme = createTheme({
+  fontFamily: V0_FONT_SANS,
+  fontFamilyMonospace: V0_FONT_MONO,
+  headings: { fontFamily: V0_FONT_SANS },
+  fontSizes: {
+    xs: rem(12),
+    sm: rem(14),
+    md: rem(16),
+    lg: rem(18),
+    xl: rem(20),
+  },
+});
+
 // ---------- Types ----------
 type ExportShipmentData = {
   id: number;
+  sno: number;
   shipment_code: string;
   enquiry_id?: string | null;
   date: string;
@@ -100,7 +159,7 @@ type ExportShipmentData = {
   carrier_booking_no?: string;
   igm_no?: string;
   igm_date?: string;
-  houseno?: string;
+  mawb_no?: string;
   routed?: string;
   routed_by?: string;
   agent_name?: string;
@@ -150,6 +209,7 @@ type PersistedListFilters = {
 };
 
 type VisibleColumnsState = {
+  sno: boolean;
   shipment: boolean;
   date: boolean;
   customer: boolean;
@@ -261,6 +321,7 @@ function AirExportBookingMaster() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
+    sno: true,
     shipment: true, date: true, customer: true, route: true, status: true,
     mawb: true, flight: true, pieces: true, weight: true, handler: true,
   });
@@ -274,7 +335,6 @@ function AirExportBookingMaster() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   // ---- create job modal ----
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [createJobLoading, setCreateJobLoading] = useState(false);
   const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
   const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
@@ -474,11 +534,6 @@ function AirExportBookingMaster() {
   }, [pageIndex, pageSize, statusFilter, debouncedSearch]);
 
   // ---- handlers ----
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try { await refetchExportShipments(); } finally { setIsRefreshing(false); }
-  };
-
   const handleExport = (rows: ExportShipmentData[]) => {
     if (rows.length === 0) { ToastNotification({ type: "info", message: "No rows to export" }); return; }
     const sheetRows = rows.map((r) => {
@@ -585,7 +640,7 @@ function AirExportBookingMaster() {
         ata: r.ata && dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null,
       })),
       housing_details: [{
-        hawb_no: booking.houseno || "", origin_code: booking.origin_code || "",
+        hawb_no: booking.mawb_no || "", origin_code: booking.origin_code || "",
         destination_code: booking.destination_code || "", trade: "Re Export",
         routed: booking.routed || "", routed_by: booking.routed_by || "",
         customer_service: booking.customer_service_name || "",
@@ -649,7 +704,13 @@ function AirExportBookingMaster() {
     const canCancel = statusUpper !== "GENERATED" && !isCancel;
     const isBooked = statusUpper === "BOOKED";
     return (
-      <Menu shadow="md" width={200} position="bottom-end">
+      <Menu
+        shadow="md"
+        width={200}
+        position="bottom-end"
+        styles={v0MenuStyles}
+        classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+      >
         <Menu.Target>
           <ActionIcon variant="subtle" color="gray" size="sm">
             <IconDots size={16} />
@@ -693,7 +754,7 @@ function AirExportBookingMaster() {
     const active = sortConfig?.key === col;
     return (
       <th style={{
-        padding: "10px 14px", textAlign: align, fontWeight: 500, fontSize: 13,
+        padding: "10px 14px", textAlign: align, fontWeight: 500, fontSize: 14,
         color: "#64748b", backgroundColor: "#f8fafc", borderBottom: "1px solid #e2e8f0",
         whiteSpace: "nowrap", userSelect: "none",
       }}>
@@ -716,16 +777,21 @@ function AirExportBookingMaster() {
   const muted = "#64748b";
   const fg = "#0f172a";
   const primary = "#2563eb";
+  /** Table header / chrome (muted band inside the white card). */
   const bg = "#f8fafc";
+  /** Same as AppShell main + `--page-bg` so the column isn’t a second gray behind the card. */
+  const pageBg = "#F0F4F8";
+  const cardBg = "#ffffff";
 
   // ===================== RENDER =====================
   return (
-    <>
+    <MantineProvider theme={airExportV0MantineTheme}>
+      <Box className={AIR_EXPORT_GEIST_ROOT_CLASS} style={v0RootTypography}>
       {showMasterTable && (
         <Box
           style={{
             minHeight: "100vh",
-            backgroundColor: bg,
+            backgroundColor: pageBg,
             display: "flex",
             flexDirection: "column",
           }}
@@ -898,18 +964,31 @@ function AirExportBookingMaster() {
                       { value: "BOOKED", label: "Booked" },
                       { value: "RECEIVED", label: "Received" },
                       { value: "GENERATED", label: "Generated" },
+                      { value: "CLOSED", label: "Closed" },
                       { value: "CANCEL", label: "Cancelled" },
                     ]}
+                    classNames={{
+                      dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                      option: AIR_EXPORT_GEIST_ROOT_CLASS,
+                    }}
                     styles={{
                       input: {
                         height: 32,
                         minHeight: 32,
                         fontSize: 12,
                         borderColor: border,
+                        fontFamily: V0_FONT_SANS,
                       },
+                      dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
+                      option: { fontFamily: V0_FONT_SANS, fontSize: 14 },
                     }}
                   />
-                  <Menu shadow="md" width={200}>
+                  <Menu
+                    shadow="md"
+                    width={200}
+                    styles={v0MenuStyles}
+                    classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                  >
                     <Menu.Target>
                       <Button
                         variant="default"
@@ -923,6 +1002,7 @@ function AirExportBookingMaster() {
                             gap: 6,
                             paddingLeft: 10,
                             paddingRight: 12,
+                            fontFamily: V0_FONT_SANS,
                           },
                         }}
                       >
@@ -930,7 +1010,7 @@ function AirExportBookingMaster() {
                       </Button>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Label style={{ fontSize: 12 }}>Toggle Columns</Menu.Label>
+                      <Menu.Label style={{ fontSize: 12, fontFamily: V0_FONT_SANS }}>Toggle Columns</Menu.Label>
                       {(Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map(
                         (key) => (
                           <Menu.Item
@@ -948,9 +1028,9 @@ function AirExportBookingMaster() {
                                 size="xs"
                                 checked={visibleColumns[key]}
                                 onChange={() => {}}
-                                styles={{ input: { cursor: "pointer" } }}
+                                styles={{ input: { cursor: "pointer", fontFamily: V0_FONT_SANS } }}
                               />
-                              <Text size="xs" tt="capitalize">
+                              <Text size="xs" tt="capitalize" style={{ fontFamily: V0_FONT_SANS }}>
                                 {key}
                               </Text>
                             </Group>
@@ -995,12 +1075,13 @@ function AirExportBookingMaster() {
                       gap: 6,
                       paddingLeft: 10,
                       paddingRight: 12,
+                      fontFamily: V0_FONT_SANS,
                     },
                   }}
                   leftSection={<IconFilter size={14} />}
                   onClick={() => setShowFilters((s) => !s)}
                 >
-                  {showFilters ? "Hide filters" : " filters"}
+                  {showFilters ? "Hide filters" : "Filters"}
                 </Button>
                   {/* <Button
                     variant="default"
@@ -1014,6 +1095,7 @@ function AirExportBookingMaster() {
                         gap: 6,
                         paddingLeft: 10,
                         paddingRight: 12,
+                        fontFamily: V0_FONT_SANS,
                       },
                     }}
                     onClick={() => handleExport(tableRows)}
@@ -1032,6 +1114,7 @@ function AirExportBookingMaster() {
                         paddingLeft: 10,
                         paddingRight: 12,
                         border: "none",
+                        fontFamily: V0_FONT_SANS,
                       },
                     }}
                     onClick={persistListAndNavigate}
@@ -1057,11 +1140,13 @@ function AirExportBookingMaster() {
                   <Grid gutter="md">
                     <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
                       <FormTextInput size="xs" label="Booking ID" placeholder="Enter Booking ID"
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
                         value={filterForm.values.booking_id ?? ""}
                         onChange={(e) => filterForm.setFieldValue("booking_id", e.currentTarget.value || null)} />
                     </Grid.Col>
                     <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
                       <FormTextInput size="xs" label="Enquiry ID" placeholder="Enter Enquiry ID"
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
                         value={filterForm.values.enquiry_id ?? ""}
                         onChange={(e) => filterForm.setFieldValue("enquiry_id", e.currentTarget.value || null)} />
                     </Grid.Col>
@@ -1071,12 +1156,18 @@ function AirExportBookingMaster() {
                         displayFormat={(item: Record<string, unknown>) => ({ value: String(item.customer_code), label: String(item.customer_name) })}
                         value={filterForm.values.customer} displayValue={customerDisplayName}
                         onChange={(value, selectedData) => { filterForm.setFieldValue("customer", value || ""); setCustomerDisplayName(selectedData?.label || null); }}
-                        minSearchLength={2} dropdownZIndex={1000} />
+                        minSearchLength={2} dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
+                      />
                     </Grid.Col>
                     <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
                       <SingleDateInput key={`date-${filterForm.values.date}`} label="Date" placeholder="YYYY-MM-DD"
                         size="xs" value={filterForm.values.date}
-                        onChange={(d) => filterForm.setFieldValue("date", d)} />
+                        onChange={(d) => filterForm.setFieldValue("date", d)}
+                        classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
+                      />
                     </Grid.Col>
                     <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
                       <SearchableSelect size="xs" label="Origin" placeholder="Type origin code or name"
@@ -1084,7 +1175,10 @@ function AirExportBookingMaster() {
                         displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
                         value={filterForm.values.origin} displayValue={originDisplayName}
                         onChange={(value, selectedData) => { filterForm.setFieldValue("origin", value || ""); setOriginDisplayName(selectedData?.label || null); }}
-                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000} />
+                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
+                      />
                     </Grid.Col>
                     <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
                       <SearchableSelect size="xs" label="Destination" placeholder="Type destination code or name"
@@ -1092,7 +1186,10 @@ function AirExportBookingMaster() {
                         displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
                         value={filterForm.values.destination} displayValue={destinationDisplayName}
                         onChange={(value, selectedData) => { filterForm.setFieldValue("destination", value || ""); setDestinationDisplayName(selectedData?.label || null); }}
-                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000} />
+                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
+                      />
                     </Grid.Col>
                   </Grid>
                   <Group justify="flex-end" gap={8} mt="md">
@@ -1112,8 +1209,8 @@ function AirExportBookingMaster() {
           )}
 
           {/* ===== MAIN CONTENT ===== */}
-          <Box component="main" py="md" style={{ flex: 1 }}>
-            <Paper withBorder radius="xl" shadow="sm" style={{ overflow: "hidden", borderColor: border }}>
+          <Box component="main" py="md" style={{ flexShrink: 0 }}>
+            <Paper withBorder radius="xl" shadow="sm" style={{ overflow: "hidden", borderColor: border, backgroundColor: cardBg }}>
               {/* <Group justify="flex-end" px="md" py={8} style={{ borderBottom: `1px solid ${border}` }}>
                 <Button
                   variant="subtle"
@@ -1147,27 +1244,28 @@ function AirExportBookingMaster() {
                 </Box>
               )}
 
-              {/* Table area */}
-              <Box style={{ overflowX: "auto" }}>
+              {/* Table area — same surface as card (avoids white vs gray mismatch with footer). */}
+              <Box style={{ overflowX: "auto", overflowY: "hidden", backgroundColor: cardBg }}>
                 {isDataLoading ? (
-                  <Center py={80}>
+                  <Center py={80} style={{ backgroundColor: cardBg }}>
                     <Stack align="center" gap="md">
                       <Loader size="lg" color={primary} />
                       <Text c="dimmed" size="sm">Loading export bookings...</Text>
                     </Stack>
                   </Center>
                 ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, backgroundColor: cardBg }}>
                     <thead>
                       <tr>
                         {/* Checkbox */}
-                        <th style={{ padding: "10px 14px", width: 44, backgroundColor: bg, borderBottom: `1px solid ${border}` }}>
+                        {/* <th style={{ padding: "10px 14px", width: 44, backgroundColor: bg, borderBottom: `1px solid ${border}` }}>
                           <Checkbox size="xs"
                             checked={tableRows.length > 0 && tableRows.every((r) => selectedIds.includes(r.id))}
                             indeterminate={tableRows.some((r) => selectedIds.includes(r.id)) && !tableRows.every((r) => selectedIds.includes(r.id))}
                             onChange={() => selectAllOnPage()} />
-                        </th>
+                        </th> */}
                         {/* {visibleColumns.shipment && <Th col="shipment" label="Shipment" sortable />} */}
+                        {visibleColumns.sno && <Th col="sno" label="S.No"  />}
                         {visibleColumns.shipment && <Th col="shipment" label="Shipment"  />}
                         {visibleColumns.date && <Th col="date" label="Date"  />}
                         {visibleColumns.customer && <Th col="customer" label="Customer"  />}
@@ -1211,13 +1309,18 @@ function AirExportBookingMaster() {
                               onMouseEnter={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc"; }}
                               onMouseLeave={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ""; }}
                             >
-                              <td style={{ padding: "10px 14px" }}>
+                              {/* <td style={{ padding: "10px 14px" }}>
                                 <Checkbox size="xs" checked={sel} onChange={() => { toggleRow(booking.id); }} />
-                              </td>
+                              </td> */}
+                              {visibleColumns.sno && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  <Text fw={600} size="sm" c={fg}>{booking.sno}</Text>
+                                </td>
+                              )}
                               {visibleColumns.shipment && (
                                 <td style={{ padding: "10px 14px" }}>
                                   <Text fw={600} size="sm" c={fg}>{booking.shipment_code}</Text>
-                                  {booking.enquiry_id ? <Text size="sm" c={muted}>{booking.enquiry_id}</Text> : null}
+                                  {booking.enquiry_id ? <Text fz={10} c={muted}>{booking.enquiry_id}</Text> : null}
                                 </td>
                               )}
                               {visibleColumns.date && (
@@ -1227,7 +1330,11 @@ function AirExportBookingMaster() {
                               )}
                               {visibleColumns.customer && (
                                 <td style={{ padding: "10px 14px", maxWidth: 200 }}>
-                                  <Tooltip label={booking.customer_name ?? ""} withArrow>
+                                  <Tooltip
+                                    label={booking.customer_name ?? ""}
+                                    withArrow
+                                    styles={{ tooltip: { fontFamily: V0_FONT_SANS, fontSize: 12 } }}
+                                  >
                                     <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default" }}>
                                       {booking.customer_name ?? "—"}
                                     </Text>
@@ -1249,8 +1356,12 @@ function AirExportBookingMaster() {
                                 </td>
                               )}
                               {visibleColumns.mawb && (
-                                <td style={{ padding: "10px 14px", fontFamily: "monospace", fontSize: 12, color: muted }}>
-                                  {booking.mawb_no?.trim() || "—"}
+                                <td
+                                  className={AIR_EXPORT_GEIST_MONO_CLASS}
+                                  style={{ padding: "10px 14px", fontSize: 12, color: muted }}
+                                >
+                                  {booking.mawb_no ? <Text size="xs" fw={500} c={fg}>{booking.mawb_no}</Text>
+                                    : <Text size="sm" c={muted}>—</Text>}
                                 </td>
                               )}
                               {visibleColumns.flight && (
@@ -1261,16 +1372,16 @@ function AirExportBookingMaster() {
                                 </td>
                               )}
                               {visibleColumns.pieces && (
-                                <td style={{ padding: "10px 14px", textAlign: "right", color: muted }}>{pw.pieces}</td>
+                                <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 14, color: muted }}>{pw.pieces}</td>
                               )}
                               {visibleColumns.weight && (
-                                <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: fg }}>{pw.weight.toFixed(1)}</td>
+                                <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 14, fontWeight: 500, color: fg }}>{pw.weight.toFixed(1)}</td>
                               )}
                               {visibleColumns.handler && (
                                 <td style={{ padding: "10px 14px" }}>
                                   <Group gap={8} wrap="nowrap">
                                     <Box style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: `${primary}1a`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                      <Text size={10} fw={700} c={primary}>{initials(booking.customer_service_name)}</Text>
+                                      <Text size={10} fw={600} c={primary}>{initials(booking.customer_service_name)}</Text>
                                     </Box>
                                     <Text size="xs" c={muted} lineClamp={1} maw={100}>{firstName(booking.customer_service_name)}</Text>
                                   </Group>
@@ -1289,7 +1400,7 @@ function AirExportBookingMaster() {
               </Box>
 
               {/* ===== PAGINATION FOOTER ===== */}
-              <Box px="md" py={10} style={{ borderTop: `1px solid ${border}`, backgroundColor: bg }}>
+              <Box px="md" py={10} style={{ borderTop: `1px solid ${border}`, backgroundColor: cardBg }}>
                 <Group justify="space-between" wrap="wrap" gap="md">
                   <Group gap="md" wrap="wrap" align="center">
                     <Text size="sm" c={muted}>
@@ -1305,7 +1416,17 @@ function AirExportBookingMaster() {
                       <Text size="sm" c={muted}>Rows:</Text>
                       <Select size="xs" w={68} value={String(pageSize)}
                         onChange={(v) => { if (v) { setPageSize(Number(v)); setPageIndex(0); } }}
-                        data={["10", "15", "25", "50"]} />
+                        data={["10", "15", "25", "50"]}
+                        classNames={{
+                          dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                          option: AIR_EXPORT_GEIST_ROOT_CLASS,
+                        }}
+                        styles={{
+                          input: { fontFamily: V0_FONT_SANS },
+                          dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
+                          option: { fontFamily: V0_FONT_SANS, fontSize: 14 },
+                        }}
+                      />
                     </Group>
                   </Group>
                   <Group gap={4} wrap="nowrap">
@@ -1333,7 +1454,7 @@ function AirExportBookingMaster() {
 
       {/* ===== CANCEL MODAL ===== */}
       <Modal opened={!!cancelConfirmRow} onClose={() => !isCancelling && setCancelConfirmRow(null)}
-        title={<Text fw={600} size="md">Cancel Booking</Text>} centered size="sm">
+        title={<Text fw={600} size="md">Cancel Booking</Text>} centered size="sm" styles={v0ModalStyles} classNames={v0ModalClassNames}>
         <Text size="sm" c="dimmed" mb="md">
           Are you sure you want to cancel booking{" "}
           <Text span fw={600} c={fg}>{cancelConfirmRow?.shipment_code}</Text>?
@@ -1349,7 +1470,7 @@ function AirExportBookingMaster() {
       <Modal opened={createJobModalOpen}
         onClose={() => { if (!createJobLoading) { setCreateJobModalOpen(false); setCreateJobResponse(null); setCreateJobError(null); } }}
         title={<Text fw={600} size="md" c={fg}>Create Job</Text>}
-        centered size="md" closeOnClickOutside={!createJobLoading} closeOnEscape={!createJobLoading} withCloseButton={!createJobLoading}>
+        centered size="md" closeOnClickOutside={!createJobLoading} closeOnEscape={!createJobLoading} withCloseButton={!createJobLoading} styles={v0ModalStyles} classNames={v0ModalClassNames}>
         {createJobLoading ? (
           <Center py="xl"><Stack align="center" gap="md"><Loader size="md" color={primary} /><Text c="dimmed" size="sm">Creating job, please wait...</Text></Stack></Center>
         ) : createJobError ? (
@@ -1391,7 +1512,8 @@ function AirExportBookingMaster() {
       </Modal>
 
       <Outlet />
-    </>
+      </Box>
+    </MantineProvider>
   );
 }
 
