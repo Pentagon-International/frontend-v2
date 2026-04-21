@@ -50,8 +50,6 @@ const AppShellLayout = ({ children }) => {
             zIndex: 10,
             position: "sticky",
             top: 0,
-            backgroundColor: "#ffffff",
-            boxShadow: "0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)",
           }}
         >
           <MainSectionHeader />
@@ -59,8 +57,9 @@ const AppShellLayout = ({ children }) => {
 
         {/* Page content */}
         <Box
-          px="md"
-          my="md"
+          px={{ base: 16, sm: 24 }}
+          mt={0}
+          mb="md"
           style={{
             flexGrow: 1,
             minHeight: 0,

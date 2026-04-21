@@ -1,14 +1,10 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
-import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
+import * as XLSX from "xlsx";
 import {
   Group,
+  Flex,
   Button,
   Text,
-  Card,
   Center,
   Loader,
   Stack,
@@ -16,37 +12,54 @@ import {
   Menu,
   ActionIcon,
   Box,
-  Badge,
   Modal,
   Tooltip,
   Select,
+  Checkbox,
+  Paper,
 } from "@mantine/core";
 import {
   IconFilter,
   IconPlus,
-  IconDotsVertical,
+  IconDots,
   IconEdit,
   IconX,
-  IconSearch,
+  IconRefresh,
+  IconDownload,
+  IconArrowRight,
+  IconSettings,
+  IconPackage,
+  IconCircleCheck,
+  IconClock,
+  IconStack2,
+  IconScale,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronsLeft,
+  IconChevronsRight,
+  IconEye,
+  IconCopy,
+  IconFileText,
+  IconBriefcase,
+  IconCircleX,
+  IconSelector,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 
 const LIST_KEY = "AIR_EXPORT_BOOKING_MASTER";
 
-// Type definitions
+// ---------- Types ----------
 type ExportShipmentData = {
   id: number;
   shipment_code: string;
@@ -73,7 +86,6 @@ type ExportShipmentData = {
   origin_code?: string;
   destination_code?: string;
   is_hazardous?: boolean;
-  // Additional fields returned by the filter API
   customer_code_read?: string;
   origin_code_read?: string;
   destination_code_read?: string;
@@ -91,23 +103,18 @@ type ExportShipmentData = {
   houseno?: string;
   routed?: string;
   routed_by?: string;
-  // Agent fields
   agent_name?: string;
   agent_address?: string;
   agent_email?: string;
-  // Shipper fields
   shipper_name?: string;
   shipper_address?: string;
   shipper_email?: string;
-  // Consignee fields
   consignee_name?: string;
   consignee_address?: string;
   consignee_email?: string;
-  // Notify party fields
   notify_customer_name?: string;
   notify_customer_address?: string;
   notify_customer_email?: string;
-  // Shipment terms / cargo details
   shipment_terms_code_read?: string;
   marks_no?: string | null;
   commodity_description?: string | null;
@@ -142,6 +149,82 @@ type PersistedListFilters = {
   pageIndex: number;
 };
 
+type VisibleColumnsState = {
+  shipment: boolean;
+  date: boolean;
+  customer: boolean;
+  route: boolean;
+  status: boolean;
+  mawb: boolean;
+  flight: boolean;
+  pieces: boolean;
+  weight: boolean;
+  handler: boolean;
+};
+
+// ---------- Pure helpers ----------
+function normalizeBookingStatus(s: string | undefined | null): string {
+  const u = (s || "").toUpperCase();
+  if (u.includes("CANCEL")) return "CANCEL";
+  if (u === "BOOKED") return "BOOKED";
+  if (u === "RECEIVED") return "RECEIVED";
+  return u || "GENERATED";
+}
+
+function getRowPW(row: ExportShipmentData): { pieces: number; weight: number } {
+  const cargo = row.cargo_details;
+  if (Array.isArray(cargo) && cargo.length > 0) {
+    const pieces = cargo.reduce((s, c) => s + Number((c as Record<string, unknown>).no_of_packages ?? 0), 0);
+    const weight = cargo.reduce((s, c) => s + Number((c as Record<string, unknown>).gross_weight ?? 0), 0);
+    return { pieces, weight };
+  }
+  return { pieces: 0, weight: 0 };
+}
+
+function initials(name: string | undefined | null): string {
+  if (!name?.trim()) return "?";
+  return name.trim().split(/\s+/).map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function firstName(name: string | undefined | null): string {
+  if (!name?.trim()) return "—";
+  return name.trim().split(/\s+/)[0] ?? "—";
+}
+
+// ---------- Sub-components ----------
+function StatusPill({ status }: { status: string | undefined | null }) {
+  const n = normalizeBookingStatus(status);
+  const cfg =
+    n === "BOOKED"
+      ? { label: "Booked", dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
+      : n === "RECEIVED"
+        ? { label: "Received", dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
+        : n === "CANCEL"
+          ? { label: "Cancelled", dot: "#ef4444", bg: "#fef2f2", color: "#b91c1c" }
+          : { label: "Generated", dot: "#f59e0b", bg: "#fffbeb", color: "#b45309" };
+
+  return (
+    <Box
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "2px 10px",
+        borderRadius: 9999,
+        backgroundColor: cfg.bg,
+        color: cfg.color,
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Box style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: cfg.dot, flexShrink: 0 }} />
+      {cfg.label}
+    </Box>
+  );
+}
+
+// ---------- Main Component ----------
 function AirExportBookingMaster() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -154,175 +237,113 @@ function AirExportBookingMaster() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
-  const dateFormat = useDateFormat();
   const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
-  //States
+  // ---- restore flag ----
   const [isRestoring, setIsRestoring] = useState(true);
+
+  // ---- filter panel ----
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
 
-  // Pagination states
-  const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
-  const [pageSize, setPageSize] = useState(25); // Default page size
-  const [totalRecords, setTotalRecords] = useState(0); // Total records from API
+  // ---- pagination ----
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(15);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  // Display name states for filter fields
-  const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
-    null
-  );
-  const [originDisplayName, setOriginDisplayName] = useState<string | null>(
-    null
-  );
-  const [destinationDisplayName, setDestinationDisplayName] = useState<
-    string | null
-  >(null);
+  // ---- display names ----
+  const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(null);
+  const [originDisplayName, setOriginDisplayName] = useState<string | null>(null);
+  const [destinationDisplayName, setDestinationDisplayName] = useState<string | null>(null);
 
-  // Map booking status to badge label and color
-  const getStatusBadge = (statusRaw: string | undefined | null) => {
-    const statusUpper = (statusRaw || "").toUpperCase();
-    const label = statusUpper || "GENERATED";
-    let color: string = "#2563EB";
-    if (label === "BOOKED") color = "green";
-    else if (label === "GENERATED") color = "#2563EB";
-    else if (label === "RECEIVED") color = "blue";
-    else if (label === "CANCEL") color = "red";
-    else color = "gray";
-    return { label, color } as const;
-  };
+  // ---- table state ----
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
+    shipment: true, date: true, customer: true, route: true, status: true,
+    mawb: true, flight: true, pieces: true, weight: true, handler: true,
+  });
 
-  // Cancel confirmation modal
+  // ---- search ----
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+
+  // ---- cancel modal ----
   const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  // Create Job modal state
+  // ---- create job modal ----
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [createJobLoading, setCreateJobLoading] = useState(false);
   const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
   const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
   const [createJobError, setCreateJobError] = useState<string | null>(null);
 
-  // State to store the actual applied filter values
+  // ---- filter form ----
   const filterForm = useForm<FilterState>({
-    initialValues: {
-      booking_id: null,
-      enquiry_id: null,
-      customer: null,
-      service: null,
-      origin: null,
-      destination: null,
-      date: null,
-    },
+    initialValues: { booking_id: null, enquiry_id: null, customer: null, service: null, origin: null, destination: null, date: null },
   });
 
-  // Search states (debounced value is sent as filters.search — same pattern as Air Export Job list)
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
-
-  // Check if we're on the create or edit route
+  // ---- route helpers ----
   const isCreateRoute = location.pathname.endsWith("/create");
   const isEditRoute = location.pathname.endsWith("/edit");
   const showMasterTable = !isCreateRoute && !isEditRoute;
 
-  // Check for refetch parameter in URL
   const searchParams = new URLSearchParams(location.search);
   const shouldRefetch = searchParams.get("refetch") === "true";
 
-  // Build filter payload function
+  // ---- filter payload ----
   const buildFilterPayload = () => {
-    const values = filterForm.values;
-    const payload: Record<string, string> = {};
-
-    if (values.booking_id?.trim())
-      payload.shipment_code = values.booking_id.trim();
-    if (values.enquiry_id?.trim())
-      payload.enquiry_id = values.enquiry_id.trim();
-    if (values.customer) payload.customer_code = values.customer;
-    if (values.service) payload.service = values.service;
-    if (values.origin) payload.origin_code = values.origin;
-    if (values.destination) payload.destination_code = values.destination;
-    if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
-
-    return payload;
+    const v = filterForm.values;
+    const p: Record<string, string> = {};
+    if (v.booking_id?.trim()) p.shipment_code = v.booking_id.trim();
+    if (v.enquiry_id?.trim()) p.enquiry_id = v.enquiry_id.trim();
+    if (v.customer) p.customer_code = v.customer;
+    if (v.service) p.service = v.service;
+    if (v.origin) p.origin_code = v.origin;
+    if (v.destination) p.destination_code = v.destination;
+    if (v.date) p.date = dayjs(v.date).format("YYYY-MM-DD");
+    return p;
   };
 
-  /** Extra keys on top of service_type + service: applied panel filters + search (Air Export Job pattern). */
-  const buildBookingRequestFilters = (searchValue: string): Record<string, string> => {
+  const buildRequestFilters = (searchValue: string): Record<string, string> => {
     const extra: Record<string, string> = {};
     if (filtersApplied) Object.assign(extra, buildFilterPayload());
     const trimmed = searchValue.trim();
     if (trimmed) extra.search = trimmed;
+    if (statusFilter !== "all") extra.status = statusFilter;
     return extra;
   };
 
+  // ---- data query ----
   const {
     data: exportShipmentsResponse,
     isLoading,
     refetch: refetchExportShipments,
   } = useQuery({
-    queryKey: [
-      "air-export-booking/filter/",
-      pageIndex,
-      pageSize,
-      filtersApplied,
-      filtersApplied ? JSON.stringify(filterForm.values) : "-",
-      debouncedSearch,
-    ],
+    queryKey: ["air-export-booking/filter/", pageIndex, pageSize, filtersApplied,
+      filtersApplied ? JSON.stringify(filterForm.values) : "-", debouncedSearch, statusFilter],
     enabled: !isRestoring && searchQuery === debouncedSearch,
     queryFn: async () => {
       try {
         const offset = pageIndex * pageSize;
         const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
-        const filtersPayload = buildBookingRequestFilters(debouncedSearch);
         const response = (await apiCallProtected.post(url, {
-          filters: {
-            service_type: "EXPORT",
-            service: "AIR",
-            ...filtersPayload,
-          },
+          filters: { service_type: "EXPORT", service: "AIR", ...buildRequestFilters(debouncedSearch) },
         })) as Record<string, unknown>;
 
         if (response && typeof response === "object") {
-          if (typeof response.total === "number") {
-            setTotalRecords(response.total);
-          }
-
+          if (typeof response.total === "number") setTotalRecords(response.total);
           let data: ExportShipmentData[] = [];
-          if (Array.isArray(response.data)) {
-            data = response.data as ExportShipmentData[];
-          } else if (Array.isArray(response.results)) {
-            data = response.results as ExportShipmentData[];
-          } else if (Array.isArray(response.result)) {
-            data = response.result as ExportShipmentData[];
-          }
-
-          return {
-            data,
-            total: (response.total as number) || 0,
-            count: (response.count as number) || data.length,
-            index: (response.index as number) ?? pageIndex,
-            limit: (response.limit as number) ?? pageSize,
-            total_pagination: (response.total_pagination as number) || 0,
-          };
+          if (Array.isArray(response.data)) data = response.data as ExportShipmentData[];
+          else if (Array.isArray(response.results)) data = response.results as ExportShipmentData[];
+          else if (Array.isArray(response.result)) data = response.result as ExportShipmentData[];
+          return { data, total: (response.total as number) || 0 };
         }
-
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: pageIndex,
-          limit: pageSize,
-          total_pagination: 0,
-        };
-      } catch (error) {
-        console.error("❌ Error fetching air export booking:", error);
-        return {
-          data: [],
-          total: 0,
-          count: 0,
-          index: pageIndex,
-          limit: pageSize,
-          total_pagination: 0,
-        };
+        return { data: [], total: 0 };
+      } catch {
+        return { data: [], total: 0 };
       }
     },
     staleTime: 0,
@@ -331,293 +352,201 @@ function AirExportBookingMaster() {
     refetchOnMount: true,
   });
 
-  const displayData = exportShipmentsResponse?.data ?? [];
+  const displayData = useMemo(() => exportShipmentsResponse?.data ?? [], [exportShipmentsResponse]);
 
+  // ---- derived table data ----
+  const tableRows = useMemo(() => {
+    const rows = [...displayData];
+    if (sortConfig) {
+      rows.sort((a, b) => {
+        let aVal: string | number = "";
+        let bVal: string | number = "";
+        if (sortConfig.key === "shipment") { aVal = a.shipment_code || ""; bVal = b.shipment_code || ""; }
+        else if (sortConfig.key === "date") { aVal = a.date || ""; bVal = b.date || ""; }
+        else if (sortConfig.key === "customer") { aVal = a.customer_name || ""; bVal = b.customer_name || ""; }
+        else if (sortConfig.key === "weight") { aVal = getRowPW(a).weight; bVal = getRowPW(b).weight; }
+        if (typeof aVal === "string") {
+          return sortConfig.direction === "asc" ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
+        }
+        return sortConfig.direction === "asc" ? aVal - (bVal as number) : (bVal as number) - aVal;
+      });
+    }
+    return rows;
+  }, [displayData, sortConfig]);
+
+  const stats = useMemo(() => {
+    const rows = displayData;
+    let totalPieces = 0;
+    let totalWeight = 0;
+    rows.forEach((r) => { const pw = getRowPW(r); totalPieces += pw.pieces; totalWeight += pw.weight; });
+    return {
+      total: totalRecords,
+      booked: rows.filter((r) => normalizeBookingStatus(r.status) === "BOOKED").length,
+      received: rows.filter((r) => normalizeBookingStatus(r.status) === "RECEIVED").length,
+      pending: rows.filter((r) => normalizeBookingStatus(r.status) === "GENERATED").length,
+      totalPieces,
+      totalWeight,
+    };
+  }, [displayData, totalRecords]);
+
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+
+  const pageButtonIndices = useMemo(() => {
+    const n = Math.min(5, totalPages);
+    return Array.from({ length: n }, (_, i) => {
+      if (totalPages <= 5) return i;
+      if (pageIndex < 3) return i;
+      if (pageIndex > totalPages - 4) return totalPages - 5 + i;
+      return pageIndex - 2 + i;
+    });
+  }, [totalPages, pageIndex]);
+
+  const isDataLoading = isRestoring || isLoading;
+
+  // ---- restore state ----
   useEffect(() => {
     const stored = getState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
-    if (!shouldRestore) {
-      setIsRestoring(false);
-      return;
-    }
+    if (!shouldRestore) { setIsRestoring(false); return; }
 
     const f = stored.filters as PersistedListFilters | undefined;
     if (f && typeof f === "object") {
       filterForm.setValues({
-        booking_id: f.booking_id ?? null,
-        enquiry_id: f.enquiry_id ?? null,
-        customer: f.customer ?? null,
-        service: f.service ?? null,
-        origin: f.origin ?? null,
-        destination: f.destination ?? null,
+        booking_id: f.booking_id ?? null, enquiry_id: f.enquiry_id ?? null,
+        customer: f.customer ?? null, service: f.service ?? null,
+        origin: f.origin ?? null, destination: f.destination ?? null,
         date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
       });
       setFiltersApplied(Boolean(f.filtersApplied));
       setShowFilters(Boolean(f.showFilters));
       setPageIndex(typeof f.pageIndex === "number" ? f.pageIndex : 0);
     }
-
     const dv = stored.displayValues;
     if (dv) {
       setCustomerDisplayName(dv.customer ?? null);
       setOriginDisplayName(dv.origin ?? null);
       setDestinationDisplayName(dv.destination ?? null);
     }
-
-    if (typeof stored.search === "string") {
-      setSearchQuery(stored.search);
-    }
-
+    if (typeof stored.search === "string") setSearchQuery(stored.search);
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
+  // ---- persist & navigate ----
   const persistListAndNavigate = useCallback(() => {
     const persisted: PersistedListFilters = {
-      booking_id: filterForm.values.booking_id,
-      enquiry_id: filterForm.values.enquiry_id,
-      customer: filterForm.values.customer,
-      service: filterForm.values.service,
-      origin: filterForm.values.origin,
-      destination: filterForm.values.destination,
-      date: filterForm.values.date
-        ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
-        : null,
-      filtersApplied,
-      showFilters,
-      pageIndex,
+      booking_id: filterForm.values.booking_id, enquiry_id: filterForm.values.enquiry_id,
+      customer: filterForm.values.customer, service: filterForm.values.service,
+      origin: filterForm.values.origin, destination: filterForm.values.destination,
+      date: filterForm.values.date ? dayjs(filterForm.values.date).format("YYYY-MM-DD") : null,
+      filtersApplied, showFilters, pageIndex,
     };
     setStoreFilters(LIST_KEY, persisted);
-    setStoreDisplayValues(LIST_KEY, {
-      customer: customerDisplayName,
-      origin: originDisplayName,
-      destination: destinationDisplayName,
-    });
+    setStoreDisplayValues(LIST_KEY, { customer: customerDisplayName, origin: originDisplayName, destination: destinationDisplayName });
     setStoreSearch(LIST_KEY, searchQuery);
     setShouldRestore(LIST_KEY, true);
     navigate("./create");
-  }, [
-    filterForm.values,
-    filtersApplied,
-    showFilters,
-    pageIndex,
-    customerDisplayName,
-    originDisplayName,
-    destinationDisplayName,
-    searchQuery,
-    navigate,
-    setStoreFilters,
-    setStoreDisplayValues,
-    setStoreSearch,
-    setShouldRestore,
-  ]);
+  }, [filterForm.values, filtersApplied, showFilters, pageIndex, customerDisplayName, originDisplayName, destinationDisplayName, searchQuery, navigate, setStoreFilters, setStoreDisplayValues, setStoreSearch, setShouldRestore]);
 
-  // Loading state
-  const isDataLoading = isRestoring || isLoading;
-
-  // Effect to handle refetch when coming from successful form submission
+  // ---- refetch effects ----
   useEffect(() => {
     if (shouldRefetch) {
-      // Refetch the export shipments data
-      queryClient.invalidateQueries({
-        queryKey: ["air-export-booking/filter/"],
-      });
-
-      // Remove the refetch parameter from URL to prevent unnecessary refetches on subsequent visits
+      queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
       const newSearchParams = new URLSearchParams(location.search);
       newSearchParams.delete("refetch");
       const newSearch = newSearchParams.toString();
-      const newPath = newSearch
-        ? `${location.pathname}?${newSearch}`
-        : location.pathname;
-
-      // Replace the current URL to remove the refetch parameter
-      navigate(newPath, { replace: true });
+      navigate(newSearch ? `${location.pathname}?${newSearch}` : location.pathname, { replace: true });
     }
-  }, [
-    shouldRefetch,
-    queryClient,
-    location.search,
-    location.pathname,
-    navigate,
-  ]);
+  }, [shouldRefetch, queryClient, location.search, location.pathname, navigate]);
 
-  // Effect to handle refreshData state from navigation
   useEffect(() => {
-    console.log("refresh data----", location.state?.refreshData);
-
     if (location.state?.refreshData) {
-      console.log("🔄 Refreshing data after create/edit operation");
-
-      // Refresh export shipments data
-      const refreshData = async () => {
-        try {
-          console.log(
-            "🔄 Starting aggressive data refresh for air export booking..."
-          );
-
-          // Remove all cached data first
-          queryClient.removeQueries({
-            queryKey: ["air-export-booking/filter/"],
-          });
-
-          // Wait a moment for cleanup
-          await new Promise((resolve) => setTimeout(resolve, 50));
-
-          await refetchExportShipments();
-
-          // Additional refetch to ensure UI updates
-          setTimeout(async () => {
-            await queryClient.refetchQueries({
-              queryKey: ["air-export-booking/filter/"],
-              type: "active",
-            });
-            console.log(
-              "✅ Air export booking data refresh completed with additional refetch"
-            );
-          }, 200);
-
-          console.log("✅ Air export booking data refresh completed");
-        } catch (error) {
-          console.error("Error refreshing air export booking data:", error);
-        }
-      };
-
-      refreshData();
-
-      // Clear the refresh flag after starting the refresh process
+      queryClient.removeQueries({ queryKey: ["air-export-booking/filter/"] });
+      setTimeout(() => { void refetchExportShipments(); }, 50);
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, refetchExportShipments, navigate, location.pathname, queryClient]);
 
-  // Additional effect to ensure data refresh on component mount
   useEffect(() => {
-    const refreshOnMount = async () => {
-      try {
-        // Always refetch data when component mounts to ensure fresh data
-        await queryClient.refetchQueries({
-          queryKey: ["air-export-booking/filter/"],
-          type: "active",
-        });
-        console.log("🔄 Air export booking data refreshed on component mount");
-      } catch (error) {
-        console.error(
-          "Error refreshing air export booking data on mount:",
-          error
-        );
-      }
-    };
+    setSelectedIds([]);
+  }, [pageIndex, pageSize, statusFilter, debouncedSearch]);
 
-    // Small delay to ensure component is fully mounted
-    const timeoutId = setTimeout(refreshOnMount, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [queryClient]);
-
-  // Pagination handlers
-  const handlePageChange = (page: number) => {
-    // PaginationBar uses 1-based page numbers, convert to 0-based index
-    const newIndex = page - 1;
-    setPageIndex(newIndex);
+  // ---- handlers ----
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try { await refetchExportShipments(); } finally { setIsRefreshing(false); }
   };
 
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setPageIndex(0); // Reset to first page when page size changes
+  const handleExport = (rows: ExportShipmentData[]) => {
+    if (rows.length === 0) { ToastNotification({ type: "info", message: "No rows to export" }); return; }
+    const sheetRows = rows.map((r) => {
+      const pw = getRowPW(r);
+      return {
+        Shipment: r.shipment_code, "Enquiry ID": r.enquiry_id ?? "",
+        Date: r.date ? dayjs(r.date).format("DD MMM YYYY") : "",
+        Customer: r.customer_name ?? "",
+        Origin: r.origin_code_read || r.origin_code || "",
+        Destination: r.destination_code_read || r.destination_code || "",
+        Status: normalizeBookingStatus(r.status),
+        MAWB: r.mawb_no ?? "", Flight: r.voyage_no ?? "",
+        Pcs: pw.pieces, "Weight kg": pw.weight,
+        Handler: r.customer_service_name ?? "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Export Bookings");
+    XLSX.writeFile(wb, `air_export_bookings_${dayjs().format("YYYY-MM-DD_HH-mm")}.xlsx`);
   };
 
-  const applyFilters = async () => {
-    try {
-      console.log("Applying filters...");
-      const formValues = filterForm.values;
-      console.log("Current filters:", formValues);
+  const handleSort = (key: string) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) return prev.direction === "asc" ? { key, direction: "desc" } : null;
+      return { key, direction: "asc" };
+    });
+  };
 
-      const hasFilterValues =
-        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
-        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
-        formValues.customer ||
-        formValues.service ||
-        formValues.origin ||
-        formValues.destination ||
-        formValues.date;
+  const toggleRow = (id: number) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
 
-      if (!hasFilterValues) {
-        setFiltersApplied(false);
-        setPageIndex(0); // Reset pagination
+  const selectAllOnPage = () => {
+    const ids = tableRows.map((r) => r.id);
+    if (ids.length > 0 && ids.every((id) => selectedIds.includes(id))) {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...ids])]);
+    }
+  };
 
-        ToastNotification({
-          type: "info",
-          message: "No filters selected, showing all data",
-        });
-        return;
-      }
-
+  const applyFilters = () => {
+    const v = filterForm.values;
+    const hasValues = (v.booking_id?.trim()) || (v.enquiry_id?.trim()) || v.customer || v.service || v.origin || v.destination || v.date;
+    if (!hasValues) {
+      setFiltersApplied(false);
+      setPageIndex(0);
+      ToastNotification({ type: "info", message: "No filters selected, showing all data" });
+    } else {
       setPageIndex(0);
       setFiltersApplied(true);
-
-      ToastNotification({
-        type: "success",
-        message: "Filters applied successfully",
-      });
-    } catch (error) {
-      ToastNotification({
-        type: "error",
-        message: "Error applying filters",
-      });
-      console.error("Error applying filters:", error);
-    } finally {
-      setShowFilters(false);
+      ToastNotification({ type: "success", message: "Filters applied" });
     }
+    setShowFilters(false);
   };
 
-  const clearAllFilters = async () => {
-    try {
-      setShowFilters(false);
-
-      const formValues = filterForm.values;
-      const hasFilterValues =
-        (formValues.booking_id && formValues.booking_id.trim() !== "") ||
-        (formValues.enquiry_id && formValues.enquiry_id.trim() !== "") ||
-        formValues.customer ||
-        formValues.service ||
-        formValues.origin ||
-        formValues.destination ||
-        formValues.date;
-
-      if (!hasFilterValues) {
-        setFiltersApplied(false);
-        setPageIndex(0); // Reset pagination
-
-        ToastNotification({
-          type: "info",
-          message: "No filters selected, showing all data",
-        });
-        return;
-      }
-      filterForm.reset(); // Reset form to initial values
-      setFiltersApplied(false); // Reset filters applied state
-      setSearchQuery("");
-      setPageIndex(0); // Reset pagination
-
-      // Clear display names
-      setCustomerDisplayName(null);
-      setOriginDisplayName(null);
-      setDestinationDisplayName(null);
-
-      // Invalidate queries and refetch unfiltered data
-      await queryClient.invalidateQueries({
-        queryKey: ["air-export-booking/filter/"],
-      });
-      ToastNotification({
-        type: "success",
-        message: "All filters cleared successfully",
-      });
-    } catch (error) {
-      console.error("Error clearing filters:", error);
-      setShowFilters(false);
-    }
+  const clearAllFilters = () => {
+    filterForm.reset();
+    setFiltersApplied(false);
+    setSearchQuery("");
+    setPageIndex(0);
+    setCustomerDisplayName(null);
+    setOriginDisplayName(null);
+    setDestinationDisplayName(null);
+    setShowFilters(false);
+    queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
+    ToastNotification({ type: "success", message: "Filters cleared" });
   };
 
   const handleConfirmCancel = async () => {
@@ -626,134 +555,75 @@ function AirExportBookingMaster() {
     try {
       const payload = { ...cancelConfirmRow, status: "CANCEL" };
       await putAPICall(URL.customerServiceShipment, payload, API_HEADER);
-      ToastNotification({ type: "success", message: "Booking cancelled successfully" });
+      ToastNotification({ type: "success", message: "Booking cancelled" });
       setCancelConfirmRow(null);
       queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
       void refetchExportShipments();
     } catch (err: unknown) {
-      ToastNotification({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to cancel booking",
-      });
-    } finally {
-      setIsCancelling(false);
-    }
+      ToastNotification({ type: "error", message: err instanceof Error ? err.message : "Failed to cancel" });
+    } finally { setIsCancelling(false); }
   };
 
   const handleCreateJob = async (booking: ExportShipmentData) => {
     const routingDetails = Array.isArray(booking.routing_details) ? booking.routing_details : [];
-    const rateDetails = Array.isArray(booking.rate_details) ? booking.rate_details : [];
-    const housingDetails = Array.isArray(booking.housing_details) ? booking.housing_details : [];
-    const cargoDetails = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
-
     const payload: Record<string, unknown> = {
-      service: booking.service || "AIR",
-      service_type: booking.service_type || "Export",
-       agent: booking.destination_agent_code || "",
-     origin_code: booking.origin_code || "",
-     destination_code: booking.destination_code || "",
-     etd: null,
-     eta: null,
-     atd: null,
-     ata: null,
-     carrier_code:  "",
-     flightno:  "",
-     is_direct: false,
-     mawb_no: booking.mawb_no || "",
-     mbl_date: null,
-     carrier_booking_no: booking.carrier_booking_no || "",
-     voyage_number: booking.voyage_no || "",
-     estimates:[],
+      service: booking.service || "AIR", service_type: booking.service_type || "Export",
+      agent: booking.destination_agent_code || "", origin_code: booking.origin_code || "",
+      destination_code: booking.destination_code || "", etd: null, eta: null, atd: null, ata: null,
+      carrier_code: "", flightno: "", is_direct: false, mawb_no: booking.mawb_no || "",
+      mbl_date: null, carrier_booking_no: booking.carrier_booking_no || "",
+      voyage_number: booking.voyage_no || "", estimates: [],
       ocean_routings: routingDetails.map((r) => ({
         transport_type: "Air",
-        from_port_code:
-          r.from_port_code|| "",
-        to_port_code:
-          r.to_port_code || "",
-        carrier_code: r.carrier_code || "",
-        flight: r.flight || "",
-        rail_no: r.rail_no || "",
-        truck_no: r.truck_no || "",
-        voyage_number: r.voyage_number || "",
-        vessel: r.vessel || "",
-        etd: r.etd ? dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DD") : null : null,
-        eta: r.eta ? dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DD") : null : null,
-        atd: r.atd ? dayjs(r.atd as string).isValid() ? dayjs(r.atd as string).format("YYYY-MM-DD") : null : null,
-        ata: r.ata ? dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null : null,
+        from_port_code: r.from_port_code || "", to_port_code: r.to_port_code || "",
+        carrier_code: r.carrier_code || "", flight: r.flight || "",
+        rail_no: r.rail_no || "", truck_no: r.truck_no || "",
+        voyage_number: r.voyage_number || "", vessel: r.vessel || "",
+        etd: r.etd && dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DD") : null,
+        eta: r.eta && dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DD") : null,
+        atd: r.atd && dayjs(r.atd as string).isValid() ? dayjs(r.atd as string).format("YYYY-MM-DD") : null,
+        ata: r.ata && dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null,
       })),
-      // estimates: rateDetails.map((r) => ({
-      //   ...(r.supplier_code ? { supplier_code: String(r.supplier_code) } : {}),
-      //   ...(r.charge_id != null ? { charge_id: Number(r.charge_id) } : {}),
-      //   pp_cc: r.pp_cc || "Prepaid",
-      //   ...(r.unit_id != null ? { unit_id: Number(r.unit_id) } : {}),
-      //   no_of_unit: Number(r.no_of_unit ?? r.no_of_units ?? 0),
-      //   ...(r.currency_id != null ? { currency_id: Number(r.currency_id) } : {}),
-      //   roe: Number(r.roe ?? 1),
-      //   cost_per_unit: Number(r.cost_per_unit ?? 0),
-      //   total_cost: Number(r.total_cost ?? 0),
-      // })),
-      housing_details:[{
-              hawb_no: booking.houseno|| "",
-              origin_code: booking.origin_code || "",
-              destination_code: booking.destination_code || "",
-              trade: "Re Export",
-              routed: booking.routed || "",
-              routed_by: booking.routed_by || "",
-              customer_service: booking.customer_service_name || "",
-              agent_name: booking.destination_agent_name || "",
-              agent_address: booking.destination_agent_address || "",
-              agent_email: booking.destination_agent_email || "",
-              shipper_name: booking.shipper_name || "",
-              shipper_address: booking.shipper_address || "",
-              shipper_email: booking.shipper_email || "",
-              // consignee
-              consignee_name: booking.consignee_name || "",
-              consignee_address: booking.consignee_address || "",
-              consignee_email: booking.consignee_email || "",
-              // notify party
-              notify1_customer_name: booking.notify1_customer_name || "",
-              notify1_customer_address: booking.notify1_customer_address || "",
-              notify1_customer_email: booking.notify1_customer_email || "",
-              cha_name: booking.cha || "",
-              cha_address: booking.cha_address || "",
-              // commodity / marks / shipment terms
-              commodity_description: booking.commodity_description || "",
-              marks_no: booking.marks_no || "",
-              shipment_terms_code: booking.shipment_terms_code || "",
-              cargo_details: Array.isArray(booking.cargo_details) ? 
-              booking.cargo_details.map((cargo: Record<string, unknown>) => ({
-                no_of_packages: cargo.no_of_packages || "",
-                gross_weight: cargo.gross_weight || "",
-                volume: cargo.volume || "",
-                chargeable_weight: cargo.chargeable_weight || "",
-                haz: booking.is_hazardous || ""
-              })) : [],
-              mawb_charges: Array.isArray(booking.rate_details) ? booking.rate_details.map((charge: Record<string, unknown>) => ({
-                charge_id: charge.charge_id || "",
-                supplier_code:  "",
-                pp_cc: charge.pp_cc || "",
-                unit_id: charge.unit_id || "",
-                no_of_unit: charge.no_of_units || "",
-                amount: charge.min_sell || "",
-                amount_per_unit: charge.sell_per_unit || "",
-                cost_local_amount: "",
-                currency_id: charge.currency_id || "",
-                roe: charge.roe || "",
-                sell_local_amount: "",
-                total_cost: charge.total_cost || "",
-                unit_cost: charge.cost_per_unit || "",
-              })) : [],
-              events: Array.isArray(booking.events) ? booking.events.map((event: Record<string, unknown>) => ({
-                event_id: event.event_id || "",
-                event_name: event.event_name || "",
-                event_date: event.event_date || "",
-                event_status: event.event_status || "",
-                event_description: event.event_description || "",
-                event_type: event.event_type || "",
-                event_priority: event.event_priority || "",
-                event_location: event.event_location || "",
-              })) : [],
-            }],
+      housing_details: [{
+        hawb_no: booking.houseno || "", origin_code: booking.origin_code || "",
+        destination_code: booking.destination_code || "", trade: "Re Export",
+        routed: booking.routed || "", routed_by: booking.routed_by || "",
+        customer_service: booking.customer_service_name || "",
+        agent_name: booking.destination_agent_name || "", agent_address: booking.destination_agent_address || "",
+        agent_email: booking.destination_agent_email || "",
+        shipper_name: booking.shipper_name || "", shipper_address: booking.shipper_address || "",
+        shipper_email: booking.shipper_email || "", consignee_name: booking.consignee_name || "",
+        consignee_address: booking.consignee_address || "", consignee_email: booking.consignee_email || "",
+        notify1_customer_name: booking.notify1_customer_name || "",
+        notify1_customer_address: booking.notify1_customer_address || "",
+        notify1_customer_email: booking.notify1_customer_email || "",
+        cha_name: booking.cha || "", cha_address: booking.cha_address || "",
+        commodity_description: booking.commodity_description || "", marks_no: booking.marks_no || "",
+        shipment_terms_code: booking.shipment_terms_code || "",
+        cargo_details: Array.isArray(booking.cargo_details)
+          ? booking.cargo_details.map((c: Record<string, unknown>) => ({
+              no_of_packages: c.no_of_packages || "", gross_weight: c.gross_weight || "",
+              volume: c.volume || "", chargeable_weight: c.chargeable_weight || "",
+              haz: booking.is_hazardous || "",
+            }))
+          : [],
+        mawb_charges: Array.isArray(booking.rate_details)
+          ? booking.rate_details.map((c: Record<string, unknown>) => ({
+              charge_id: c.charge_id || "", supplier_code: "", pp_cc: c.pp_cc || "",
+              unit_id: c.unit_id || "", no_of_unit: c.no_of_units || "",
+              amount: c.min_sell || "", amount_per_unit: c.sell_per_unit || "",
+              cost_local_amount: "", currency_id: c.currency_id || "", roe: c.roe || "",
+              sell_local_amount: "", total_cost: c.total_cost || "", unit_cost: c.cost_per_unit || "",
+            }))
+          : [],
+        events: Array.isArray(booking.events)
+          ? booking.events.map((e: Record<string, unknown>) => ({
+              event_id: e.event_id || "", event_name: e.event_name || "", event_date: e.event_date || "",
+              event_status: e.event_status || "", event_description: e.event_description || "",
+              event_type: e.event_type || "", event_priority: e.event_priority || "", event_location: e.event_location || "",
+            }))
+          : [],
+      }],
     };
 
     setCreateJobModalOpen(true);
@@ -762,861 +632,762 @@ function AirExportBookingMaster() {
     setCreateJobError(null);
 
     try {
-      const response = (await apiCallProtected.post(
-        URL.jobCreate,
-        payload,
-      )) as Record<string, unknown>;
+      const response = (await apiCallProtected.post(URL.jobCreate, payload)) as Record<string, unknown>;
       setCreateJobResponse(response);
     } catch (err: unknown) {
-      const axiosErr = err as {
-        response?: { data?: { message?: string; detail?: string; error?: string } };
-        message?: string;
-      };
-      const errMsg =
-        axiosErr?.response?.data?.message ||
-        axiosErr?.response?.data?.detail ||
-        axiosErr?.response?.data?.error ||
-        (err instanceof Error ? err.message : "Failed to create job");
+      const axiosErr = err as { response?: { data?: { message?: string; detail?: string; error?: string } }; message?: string };
+      const errMsg = axiosErr?.response?.data?.message || axiosErr?.response?.data?.detail ||
+        axiosErr?.response?.data?.error || (err instanceof Error ? err.message : "Failed to create job");
       setCreateJobError(String(errMsg));
-    } finally {
-      setCreateJobLoading(false);
-    }
+    } finally { setCreateJobLoading(false); }
   };
 
-  const columns = useMemo<MRT_ColumnDef<ExportShipmentData>[]>(
-    () => [
-      {
-        accessorKey: "shipment_code",
-        header: "Booking ID",
-        size: 120,
-      },
-      {
-        accessorKey: "enquiry_id",
-        header: "Enquiry ID",
-        size: 150,
-        Cell: ({ cell }) => {
-          const v = cell.getValue<string | null | undefined>();
-          return v != null && String(v) !== "" ? String(v) : "-";
-        },
-      },
-      {
-        accessorKey: "date",
-        header: "Date",
-        size: 120,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.date
-              ? dayjs(row.original.date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "service",
-        header: "Service",
-        size: 100,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 150,
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 150,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 150,
-      },
-      {
-        accessorKey: "customer_service_name",
-        header: "Customer Service",
-        size: 150,
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        size: 140,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          const { label, color } = getStatusBadge(value ?? undefined);
-          return (
-            <Badge
-              size="sm"
-              variant="light"
-              color={color}
-              styles={{
-                root: {
-                  textTransform: "none",
-                  minWidth: "fit-content",
-                  whiteSpace: "nowrap",
-                },
-              }}
-            >
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 80,
-        Cell: ({ row }) => {
-          const statusUpper = (row.original.status ?? "").toUpperCase();
-          const isCancel = statusUpper === "CANCEL";
-          const canCancel = statusUpper !== "GENERATED" && !isCancel;
-          const isBooked = statusUpper === "BOOKED";
-          return (
-            <Menu shadow="md" width={140}>
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Tooltip
-                  label="Edit disabled because booking is cancelled"
-                  disabled={!isCancel}
-                >
-                  <Menu.Item
-                    leftSection={<IconEdit size={14} />}
-                    disabled={isCancel}
-                    onClick={() => {
-                      if (!isCancel) {
-                        navigate(`./edit`, {
-                          state: { job: row.original },
-                        });
-                      }
-                    }}
-                  >
-                    Edit
-                  </Menu.Item>
-                </Tooltip>
-                {isBooked && (
-                  <Menu.Item
-                    leftSection={<IconPlus size={14} />}
-                    onClick={() => handleCreateJob(row.original)}
-                  >
-                    Create Job
-                  </Menu.Item>
-                )}
-                {canCancel && (
-                  <Tooltip
-                    label="This booking already has a job. If required, you can cancel the job."
-                    disabled={statusUpper !== "GENERATED"}
-                  >
-                    <Menu.Item
-                      leftSection={<IconX size={14} />}
-                      color="red"
-                      disabled={!canCancel}
-                      onClick={() => {
-                        if (canCancel) setCancelConfirmRow(row.original);
-                      }}
-                    >
-                      Cancel
-                    </Menu.Item>
-                  </Tooltip>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [navigate, dateFormat]
-  );
+  // ---- Row action menu ----
+  const RowMenu = ({ row }: { row: ExportShipmentData }) => {
+    const statusUpper = (row.status ?? "").toUpperCase();
+    const isCancel = statusUpper.includes("CANCEL");
+    const canCancel = statusUpper !== "GENERATED" && !isCancel;
+    const isBooked = statusUpper === "BOOKED";
+    return (
+      <Menu shadow="md" width={200} position="bottom-end">
+        <Menu.Target>
+          <ActionIcon variant="subtle" color="gray" size="sm">
+            <IconDots size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconEye size={14} />} disabled={isCancel}
+            onClick={() => { if (!isCancel) navigate("./edit", { state: { job: row } }); }}>
+            View Details
+          </Menu.Item>
+          <Menu.Item leftSection={<IconEdit size={14} />} disabled={isCancel}
+            onClick={() => { if (!isCancel) navigate("./edit", { state: { job: row } }); }}>
+            Edit Booking
+          </Menu.Item>
+          {/* <Menu.Item leftSection={<IconCopy size={14} />}
+            onClick={() => ToastNotification({ type: "info", message: "Duplicate not available yet" })}>
+            Duplicate
+          </Menu.Item> */}
+          <Menu.Divider />
+          {/* <Menu.Item leftSection={<IconFileText size={14} />}
+            onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
+            Generate AWB
+          </Menu.Item> */}
+          {isBooked && (
+            <Menu.Item leftSection={<IconBriefcase size={14} />} onClick={() => handleCreateJob(row)}>
+              Create Job
+            </Menu.Item>
+          )}
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconCircleX size={14} />} color="red" disabled={!canCancel}
+            onClick={() => { if (canCancel) setCancelConfirmRow(row); }}>
+            Cancel Booking
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    );
+  };
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false, // Disable built-in pagination - using server-side pagination
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "30px",
-          zIndex: 2,
-          borderLeft: "1px solid #F3F3F3",
-          boxShadow: "1px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "80px",
-          zIndex: 2,
-          backgroundColor: "#F8FAFC",
-          boxShadow: "0px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-    renderEmptyRowsFallback: () => (
-      <tr>
-        <td colSpan={columns.length}>
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Text c="dimmed" size="lg">
-                No data to display
-              </Text>
-            </Stack>
-          </Center>
-        </td>
-      </tr>
-    ),
-  });
+  // ---- Sortable header ----
+  const Th = ({ col, label, sortable = false, align = "left" as "left" | "right" }) => {
+    const active = sortConfig?.key === col;
+    return (
+      <th style={{
+        padding: "10px 14px", textAlign: align, fontWeight: 500, fontSize: 13,
+        color: "#64748b", backgroundColor: "#f8fafc", borderBottom: "1px solid #e2e8f0",
+        whiteSpace: "nowrap", userSelect: "none",
+      }}>
+        {sortable ? (
+          <button type="button" onClick={() => handleSort(col)} style={{
+            background: "none", border: "none", padding: 0, cursor: "pointer",
+            display: "inline-flex", alignItems: "center", gap: 4,
+            color: active ? "#2563eb" : "#64748b", fontSize: "inherit", fontWeight: "inherit",
+          }}>
+            {label}
+            <IconSelector size={12} style={{ opacity: active ? 1 : 0.5 }} />
+          </button>
+        ) : label}
+      </th>
+    );
+  };
 
+  // ---- theme constants ----
+  const border = "#e2e8f0";
+  const muted = "#64748b";
+  const fg = "#0f172a";
+  const primary = "#2563eb";
+  const bg = "#f8fafc";
+
+  // ===================== RENDER =====================
   return (
     <>
       {showMasterTable && (
-        <Card
-          shadow="sm"
-          pt="md"
-          pb="sm"
-          px="lg"
-          radius="md"
-          withBorder
+        <Box
           style={{
+            minHeight: "100vh",
+            backgroundColor: bg,
             display: "flex",
             flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex: 1,
           }}
         >
-          <Box mb="md">
-            <Group justify="space-between" align="center">
-              <Text
-                size="md"
-                fw={600}
-                c={"#1E293B"}
-                style={{ fontFamily: "Inter", fontSize: "16px" }}
+          {/* ===== STATS + TOOLBAR (v0 layout: one row, gap-6 / gap-8, ml-auto actions) ===== */}
+          {/* Full-bleed in main column: cancel AppShellLayout px (16 / 24) */}
+          <Box
+            mx={{ base: -16, sm: -24 }}
+            style={{ backgroundColor: "#fff", borderBottom: `1px solid ${border}` }}
+          >
+            <Box px={{ base: 16, lg: 24 }} py={12}>
+              <Flex
+                align="center"
+                gap={24}
+                wrap="nowrap"
+                style={{
+                  overflowX: "auto",
+                  minHeight: 40,
+                }}
               >
-                Air Export Booking Lists
-              </Text>
+                {/* Stat pills — gap-8 between items, gap-2 inside each */}
+                <Flex align="center" gap={32} wrap="nowrap" style={{ flexShrink: 0 }}>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <Box
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        backgroundColor: `${primary}1a`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconPackage size={14} color={primary} />
+                    </Box>
+                    <Box>
+                      <Text fw={700} size="lg" c={fg} lh={1}>
+                        {stats.total}
+                      </Text>
+                      <Text size={10} c={muted} lh={1.2}>
+                        Total
+                      </Text>
+                    </Box>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <Box
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        backgroundColor: "#d1fae5",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconCircleCheck size={14} color="#059669" />
+                    </Box>
+                    <Box>
+                      <Text fw={700} size="lg" c={fg} lh={1}>
+                        {stats.booked}
+                      </Text>
+                      <Text size={10} c={muted} lh={1.2}>
+                        Booked
+                      </Text>
+                    </Box>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <Box
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        backgroundColor: "#dbeafe",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconPackage size={14} color="#2563eb" />
+                    </Box>
+                    <Box>
+                      <Text fw={700} size="lg" c={fg} lh={1}>
+                        {stats.received}
+                      </Text>
+                      <Text size={10} c={muted} lh={1.2}>
+                        Received
+                      </Text>
+                    </Box>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <Box
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        backgroundColor: "#fef3c7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconClock size={14} color="#d97706" />
+                    </Box>
+                    <Box>
+                      <Text fw={700} size="lg" c={fg} lh={1}>
+                        {stats.pending}
+                      </Text>
+                      <Text size={10} c={muted} lh={1.2}>
+                        Pending
+                      </Text>
+                    </Box>
+                  </Group>
+                </Flex>
 
-              <Group gap="xs" wrap="nowrap">
-                <FormTextInput
-                  placeholder="Search..."
-                  leftSection={<IconSearch size={16} />}
-                  rightSection={
-                    searchQuery ? (
-                      <ActionIcon
-                        variant="transparent"
-                        size="sm"
-                        onClick={() => setSearchQuery("")}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
-                    ) : null
-                  }
-                  w={248}
-                  size="sm"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                  styles={{
-                    input: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      color: "#334155",
-                      minWidth: "24px",
-                      minHeight: "24px",
-                      width: "248px",
-                      height: "36px",
-                      border: "1px solid #D0D1D4",
-                      "&:focus": {
-                        border: "1px solid #2563EB",
-                      },
-                    },
+                <Box
+                  style={{
+                    width: 1,
+                    height: 32,
+                    backgroundColor: border,
+                    flexShrink: 0,
                   }}
                 />
 
-                <ActionIcon
-                  variant={showFilters ? "filled" : "outline"}
-                  size={36}
-                  color={showFilters ? "#E0F5FF" : "gray"}
-                  onClick={() => setShowFilters(!showFilters)}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                      border: showFilters
-                        ? "1px solid #2563EB"
-                        : "1px solid #737780",
-                      color: showFilters ? "#2563EB" : "#737780",
-                    },
-                  }}
-                >
-                  <IconFilter size={18} />
-                </ActionIcon>
+                <Flex align="center" gap={24} wrap="nowrap" style={{ flexShrink: 0 }}>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalPieces.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      pcs
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalWeight.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      kg
+                    </Text>
+                  </Group>
+                </Flex>
 
-                <Button
-                  leftSection={<IconPlus size={16} />}
-                  size="sm"
-                  styles={{
-                    root: {
-                      backgroundColor: "#2563EB",
-                      borderRadius: "4px",
-                      color: "#FFFFFF",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#2563EB",
-                      },
-                    },
-                  }}
-                  onClick={persistListAndNavigate}
+                {/* ml-auto toolbar — matches v0: Status, Columns, Refresh, Export, New Booking */}
+                <Flex
+                  align="center"
+                  gap={8}
+                  wrap="nowrap"
+                  style={{ marginLeft: "auto", flexShrink: 0 }}
                 >
-                  Create New
-                </Button>
-              </Group>
-            </Group>
-          </Box>
-
-          {/* Filter Section */}
-          {showFilters && (
-            <Box
-              mb="xs"
-              style={{
-                borderRadius: "8px",
-                border: "1px solid #E0E0E0",
-                flexShrink: 0,
-                height: "fit-content",
-              }}
-            >
-              <Group
-                justify="space-between"
-                align="center"
-                mb="lg"
-                style={{
-                  backgroundColor: "#F8FAFC",
-                  padding: "8px 8px",
-                  borderRadius: "8px",
-                }}
-              >
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="#1E293B"
-                  style={{ fontFamily: "Inter", fontSize: "14px" }}
-                >
-                  Filters
-                </Text>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => setShowFilters(false)}
-                  aria-label="Close filters"
-                  size="sm"
-                >
-                  <IconX size={18} />
-                </ActionIcon>
-              </Group>
-
-              <Grid gutter="md" px="md">
-                <Grid.Col span={2.4}>
-                  <FormTextInput
+                  <Select
                     size="xs"
-                    label="Booking ID"
-                    placeholder="Enter Booking ID"
-                    value={filterForm.values.booking_id ?? ""}
-                    onChange={(e) =>
-                      filterForm.setFieldValue(
-                        "booking_id",
-                        e.currentTarget.value || null
+                    w={130}
+                    value={statusFilter}
+                    onChange={(v) => {
+                      setStatusFilter(v || "all");
+                      setPageIndex(0);
+                    }}
+                    data={[
+                      { value: "all", label: "All Status" },
+                      { value: "BOOKED", label: "Booked" },
+                      { value: "RECEIVED", label: "Received" },
+                      { value: "GENERATED", label: "Generated" },
+                      { value: "CANCEL", label: "Cancelled" },
+                    ]}
+                    styles={{
+                      input: {
+                        height: 32,
+                        minHeight: 32,
+                        fontSize: 12,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  <Menu shadow="md" width={200}>
+                    <Menu.Target>
+                      <Button
+                        variant="default"
+                        size="xs"
+                        leftSection={<IconSettings size={14} />}
+                        styles={{
+                          root: {
+                            height: 32,
+                            fontSize: 12,
+                            borderColor: border,
+                            gap: 6,
+                            paddingLeft: 10,
+                            paddingRight: 12,
+                          },
+                        }}
+                      >
+                        Columns
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Label style={{ fontSize: 12 }}>Toggle Columns</Menu.Label>
+                      {(Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map(
+                        (key) => (
+                          <Menu.Item
+                            key={key}
+                            closeMenuOnClick={false}
+                            onClick={() =>
+                              setVisibleColumns((prev) => ({
+                                ...prev,
+                                [key]: !prev[key],
+                              }))
+                            }
+                          >
+                            <Group gap="sm" wrap="nowrap">
+                              <Checkbox
+                                size="xs"
+                                checked={visibleColumns[key]}
+                                onChange={() => {}}
+                                styles={{ input: { cursor: "pointer" } }}
+                              />
+                              <Text size="xs" tt="capitalize">
+                                {key}
+                              </Text>
+                            </Group>
+                          </Menu.Item>
+                        ),
+                      )}
+                    </Menu.Dropdown>
+                  </Menu>
+                  {/* <Button
+                    variant="default"
+                    size="xs"
+                    disabled={isDataLoading || isRefreshing}
+                    leftSection={
+                      isRefreshing ? (
+                        <Loader size={14} />
+                      ) : (
+                        <IconRefresh size={14} />
                       )
                     }
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2.4}>
-                  <FormTextInput
-                    size="xs"
-                    label="Enquiry ID"
-                    placeholder="Enter Enquiry ID"
-                    value={filterForm.values.enquiry_id ?? ""}
-                    onChange={(e) =>
-                      filterForm.setFieldValue(
-                        "enquiry_id",
-                        e.currentTarget.value || null
-                      )
-                    }
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2.4}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Customer"
-                    placeholder="Type customer name"
-                    apiEndpoint={URL.allCustomers}
-                    searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={filterForm.values.customer}
-                    displayValue={customerDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("customer", value || "");
-                      setCustomerDisplayName(selectedData?.label || null);
-                    }}
-                    minSearchLength={2}
-                    dropdownZIndex={1000}
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2.4}>
-                  <SingleDateInput
-                    key={`date-${filterForm.values.date}`}
-                    label="Date"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    value={filterForm.values.date}
-                    onChange={(d) => filterForm.setFieldValue("date", d)}
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2.4}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Origin"
-                    placeholder="Type origin code or name"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.origin}
-                    displayValue={originDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("origin", value || "");
-                      setOriginDisplayName(selectedData?.label || null);
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                    additionalParams={airTransportParams}
-                    dropdownZIndex={1000}
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2.4}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Destination"
-                    placeholder="Type destination code or name"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.destination}
-                    displayValue={destinationDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("destination", value || "");
-                      setDestinationDisplayName(selectedData?.label || null);
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                    additionalParams={airTransportParams}
-                    dropdownZIndex={1000}
-                  />
-                </Grid.Col>
-              </Grid>
-
-              <Group justify="end" mt="md" p="md" pb="md">
-                <Button
-                  size="xs"
-                  variant="outline"
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      color: "#2563EB",
-                      borderColor: "#2563EB",
-                      "&:hover": {
-                        backgroundColor: "#f8f9fa",
-                      },
-                    },
-                  }}
-                  leftSection={<IconX size={14} />}
-                  onClick={clearAllFilters}
-                >
-                  Clear Filters
-                </Button>
-                <Button
-                  size="xs"
-                  variant="filled"
-                  styles={{
-                    root: {
-                      backgroundColor: "#2563EB",
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#2563EB",
-                      },
-                    },
-                  }}
-                  leftSection={
-                    isDataLoading ? (
-                      <Loader size={14} />
-                    ) : (
-                      <IconFilter size={14} />
-                    )
-                  }
-                  onClick={applyFilters}
-                  loading={isDataLoading}
-                  disabled={isDataLoading}
-                >
-                  Apply Filters
-                </Button>
-              </Group>
-            </Box>
-          )}
-
-          {isDataLoading ? (
-            <Center py="xl">
-              <Stack align="center" gap="md">
-                <Loader size="lg" color="#2563EB" />
-                <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                  Loading air export booking...
-                </Text>
-              </Stack>
-            </Center>
-          ) : (
-            <>
-              <MantineReactTable
-                key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-                table={table}
-              />
-
-              {/* Pagination Bar */}
-              <PaginationBar
-                pageSize={pageSize}
-                currentPage={pageIndex + 1} // Convert 0-based to 1-based for PaginationBar
-                totalRecords={totalRecords}
-                onPageSizeChange={handlePageSizeChange}
-                onPageChange={handlePageChange}
-                pageSizeOptions={["10", "25", "50"]}
-              />
-            </>
-          )}
-        </Card>
-      )}
-      <Modal
-        opened={!!cancelConfirmRow}
-        onClose={() => !isCancelling && setCancelConfirmRow(null)}
-        title="Cancel booking"
-        centered
-      >
-        <Text size="sm" c="dimmed" mb="md">
-          Are you sure you want to cancel this booking? This action cannot be undone.
-        </Text>
-        <Group justify="flex-end" gap="xs">
-          <Button variant="subtle" onClick={() => setCancelConfirmRow(null)} disabled={isCancelling}>
-            No
-          </Button>
-          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
-            Yes, cancel
-          </Button>
-        </Group>
-      </Modal>
-      {/* Create Job Modal */}
-      <Modal
-        opened={createJobModalOpen}
-        onClose={() => {
-          if (!createJobLoading) {
-            setCreateJobModalOpen(false);
-            setCreateJobResponse(null);
-            setCreateJobError(null);
-          }
-        }}
-        title={
-          <Text fw={600} size="md" c="#1E293B" style={{ fontFamily: "Inter" }}>
-            Create Job
-          </Text>
-        }
-        centered
-        size="md"
-        closeOnClickOutside={!createJobLoading}
-        closeOnEscape={!createJobLoading}
-        withCloseButton={!createJobLoading}
-      >
-        {createJobLoading ? (
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Loader size="md" color="#2563EB" />
-              <Text c="dimmed" size="sm" style={{ fontFamily: "Inter" }}>
-                Creating job, please wait...
-              </Text>
-            </Stack>
-          </Center>
-        ) : createJobError ? (
-          <Stack gap="md">
-            <Box
-              style={{
-                border: "1px solid #FFCDD2",
-                borderRadius: "6px",
-                padding: "12px 16px",
-                backgroundColor: "#FFF5F5",
-              }}
-            >
-              <Text size="sm" c="red" style={{ fontFamily: "Inter" }}>
-                {createJobError}
-              </Text>
-            </Box>
-            <Group justify="flex-end" gap="xs">
-              <Button
-                size="sm"
-                variant="outline"
-                styles={{
-                  root: {
-                    borderColor: "#2563EB",
-                    color: "#2563EB",
-                    borderRadius: "4px",
-                    fontFamily: "Inter",
-                  },
-                }}
-                onClick={() => {
-                  setCreateJobModalOpen(false);
-                  setCreateJobError(null);
-                }}
-              >
-                Close
-              </Button>
-            </Group>
-          </Stack>
-        ) : createJobResponse ? (
-          (() => {
-            const respData = createJobResponse as {
-              success?: boolean;
-              message?: string;
-              data?: {
-                job_details_id?: number;
-                id?: number;
-                job_id?: string;
-                job_no?: string;
-              };
-              job_details_id?: number;
-              id?: number;
-              job_id?: string;
-            };
-            const isSuccess =
-              respData?.success === true || respData?.success === undefined;
-            const message =
-              respData?.message ||
-              (isSuccess ? "Job created successfully!" : "Job creation failed.");
-            const jobDetailsId =
-              respData?.data?.job_details_id ??
-              respData?.data?.id ??
-              respData?.job_details_id ??
-              respData?.id;
-            const jobNo = respData?.data?.job_id || respData?.data?.job_no || respData?.job_id;
-
-            return (
-              <Stack gap="md">
-                <Box
-                  style={{
-                    border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`,
-                    borderRadius: "6px",
-                    padding: "12px 16px",
-                    backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5",
-                  }}
-                >
-                  <Text
-                    size="sm"
-                    fw={600}
-                    c={isSuccess ? "green" : "red"}
-                    style={{ fontFamily: "Inter" }}
-                  >
-                    {message}
-                  </Text>
-                </Box>
-
-                {(jobDetailsId != null || jobNo) && (
-                  <Box
-                    style={{
-                      border: "1px solid #E0E0E0",
-                      borderRadius: "6px",
-                      padding: "12px 16px",
-                      backgroundColor: "#F8FAFC",
-                    }}
-                  >
-                    <Stack gap="xs">
-                      {jobDetailsId != null && (
-                        <Group gap="xs">
-                          <Text
-                            size="sm"
-                            fw={600}
-                            c="#1E293B"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            Job ID:
-                          </Text>
-                          <Text
-                            size="sm"
-                            c="#334155"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            {String(jobDetailsId)}
-                          </Text>
-                        </Group>
-                      )}
-                      {jobNo && (
-                        <Group gap="xs">
-                          <Text
-                            size="sm"
-                            fw={600}
-                            c="#1E293B"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            Job No:
-                          </Text>
-                          <Text
-                            size="sm"
-                            c="#334155"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            {String(jobNo)}
-                          </Text>
-                        </Group>
-                      )}
-                    </Stack>
-                  </Box>
-                )}
-
-                <Group justify="flex-end" gap="xs">
-                  {/* {isSuccess && jobDetailsId != null && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      styles={{
-                        root: {
-                          borderColor: "#2563EB",
-                          color: "#2563EB",
-                          borderRadius: "4px",
-                          fontFamily: "Inter",
-                        },
-                      }}
-                      onClick={() => {
-                        setCreateJobModalOpen(false);
-                        setCreateJobResponse(null);
-                        navigate("/air/export-job/view", {
-                          state: { jobId: Number(jobDetailsId) },
-                        });
-                      }}
-                    >
-                      View Job
-                    </Button>
-                  )} */}
-                  <Button
-                    size="sm"
                     styles={{
                       root: {
-                        backgroundColor: "#2563EB",
-                        borderRadius: "4px",
-                        fontFamily: "Inter",
-                        color: "#FFFFFF",
+                        height: 32,
+                        fontSize: 12,
+                        borderColor: border,
+                        gap: 6,
+                        paddingLeft: 10,
+                        paddingRight: 12,
                       },
                     }}
-                    onClick={() => {
-                      setCreateJobModalOpen(false);
-                      setCreateJobResponse(null);
-                    }}
+                    onClick={() => void handleRefresh()}
                   >
-                    Close
+                    Refresh
+                  </Button> */}
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={{
+                    root: {
+                      height: 32,
+                      fontSize: 12,
+                      borderColor: border,
+                      gap: 6,
+                      paddingLeft: 10,
+                      paddingRight: 12,
+                    },
+                  }}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((s) => !s)}
+                >
+                  {showFilters ? "Hide filters" : " filters"}
+                </Button>
+                  {/* <Button
+                    variant="default"
+                    size="xs"
+                    leftSection={<IconDownload size={14} />}
+                    styles={{
+                      root: {
+                        height: 32,
+                        fontSize: 12,
+                        borderColor: border,
+                        gap: 6,
+                        paddingLeft: 10,
+                        paddingRight: 12,
+                      },
+                    }}
+                    onClick={() => handleExport(tableRows)}
+                  >
+                    Export
+                  </Button> */}
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={{
+                      root: {
+                        height: 32,
+                        fontSize: 12,
+                        backgroundColor: primary,
+                        gap: 6,
+                        paddingLeft: 10,
+                        paddingRight: 12,
+                        border: "none",
+                      },
+                    }}
+                    onClick={persistListAndNavigate}
+                  >
+                    New Booking
                   </Button>
+                </Flex>
+              </Flex>
+            </Box>
+          </Box>
+
+          {/* ===== ADVANCED FILTER PANEL ===== */}
+          {showFilters && (
+            <Box py="sm" style={{ backgroundColor: "#fff", borderBottom: `1px solid ${border}` }}>
+              <Box style={{ border: `1px solid ${border}`, borderRadius: 8, overflow: "hidden" }}>
+                <Group justify="space-between" align="center" px="sm" py={6} style={{ backgroundColor: bg }}>
+                  <Text size="sm" fw={600} c={fg}>Advanced Filters</Text>
+                  <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setShowFilters(false)}>
+                    <IconX size={16} />
+                  </ActionIcon>
                 </Group>
-              </Stack>
-            );
-          })()
-        ) : null}
+                <Box p="md">
+                  <Grid gutter="md">
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <FormTextInput size="xs" label="Booking ID" placeholder="Enter Booking ID"
+                        value={filterForm.values.booking_id ?? ""}
+                        onChange={(e) => filterForm.setFieldValue("booking_id", e.currentTarget.value || null)} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <FormTextInput size="xs" label="Enquiry ID" placeholder="Enter Enquiry ID"
+                        value={filterForm.values.enquiry_id ?? ""}
+                        onChange={(e) => filterForm.setFieldValue("enquiry_id", e.currentTarget.value || null)} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <SearchableSelect size="xs" label="Customer" placeholder="Type customer name"
+                        apiEndpoint={URL.allCustomers} searchFields={["customer_name", "customer_code"]}
+                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.customer_code), label: String(item.customer_name) })}
+                        value={filterForm.values.customer} displayValue={customerDisplayName}
+                        onChange={(value, selectedData) => { filterForm.setFieldValue("customer", value || ""); setCustomerDisplayName(selectedData?.label || null); }}
+                        minSearchLength={2} dropdownZIndex={1000} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <SingleDateInput key={`date-${filterForm.values.date}`} label="Date" placeholder="YYYY-MM-DD"
+                        size="xs" value={filterForm.values.date}
+                        onChange={(d) => filterForm.setFieldValue("date", d)} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <SearchableSelect size="xs" label="Origin" placeholder="Type origin code or name"
+                        apiEndpoint={URL.portMaster} searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
+                        value={filterForm.values.origin} displayValue={originDisplayName}
+                        onChange={(value, selectedData) => { filterForm.setFieldValue("origin", value || ""); setOriginDisplayName(selectedData?.label || null); }}
+                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
+                      <SearchableSelect size="xs" label="Destination" placeholder="Type destination code or name"
+                        apiEndpoint={URL.portMaster} searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
+                        value={filterForm.values.destination} displayValue={destinationDisplayName}
+                        onChange={(value, selectedData) => { filterForm.setFieldValue("destination", value || ""); setDestinationDisplayName(selectedData?.label || null); }}
+                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000} />
+                    </Grid.Col>
+                  </Grid>
+                  <Group justify="flex-end" gap={8} mt="md">
+                    <Button size="xs" variant="outline" leftSection={<IconX size={13} />}
+                      styles={{ root: { borderColor: primary, color: primary } }} onClick={clearAllFilters}>
+                      Clear
+                    </Button>
+                    <Button size="xs" leftSection={<IconFilter size={13} />}
+                      styles={{ root: { backgroundColor: primary } }}
+                      onClick={applyFilters} loading={isDataLoading} disabled={isDataLoading}>
+                      Apply Filters
+                    </Button>
+                  </Group>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {/* ===== MAIN CONTENT ===== */}
+          <Box component="main" py="md" style={{ flex: 1 }}>
+            <Paper withBorder radius="xl" shadow="sm" style={{ overflow: "hidden", borderColor: border }}>
+              {/* <Group justify="flex-end" px="md" py={8} style={{ borderBottom: `1px solid ${border}` }}>
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((s) => !s)}
+                >
+                  {showFilters ? "Hide filters" : "Advanced filters"}
+                </Button>
+              </Group> */}
+
+              {/* Selection bar */}
+              {selectedIds.length > 0 && (
+                <Box px="md" py={8} style={{ backgroundColor: `${primary}0d`, borderBottom: `1px solid ${border}` }}>
+                  <Group justify="space-between" wrap="wrap" gap={8}>
+                    <Text size="sm" fw={500} c={primary}>
+                      {selectedIds.length} booking{selectedIds.length > 1 ? "s" : ""} selected
+                    </Text>
+                    <Group gap={8}>
+                      <Button variant="default" size="xs" leftSection={<IconFileText size={13} />}
+                        onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
+                        Generate AWB
+                      </Button>
+                      <Button variant="default" size="xs" leftSection={<IconDownload size={13} />}
+                        onClick={() => handleExport(tableRows.filter((r) => selectedIds.includes(r.id)))}>
+                        Export Selected
+                      </Button>
+                      <Button variant="subtle" color="red" size="xs" onClick={() => setSelectedIds([])}>Clear</Button>
+                    </Group>
+                  </Group>
+                </Box>
+              )}
+
+              {/* Table area */}
+              <Box style={{ overflowX: "auto" }}>
+                {isDataLoading ? (
+                  <Center py={80}>
+                    <Stack align="center" gap="md">
+                      <Loader size="lg" color={primary} />
+                      <Text c="dimmed" size="sm">Loading export bookings...</Text>
+                    </Stack>
+                  </Center>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                    <thead>
+                      <tr>
+                        {/* Checkbox */}
+                        <th style={{ padding: "10px 14px", width: 44, backgroundColor: bg, borderBottom: `1px solid ${border}` }}>
+                          <Checkbox size="xs"
+                            checked={tableRows.length > 0 && tableRows.every((r) => selectedIds.includes(r.id))}
+                            indeterminate={tableRows.some((r) => selectedIds.includes(r.id)) && !tableRows.every((r) => selectedIds.includes(r.id))}
+                            onChange={() => selectAllOnPage()} />
+                        </th>
+                        {/* {visibleColumns.shipment && <Th col="shipment" label="Shipment" sortable />} */}
+                        {visibleColumns.shipment && <Th col="shipment" label="Shipment"  />}
+                        {visibleColumns.date && <Th col="date" label="Date"  />}
+                        {visibleColumns.customer && <Th col="customer" label="Customer"  />}
+                        {visibleColumns.route && <Th col="route" label="Route" />}
+                        {visibleColumns.status && <Th col="status" label="Status" />}
+                        {visibleColumns.mawb && <Th col="mawb" label="MAWB" />}
+                        {visibleColumns.flight && <Th col="flight" label="Flight" />}
+                        {visibleColumns.pieces && <Th col="pieces" label="Pcs" align="right" />}
+                        {visibleColumns.weight && <Th col="weight" label="Weight"  align="right" />}
+                        {visibleColumns.handler && <Th col="handler" label="Customer Service" />}
+                        <th style={{ width: 44, backgroundColor: bg, borderBottom: `1px solid ${border}` }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={20} style={{ padding: 60, textAlign: "center" }}>
+                            <Stack align="center" gap="md">
+                              <Box style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <IconPackage size={24} color={muted} />
+                              </Box>
+                              <Box>
+                                <Text fw={500} c={fg}>No bookings found</Text>
+                                <Text size="sm" c={muted} mt={4}>Try adjusting your search or filters</Text>
+                              </Box>
+                            </Stack>
+                          </td>
+                        </tr>
+                      ) : (
+                        tableRows.map((booking) => {
+                          const pw = getRowPW(booking);
+                          const oc = booking.origin_code_read || booking.origin_code || "";
+                          const dc = booking.destination_code_read || booking.destination_code || "";
+                          const sel = selectedIds.includes(booking.id);
+                          return (
+                            <tr key={booking.id} style={{
+                              borderBottom: `1px solid ${border}`,
+                              backgroundColor: sel ? `${primary}08` : undefined,
+                              transition: "background 0.12s",
+                            }}
+                              onMouseEnter={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc"; }}
+                              onMouseLeave={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ""; }}
+                            >
+                              <td style={{ padding: "10px 14px" }}>
+                                <Checkbox size="xs" checked={sel} onChange={() => { toggleRow(booking.id); }} />
+                              </td>
+                              {visibleColumns.shipment && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  <Text fw={600} size="sm" c={fg}>{booking.shipment_code}</Text>
+                                  {booking.enquiry_id ? <Text size="sm" c={muted}>{booking.enquiry_id}</Text> : null}
+                                </td>
+                              )}
+                              {visibleColumns.date && (
+                                <td style={{ padding: "10px 14px", color: muted }}>
+                                  {booking.date ? dayjs(booking.date).format("DD MMM") : "—"}
+                                </td>
+                              )}
+                              {visibleColumns.customer && (
+                                <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                                  <Tooltip label={booking.customer_name ?? ""} withArrow>
+                                    <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default" }}>
+                                      {booking.customer_name ?? "—"}
+                                    </Text>
+                                  </Tooltip>
+                                </td>
+                              )}
+                              {visibleColumns.route && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  <Group gap={6} wrap="nowrap">
+                                    <Text fw={600} size="sm" c={primary}>{oc || "—"}</Text>
+                                    <IconArrowRight size={12} color={muted} />
+                                    <Text fw={500} size="sm" c={fg}>{dc || "—"}</Text>
+                                  </Group>
+                                </td>
+                              )}
+                              {visibleColumns.status && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  <StatusPill status={booking.status} />
+                                </td>
+                              )}
+                              {visibleColumns.mawb && (
+                                <td style={{ padding: "10px 14px", fontFamily: "monospace", fontSize: 12, color: muted }}>
+                                  {booking.mawb_no?.trim() || "—"}
+                                </td>
+                              )}
+                              {visibleColumns.flight && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  {booking.voyage_no
+                                    ? <Text size="xs" fw={500} c={fg}>{booking.voyage_no}</Text>
+                                    : <Text size="sm" c={muted}>—</Text>}
+                                </td>
+                              )}
+                              {visibleColumns.pieces && (
+                                <td style={{ padding: "10px 14px", textAlign: "right", color: muted }}>{pw.pieces}</td>
+                              )}
+                              {visibleColumns.weight && (
+                                <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: fg }}>{pw.weight.toFixed(1)}</td>
+                              )}
+                              {visibleColumns.handler && (
+                                <td style={{ padding: "10px 14px" }}>
+                                  <Group gap={8} wrap="nowrap">
+                                    <Box style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: `${primary}1a`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <Text size={10} fw={700} c={primary}>{initials(booking.customer_service_name)}</Text>
+                                    </Box>
+                                    <Text size="xs" c={muted} lineClamp={1} maw={100}>{firstName(booking.customer_service_name)}</Text>
+                                  </Group>
+                                </td>
+                              )}
+                              <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                                <RowMenu row={booking} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </Box>
+
+              {/* ===== PAGINATION FOOTER ===== */}
+              <Box px="md" py={10} style={{ borderTop: `1px solid ${border}`, backgroundColor: bg }}>
+                <Group justify="space-between" wrap="wrap" gap="md">
+                  <Group gap="md" wrap="wrap" align="center">
+                    <Text size="sm" c={muted}>
+                      Showing{" "}
+                      <Text span fw={600} c={fg}>{totalRecords === 0 ? 0 : pageIndex * pageSize + 1}</Text>
+                      {" "}to{" "}
+                      <Text span fw={600} c={fg}>{Math.min((pageIndex + 1) * pageSize, totalRecords)}</Text>
+                      {" "}of{" "}
+                      <Text span fw={600} c={fg}>{totalRecords}</Text>
+                      {" "}results
+                    </Text>
+                    <Group gap={6} align="center">
+                      <Text size="sm" c={muted}>Rows:</Text>
+                      <Select size="xs" w={68} value={String(pageSize)}
+                        onChange={(v) => { if (v) { setPageSize(Number(v)); setPageIndex(0); } }}
+                        data={["10", "15", "25", "50"]} />
+                    </Group>
+                  </Group>
+                  <Group gap={4} wrap="nowrap">
+                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex(0)} disabled={pageIndex === 0}><IconChevronsLeft size={16} /></ActionIcon>
+                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex((p) => Math.max(0, p - 1))} disabled={pageIndex === 0}><IconChevronLeft size={16} /></ActionIcon>
+                    <Group gap={4} mx={4}>
+                      {pageButtonIndices.map((pNum) => (
+                        <ActionIcon key={pNum} size="md"
+                          variant={pageIndex === pNum ? "filled" : "default"}
+                          color={pageIndex === pNum ? "blue" : "gray"}
+                          onClick={() => setPageIndex(pNum)}>
+                          <Text size="xs">{pNum + 1}</Text>
+                        </ActionIcon>
+                      ))}
+                    </Group>
+                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))} disabled={pageIndex >= totalPages - 1}><IconChevronRight size={16} /></ActionIcon>
+                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex(totalPages - 1)} disabled={pageIndex >= totalPages - 1}><IconChevronsRight size={16} /></ActionIcon>
+                  </Group>
+                </Group>
+              </Box>
+            </Paper>
+          </Box>
+        </Box>
+      )}
+
+      {/* ===== CANCEL MODAL ===== */}
+      <Modal opened={!!cancelConfirmRow} onClose={() => !isCancelling && setCancelConfirmRow(null)}
+        title={<Text fw={600} size="md">Cancel Booking</Text>} centered size="sm">
+        <Text size="sm" c="dimmed" mb="md">
+          Are you sure you want to cancel booking{" "}
+          <Text span fw={600} c={fg}>{cancelConfirmRow?.shipment_code}</Text>?
+          This action cannot be undone.
+        </Text>
+        <Group justify="flex-end" gap={8}>
+          <Button variant="default" onClick={() => setCancelConfirmRow(null)} disabled={isCancelling}>Keep Booking</Button>
+          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>Cancel Booking</Button>
+        </Group>
+      </Modal>
+
+      {/* ===== CREATE JOB MODAL ===== */}
+      <Modal opened={createJobModalOpen}
+        onClose={() => { if (!createJobLoading) { setCreateJobModalOpen(false); setCreateJobResponse(null); setCreateJobError(null); } }}
+        title={<Text fw={600} size="md" c={fg}>Create Job</Text>}
+        centered size="md" closeOnClickOutside={!createJobLoading} closeOnEscape={!createJobLoading} withCloseButton={!createJobLoading}>
+        {createJobLoading ? (
+          <Center py="xl"><Stack align="center" gap="md"><Loader size="md" color={primary} /><Text c="dimmed" size="sm">Creating job, please wait...</Text></Stack></Center>
+        ) : createJobError ? (
+          <Stack gap="md">
+            <Box style={{ border: "1px solid #FFCDD2", borderRadius: 6, padding: "12px 16px", backgroundColor: "#FFF5F5" }}>
+              <Text size="sm" c="red">{createJobError}</Text>
+            </Box>
+            <Group justify="flex-end">
+              <Button size="sm" variant="outline" styles={{ root: { borderColor: primary, color: primary } }}
+                onClick={() => { setCreateJobModalOpen(false); setCreateJobError(null); }}>Close</Button>
+            </Group>
+          </Stack>
+        ) : createJobResponse ? (() => {
+          const r = createJobResponse as { success?: boolean; message?: string; data?: { job_details_id?: number; id?: number; job_id?: string; job_no?: string }; job_details_id?: number; id?: number; job_id?: string };
+          const isSuccess = r?.success === true || r?.success === undefined;
+          const message = r?.message || (isSuccess ? "Job created successfully!" : "Job creation failed.");
+          const jobId = r?.data?.job_details_id ?? r?.data?.id ?? r?.job_details_id ?? r?.id;
+          const jobNo = r?.data?.job_id || r?.data?.job_no || r?.job_id;
+          return (
+            <Stack gap="md">
+              <Box style={{ border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`, borderRadius: 6, padding: "12px 16px", backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5" }}>
+                <Text size="sm" fw={600} c={isSuccess ? "green" : "red"}>{message}</Text>
+              </Box>
+              {(jobId != null || jobNo) && (
+                <Box style={{ border: `1px solid ${border}`, borderRadius: 6, padding: "12px 16px", backgroundColor: bg }}>
+                  <Stack gap="xs">
+                    {jobId != null && <Group gap="xs"><Text size="sm" fw={600} c={fg}>Job ID:</Text><Text size="sm" c="#334155">{String(jobId)}</Text></Group>}
+                    {jobNo && <Group gap="xs"><Text size="sm" fw={600} c={fg}>Job No:</Text><Text size="sm" c="#334155">{String(jobNo)}</Text></Group>}
+                  </Stack>
+                </Box>
+              )}
+              <Group justify="flex-end">
+                <Button size="sm" styles={{ root: { backgroundColor: primary } }}
+                  onClick={() => { setCreateJobModalOpen(false); setCreateJobResponse(null); }}>Close</Button>
+              </Group>
+            </Stack>
+          );
+        })() : null}
       </Modal>
 
       <Outlet />

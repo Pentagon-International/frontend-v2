@@ -2,7 +2,6 @@ import {
   Box,
   Flex,
   Group,
-  Indicator,
   Text,
   TextInput,
   ActionIcon,
@@ -11,10 +10,15 @@ import {
   ScrollArea,
   Loader,
   UnstyledButton,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconChevronRight,
   IconSearch,
+  IconPlane,
+  IconBell,
+  IconHelp,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -32,14 +36,14 @@ import { ToastNotification } from ".";
 
 function MainSectionHeader() {
   const title = useLayoutStore((state) => state.title);
+  const activeSubNav = useLayoutStore((state) => state.activeSubNav);
   const [profileDrawerOpened, setProfileDrawerOpened] = useState(false);
   const navigate = useNavigate();
 
   const user = useAuthStore((state) => state.user);
   const fullName = user?.full_name || "User";
-  const email = user?.email || "";
 
-  console.log("MainSectionHeader render:", { user, fullName, email });
+  console.log("MainSectionHeader render:", { user, fullName });
 
   const [searchText, setSearchText] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -365,41 +369,61 @@ function MainSectionHeader() {
     setProfileDrawerOpened(true);
   };
 
-  const handleProfileDrawerClose = () => {
-    setProfileDrawerOpened(false);
-  };
+  const headerPrimary = "#2563eb";
+  const headerMuted = "#64748b";
+  const headerFg = "#0f172a";
+
+  const avatarInitials = useMemo(() => {
+    const parts = fullName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+  }, [fullName]);
 
   return (
     <>
       <Flex
         justify="space-between"
         align="center"
-        bg="white"
-        style={{ padding: "0 24px", minHeight: "54px" }}
+        wrap="nowrap"
+        gap="md"
+        style={{
+          padding: "0 24px",
+          minHeight: "56px",
+          borderBottom: "1px solid #e2e8f0",
+          backgroundColor: "rgba(255, 255, 255, 0.97)",
+          backdropFilter: "blur(8px)",
+        }}
       >
-        {/* Page title with enterprise blue left accent */}
-        <Box
-          style={{
-            borderLeft: "3px solid #2563EB",
-            paddingLeft: 12,
-          }}
-        >
-          <Text
-            fw={600}
+        {/* Brand + context (v0-style left cluster) */}
+        <Group gap={12} wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Flex
+            justify="center"
+            align="center"
             style={{
-              fontSize: "17px",
-              color: "#1E293B",
-              letterSpacing: 0.1,
-              lineHeight: 1.3,
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: headerPrimary,
+              flexShrink: 0,
             }}
           >
-            {title}
-          </Text>
-        </Box>
+            <IconPlane size={18} color="#fff" />
+          </Flex>
+          <Box style={{ minWidth: 0 }}>
+            <Text fw={700} size="sm" c={headerFg} lh={1.2} lineClamp={1}>
+              {title.trim() || "\u00A0"}
+            </Text>
+            {activeSubNav && activeSubNav !== title.trim() ? (
+              <Text size={10} c={headerMuted} lh={1.2} lineClamp={1}>
+                {activeSubNav}
+              </Text>
+            ) : null}
+          </Box>
+        </Group>
 
-        {/* Right section */}
-
-        <Group gap="xl" align="center" wrap="nowrap">
+        {/* Center search (same global search behavior, v0-style field) */}
+        <Box style={{ flex: 1, maxWidth: 440, minWidth: 0 }}>
           <Popover
             opened={searchOpen}
             onChange={setSearchOpen}
@@ -412,7 +436,8 @@ function MainSectionHeader() {
                 value={searchText}
                 onChange={(e) => setSearchText(e.currentTarget.value)}
                 placeholder="Search"
-                w={360}
+                w="100%"
+                leftSection={<IconSearch size={16} color={headerMuted} />}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -422,16 +447,38 @@ function MainSectionHeader() {
                 }}
                 rightSectionPointerEvents="all"
                 rightSection={
-                  <ActionIcon
-                    variant="subtle"
-                    color="blue"
-                    onClick={() => void runGlobalSearch(trimmedSearch)}
-                    disabled={!canSearch}
-                    aria-label="Global search"
-                  >
-                    {searchLoading ? <Loader size={16} /> : <IconSearch size={18} />}
-                  </ActionIcon>
+                  <Group gap={0} wrap="nowrap">
+                    {searchText ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearchText("")}
+                        aria-label="Clear search"
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null}
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      onClick={() => void runGlobalSearch(trimmedSearch)}
+                      disabled={!canSearch}
+                      aria-label="Global search"
+                    >
+                      {searchLoading ? <Loader size={16} /> : <IconSearch size={18} />}
+                    </ActionIcon>
+                  </Group>
                 }
+                styles={{
+                  input: {
+                    height: 36,
+                    borderRadius: 8,
+                    border: "none",
+                    backgroundColor: "#f1f5f9",
+                    fontSize: 14,
+                    color: headerFg,
+                  },
+                }}
               />
             </Popover.Target>
             <Popover.Dropdown>
@@ -498,58 +545,40 @@ function MainSectionHeader() {
               </Stack>
             </Popover.Dropdown>
           </Popover>
+        </Box>
 
-          {/* User profile */}
+        {/* Right: v0-style actions + profile */}
+        <Group gap={8} align="center" wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Tooltip label="Notifications">
+            <ActionIcon variant="subtle" color="gray" size="md" aria-label="Notifications">
+              <IconBell size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Help">
+            <ActionIcon variant="subtle" color="gray" size="md" aria-label="Help">
+              <IconHelp size={18} />
+            </ActionIcon>
+          </Tooltip>
           <UnstyledButton
-            onClick={() => setProfileDrawerOpened(true)}
-            px={0}
+            onClick={handleProfileClick}
             aria-label="Open profile menu"
+            style={{ lineHeight: 0 }}
           >
-            <Group gap="sm" align="center" wrap="nowrap">
-              <Box style={{ lineHeight: 1.35, textAlign: "right" }}>
-                <Text
-                  style={{
-                    fontSize: "13.5px",
-                    color: "#1E293B",
-                    fontWeight: 500,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  {fullName}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: "12px",
-                    color: "#94A3B8",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {email}
-                </Text>
-              </Box>
-
-              {/* Avatar — gradient square with rounded corners */}
-              <Flex
-                justify="center"
-                align="center"
-                aria-hidden="true"
-                style={{
-                  width: "34px",
-                  height: "34px",
-                  color: "#ffffff",
-                  borderRadius: "8px",
-                  background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
-                  fontFamily: "'Inter', sans-serif",
-                  fontWeight: 600,
-                  fontSize: "14px",
-                  flexShrink: 0,
-                  letterSpacing: 0,
-                  userSelect: "none",
-                }}
-              >
-                {fullName.slice(0, 1).toUpperCase()}
-              </Flex>
-            </Group>
+            <Box
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                backgroundColor: `${headerPrimary}1a`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text size="xs" fw={600} c={headerPrimary}>
+                {avatarInitials}
+              </Text>
+            </Box>
           </UnstyledButton>
         </Group>
       </Flex>
