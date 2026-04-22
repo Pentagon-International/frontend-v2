@@ -249,7 +249,7 @@ const fetchAllocationDocumentFromApi = async (
 
 const fetchDocumentAllocation = async (payload: {
   account_code: string;
-  subledger_code: string;
+  subledger_code?: string;
   /** Optional filter; omitted when user leaves date empty */
   document_date?: string;
 }): Promise<DocumentAllocationResponse> => {
@@ -701,7 +701,7 @@ export default function DocumentAllocation() {
   };
 
   const handleGet = async () => {
-    if (!selectedAccount || !selectedGlAccountCode || !selectedSlCode) {
+    if (!selectedAccount || !selectedGlAccountCode) {
       ToastNotification({
         type: "error",
         message: "Please select an Account Name before fetching.",
@@ -711,13 +711,24 @@ export default function DocumentAllocation() {
 
     setIsFetching(true);
     try {
-      const res = await fetchDocumentAllocation({
+      const slTrimmed = String(selectedSlCode ?? "").trim();
+      const payload: {
+        account_code: string;
+        subledger_code?: string;
+        document_date?: string;
+      } = {
         account_code: selectedGlAccountCode,
-        subledger_code: selectedSlCode,
         ...(selectedDate != null
           ? { document_date: formatDateForApi(selectedDate) }
           : {}),
-      });
+      };
+
+      // When SL code is 0, don't send subledger_code at all
+      if (slTrimmed !== "" && slTrimmed !== "0") {
+        payload.subledger_code = slTrimmed;
+      }
+
+      const res = await fetchDocumentAllocation(payload);
       const list = Array.isArray(res?.data) ? res.data : [];
       setHasFetched(true);
       if (list.length === 0) {
