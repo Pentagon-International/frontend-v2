@@ -15,8 +15,6 @@ import {
   Modal,
   Tooltip,
   Select,
-  Checkbox,
-  Paper,
   Drawer,
   MantineProvider,
   createTheme,
@@ -27,19 +25,13 @@ import {
   IconPlus,
   IconDots,
   IconEdit,
-  IconX,
   IconDownload,
   IconArrowRight,
-  IconSettings,
   IconPackage,
   IconCircleCheck,
   IconClock,
   IconStack2,
   IconScale,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
   IconEye,
   IconFileText,
   IconBriefcase,
@@ -54,7 +46,22 @@ import {
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
-import { SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
+import {
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+  ERPListBulkSelectionBar,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  erpToolbarSelectStyles,
+  type ErpListTheme,
+} from "../../../components";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
@@ -654,17 +661,20 @@ function AirExportBookingMaster() {
     };
   }, [displayData, totalRecords]);
 
-  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
-
-  const pageButtonIndices = useMemo(() => {
-    const n = Math.min(5, totalPages);
-    return Array.from({ length: n }, (_, i) => {
-      if (totalPages <= 5) return i;
-      if (pageIndex < 3) return i;
-      if (pageIndex > totalPages - 4) return totalPages - 5 + i;
-      return pageIndex - 2 + i;
-    });
-  }, [totalPages, pageIndex]);
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
+        id: String(key),
+        label: String(key),
+        checked: visibleColumns[key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [key]: !prev[key],
+          })),
+      })),
+    [visibleColumns],
+  );
 
   const isDataLoading = isRestoring || isLoading;
 
@@ -976,419 +986,148 @@ function AirExportBookingMaster() {
   const pageBg = "#F0F4F8";
   const cardBg = "#ffffff";
 
+  const erpTheme: ErpListTheme = {
+    border,
+    muted,
+    fg,
+    primary,
+    headerBg: bg,
+    pageBg,
+    cardBg,
+    fontSans: V0_FONT_SANS,
+  };
+
   // ===================== RENDER =====================
   return (
     <MantineProvider theme={airExportV0MantineTheme}>
       <Box className={AIR_EXPORT_GEIST_ROOT_CLASS} style={v0RootTypography}>
       {showMasterTable && (
-        <Box
-          style={{
-            minHeight: "100vh",
-            backgroundColor: pageBg,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {/* ===== STATS + TOOLBAR (v0 layout: one row, gap-6 / gap-8, ml-auto actions) ===== */}
-          {/* Full-bleed in main column: cancel AppShellLayout px (16 / 24) */}
-          <Box
-            mx={{ base: -16, sm: -24 }}
-            style={{ backgroundColor: "#fff", borderBottom: `1px solid ${border}` }}
-          >
-            <Box px={{ base: 16, lg: 24 }} py={12}>
-              <Flex
-                align="center"
-                gap={24}
-                wrap="nowrap"
-                style={{
-                  overflowX: "auto",
-                  minHeight: 40,
-                }}
-              >
-                {/* Stat pills — gap-8 between items, gap-2 inside each */}
-                <Flex align="center" gap={32} wrap="nowrap" style={{ flexShrink: 0 }}>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <Box
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 6,
-                        backgroundColor: `${primary}1a`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <IconPackage size={14} color={primary} />
-                    </Box>
-                    <Box>
-                      <Text fw={700} size="lg" c={fg} lh={1}>
-                        {stats.total}
-                      </Text>
-                      <Text size={10} c={muted} lh={1.2}>
-                        Total
-                      </Text>
-                    </Box>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <Box
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 6,
-                        backgroundColor: "#d1fae5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <IconCircleCheck size={14} color="#059669" />
-                    </Box>
-                    <Box>
-                      <Text fw={700} size="lg" c={fg} lh={1}>
-                        {stats.booked}
-                      </Text>
-                      <Text size={10} c={muted} lh={1.2}>
-                        Booked
-                      </Text>
-                    </Box>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <Box
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 6,
-                        backgroundColor: "#dbeafe",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <IconPackage size={14} color="#105476" />
-                    </Box>
-                    <Box>
-                      <Text fw={700} size="lg" c={fg} lh={1}>
-                        {stats.received}
-                      </Text>
-                      <Text size={10} c={muted} lh={1.2}>
-                        Received
-                      </Text>
-                    </Box>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <Box
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 6,
-                        backgroundColor: "#fef3c7",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <IconClock size={14} color="#d97706" />
-                    </Box>
-                    <Box>
-                      <Text fw={700} size="lg" c={fg} lh={1}>
-                        {stats.pending}
-                      </Text>
-                      <Text size={10} c={muted} lh={1.2}>
-                        Generated
-                      </Text>
-                    </Box>
-                  </Group>
-                </Flex>
-
-                <Box
-                  style={{
-                    width: 1,
-                    height: 32,
-                    backgroundColor: border,
-                    flexShrink: 0,
-                  }}
+        <ERPListScreen
+          theme={erpTheme}
+          toolbar={{
+            leading:
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color={primary} />}
+                  value={stats.total}
+                  label="Total"
                 />
-
-                <Flex align="center" gap={24} wrap="nowrap" style={{ flexShrink: 0 }}>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                    <Text fw={600} size="sm" c={fg} component="span">
-                      {stats.totalPieces.toLocaleString()}
-                    </Text>
-                    <Text size="xs" c={muted} component="span">
-                      pcs
-                    </Text>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
-                    <Text fw={600} size="sm" c={fg} component="span">
-                      {stats.totalWeight.toLocaleString(undefined, {
-                        maximumFractionDigits: 1,
-                      })}
-                    </Text>
-                    <Text size="xs" c={muted} component="span">
-                      kg
-                    </Text>
-                  </Group>
-                </Flex>
-
-                {/* ml-auto toolbar — matches v0: Status, Columns, Refresh, Export, New Booking */}
-                <Flex
-                  align="center"
-                  gap={8}
-                  wrap="nowrap"
-                  style={{ marginLeft: "auto", flexShrink: 0 }}
-                >
-                  <Select
-                    size="xs"
-                    w={130}
-                    value={statusFilter}
-                    onChange={(v) => {
-                      setStatusFilter(v || "all");
-                      setPageIndex(0);
-                    }}
-                    data={[
-                      { value: "all", label: "All Status" },
-                      { value: "BOOKED", label: "Booked" },
-                      { value: "RECEIVED", label: "Received" },
-                      { value: "GENERATED", label: "Generated" },
-                      { value: "CLOSED", label: "Closed" },
-                      { value: "CANCEL", label: "Cancelled" },
-                    ]}
-                    classNames={{
-                      dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
-                      option: AIR_EXPORT_GEIST_ROOT_CLASS,
-                    }}
-                    styles={{
-                      input: {
-                        height: 32,
-                        minHeight: 32,
-                        fontSize: 12,
-                        borderColor: border,
-                        fontFamily: V0_FONT_SANS,
-                      },
-                      dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
-                      option: { fontFamily: V0_FONT_SANS, fontSize: 14 },
-                    }}
-                  />
-                  <Menu
-                    shadow="md"
-                    width={200}
-                    styles={v0MenuStyles}
-                    classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
-                  >
-                    <Menu.Target>
-                      <Button
-                        variant="default"
-                        size="xs"
-                        leftSection={<IconSettings size={14} />}
-                        styles={{
-                          root: {
-                            height: 32,
-                            fontSize: 12,
-                            borderColor: border,
-                            gap: 6,
-                            paddingLeft: 10,
-                            paddingRight: 12,
-                            fontFamily: V0_FONT_SANS,
-                          },
-                        }}
-                      >
-                        Columns
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label style={{ fontSize: 12, fontFamily: V0_FONT_SANS }}>Toggle Columns</Menu.Label>
-                      {(Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map(
-                        (key) => (
-                          <Menu.Item
-                            key={key}
-                            closeMenuOnClick={false}
-                            onClick={() =>
-                              setVisibleColumns((prev) => ({
-                                ...prev,
-                                [key]: !prev[key],
-                              }))
-                            }
-                          >
-                            <Group gap="sm" wrap="nowrap">
-                              <Checkbox
-                                size="xs"
-                                checked={visibleColumns[key]}
-                                onChange={() => {}}
-                                styles={{ input: { cursor: "pointer", fontFamily: V0_FONT_SANS } }}
-                              />
-                              <Text size="xs" tt="capitalize" style={{ fontFamily: V0_FONT_SANS }}>
-                                {key}
-                              </Text>
-                            </Group>
-                          </Menu.Item>
-                        ),
-                      )}
-                    </Menu.Dropdown>
-                  </Menu>
-                  {/* <Button
-                    variant="default"
-                    size="xs"
-                    disabled={isDataLoading || isRefreshing}
-                    leftSection={
-                      isRefreshing ? (
-                        <Loader size={14} />
-                      ) : (
-                        <IconRefresh size={14} />
-                      )
-                    }
-                    styles={{
-                      root: {
-                        height: 32,
-                        fontSize: 12,
-                        borderColor: border,
-                        gap: 6,
-                        paddingLeft: 10,
-                        paddingRight: 12,
-                      },
-                    }}
-                    onClick={() => void handleRefresh()}
-                  >
-                    Refresh
-                  </Button> */}
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={stats.booked}
+                  label="Booked"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color="#105476" />}
+                  iconBackground="#dbeafe"
+                  iconColor="#105476"
+                  value={stats.received}
+                  label="Received"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={stats.pending}
+                  label="Generated"
+                />
+              </>
+            ,
+            secondary:
+              <>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {stats.totalPieces.toLocaleString()}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    pcs
+                  </Text>
+                </Group>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {stats.totalWeight.toLocaleString(undefined, {
+                      maximumFractionDigits: 1,
+                    })}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    kg
+                  </Text>
+                </Group>
+              </>
+            ,
+            actions:
+              <>
+                <Select
+                  size="xs"
+                  w={130}
+                  value={statusFilter}
+                  onChange={(v) => {
+                    setStatusFilter(v || "all");
+                    setPageIndex(0);
+                  }}
+                  data={[
+                    { value: "all", label: "All Status" },
+                    { value: "BOOKED", label: "Booked" },
+                    { value: "RECEIVED", label: "Received" },
+                    { value: "GENERATED", label: "Generated" },
+                    { value: "CLOSED", label: "Closed" },
+                    { value: "CANCEL", label: "Cancelled" },
+                  ]}
+                  classNames={{
+                    dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                    option: AIR_EXPORT_GEIST_ROOT_CLASS,
+                  }}
+                  styles={erpToolbarSelectStyles(erpTheme)}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={v0MenuStyles}
+                  classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                />
                 <Button
                   variant="default"
                   size="xs"
-                  styles={{
-                    root: {
-                      height: 32,
-                      fontSize: 12,
-                      borderColor: border,
-                      gap: 6,
-                      paddingLeft: 10,
-                      paddingRight: 12,
-                      fontFamily: V0_FONT_SANS,
-                    },
-                  }}
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
                   leftSection={<IconFilter size={14} />}
                   onClick={() => setShowFilters((s) => !s)}
                 >
                   {showFilters ? "Hide filters" : "Filters"}
                 </Button>
-                  {/* <Button
-                    variant="default"
-                    size="xs"
-                    leftSection={<IconDownload size={14} />}
-                    styles={{
-                      root: {
-                        height: 32,
-                        fontSize: 12,
-                        borderColor: border,
-                        gap: 6,
-                        paddingLeft: 10,
-                        paddingRight: 12,
-                        fontFamily: V0_FONT_SANS,
-                      },
-                    }}
-                    onClick={() => handleExport(tableRows)}
-                  >
-                    Export
-                  </Button> */}
-                  <Button
-                    size="xs"
-                    leftSection={<IconPlus size={14} />}
-                    styles={{
-                      root: {
-                        height: 32,
-                        fontSize: 12,
-                        backgroundColor: primary,
-                        gap: 6,
-                        paddingLeft: 10,
-                        paddingRight: 12,
-                        border: "none",
-                        fontFamily: V0_FONT_SANS,
-                      },
-                    }}
-                    onClick={persistListAndNavigate}
-                  >
-                    New Booking
-                  </Button>
-                </Flex>
-              </Flex>
-            </Box>
-          </Box>
-
-          {/* ===== ADVANCED FILTER PANEL (aligned with toolbar insets; grid spans sum to 12 per row) ===== */}
-          {showFilters && (
-            <Box
-              mx={{ base: -16, sm: -24 }}
-              px={{ base: 16, lg: 24 }}
-              pt="sm"
-              pb="md"
-              style={{
-                backgroundColor: pageBg,
-                borderBottom: `1px solid ${border}`,
-              }}
-            >
-              <Paper
-                withBorder
-                radius="md"
-                p={0}
-                shadow="sm"
-                style={{
-                  borderColor: border,
-                  backgroundColor: cardBg,
-                  overflow: "hidden",
-                }}
-              >
-                <Group
-                  justify="space-between"
-                  align="center"
-                  wrap="nowrap"
-                  gap="sm"
-                  px="md"
-                  py={10}
-                  style={{
-                    backgroundColor: bg,
-                    borderBottom: `1px solid ${border}`,
-                  }}
+                <Button
+                  size="xs"
+                  leftSection={<IconPlus size={14} />}
+                  styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                  onClick={persistListAndNavigate}
                 >
-                  <Group gap={10} wrap="nowrap" align="center">
-                    <Box
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        backgroundColor: `${primary}14`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <IconFilter size={16} color={primary} stroke={1.5} />
-                    </Box>
-                    <Box style={{ minWidth: 0 }}>
-                      <Text size="sm" fw={600} c={fg} lh={1.3} style={{ fontFamily: V0_FONT_SANS }}>
-                        Filters
-                      </Text>
-                      <Text size="xs" c={muted} lh={1.2} style={{ fontFamily: V0_FONT_SANS }}>
-                        Refine bookings by reference, customer, route, or date
-                      </Text>
-                    </Box>
-                  </Group>
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    size="sm"
-                    aria-label="Close filters"
-                    onClick={() => setShowFilters(false)}
-                  >
-                    <IconX size={16} />
-                  </ActionIcon>
-                </Group>
-                <Box p={{ base: "md", sm: "lg" }}>
+                  New Booking
+                </Button>
+              </>
+            ,
+          }}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Refine bookings by reference, customer, route, or date",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isDataLoading}
+                applyDisabled={isDataLoading}
+              />
+            ),
+            children: (
                   <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                     <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                       <Box
@@ -1564,102 +1303,40 @@ function AirExportBookingMaster() {
                       </Box>
                     </Grid.Col>
                   </Grid>
-                  <Group
-                    justify="flex-end"
-                    gap={8}
-                    mt="lg"
-                    pt="md"
-                    style={{
-                      borderTop: `1px solid ${border}`,
-                    }}
-                  >
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      leftSection={<IconX size={13} />}
-                      styles={{
-                        root: {
-                          height: 32,
-                          fontSize: 12,
-                          borderColor: primary,
-                          color: primary,
-                          fontFamily: V0_FONT_SANS,
-                        },
-                      }}
-                      onClick={clearAllFilters}
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      size="xs"
-                      leftSection={<IconFilter size={13} />}
-                      styles={{
-                        root: {
-                          height: 32,
-                          fontSize: 12,
-                          backgroundColor: primary,
-                          border: "none",
-                          fontFamily: V0_FONT_SANS,
-                        },
-                      }}
-                      onClick={applyFilters}
-                      loading={isDataLoading}
-                      disabled={isDataLoading}
-                    >
-                      Apply Filters
-                    </Button>
-                  </Group>
-                </Box>
-              </Paper>
-            </Box>
-          )}
-
-          {/* ===== MAIN CONTENT ===== */}
-          <Box component="main" py="md" style={{ flexShrink: 0 }}>
-            <Paper withBorder radius="xl" shadow="sm" style={{ overflow: "hidden", borderColor: border, backgroundColor: cardBg }}>
-              {/* <Group justify="flex-end" px="md" py={8} style={{ borderBottom: `1px solid ${border}` }}>
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  leftSection={<IconFilter size={14} />}
-                  onClick={() => setShowFilters((s) => !s)}
-                >
-                  {showFilters ? "Hide filters" : "Advanced filters"}
-                </Button>
-              </Group> */}
-
-              {/* Selection bar */}
-              {selectedIds.length > 0 && (
-                <Box px="md" py={8} style={{ backgroundColor: `${primary}0d`, borderBottom: `1px solid ${border}` }}>
-                  <Group justify="space-between" wrap="wrap" gap={8}>
-                    <Text size="sm" fw={500} c={primary}>
-                      {selectedIds.length} booking{selectedIds.length > 1 ? "s" : ""} selected
-                    </Text>
-                    <Group gap={8}>
-                      <Button variant="default" size="xs" leftSection={<IconFileText size={13} />}
-                        onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
-                        Generate AWB
-                      </Button>
-                      <Button variant="default" size="xs" leftSection={<IconDownload size={13} />}
-                        onClick={() => handleExport(tableRows.filter((r) => selectedIds.includes(r.id)))}>
-                        Export Selected
-                      </Button>
-                      <Button variant="subtle" color="red" size="xs" onClick={() => setSelectedIds([])}>Clear</Button>
-                    </Group>
-                  </Group>
-                </Box>
-              )}
-
-              {/* Table area — same surface as card (avoids white vs gray mismatch with footer). */}
-              <Box style={{ overflowX: "auto", overflowY: "hidden", backgroundColor: cardBg }}>
-                {isDataLoading ? (
-                  <Center py={80} style={{ backgroundColor: cardBg }}>
-                    <Stack align="center" gap="md">
-                      <Loader size="lg" color={primary} />
-                      <Text c="dimmed" size="sm">Loading export bookings...</Text>
-                    </Stack>
-                  </Center>
-                ) : (
+            ),
+          }}
+          table={{
+            selectionBar:
+              selectedIds.length > 0 ? (
+                <ERPListBulkSelectionBar theme={erpTheme} count={selectedIds.length} entityLabel="booking">
+                  <Button variant="default" size="xs" leftSection={<IconFileText size={13} />}
+                    onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
+                    Generate AWB
+                  </Button>
+                  <Button variant="default" size="xs" leftSection={<IconDownload size={13} />}
+                    onClick={() => handleExport(tableRows.filter((r) => selectedIds.includes(r.id)))}>
+                    Export Selected
+                  </Button>
+                  <Button variant="subtle" color="red" size="xs" onClick={() => setSelectedIds([])}>Clear</Button>
+                </ERPListBulkSelectionBar>
+              ) : undefined,
+            footer: (
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                selectClassNames={{
+                  dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                  option: AIR_EXPORT_GEIST_ROOT_CLASS,
+                }}
+              />
+            ),
+            children: isDataLoading ? (
+              <ERPListTableLoading theme={erpTheme} message="Loading export bookings..." />
+            ) : (
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, backgroundColor: cardBg }}>
                     <thead>
                       <tr>
@@ -1883,60 +1560,9 @@ function AirExportBookingMaster() {
                       )}
                     </tbody>
                   </table>
-                )}
-              </Box>
-
-              {/* ===== PAGINATION FOOTER ===== */}
-              <Box px="md" py={10} style={{ borderTop: `1px solid ${border}`, backgroundColor: cardBg }}>
-                <Group justify="space-between" wrap="wrap" gap="md">
-                  <Group gap="md" wrap="wrap" align="center">
-                    <Text size="sm" c={muted}>
-                      Showing{" "}
-                      <Text span fw={600} c={fg}>{totalRecords === 0 ? 0 : pageIndex * pageSize + 1}</Text>
-                      {" "}to{" "}
-                      <Text span fw={600} c={fg}>{Math.min((pageIndex + 1) * pageSize, totalRecords)}</Text>
-                      {" "}of{" "}
-                      <Text span fw={600} c={fg}>{totalRecords}</Text>
-                      {" "}results
-                    </Text>
-                    <Group gap={6} align="center">
-                      <Text size="sm" c={muted}>Rows:</Text>
-                      <Select size="xs" w={68} value={String(pageSize)}
-                        onChange={(v) => { if (v) { setPageSize(Number(v)); setPageIndex(0); } }}
-                        data={["10", "15", "25", "50"]}
-                        classNames={{
-                          dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
-                          option: AIR_EXPORT_GEIST_ROOT_CLASS,
-                        }}
-                        styles={{
-                          input: { fontFamily: V0_FONT_SANS },
-                          dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
-                          option: { fontFamily: V0_FONT_SANS, fontSize: 14 },
-                        }}
-                      />
-                    </Group>
-                  </Group>
-                  <Group gap={4} wrap="nowrap">
-                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex(0)} disabled={pageIndex === 0}><IconChevronsLeft size={16} /></ActionIcon>
-                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex((p) => Math.max(0, p - 1))} disabled={pageIndex === 0}><IconChevronLeft size={16} /></ActionIcon>
-                    <Group gap={4} mx={4}>
-                      {pageButtonIndices.map((pNum) => (
-                        <ActionIcon key={pNum} size="md"
-                          variant={pageIndex === pNum ? "filled" : "default"}
-                          color={pageIndex === pNum ? "blue" : "gray"}
-                          onClick={() => setPageIndex(pNum)}>
-                          <Text size="xs">{pNum + 1}</Text>
-                        </ActionIcon>
-                      ))}
-                    </Group>
-                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))} disabled={pageIndex >= totalPages - 1}><IconChevronRight size={16} /></ActionIcon>
-                    <ActionIcon variant="default" size="md" onClick={() => setPageIndex(totalPages - 1)} disabled={pageIndex >= totalPages - 1}><IconChevronsRight size={16} /></ActionIcon>
-                  </Group>
-                </Group>
-              </Box>
-            </Paper>
-          </Box>
-        </Box>
+                ),
+          }}
+        />
       )}
 
       {/* ===== MILESTONE TIMELINE DRAWER ===== */}

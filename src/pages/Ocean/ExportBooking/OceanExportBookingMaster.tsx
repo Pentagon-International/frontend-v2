@@ -8,18 +8,17 @@ import {
   Group,
   Button,
   Text,
-  Card,
   Center,
-  Loader,
   Stack,
   Grid,
   Menu,
   ActionIcon,
-  Box,
   Badge,
   Modal,
   Tooltip,
   Select,
+  Box,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconFilter,
@@ -28,6 +27,11 @@ import {
   IconEdit,
   IconX,
   IconSearch,
+  IconPackage,
+  IconCircleCheck,
+  IconClock,
+  IconStack2,
+  IconScale,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,9 +40,24 @@ import {
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  erpToolbarSelectStyles,
+  DEFAULT_ERP_LIST_THEME,
+  type ErpListTheme,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
@@ -49,6 +68,47 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import { useListFilterStore } from "../../../store/listFilterStore";
 
 const LIST_KEY = "OCEAN_EXPORT_BOOKING_MASTER";
+
+type OceanExportListColumnKey =
+  | "shipment_code"
+  | "enquiry_id"
+  | "date"
+  | "service"
+  | "customer_name"
+  | "origin_name"
+  | "destination_name"
+  | "customer_service_name"
+  | "status";
+
+type OceanExportVisibleColumnsState = Record<OceanExportListColumnKey, boolean>;
+
+const OCEAN_EXPORT_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    fontWeight: 500,
+    color: DEFAULT_ERP_LIST_THEME.muted,
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: DEFAULT_ERP_LIST_THEME.border,
+  },
+  dropdown: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+} as const;
 
 // Type definitions
 type ExportShipmentData = {
@@ -110,6 +170,18 @@ function OceanExportBookingMaster() {
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
   const [pageSize, setPageSize] = useState(25); // Default page size
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [visibleColumns, setVisibleColumns] = useState<OceanExportVisibleColumnsState>({
+    shipment_code: true,
+    enquiry_id: true,
+    date: true,
+    service: true,
+    customer_name: true,
+    origin_name: true,
+    destination_name: true,
+    customer_service_name: true,
+    status: true,
+  });
 
   // Display name states for filter fields
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
@@ -207,6 +279,7 @@ function OceanExportBookingMaster() {
   ): Record<string, string> => {
     const extra: Record<string, string> = {};
     if (filtersApplied) Object.assign(extra, buildFilterPayload());
+    if (statusFilter !== "all") extra.status = statusFilter;
     const trimmed = searchValue.trim();
     if (trimmed) extra.search = trimmed;
     return extra;
@@ -226,6 +299,7 @@ function OceanExportBookingMaster() {
       filtersApplied,
       filtersApplied ? JSON.stringify(filterForm.values) : "-",
       debouncedSearch,
+      statusFilter,
     ],
     enabled: !isRestoring && searchQuery === debouncedSearch,
     queryFn: async () => {
@@ -289,6 +363,56 @@ function OceanExportBookingMaster() {
   });
 
   const displayData = exportShipmentsResponse?.data ?? [];
+
+  const oceanStats = useMemo(() => {
+    const rows = displayData;
+    const st = (s: string | undefined) => (s || "").toUpperCase();
+    const fcl = rows.filter((r) => (r.service || "").toUpperCase() === "FCL")
+      .length;
+    const lcl = rows.filter((r) => (r.service || "").toUpperCase() === "LCL")
+      .length;
+    return {
+      total: totalRecords,
+      booked: rows.filter((r) => st(r.status) === "BOOKED").length,
+      received: rows.filter((r) => st(r.status) === "RECEIVED").length,
+      pending: rows.filter((r) => st(r.status) === "GENERATED").length,
+      fcl,
+      lcl,
+    };
+  }, [displayData, totalRecords]);
+
+  const columnVisibility = useMemo(
+    () => ({
+      shipment_code: visibleColumns.shipment_code,
+      enquiry_id: visibleColumns.enquiry_id,
+      date: visibleColumns.date,
+      service: visibleColumns.service,
+      customer_name: visibleColumns.customer_name,
+      origin_name: visibleColumns.origin_name,
+      destination_name: visibleColumns.destination_name,
+      customer_service_name: visibleColumns.customer_service_name,
+      status: visibleColumns.status,
+      actions: true,
+    }),
+    [visibleColumns],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as OceanExportListColumnKey[]).map(
+        (key) => ({
+          id: key,
+          label: key.replace(/_/g, " "),
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
+    [visibleColumns],
+  );
 
   const [isApplyingFilters, setIsApplyingFilters] = useState(false);
 
@@ -438,16 +562,6 @@ function OceanExportBookingMaster() {
     const timeoutId = setTimeout(refreshOnMount, 100);
     return () => clearTimeout(timeoutId);
   }, [queryClient]);
-
-  const handlePageChange = (page: number) => {
-    const newIndex = page - 1;
-    setPageIndex(newIndex);
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setPageIndex(0);
-  };
 
   const applyFilters = async () => {
     try {
@@ -711,6 +825,7 @@ function OceanExportBookingMaster() {
   const table = useMantineReactTable({
     columns,
     data: displayData,
+    state: { columnVisibility },
     enableColumnFilters: false,
     enablePagination: false, // Disable built-in pagination - using server-side pagination
     enableTopToolbar: false,
@@ -731,16 +846,18 @@ function OceanExportBookingMaster() {
       style: { width: "100%" },
     },
     mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
+      shadow: undefined,
+      p: 0,
+      radius: 0,
+      withBorder: false,
       style: {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
+        minHeight: 320,
+        maxHeight: "min(75vh, 1536px)",
+        overflow: "hidden",
+        backgroundColor: "transparent",
       },
     },
     mantineTableBodyCellProps: ({ column }) => {
@@ -820,162 +937,187 @@ function OceanExportBookingMaster() {
     ),
   });
 
-  return (
-    <>
-      {showMasterTable && (
-        <Card
-          shadow="sm"
-          pt="md"
-          pb="sm"
-          px="lg"
-          radius="md"
-          withBorder
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex: 1,
-          }}
-        >
-          <Box mb="md">
-            <Group justify="space-between" align="center">
-              <Text
-                size="md"
-                fw={600}
-                c={"#1E293B"}
-                style={{ fontFamily: "Inter", fontSize: "16px" }}
-              >
-                Ocean Export Booking Lists
-              </Text>
+  const border = DEFAULT_ERP_LIST_THEME.border;
+  const muted = DEFAULT_ERP_LIST_THEME.muted;
+  const fg = DEFAULT_ERP_LIST_THEME.fg;
+  const primary = DEFAULT_ERP_LIST_THEME.primary;
+  const bg = DEFAULT_ERP_LIST_THEME.headerBg;
+  const pageBg = DEFAULT_ERP_LIST_THEME.pageBg;
+  const cardBg = DEFAULT_ERP_LIST_THEME.cardBg;
 
-              <Group gap="xs" wrap="nowrap">
+  const erpTheme: ErpListTheme = {
+    border,
+    muted,
+    fg,
+    primary,
+    headerBg: bg,
+    pageBg,
+    cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+
+  return (
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+      {showMasterTable && (
+        <ERPListScreen
+          theme={erpTheme}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color={primary} />}
+                  value={oceanStats.total}
+                  label="Total"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={oceanStats.booked}
+                  label="Booked"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color="#105476" />}
+                  iconBackground="#dbeafe"
+                  iconColor="#105476"
+                  value={oceanStats.received}
+                  label="Received"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={oceanStats.pending}
+                  label="Generated"
+                />
+              </>
+            ),
+            secondary: (
+              <>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {oceanStats.fcl}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    FCL
+                  </Text>
+                </Group>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {oceanStats.lcl}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    LCL
+                  </Text>
+                </Group>
+              </>
+            ),
+            actions: (
+              <>
+                <Select
+                  size="xs"
+                  w={130}
+                  value={statusFilter}
+                  onChange={(v) => {
+                    setStatusFilter(v || "all");
+                    setPageIndex(0);
+                  }}
+                  data={[
+                    { value: "all", label: "All Status" },
+                    { value: "BOOKED", label: "Booked" },
+                    { value: "RECEIVED", label: "Received" },
+                    { value: "GENERATED", label: "Generated" },
+                    { value: "CLOSED", label: "Closed" },
+                    { value: "CANCEL", label: "Cancelled" },
+                  ]}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpToolbarSelectStyles(erpTheme)}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
                 <FormTextInput
                   placeholder="Search..."
-                  leftSection={<IconSearch size={16} />}
+                  leftSection={<IconSearch size={14} />}
                   rightSection={
                     searchQuery ? (
                       <ActionIcon
                         variant="transparent"
                         size="sm"
                         onClick={() => setSearchQuery("")}
-                        style={{ cursor: "pointer" }}
+                        aria-label="Clear search"
                       >
-                        <IconX size={16} />
+                        <IconX size={14} />
                       </ActionIcon>
                     ) : null
                   }
-                  w={248}
-                  size="sm"
+                  w={220}
+                  size="xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.currentTarget.value)}
                   styles={{
                     input: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      color: "#334155",
-                      minWidth: "24px",
-                      minHeight: "24px",
-                      width: "248px",
-                      height: "36px",
-                      border: "1px solid #D0D1D4",
-                      "&:focus": {
-                        border: "1px solid #105476",
-                      },
+                      height: 32,
+                      minHeight: 32,
+                      fontSize: 12,
+                      borderColor: border,
+                      fontFamily: erpTheme.fontSans,
                     },
                   }}
                 />
-
-                <ActionIcon
-                  variant={showFilters ? "filled" : "outline"}
-                  size={36}
-                  color={showFilters ? "#E0F5FF" : "gray"}
-                  onClick={() => setShowFilters(!showFilters)}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                      border: showFilters
-                        ? "1px solid #105476"
-                        : "1px solid #737780",
-                      color: showFilters ? "#105476" : "#737780",
-                    },
-                  }}
-                >
-                  <IconFilter size={18} />
-                </ActionIcon>
-
                 <Button
-                  leftSection={<IconPlus size={16} />}
-                  size="sm"
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      color: "#FFFFFF",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
+                  variant="default"
+                  size="xs"
+                  leftSection={<IconFilter size={14} />}
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  onClick={() => setShowFilters((s) => !s)}
+                >
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+                <Button
+                  size="xs"
+                  leftSection={<IconPlus size={14} />}
+                  styles={erpToolbarPrimaryButtonStyles(erpTheme)}
                   onClick={persistListAndNavigate}
                 >
                   Create New
                 </Button>
-              </Group>
-            </Group>
-          </Box>
-
-          {/* Filter Section */}
-          {showFilters && (
-            <Box
-              mb="xs"
-              style={{
-                borderRadius: "8px",
-                border: "1px solid #E0E0E0",
-                flexShrink: 0,
-                height: "fit-content",
-              }}
-            >
-              <Group
-                justify="space-between"
-                align="center"
-                mb="lg"
-                style={{
-                  backgroundColor: "#F8FAFC",
-                  padding: "8px 8px",
-                  borderRadius: "8px",
-                }}
-              >
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="#1E293B"
-                  style={{ fontFamily: "Inter", fontSize: "14px" }}
-                >
-                  Filters
-                </Text>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => setShowFilters(false)}
-                  aria-label="Close filters"
-                  size="sm"
-                >
-                  <IconX size={18} />
-                </ActionIcon>
-              </Group>
-
-              <Grid gutter="md" px="md">
-                <Grid.Col span={2.4}>
+              </>
+            ),
+          }}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle:
+              "Refine ocean export bookings by reference, customer, service, route, or date",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isDataLoading}
+                applyDisabled={isDataLoading}
+              />
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <FormTextInput
                     size="xs"
                     label="Booking ID"
                     placeholder="Enter Booking ID"
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                     value={filterForm.values.booking_id ?? ""}
                     onChange={(e) =>
                       filterForm.setFieldValue(
@@ -985,11 +1127,12 @@ function OceanExportBookingMaster() {
                     }
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <FormTextInput
                     size="xs"
                     label="Enquiry ID"
                     placeholder="Enter Enquiry ID"
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                     value={filterForm.values.enquiry_id ?? ""}
                     onChange={(e) =>
                       filterForm.setFieldValue(
@@ -999,7 +1142,7 @@ function OceanExportBookingMaster() {
                     }
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Customer"
@@ -1018,9 +1161,11 @@ function OceanExportBookingMaster() {
                     }}
                     minSearchLength={2}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <Select
                     size="xs"
                     label="Service"
@@ -1034,9 +1179,11 @@ function OceanExportBookingMaster() {
                     onChange={(v) =>
                       filterForm.setFieldValue("service", v ?? null)
                     }
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpToolbarSelectStyles(erpTheme)}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SingleDateInput
                     key={`date-${filterForm.values.date}`}
                     label="Date"
@@ -1044,9 +1191,10 @@ function OceanExportBookingMaster() {
                     size="xs"
                     value={filterForm.values.date}
                     onChange={(d) => filterForm.setFieldValue("date", d)}
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Origin"
@@ -1067,9 +1215,11 @@ function OceanExportBookingMaster() {
                     className="filter-searchable-select"
                     additionalParams={seaTransportParams}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Destination"
@@ -1090,89 +1240,39 @@ function OceanExportBookingMaster() {
                     className="filter-searchable-select"
                     additionalParams={seaTransportParams}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_EXPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
               </Grid>
-
-              <Group justify="end" mt="md" p="md" pb="md">
-                <Button
-                  size="xs"
-                  variant="outline"
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      color: "#105476",
-                      borderColor: "#105476",
-                      "&:hover": {
-                        backgroundColor: "#f8f9fa",
-                      },
-                    },
-                  }}
-                  leftSection={<IconX size={14} />}
-                  onClick={clearAllFilters}
-                >
-                  Clear Filters
-                </Button>
-                <Button
-                  size="xs"
-                  variant="filled"
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
-                  leftSection={
-                    isDataLoading ? (
-                      <Loader size={14} />
-                    ) : (
-                      <IconFilter size={14} />
-                    )
-                  }
-                  onClick={applyFilters}
-                  loading={isDataLoading}
-                  disabled={isDataLoading}
-                >
-                  Apply Filters
-                </Button>
-              </Group>
-            </Box>
-          )}
-
-          {isDataLoading ? (
-            <Center py="xl">
-              <Stack align="center" gap="md">
-                <Loader size="lg" color="#105476" />
-                <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                  Loading Ocean export booking...
-                </Text>
-              </Stack>
-            </Center>
-          ) : (
-            <>
-              <MantineReactTable table={table} />
-
-              {/* Pagination Bar */}
-              <PaginationBar
-                pageSize={pageSize}
-                currentPage={pageIndex + 1} // Convert 0-based to 1-based for PaginationBar
+            ),
+          }}
+          table={{
+            footer: (
+              <ERPListPaginationFooter
+                theme={erpTheme}
                 totalRecords={totalRecords}
-                onPageSizeChange={handlePageSizeChange}
-                onPageChange={handlePageChange}
-                pageSizeOptions={["10", "25", "50"]}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={["10", "15", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
               />
-            </>
-          )}
-        </Card>
+            ),
+            children: isDataLoading ? (
+              <ERPListTableLoading
+                theme={erpTheme}
+                message="Loading ocean export bookings..."
+              />
+            ) : (
+              <MantineReactTable
+                key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
+                table={table}
+              />
+            ),
+          }}
+        />
       )}
       <Modal
         opened={!!cancelConfirmRow}
@@ -1202,7 +1302,8 @@ function OceanExportBookingMaster() {
         </Group>
       </Modal>
       <Outlet />
-    </>
+      </Box>
+    </MantineProvider>
   );
 }
 
