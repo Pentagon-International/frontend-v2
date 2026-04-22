@@ -17,6 +17,7 @@ import {
   Select,
   Checkbox,
   Paper,
+  Drawer,
   MantineProvider,
   createTheme,
   rem,
@@ -44,6 +45,11 @@ import {
   IconBriefcase,
   IconCircleX,
   IconSelector,
+  IconBook2,
+  IconTruckDelivery,
+  IconPlaneDeparture,
+  IconPlaneArrival,
+  IconMapPin,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -156,6 +162,10 @@ type ExportShipmentData = {
   voyage_no?: string;
   mawb_no?: string;
   mawb_date?: string;
+  /** When set, shipment has passed pickup — drives “Picked up” milestone in list/drawer. */
+  actual_pickup_date?: string | null;
+  /** When set, shipment is treated as delivered for milestone display. */
+  actual_delivery_date?: string | null;
   carrier_booking_no?: string;
   igm_no?: string;
   igm_date?: string;
@@ -220,7 +230,66 @@ type VisibleColumnsState = {
   pieces: boolean;
   weight: boolean;
   handler: boolean;
+  lastMilestone: boolean;
 };
+
+/** Air export journey steps — order is fixed; index drives timeline state. */
+const EXPORT_MILESTONES = [
+  { label: "Booked", Icon: IconBook2, accent: "#4f46e5", soft: "#eef2ff" },
+  { label: "Picked up", Icon: IconTruckDelivery, accent: "#0284c7", soft: "#e0f2fe" },
+  { label: "Received", Icon: IconPackage, accent: "#7c3aed", soft: "#f3e8ff" },
+  { label: "Departure", Icon: IconPlaneDeparture, accent: "#0891b2", soft: "#ecfeff" },
+  { label: "Arrived", Icon: IconPlaneArrival, accent: "#059669", soft: "#ecfdf5" },
+  { label: "Delivered", Icon: IconMapPin, accent: "#16a34a", soft: "#f0fdf4" },
+] as const;
+
+type MilestonePhase = "completed" | "current" | "upcoming";
+
+function milestonePhase(i: number, activeIdx: number): MilestonePhase {
+  if (i < activeIdx) return "completed";
+  if (i === activeIdx) return "current";
+  return "upcoming";
+}
+
+function rgbaFromHex(hex: string, a: number): string {
+  const x = hex.replace("#", "");
+  const v = x.length === 3 ? x.split("").map((c) => c + c).join("") : x;
+  const r = Number.parseInt(v.slice(0, 2), 16);
+  const g = Number.parseInt(v.slice(2, 4), 16);
+  const b = Number.parseInt(v.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/** Map event / master event label to milestone index (0–5). Returns null if unknown. */
+function mapEventStringToMilestoneIndex(s: string): number | null {
+  const u = s.toUpperCase();
+  if (/\bDELIVER|HANDOVER|\bPOD\b|PROOF\s+OF\s+DELIVERY/.test(u)) return 5;
+  if (/\bARRIV|\bATA\b|\bLAND(ED|ING)?\b/.test(u)) return 4;
+  if (/\bDEPART|\bATD\b|TAKE[\s-]?OFF|AIRBORNE|EXPORT\s+FLIGHT|FLIGHT\s+DEP/.test(u)) return 3;
+  if (/\bRECEIV|GATE\s+IN|TERMINAL|WAREHOUSE\s+IN|ACCEPTANCE/.test(u)) return 2;
+  if (/\bPICK|COLLECT|COLLECTION|CARGO\s+READY|GATE\s+OUT/.test(u)) return 1;
+  if (/\bBOOK|CONFIRM|BOOKING/.test(u)) return 0;
+  return null;
+}
+
+function getMaxMilestoneIndexFromEvents(events: ExportShipmentData["events"]): number | null {
+  if (!Array.isArray(events) || events.length === 0) return null;
+  let max = -1;
+  for (const e of events) {
+    const rec = e as { type?: string; event_type?: string; name?: string };
+    const t = String(rec.type ?? rec.event_type ?? rec.name ?? "").trim();
+    if (!t) continue;
+    const idx = mapEventStringToMilestoneIndex(t);
+    if (idx != null && idx > max) max = idx;
+  }
+  return max >= 0 ? max : null;
+}
+
+function hasTruthyDate(value: string | null | undefined): boolean {
+  if (value == null) return false;
+  const s = String(value).trim();
+  return s.length > 0 && s !== "null";
+}
 
 // ---------- Pure helpers ----------
 function normalizeBookingStatus(s: string | undefined | null): string {
@@ -229,6 +298,114 @@ function normalizeBookingStatus(s: string | undefined | null): string {
   if (u === "BOOKED") return "BOOKED";
   if (u === "RECEIVED") return "RECEIVED";
   return u || "GENERATED";
+}
+
+/**
+ * Latest milestone index (0–5) from status, dates, documents, pickup/delivery dates, and `events`.
+ * Uses the highest signal so rows can sit at Booked vs Picked up vs Departure vs Delivered distinctly.
+ */
+function getLastMilestoneIndex(row: ExportShipmentData): number {
+  const st = normalizeBookingStatus(row.status);
+  const raw = (row.status || "").toUpperCase();
+  if (st === "CANCEL" || raw.includes("CANCEL")) return 0;
+
+  let idx = -1;
+
+  const fromEvents = getMaxMilestoneIndexFromEvents(row.events);
+  if (fromEvents != null) idx = Math.max(idx, fromEvents);
+
+  if (raw.includes("DELIVER")) idx = Math.max(idx, 5);
+  if (hasTruthyDate(row.actual_delivery_date)) idx = Math.max(idx, 5);
+
+  if (row.ata?.trim()) idx = Math.max(idx, 4);
+
+  if (row.atd?.trim()) idx = Math.max(idx, 3);
+  if (/\b(DEPART|DEPARTED|DISPATCH|DISPATCHED|IN\s*TRANSIT|EXPORTED|FLT\s*DEP)\b/i.test(raw)) {
+    idx = Math.max(idx, 3);
+  }
+
+  if (st === "RECEIVED") idx = Math.max(idx, 2);
+
+  if (/\b(PICK\s*UP|PICKUP|PICKED\s*UP|GATE\s*OUT|COLLECTED)\b/i.test(raw)) {
+    idx = Math.max(idx, 1);
+  }
+  if (hasTruthyDate(row.actual_pickup_date)) idx = Math.max(idx, 1);
+
+  if (st === "BOOKED" && (row.mawb_no?.trim() || row.carrier_booking_no?.trim())) {
+    idx = Math.max(idx, 1);
+  }
+
+  if (st === "BOOKED") idx = Math.max(idx, 0);
+  if (st === "GENERATED") idx = Math.max(idx, 0);
+
+  if (idx < 0) idx = 0;
+  return Math.min(idx, 5);
+}
+
+function getLastMilestoneLabel(row: ExportShipmentData): string {
+  const i = getLastMilestoneIndex(row);
+  return EXPORT_MILESTONES[Math.min(Math.max(i, 0), EXPORT_MILESTONES.length - 1)].label;
+}
+
+/** Milestone meta for table/drawer — same `accent` / `soft` as the sidebar timeline. */
+function getLastMilestoneStep(row: ExportShipmentData): (typeof EXPORT_MILESTONES)[number] {
+  const i = getLastMilestoneIndex(row);
+  return EXPORT_MILESTONES[Math.min(Math.max(i, 0), EXPORT_MILESTONES.length - 1)];
+}
+
+function getMilestoneDrawerDetail(row: ExportShipmentData, index: number): { detail: string; when: string } {
+  const oc = row.origin_name || row.origin_code_read || row.origin_code || "Origin";
+  const dc = row.destination_name || row.destination_code_read || row.destination_code || "Destination";
+  switch (index) {
+    case 0:
+      return {
+        detail: "Booking confirmed",
+        when: row.date ? dayjs(row.date).format("DD MMM, HH:mm") : "—",
+      };
+    case 1:
+      return {
+        detail: `${oc} — cargo / docs ready`,
+        when: hasTruthyDate(row.actual_pickup_date)
+          ? dayjs(String(row.actual_pickup_date)).format("DD MMM, HH:mm")
+          : "—",
+      };
+    case 2:
+      return { detail: "Received at export facility / terminal", when: "—" };
+    case 3:
+      return {
+        detail: String(oc),
+        when: row.atd
+          ? dayjs(row.atd).format("DD MMM, HH:mm")
+          : row.etd
+            ? `Est. ${dayjs(row.etd).format("DD MMM, HH:mm")}`
+            : "—",
+      };
+    case 4:
+      return {
+        detail: String(dc),
+        when: row.ata
+          ? dayjs(row.ata).format("DD MMM, HH:mm")
+          : row.eta
+            ? `Est. ${dayjs(row.eta).format("DD MMM, HH:mm")}`
+            : "—",
+      };
+    case 5:
+      return {
+        detail: String(dc),
+        when: hasTruthyDate(row.actual_delivery_date)
+          ? dayjs(String(row.actual_delivery_date)).format("DD MMM, HH:mm")
+          : "—",
+      };
+    default:
+      return { detail: "", when: "—" };
+  }
+}
+
+/** Date/time string for the row’s current last milestone — aligned with drawer timeline. */
+function getLastMilestoneWhen(row: ExportShipmentData): string {
+  const i = getLastMilestoneIndex(row);
+  const idx = Math.min(Math.max(i, 0), EXPORT_MILESTONES.length - 1);
+  return getMilestoneDrawerDetail(row, idx).when;
 }
 
 function getRowPW(row: ExportShipmentData): { pieces: number; weight: number } {
@@ -324,7 +501,10 @@ function AirExportBookingMaster() {
     sno: true,
     shipment: true, date: true, customer: true, route: true, status: true,
     mawb: true, flight: true, pieces: true, weight: true, handler: true,
+    lastMilestone: true,
   });
+
+  const [milestoneDrawerRow, setMilestoneDrawerRow] = useState<ExportShipmentData | null>(null);
 
   // ---- search ----
   const [searchQuery, setSearchQuery] = useState("");
@@ -545,6 +725,7 @@ function AirExportBookingMaster() {
         Origin: r.origin_code_read || r.origin_code || "",
         Destination: r.destination_code_read || r.destination_code || "",
         Status: normalizeBookingStatus(r.status),
+        "Last Milestone": getLastMilestoneLabel(r),
         MAWB: r.mawb_no ?? "", Flight: r.voyage_no ?? "",
         Pcs: pw.pieces, "Weight kg": pw.weight,
         Handler: r.customer_service_name ?? "",
@@ -561,19 +742,6 @@ function AirExportBookingMaster() {
       if (prev?.key === key) return prev.direction === "asc" ? { key, direction: "desc" } : null;
       return { key, direction: "asc" };
     });
-  };
-
-  const toggleRow = (id: number) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  };
-
-  const selectAllOnPage = () => {
-    const ids = tableRows.map((r) => r.id);
-    if (ids.length > 0 && ids.every((id) => selectedIds.includes(id))) {
-      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
-    } else {
-      setSelectedIds((prev) => [...new Set([...prev, ...ids])]);
-    }
   };
 
   const applyFilters = () => {
@@ -1276,6 +1444,7 @@ function AirExportBookingMaster() {
                         {visibleColumns.pieces && <Th col="pieces" label="Pcs" align="right" />}
                         {visibleColumns.weight && <Th col="weight" label="Weight"  align="right" />}
                         {visibleColumns.handler && <Th col="handler" label="Customer Service" />}
+                        {visibleColumns.lastMilestone && <Th col="lastMilestone" label="Last Milestone" />}
                         <th style={{ width: 44, backgroundColor: bg, borderBottom: `1px solid ${border}` }} />
                       </tr>
                     </thead>
@@ -1297,6 +1466,9 @@ function AirExportBookingMaster() {
                       ) : (
                         tableRows.map((booking) => {
                           const pw = getRowPW(booking);
+                          const lastMs = getLastMilestoneStep(booking);
+                          const LastMilestoneColIcon = lastMs.Icon;
+                          const lastMilestoneWhen = getLastMilestoneWhen(booking);
                           const oc = booking.origin_code_read || booking.origin_code || "";
                           const dc = booking.destination_code_read || booking.destination_code || "";
                           const sel = selectedIds.includes(booking.id);
@@ -1387,6 +1559,83 @@ function AirExportBookingMaster() {
                                   </Group>
                                 </td>
                               )}
+                              {visibleColumns.lastMilestone && (
+                                <td style={{ padding: "10px 14px", maxWidth: 260, verticalAlign: "top" }}>
+                                  <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={() => setMilestoneDrawerRow(booking)}
+                                    style={{
+                                      display: "grid",
+                                      gridTemplateColumns: "22px minmax(0, 1fr)",
+                                      columnGap: 8,
+                                      rowGap: 4,
+                                      alignItems: "start",
+                                      justifyItems: "stretch",
+                                      width: "100%",
+                                      margin: 0,
+                                      padding: "4px 0",
+                                      fontFamily: V0_FONT_SANS,
+                                      cursor: "pointer",
+                                      textAlign: "left",
+                                      background: "transparent",
+                                      border: "none",
+                                      boxShadow: "none",
+                                      transition: "opacity 0.12s",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      (e.currentTarget as HTMLButtonElement).style.opacity = "0.82";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                                    }}
+                                  >
+                                    <Box
+                                      style={{
+                                        gridColumn: 1,
+                                        gridRow: 1,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: 22,
+                                        paddingTop: 2,
+                                      }}
+                                      aria-hidden
+                                    >
+                                      <LastMilestoneColIcon size={15} color={lastMs.accent} stroke={2} />
+                                    </Box>
+                                    <Text
+                                      component="span"
+                                      size="sm"
+                                      fw={600}
+                                      c={lastMs.accent}
+                                      lh={1.35}
+                                      style={{
+                                        gridColumn: 2,
+                                        gridRow: 1,
+                                        minWidth: 0,
+                                        textAlign: "left",
+                                      }}
+                                    >
+                                      {lastMs.label}
+                                    </Text>
+                                    <Text
+                                      size="xs"
+                                      lh={1.35}
+                                      style={{
+                                        gridColumn: 2,
+                                        gridRow: 2,
+                                        minWidth: 0,
+                                        textAlign: "left",
+                                        color: lastMilestoneWhen === "—" ? muted : rgbaFromHex(lastMs.accent, 0.92),
+                                        fontWeight: lastMilestoneWhen === "—" ? 400 : 500,
+                                      }}
+                                    >
+                                      {lastMilestoneWhen}
+                                    </Text>
+                                  </Box>
+                                </td>
+                              )}
                               <td style={{ padding: "10px 8px", textAlign: "center" }}>
                                 <RowMenu row={booking} />
                               </td>
@@ -1451,6 +1700,220 @@ function AirExportBookingMaster() {
           </Box>
         </Box>
       )}
+
+      {/* ===== MILESTONE TIMELINE DRAWER ===== */}
+      <Drawer
+        opened={!!milestoneDrawerRow}
+        onClose={() => setMilestoneDrawerRow(null)}
+        position="right"
+        size="md"
+        title={
+          milestoneDrawerRow ? (
+            <Stack gap={2}>
+              <Text fw={700} size="md" c={fg}>{milestoneDrawerRow.shipment_code}</Text>
+              {milestoneDrawerRow.enquiry_id ? (
+                <Text size="xs" c="dimmed">{milestoneDrawerRow.enquiry_id}</Text>
+              ) : null}
+            </Stack>
+          ) : null
+        }
+        classNames={{
+          content: AIR_EXPORT_GEIST_ROOT_CLASS,
+          body: AIR_EXPORT_GEIST_ROOT_CLASS,
+          header: AIR_EXPORT_GEIST_ROOT_CLASS,
+        }}
+        styles={{
+          content: { fontFamily: V0_FONT_SANS },
+          body: { fontFamily: V0_FONT_SANS },
+          header: { fontFamily: V0_FONT_SANS },
+        }}
+      >
+        {milestoneDrawerRow ? (
+          <Stack gap="md">
+            <Text fw={600} size="sm" c={fg}>Route milestones</Text>
+            <Stack gap={0}>
+              {EXPORT_MILESTONES.map((step, i) => {
+                const activeIdx = getLastMilestoneIndex(milestoneDrawerRow);
+                const phase = milestonePhase(i, activeIdx);
+                const { detail, when } = getMilestoneDrawerDetail(milestoneDrawerRow, i);
+                const NodeIcon = step.Icon;
+                const iconSize = phase === "current" ? 18 : 16;
+
+                const connector =
+                  i < EXPORT_MILESTONES.length - 1 ? (
+                    i < activeIdx ? (
+                      <Box
+                        style={{
+                          width: 2,
+                          height: 32,
+                          marginTop: 4,
+                          backgroundColor: rgbaFromHex(step.accent, 0.55),
+                          borderRadius: 1,
+                        }}
+                      />
+                    ) : i === activeIdx ? (
+                      <Box
+                        style={{
+                          width: 2,
+                          height: 32,
+                          marginTop: 4,
+                          borderRadius: 1,
+                          background: `repeating-linear-gradient(to bottom, ${primary} 0, ${primary} 5px, transparent 5px, transparent 9px)`,
+                        }}
+                      />
+                    ) : (
+                      <Box style={{ width: 2, height: 32, marginTop: 4, backgroundColor: "#e2e8f0", borderRadius: 1 }} />
+                    )
+                  ) : null;
+
+                const phaseLabel =
+                  phase === "completed" ? "Done" : phase === "current" ? "Active" : "Pending";
+
+                return (
+                  <Group key={step.label} align="flex-start" wrap="nowrap" gap="md">
+                    <Flex direction="column" align="center" style={{ width: 40, flexShrink: 0 }}>
+                      <Box mt={2}>
+                        {phase === "completed" ? (
+                          <Box
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: "50%",
+                              backgroundColor: rgbaFromHex(step.accent, 0.15),
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              border: `2px solid ${rgbaFromHex(step.accent, 0.45)}`,
+                            }}
+                          >
+                            <NodeIcon size={iconSize} color={step.accent} stroke={2} />
+                          </Box>
+                        ) : phase === "current" ? (
+                          <Box
+                            style={{
+                              width: 38,
+                              height: 38,
+                              borderRadius: "50%",
+                              border: `3px solid ${step.accent}`,
+                              backgroundColor: step.soft,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              boxShadow: `0 0 0 4px ${rgbaFromHex(step.accent, 0.14)}`,
+                            }}
+                          >
+                            <NodeIcon size={iconSize} color={step.accent} stroke={2} />
+                          </Box>
+                        ) : (
+                          <Box
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: "50%",
+                              border: "2px dashed #cbd5e1",
+                              backgroundColor: "#f8fafc",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <NodeIcon size={iconSize} color="#94a3b8" stroke={1.75} />
+                          </Box>
+                        )}
+                      </Box>
+                      {connector}
+                    </Flex>
+                    <Stack
+                      gap={6}
+                      pb="md"
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding:
+                          phase === "upcoming" ? "4px 0 12px 0" : "10px 12px 12px 12px",
+                        borderRadius: 10,
+                        ...(phase === "completed"
+                          ? {
+                              backgroundColor: rgbaFromHex(step.accent, 0.07),
+                              borderLeft: `3px solid ${step.accent}`,
+                            }
+                          : {}),
+                        ...(phase === "current"
+                          ? {
+                              backgroundColor: step.soft,
+                              border: `1px solid ${rgbaFromHex(step.accent, 0.35)}`,
+                              boxShadow: `0 0 0 3px ${rgbaFromHex(step.accent, 0.1)}`,
+                            }
+                          : {}),
+                      }}
+                    >
+                      <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
+                        <Group gap={8} wrap="nowrap" align="center">
+                          <Text
+                            fw={phase === "current" ? 700 : phase === "completed" ? 600 : 500}
+                            size="sm"
+                            c={phase === "upcoming" ? muted : fg}
+                            lh={1.3}
+                          >
+                            {step.label}
+                          </Text>
+                          <Text
+                            size="xs"
+                            fw={600}
+                            style={{
+                              flexShrink: 0,
+                              padding: "2px 8px",
+                              borderRadius: 9999,
+                              fontSize: 10,
+                              letterSpacing: "0.02em",
+                              backgroundColor:
+                                phase === "completed"
+                                  ? rgbaFromHex(step.accent, 0.14)
+                                  : phase === "current"
+                                    ? rgbaFromHex(step.accent, 0.22)
+                                    : "#f1f5f9",
+                              color: phase === "upcoming" ? muted : step.accent,
+                            }}
+                          >
+                            {phaseLabel}
+                          </Text>
+                        </Group>
+                        <Text
+                          size="xs"
+                          c={phase === "current" ? step.accent : muted}
+                          ta="right"
+                          style={{ flexShrink: 0 }}
+                          fw={phase === "current" ? 600 : 400}
+                        >
+                          {when}
+                        </Text>
+                      </Group>
+                      <Text size="xs" c="dimmed" lh={1.4}>
+                        {detail}
+                      </Text>
+                      {phase === "current" ? (
+                        <Box
+                          mt={2}
+                          p="sm"
+                          style={{
+                            backgroundColor: bg,
+                            borderRadius: 8,
+                            border: `1px solid ${border}`,
+                          }}
+                        >
+                          <Text size="xs" c={muted}>
+                            Current stage — derived from status, MAWB/booking refs, and ETD/ATD/ETA/ATA when present.
+                          </Text>
+                        </Box>
+                      ) : null}
+                    </Stack>
+                  </Group>
+                );
+              })}
+            </Stack>
+          </Stack>
+        ) : null}
+      </Drawer>
 
       {/* ===== CANCEL MODAL ===== */}
       <Modal opened={!!cancelConfirmRow} onClose={() => !isCancelling && setCancelConfirmRow(null)}
