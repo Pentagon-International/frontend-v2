@@ -2905,7 +2905,7 @@ function AirImportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#2563EB" size="lg" />
+        <Loader color="#105476" size="lg" />
       </Center>
     );
   }
@@ -2914,7 +2914,7 @@ function AirImportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {mode === "view"
               ? "View Import Job"
               : mode === "edit"
@@ -2922,7 +2922,7 @@ function AirImportJobCreate() {
                 : "Create Import Job"}
           </Text>
           {jobData?.job_id && (
-            <Badge color="#2563EB" radius="md" size="md">
+            <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
           )}
@@ -2930,7 +2930,7 @@ function AirImportJobCreate() {
         {!isReadOnly && (
           <Group gap="xs">
             <Button
-              color="#2563EB"
+              color="#105476"
               variant={canCreateJob ? "filled" : "outline"}
               onClick={handleSubmit}
               loading={isSubmitting}
@@ -2947,7 +2947,7 @@ function AirImportJobCreate() {
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
-                    color="#2563EB"
+                    color="#105476"
                     size="lg"
                     styles={{
                       root: {
@@ -2989,7 +2989,7 @@ function AirImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconEye size={16} color="#2563EB" />
+                          <IconEye size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -3039,7 +3039,7 @@ function AirImportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconEye size={16} color="#2563EB" />
+                        <IconEye size={16} color="#105476" />
                       </Box>
                     }
                     styles={{
@@ -3085,7 +3085,7 @@ function AirImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#2563EB" />
+                          <IconFileInvoice size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -3182,7 +3182,7 @@ function AirImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#2563EB" />
+                          <IconFileInvoice size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -3232,7 +3232,7 @@ function AirImportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconDownload size={16} color="#2563EB" />
+                          <IconDownload size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -3269,7 +3269,7 @@ function AirImportJobCreate() {
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
-        color="#2563EB"
+        color="#105476"
       >
         <Tabs.List
           mb="md"
@@ -3286,8 +3286,8 @@ function AirImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -3300,8 +3300,8 @@ function AirImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -3314,8 +3314,8 @@ function AirImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -3328,8 +3328,8 @@ function AirImportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 3 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
             }}
@@ -3343,8 +3343,8 @@ function AirImportJobCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 4 ? "3px solid #2563EB" : "none",
-                color: "#2563EB",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
                 fontSize: 16,
                 fontWeight: active === 4 ? 600 : 400,
               }}
@@ -3359,7 +3359,7 @@ function AirImportJobCreate() {
           <Box mt="md">
             {/* MAWB Details Section */}
             <Group align="center" mb="md">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 MAWB Details
               </Text>
             </Group>
@@ -3592,7 +3592,7 @@ function AirImportJobCreate() {
 
             {/* Carrier Details Section */}
             <Group justify="space-between" align="center" mb="sm">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Carrier Details
               </Text>
             </Group>
@@ -3677,12 +3677,12 @@ function AirImportJobCreate() {
 
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#2563EB" mb="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
               Party Details
             </Text>
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#2563EB">
+                <Text fw={600} c="#105476">
                   Shipper Details
                 </Text>
               </Grid.Col>
@@ -3808,7 +3808,7 @@ function AirImportJobCreate() {
             </Grid>
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#2563EB">
+                <Text fw={600} c="#105476">
                   Consignee Details
                 </Text>
               </Grid.Col>
@@ -3934,7 +3934,7 @@ function AirImportJobCreate() {
             </Grid>
             <Grid gutter="sm" mb="md">
               <Grid.Col span={12}>
-                <Text fw={600} c="#2563EB">
+                <Text fw={600} c="#105476">
                   Carrier Agent Details
                 </Text>
               </Grid.Col>
@@ -4084,7 +4084,7 @@ function AirImportJobCreate() {
         {/* Tab 3: Routings */}
         <Tabs.Panel value="2">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#2563EB" mb="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
               Routings
             </Text>
 
@@ -4587,7 +4587,7 @@ function AirImportJobCreate() {
                           <ActionIcon
                             size="lg"
                             variant="light"
-                            color="#2563EB"
+                            color="#105476"
                             onClick={addRouting}
                             style={{ marginTop: "1.75rem" }}
                           >
@@ -4610,14 +4610,14 @@ function AirImportJobCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
                 <Group gap="sm">
                 <Button
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   onClick={() => {
                     const toStr = (v: unknown) => String(v ?? "").trim();
                     const toNumOrNull = (v: unknown): number | null => {
@@ -4731,7 +4731,7 @@ function AirImportJobCreate() {
                 </Button>
                 <Button
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   size="sm"
                   leftSection={<IconFileInvoice size={16} />}
                   styles={{
@@ -4827,12 +4827,12 @@ function AirImportJobCreate() {
         {jobData?.id != null && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="md" fw={600} c="#2563EB" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
                 <Center py="xl">
-                  <Loader color="#2563EB" size="lg" />
+                  <Loader color="#105476" size="lg" />
                 </Center>
               ) : (
                 <ScrollArea>
@@ -4928,12 +4928,12 @@ function AirImportJobCreate() {
                                         {isExpanded ? (
                                           <IconChevronUp
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         ) : (
                                           <IconChevronDown
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         )}
                                       </Box>
@@ -4967,7 +4967,7 @@ function AirImportJobCreate() {
                                         ? "yellow"
                                         : isPosted
                                           ? "green"
-                                          : "#2563EB"
+                                          : "#105476"
                                     }
                                   >
                                     {row.status ?? "-"}
@@ -4985,7 +4985,7 @@ function AirImportJobCreate() {
                                     <Menu.Target>
                                       <ActionIcon
                                         variant="subtle"
-                                        color="#2563EB"
+                                        color="#105476"
                                         size="sm"
                                         styles={{
                                           root: {
@@ -5027,7 +5027,7 @@ function AirImportJobCreate() {
                                           >
                                             <IconEye
                                               size={16}
-                                              color="#2563EB"
+                                              color="#105476"
                                             />
                                           </Box>
                                         }
@@ -5082,7 +5082,7 @@ function AirImportJobCreate() {
                                             >
                                               <IconEdit
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -5137,7 +5137,7 @@ function AirImportJobCreate() {
                                             >
                                               <IconRefresh
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -5201,7 +5201,7 @@ function AirImportJobCreate() {
                                       <Text
                                         size="sm"
                                         fw={600}
-                                        c="#2563EB"
+                                        c="#105476"
                                         mb="xs"
                                       >
                                         Reverse invoices
@@ -5318,7 +5318,7 @@ function AirImportJobCreate() {
                                                     <Badge
                                                       size="sm"
                                                       variant="light"
-                                                      color="#2563EB"
+                                                      color="#105476"
                                                     >
                                                       {rev.status ?? "-"}
                                                     </Badge>
@@ -5340,7 +5340,7 @@ function AirImportJobCreate() {
                                                       <Menu.Target>
                                                         <ActionIcon
                                                           variant="subtle"
-                                                          color="#2563EB"
+                                                          color="#105476"
                                                           size="sm"
                                                           styles={{
                                                             root: {
@@ -5393,7 +5393,7 @@ function AirImportJobCreate() {
                                                             >
                                                               <IconEye
                                                                 size={16}
-                                                                color="#2563EB"
+                                                                color="#105476"
                                                               />
                                                             </Box>
                                                           }
@@ -5510,7 +5510,7 @@ function AirImportJobCreate() {
         <Group>
           <Button
             variant="outline"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/air/import-job")}
           >
@@ -5520,7 +5520,7 @@ function AirImportJobCreate() {
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={handlePrev}
             >
               Previous
@@ -5532,7 +5532,7 @@ function AirImportJobCreate() {
           {!isReadOnly && (
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconPlus size={16} />}
               onClick={() => navigateToHawbCreate()}
             >
@@ -5542,7 +5542,7 @@ function AirImportJobCreate() {
           {active === 0 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -5551,7 +5551,7 @@ function AirImportJobCreate() {
           {active === 1 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -5561,7 +5561,7 @@ function AirImportJobCreate() {
           {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -5570,7 +5570,7 @@ function AirImportJobCreate() {
           {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
               loading={isSubmitting}
             >
@@ -5582,7 +5582,7 @@ function AirImportJobCreate() {
       {/* HAWB Details Display - Show at the top (all steps) */}
       {hawbDetails.length > 0 && (
         <Box mb="xl">
-          <Text size="lg" fw={600} c="#2563EB" mb="md" mt="md">
+          <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
             House Air Waybill (HAWB) ({hawbDetails.length})
           </Text>
           <Stack gap="md">
@@ -5590,7 +5590,7 @@ function AirImportJobCreate() {
               <Card key={index} shadow="sm" padding="lg" radius="md" withBorder>
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
-                    <Badge color="#2563EB" size="lg">
+                    <Badge color="#105476" size="lg">
                       HAWB {index + 1}
                     </Badge>
                     <Badge
@@ -5613,7 +5613,7 @@ function AirImportJobCreate() {
                       </Badge>
                     )}
                     {hawb.shipment_id && (
-                      <Badge color="#2563EB" variant="light">
+                      <Badge color="#105476" variant="light">
                         Shipment Id : {hawb.shipment_id}
                       </Badge>
                     )}
@@ -5622,7 +5622,7 @@ function AirImportJobCreate() {
                     <Group gap="xs">
                       <Button
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         size="xs"
                         leftSection={<IconEdit size={14} />}
                         onClick={() => handleEditHawbDetail(index)}
@@ -5642,7 +5642,7 @@ function AirImportJobCreate() {
                         <Menu.Target>
                           <ActionIcon
                             variant="subtle"
-                            color="#2563EB"
+                            color="#105476"
                             size="lg"
                             styles={{
                               root: {
@@ -5683,7 +5683,7 @@ function AirImportJobCreate() {
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconEye size={16} color="#2563EB" />
+                                <IconEye size={16} color="#105476" />
                               </Box>
                             }
                             styles={{
@@ -5725,7 +5725,7 @@ function AirImportJobCreate() {
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconEye size={16} color="#2563EB" />
+                                <IconEye size={16} color="#105476" />
                               </Box>
                             }
                             styles={{
@@ -5814,7 +5814,7 @@ function AirImportJobCreate() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             Cargo Arrival Notice -{" "}
             {currentHawbForPreview?.hawb_number || "HAWB"}
           </Text>
@@ -5864,7 +5864,7 @@ function AirImportJobCreate() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -5873,7 +5873,7 @@ function AirImportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>

@@ -324,7 +324,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
           return (
             <Badge
               size="xs"
-              bg="#2563EB"
+              bg="#105476"
               c="white"
               style={{ cursor: "pointer", textDecoration: "none", fontFamily:'Inter' }}
               onClick={() =>
@@ -438,7 +438,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
           return (
             <Badge
               size="xs"
-              bg="#2563EB"
+              bg="#105476"
               c="white"
               style={{ cursor: "pointer", textDecoration: "none", fontFamily:'Inter' }}
               onClick={() =>
@@ -532,7 +532,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
           return (
             <Badge
               size="xs"
-              style={{ cursor: "pointer", textDecoration: "none", backgroundColor: "#2563EB", color:"white", fontFamily:'Inter' }}
+              style={{ cursor: "pointer", textDecoration: "none", backgroundColor: "#105476", color:"white", fontFamily:'Inter' }}
               onClick={() =>
                 navigate(path, {
                   state: {
@@ -810,7 +810,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             onClick={handleBackFromTable}
             variant="outline"
             size="xs"
-            color="#2563EB"
+            color="#105476"
             style={{fontFamily:'Inter'}}
           >
             Back
@@ -818,7 +818,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
         </Group>
         {tableLoading ? (
           <Center py="xl" style={{ flex: 1, minHeight: 0 }}>
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
           </Center>
         ) : (
           <>
@@ -869,7 +869,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Gained Quotations - Pending for Bookings
                 </Text>
-                <Badge size="sm" variant="transparent" bg="#2563EB" c={"white"}>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardBookingsCount}
                 </Badge>
               </Group>
@@ -878,7 +878,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 c="#ffffff"
                 fw={500}
                 style={{
-                  backgroundColor:"#2563EB",
+                  backgroundColor:"#105476",
                   textDecoration: "none",
                   cursor: "pointer",
                   padding:"4px 8px",
@@ -892,7 +892,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             </Group>
             {loadingBookings ? (
               <Center py="xl">
-                <Loader size="md" color="#2563EB" />
+                <Loader size="md" color="#105476" />
               </Center>
             ) : bookingsPreview.length === 0 ? (
               <Center py="xl">
@@ -922,7 +922,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Bookings Created - Pending for Jobs
                 </Text>
-                <Badge size="sm" variant="transparent" bg="#2563EB" c={"white"}>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardJobsCount}
                 </Badge>
               </Group>
@@ -931,7 +931,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 c="#ffffff"
                 fw={500}
                 style={{
-                  backgroundColor:"#2563EB",
+                  backgroundColor:"#105476",
                   textDecoration: "none",
                   cursor: "pointer",
                   padding:"4px 8px",
@@ -945,7 +945,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             </Group>
             {loadingJobs ? (
               <Center py="xl">
-                <Loader size="md" color="#2563EB" />
+                <Loader size="md" color="#105476" />
               </Center>
             ) : jobsPreview.length === 0 ? (
               <Center py="xl">
@@ -975,7 +975,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - BL Not Released
                 </Text>
-                <Badge size="sm" variant="transparent" bg="#2563EB" c={"white"}>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardJobsWithoutBLCount}
                 </Badge>
               </Group>
@@ -984,7 +984,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 c="#ffffff"
                 fw={500}
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   textDecoration: "none",
                   cursor: "pointer",
                   padding: "4px 8px",
@@ -998,7 +998,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             </Group>
             {loadingJobsWithoutBL ? (
               <Center py="xl">
-                <Loader size="md" color="#2563EB" />
+                <Loader size="md" color="#105476" />
               </Center>
             ) : jobsWithoutBLPreview.length === 0 ? (
               <Center py="xl">
@@ -1028,7 +1028,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - POD Not Updated
                 </Text>
-                <Badge size="sm" variant="transparent" bg="#2563EB" c={"white"}>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardPodNotUpdatedCount}
                 </Badge>
               </Group>
@@ -1037,7 +1037,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 c="#ffffff"
                 fw={500}
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   textDecoration: "none",
                   cursor: "pointer",
                   padding: "4px 8px",
@@ -1051,7 +1051,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             </Group>
             {loadingPodNotUpdated ? (
               <Center py="xl">
-                <Loader size="md" color="#2563EB" />
+                <Loader size="md" color="#105476" />
               </Center>
             ) : podNotUpdatedPreview.length === 0 ? (
               <Center py="xl">
@@ -1081,7 +1081,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 <Text size="md" fw={500} c="Black" style={{fontFamily:'Inter'}}>
                   Jobs - Invoice Not Raised
                 </Text>
-                <Badge size="sm" variant="transparent" bg="#2563EB" c={"white"}>
+                <Badge size="sm" variant="transparent" bg="#105476" c={"white"}>
                   {cardInvoiceNotRaisedCount}
                 </Badge>
               </Group>
@@ -1090,7 +1090,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
                 c="#ffffff"
                 fw={500}
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   textDecoration: "none",
                   cursor: "pointer",
                   padding: "4px 8px",
@@ -1104,7 +1104,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
             </Group>
             {loadingInvoiceNotRaised ? (
               <Center py="xl">
-                <Loader size="md" color="#2563EB" />
+                <Loader size="md" color="#105476" />
               </Center>
             ) : invoiceNotRaisedPreview.length === 0 ? (
               <Center py="xl">

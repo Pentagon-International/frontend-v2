@@ -343,12 +343,12 @@ export default function TdsRateSectionCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -445,7 +445,7 @@ export default function TdsRateSectionCreate() {
                   <Text
                     size="sm"
                     fw={600}
-                    c="#2563EB"
+                    c="#105476"
                     style={{ fontFamily: "Inter", marginTop: "8px" }}
                   >
                     TDS Rate Detail
@@ -689,7 +689,7 @@ export default function TdsRateSectionCreate() {
                           {index === rateRows.length - 1 && (
                             <ActionIcon
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               onClick={addRateRow}
                             >
                               <IconPlus size={14} />
@@ -738,7 +738,7 @@ export default function TdsRateSectionCreate() {
                     loading={isSubmitting}
                     disabled={isSubmitting}
                     style={{
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

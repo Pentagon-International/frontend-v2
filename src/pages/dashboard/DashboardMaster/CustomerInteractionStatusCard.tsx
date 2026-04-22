@@ -29,7 +29,7 @@ const CustomerInteractionStatusCard = ({
     <Box>
       {loading ? (
         <Center h={200}>
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
         </Center>
       ) : (
         <Grid gutter="md">

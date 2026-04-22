@@ -57,47 +57,47 @@ export default function MastersPage() {
         title: "Organization Masters",
         items: [
           {
-            icon: <IconBuildingSkyscraper size={28} color="#2563EB" />,
+            icon: <IconBuildingSkyscraper size={28} color="#105476" />,
             label: "Group Company",
           },
           {
-            icon: <IconBuildingEstate size={28} color="#2563EB" />,
+            icon: <IconBuildingEstate size={28} color="#105476" />,
             label: "Company",
           },
-          { icon: <IconSitemap size={28} color="#2563EB" />, label: "Branch" },
-          { icon: <IconUserHexagon size={28} color="#2563EB" />, label: "User" },
+          { icon: <IconSitemap size={28} color="#105476" />, label: "Branch" },
+          { icon: <IconUserHexagon size={28} color="#105476" />, label: "User" },
         ],
       },
       {
         title: "Customer & Partner Masters",
         items: [
-          { icon: <IconUsers size={28} color="#2563EB" />, label: "Customer" },
+          { icon: <IconUsers size={28} color="#105476" />, label: "Customer" },
           {
-            icon: <IconTruck size={28} color="#2563EB" />,
+            icon: <IconTruck size={28} color="#105476" />,
             label: "Vendor",
           },
           {
-            icon: <IconUsersGroup size={28} color="#2563EB" />,
+            icon: <IconUsersGroup size={28} color="#105476" />,
             label: "Customer Type",
           },
-          { icon: <IconInfinity size={28} color="#2563EB" />, label: "Follow-up" },
+          { icon: <IconInfinity size={28} color="#105476" />, label: "Follow-up" },
           {
-            icon: <IconSquareRotated size={28} color="#2563EB" />,
+            icon: <IconSquareRotated size={28} color="#105476" />,
             label: "Frequency",
           },
           {
-            icon: <IconWorld size={28} color="#2563EB" />,
+            icon: <IconWorld size={28} color="#105476" />,
             label: "Network Master",
           },
           // Conditionally include Sales Co-ordinator Reassignation
           ...(hasManagerOrStaffAccess
             ? [
                 {
-                  icon: <IconExchange size={28} color="#2563EB" />,
+                  icon: <IconExchange size={28} color="#105476" />,
                   label: "Sales Co-ordinator Reassignation",
                 },
                 {
-                  icon: <IconUserCheck size={28} color="#2563EB" />,
+                  icon: <IconUserCheck size={28} color="#105476" />,
                   label: "Customer Relationship Mapping",
                 },
               ]
@@ -107,21 +107,21 @@ export default function MastersPage() {
       {
         title: "Logistics & Operations Masters",
         items: [
-          { icon: <IconAnchor size={28} color="#2563EB" />, label: "Port" },
+          { icon: <IconAnchor size={28} color="#105476" />, label: "Port" },
           {
-            icon: <IconContainer size={28} color="#2563EB" />,
+            icon: <IconContainer size={28} color="#105476" />,
             label: "Container Type",
           },
           {
-            icon: <IconFileStack size={28} color="#2563EB" />,
+            icon: <IconFileStack size={28} color="#105476" />,
             label: "Terms of Shipment",
           },
           {
-            icon: <IconTruckDelivery size={28} color="#2563EB" />,
+            icon: <IconTruckDelivery size={28} color="#105476" />,
             label: "Service",
           },
           {
-            icon: <IconBuildingEstate size={28} color="#2563EB" />,
+            icon: <IconBuildingEstate size={28} color="#105476" />,
             label: "CFS Master",
           },
         ],
@@ -130,11 +130,11 @@ export default function MastersPage() {
         title: "Communication & Interaction Masters",
         items: [
           {
-            icon: <IconBrandRedux size={28} color="#2563EB" />,
+            icon: <IconBrandRedux size={28} color="#105476" />,
             label: "Call Mode",
           },
           {
-            icon: <IconFileStack size={28} color="#2563EB" />,
+            icon: <IconFileStack size={28} color="#105476" />,
             label: "Create Customer-PAN",
           },
         ],
@@ -143,35 +143,35 @@ export default function MastersPage() {
         title: "Accounts",
         items: [
           {
-            icon: <IconCurrencyDollar size={28} color="#2563EB" />,
+            icon: <IconCurrencyDollar size={28} color="#105476" />,
             label: "Charge",
           },
           {
-            icon: <IconCalculator size={28} color="#2563EB" />,
+            icon: <IconCalculator size={28} color="#105476" />,
             label: "TDS Section",
           },
           {
-            icon: <IconCalculator size={28} color="#2563EB" />,
+            icon: <IconCalculator size={28} color="#105476" />,
             label: "TDS Rate Section",
           },
           {
-            icon: <IconChartBar size={28} color="#2563EB" />,
+            icon: <IconChartBar size={28} color="#105476" />,
             label: "Chart of Accounts",
           },
           {
-            icon: <IconLink size={28} color="#2563EB" />,
+            icon: <IconLink size={28} color="#105476" />,
             label: "GL Charge Mapping",
           },
           {
-            icon: <IconReceiptTax size={28} color="#2563EB" />,
+            icon: <IconReceiptTax size={28} color="#105476" />,
             label: "GST SAC",
           },
           {
-            icon: <IconPercentage size={28} color="#2563EB" />,
+            icon: <IconPercentage size={28} color="#105476" />,
             label: "GST Rate",
           },
           {
-            icon: <IconLink size={28} color="#2563EB" />,
+            icon: <IconLink size={28} color="#105476" />,
             label: "GST Charge Mapping",
           },
         ],
@@ -199,7 +199,7 @@ export default function MastersPage() {
                 style={{
                   fontSize: "11px",
                   fontWeight: 600,
-                  color: "#2563EB",
+                  color: "#105476",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
                 }}

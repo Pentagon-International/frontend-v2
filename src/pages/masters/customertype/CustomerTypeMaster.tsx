@@ -115,7 +115,7 @@ export default function CustomerTypeMaster() {
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Item
-                  leftSection={<IconEye size={16} color="#2563EB" />}
+                  leftSection={<IconEye size={16} color="#105476" />}
                   onClick={() =>
                     navigate("/master/customer-type-view", {
                       state: row.original,
@@ -125,7 +125,7 @@ export default function CustomerTypeMaster() {
                   View
                 </Menu.Item>
                 <Menu.Item
-                  leftSection={<IconEdit size={16} color="#2563EB" />}
+                  leftSection={<IconEdit size={16} color="#105476" />}
                   onClick={() =>
                     navigate("/master/customer-type-edit", {
                       state: row.original,
@@ -225,7 +225,7 @@ export default function CustomerTypeMaster() {
           </Button>
           <Button
             size="xs"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconPlus size={16} />}
             onClick={() => navigate("/master/customer-type-new")}
           >

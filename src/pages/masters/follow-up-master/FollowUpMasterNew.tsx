@@ -142,8 +142,8 @@ function FollowUpMasterNew() {
             onClick={() => navigate("/master/follow-up")}
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
           >
@@ -155,8 +155,8 @@ function FollowUpMasterNew() {
               onClick={() => navigate("/master/follow-up")}
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
             >
@@ -164,7 +164,7 @@ function FollowUpMasterNew() {
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Submit

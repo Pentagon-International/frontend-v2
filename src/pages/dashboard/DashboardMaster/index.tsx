@@ -7432,7 +7432,7 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "overall" ? "#2563EB" : "transparent",
+                  activeTab === "overall" ? "#105476" : "transparent",
                 color: activeTab === "overall" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "overall" ? 600 : 400,
                 border: "none",
@@ -7454,7 +7454,7 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "pipeline-Report" ? "#2563EB" : "transparent",
+                  activeTab === "pipeline-Report" ? "#105476" : "transparent",
                 color: activeTab === "pipeline-Report" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
                 border: "none",
@@ -7476,7 +7476,7 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "booking" ? "#2563EB" : "transparent",
+                  activeTab === "booking" ? "#105476" : "transparent",
                   color: activeTab === "booking" ? "#ffffff" : "#64748B",
                   fontWeight: activeTab === "booking" ? 600 : 400,
                   border: "none",
@@ -7498,7 +7498,7 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "customer-service" ? "#2563EB" : "transparent",
+                  activeTab === "customer-service" ? "#105476" : "transparent",
                 color: activeTab === "customer-service" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "customer-service" ? 600 : 400,
                 border: "none",
@@ -7520,7 +7520,7 @@ const Dashboard = () => {
               size="xs"
               style={{
                 backgroundColor:
-                  activeTab === "customer-service-import" ? "#2563EB" : "transparent",
+                  activeTab === "customer-service-import" ? "#105476" : "transparent",
                 color: activeTab === "customer-service-import" ? "#ffffff" : "#64748B",
                 fontWeight: activeTab === "customer-service-import" ? 600 : 400,
                 border: "none",

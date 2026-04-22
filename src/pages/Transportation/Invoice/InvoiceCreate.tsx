@@ -2653,8 +2653,8 @@ function InvoiceCreate({
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
-            <Text size="sm" c="#2563EB" fw={500}>
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
               {invoiceViewFetchLoading
                 ? `Loading ${resolvedDocumentLabel.toLowerCase()}...`
                 : isPosting
@@ -2667,7 +2667,7 @@ function InvoiceCreate({
       <Stack gap="md">
         {/* Header: Title | document_no & status (after save) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -2682,7 +2682,7 @@ function InvoiceCreate({
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {saveResponse.document_no || "—"}
@@ -2700,7 +2700,7 @@ function InvoiceCreate({
                         ? "gray"
                         : saveResponse.status?.toUpperCase() === "POSTED"
                           ? "green"
-                          : "#2563EB"
+                          : "#105476"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -2712,7 +2712,7 @@ function InvoiceCreate({
             {saveResponse && (
               <Menu shadow="md" width={200}>
                 <Menu.Target>
-                  <ActionIcon variant="light" color="#2563EB" size="lg">
+                  <ActionIcon variant="light" color="#105476" size="lg">
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
@@ -2730,7 +2730,7 @@ function InvoiceCreate({
             )}
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(-1)}
             >
@@ -3094,7 +3094,7 @@ function InvoiceCreate({
           <Box mt="md">
             <Tabs
               variant="default"
-              color={"#2563EB"}
+              color={"#105476"}
               value={chargesTabActive}
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
@@ -3119,7 +3119,7 @@ function InvoiceCreate({
                     zIndex: 100,
                     backgroundColor: "white",
                     fontWeight: 600,
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   {showShipmentIdInCharges && (
@@ -3383,7 +3383,7 @@ function InvoiceCreate({
                               mt={4}
                               size="xs"
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               disabled={isReadOnly}
                               onClick={async () => {
                               const stateId = form.values.state ? Number(form.values.state) : null;
@@ -3810,7 +3810,7 @@ function InvoiceCreate({
                             gstRatesLoadingByIndex[index] &&
                             (!charge.tax_code ||
                               charge.tax_code.trim() === "") ? (
-                              <Loader size="xs" color="#2563EB" />
+                              <Loader size="xs" color="#105476" />
                             ) : null
                           }
                           styles={{
@@ -3876,7 +3876,7 @@ function InvoiceCreate({
                               amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" ? (
-                              <Loader size="xs" color="#2563EB" />
+                              <Loader size="xs" color="#105476" />
                             ) : null;
                           })()}
                           styles={{
@@ -3918,7 +3918,7 @@ function InvoiceCreate({
                               amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" ? (
-                              <Loader size="xs" color="#2563EB" />
+                              <Loader size="xs" color="#105476" />
                             ) : null;
                           })()}
                           styles={{
@@ -3960,7 +3960,7 @@ function InvoiceCreate({
                               amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" ? (
-                              <Loader size="xs" color="#2563EB" />
+                              <Loader size="xs" color="#105476" />
                             ) : null;
                           })()}
                           styles={{
@@ -4022,7 +4022,7 @@ function InvoiceCreate({
                               px={12}
                               size="sm"
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               onClick={() => {
                                 // New charge currency = local currency (active branch) from store, not billing currency
                                 const newChargeCurrency =
@@ -4086,7 +4086,7 @@ function InvoiceCreate({
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total
                           </Text>
-                          <Text size="lg" fw={600} c="#2563EB">
+                          <Text size="lg" fw={600} c="#105476">
                             {form.values.charges
                               .reduce(
                                 (sum, c) => sum + (c.amount_in_local ?? 0),
@@ -4101,7 +4101,7 @@ function InvoiceCreate({
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             IGST Total
                           </Text>
-                          <Text size="lg" fw={600} c="#2563EB">
+                          <Text size="lg" fw={600} c="#105476">
                             {form.values.charges
                               .reduce((sum, c, idx) => {
                                 const rate = gstRatesByChargeIndex[idx]?.igst;
@@ -4122,7 +4122,7 @@ function InvoiceCreate({
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             CGST Total
                           </Text>
-                          <Text size="lg" fw={600} c="#2563EB">
+                          <Text size="lg" fw={600} c="#105476">
                             {form.values.charges
                               .reduce((sum, c, idx) => {
                                 const rate = gstRatesByChargeIndex[idx]?.cgst;
@@ -4143,7 +4143,7 @@ function InvoiceCreate({
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             SGST Total
                           </Text>
-                          <Text size="lg" fw={600} c="#2563EB">
+                          <Text size="lg" fw={600} c="#105476">
                             {form.values.charges
                               .reduce((sum, c, idx) => {
                                 const rate = gstRatesByChargeIndex[idx]?.sgst;
@@ -4168,7 +4168,7 @@ function InvoiceCreate({
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
-                      <Loader size="md" color="#2563EB" />
+                      <Loader size="md" color="#105476" />
                       <Text size="sm" c="dimmed">
                         Loading GST breakup...
                       </Text>
@@ -4249,7 +4249,7 @@ function InvoiceCreate({
                                 style={{
                                   fontSize: "13px",
                                   fontWeight: 600,
-                                  color: "#2563EB",
+                                  color: "#105476",
                                 }}
                               >
                                 Total:
@@ -4258,7 +4258,7 @@ function InvoiceCreate({
                                 style={{
                                   fontSize: "13px",
                                   fontWeight: 600,
-                                  color: "#2563EB",
+                                  color: "#105476",
                                 }}
                               >
                                 {gstBreakup.total ?? "0.00"}
@@ -4287,7 +4287,7 @@ function InvoiceCreate({
           <Group justify="flex-end" mt="xl">
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={() => navigate(-1)}
             >
               Cancel
@@ -4296,7 +4296,7 @@ function InvoiceCreate({
               <>
                 <Button
                   type="submit"
-                  color="#2563EB"
+                  color="#105476"
                   rightSection={<IconChevronRight size={16} />}
                   loading={isSubmitting}
                 >
@@ -4373,7 +4373,7 @@ function InvoiceCreate({
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -4382,7 +4382,7 @@ function InvoiceCreate({
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>

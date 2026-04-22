@@ -1479,8 +1479,8 @@ import {
             }}
           >
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
-              <Text size="sm" c="#2563EB" fw={500}>
+              <Loader size="lg" color="#105476" />
+              <Text size="sm" c="#105476" fw={500}>
                 {calcLoading ? calcLoadingText : "Saving supplier invoice..."}
               </Text>
             </Stack>
@@ -1488,7 +1488,7 @@ import {
         )}
         <Stack gap="md">
           <Group justify="space-between" wrap="nowrap">
-            <Text size="xl" fw={600} c="#2563EB">
+            <Text size="xl" fw={600} c="#105476">
               {pathname.includes("/reversal/create") && saveResponse?.id == null
                 ? "Create Supplier Invoice Reverse"
                 : pathname.includes("/reversal/create") && saveResponse?.id != null
@@ -1514,7 +1514,7 @@ import {
                     <Badge
                       size="sm"
                       variant="light"
-                      color="#2563EB"
+                      color="#105476"
                       styles={{ root: { textTransform: "none" } }}
                     >
                       {isReversal
@@ -1549,7 +1549,7 @@ import {
               )}
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => navigate(backPath)}
               >
@@ -1569,7 +1569,7 @@ import {
             }
           >
             {/* Segment: Credit Journal Voucher — CBP Number through Location GST No */}
-            <Text size="sm" fw={600} c="#2563EB" mb="xs">
+            <Text size="sm" fw={600} c="#105476" mb="xs">
               Credit Journal Voucher
             </Text>
             <Grid mb="md">
@@ -1775,7 +1775,7 @@ import {
             </Grid>
   
             {/* Segment: Agent INV/CRN Detail — Due Date, Currency, Inv/Crn Note through Difference Amount */}
-            <Text size="sm" fw={600} c="#2563EB" mb="xs">
+            <Text size="sm" fw={600} c="#105476" mb="xs">
               Agent INV/CRN Detail
             </Text>
             <Grid mb="md" columns={12}>
@@ -1993,7 +1993,7 @@ import {
             <Grid mt={"sm"}>
               <Grid.Col span={12}>
                 <Group justify="space-between" align="center">
-                  <Text size="sm" fw={600} c="#2563EB">
+                  <Text size="sm" fw={600} c="#105476">
                     Charges
                   </Text>
                   {!isReversal && form.values.tds_section_code?.trim() && (
@@ -2002,7 +2002,7 @@ import {
                         type="button"
                         size="sm"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         disabled={
                           isReadOnly ||
                           reversalFormDisabled ||
@@ -2162,7 +2162,7 @@ import {
                         type="button"
                         size="sm"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         disabled={
                           isReadOnly ||
                           reversalFormDisabled ||
@@ -2293,7 +2293,7 @@ import {
                       // zIndex: 100,
                       backgroundColor: "white",
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                     }}
                   >
                     <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
@@ -2763,7 +2763,7 @@ import {
                                 px={12}
                                 size="sm"
                                 variant="light"
-                                color="#2563EB"
+                                color="#105476"
                                 onClick={addChargeRow}
                                 disabled={reversalFormDisabled}
                               >
@@ -2786,7 +2786,7 @@ import {
                 size="xl"
                 centered
                 style={{ fontFamily: "Inter" }}
-                styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
+                styles={{ title: { fontWeight: 600, color: "#105476" } }}
               >
                 <Stack gap="xs">
                   {form.values.supporting_documents.map((doc, index) => (
@@ -3055,7 +3055,7 @@ import {
                             form.values.supporting_documents.length - 1 && (
                             <Button
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               onClick={() => {
                                 form.setFieldValue("supporting_documents", [
                                   ...form.values.supporting_documents,
@@ -3074,7 +3074,7 @@ import {
                     form.values.supporting_documents.length === 0 && (
                       <Button
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         leftSection={<IconPlus size={16} />}
                         onClick={() => {
                           form.setFieldValue("supporting_documents", [
@@ -3101,7 +3101,7 @@ import {
                 size="sm"
                 styles={{
                   root: {
-                    borderColor: "#2563EB",
+                    borderColor: "#105476",
                     color: "#666",
                     fontSize: "13px",
                     fontFamily: "Inter",
@@ -3131,7 +3131,7 @@ import {
                 <>
                   <Button
                     type="submit"
-                    color="#2563EB"
+                    color="#105476"
                     rightSection={<IconChevronRight size={16} />}
                     loading={isSubmitting}
                   >

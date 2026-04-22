@@ -369,7 +369,8 @@ function MainSectionHeader() {
     setProfileDrawerOpened(true);
   };
 
-  const headerPrimary = "#2563eb";
+  // const headerPrimary = "#105476";
+  const headerPrimary = "#105476";
   const headerMuted = "#64748b";
   const headerFg = "#0f172a";
 

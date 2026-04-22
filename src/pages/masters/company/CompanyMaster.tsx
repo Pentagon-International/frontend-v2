@@ -214,7 +214,7 @@ function Company() {
                       <Group gap={"sm"}>
                         <IconEyeSpark
                           size={16}
-                          style={{ color: "#2563EB", marginRight: 6 }}
+                          style={{ color: "#105476", marginRight: 6 }}
                         />
                         <Text size="sm">View</Text>
                       </Group>
@@ -234,7 +234,7 @@ function Company() {
                       <Group gap={"sm"}>
                         <IconEdit
                           size={16}
-                          style={{ color: "#2563EB", marginRight: 6 }}
+                          style={{ color: "#105476", marginRight: 6 }}
                         />
                         <Text size="sm">Edit</Text>
                       </Group>
@@ -276,7 +276,7 @@ function Company() {
                         Do you want to delete this?
                       </Text>
                       <Group mt={10} gap={"lg"}>
-                        <Button variant="outline" color="#2563EB" size="xs">
+                        <Button variant="outline" color="#105476" size="xs">
                           Not now
                         </Button>
                         <Button
@@ -370,7 +370,7 @@ function Company() {
     <>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c={"#2563EB"}>
+          <Text size="md" fw={600} c={"#105476"}>
             Companies Lists
           </Text>
 
@@ -399,7 +399,7 @@ function Company() {
                   variant="outline"
                   rightSection={<IconChevronDown size={16} />}
                   size="xs"
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download
                 </Button>
@@ -415,14 +415,14 @@ function Company() {
               variant="outline"
               leftSection={<IconUpload size={16} />}
               size="xs"
-              color={"#2563EB"}
+              color={"#105476"}
             >
               Bulk Upload
             </Button>
 
             <Button
               //   variant="filled"
-              color={"#2563EB"}
+              color={"#105476"}
               leftSection={<IconPlus size={16} />}
               size="xs"
               onClick={() => navigate("/master/company-new")}

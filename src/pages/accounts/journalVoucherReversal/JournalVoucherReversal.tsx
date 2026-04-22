@@ -651,8 +651,8 @@ import {
             }}
           >
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
-              <Text size="sm" c="#2563EB" fw={500}>
+              <Loader size="lg" color="#105476" />
+              <Text size="sm" c="#105476" fw={500}>
                 Saving journal voucher...
               </Text>
             </Stack>
@@ -673,8 +673,8 @@ import {
             }}
           >
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
-              <Text size="sm" c="#2563EB" fw={500}>
+              <Loader size="lg" color="#105476" />
+              <Text size="sm" c="#105476" fw={500}>
                 Loading journal voucher...
               </Text>
             </Stack>
@@ -684,7 +684,7 @@ import {
         <Stack gap="md">
           {/* ── Page header ── */}
           <Group justify="space-between" mb="xs" wrap="nowrap">
-            <Text size="xl" fw={700} c="#2563EB" style={{ fontFamily: "Inter" }}>
+            <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
               Journal Voucher Reversal
             </Text>
             <Group gap="md" wrap="nowrap">
@@ -698,7 +698,7 @@ import {
                       <Badge
                         size="sm"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         styles={{ root: { textTransform: "none" } }}
                       >
                         {form.values.document_id || "—"}
@@ -713,7 +713,7 @@ import {
                       <Badge
                         size="sm"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         styles={{ root: { textTransform: "none" } }}
                       >
                         {saveResponse.journal_no}
@@ -746,7 +746,7 @@ import {
                     aria-label="More options"
                     style={{ border: "1px solid #cce4f0" }}
                   >
-                    <IconDotsVertical size={16} color="#2563EB" />
+                    <IconDotsVertical size={16} color="#105476" />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
@@ -761,7 +761,7 @@ import {
               </Menu>
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => navigate(-1)}
                 styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
@@ -795,7 +795,7 @@ import {
                 px="md"
                 py="xs"
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
@@ -813,7 +813,7 @@ import {
                   <Button
                     size="xs"
                     variant="white"
-                    color="#2563EB"
+                    color="#105476"
                     leftSection={<IconFileText size={13} />}
                     disabled={isReadOnly || !saveResponse?.id}
                     styles={{
@@ -887,7 +887,7 @@ import {
                       <Text
                         size="xs"
                         fw={700}
-                        c="#2563EB"
+                        c="#105476"
                         mb="xs"
                         style={{
                           fontFamily: "Inter",
@@ -935,7 +935,7 @@ import {
                           <Button
                             size="xs"
                             variant="outline"
-                            color="#2563EB"
+                            color="#105476"
                             disabled={isReadOnly || !form.values.reversal_journal_no}
                             styles={{
                               root: { fontFamily: "Inter", fontSize: "12px", height: "28px" , },
@@ -1042,7 +1042,7 @@ import {
                       <Button
                         size="sm"
                         variant="outline"
-                        color="#2563EB"
+                        color="#105476"
                         leftSection={<IconFileUpload size={14} />}
                         disabled={isReadOnly}
                         styles={{ root: { fontFamily: "Inter", fontSize: "13px", flex: 1 } }}
@@ -1052,7 +1052,7 @@ import {
                       <Button
                         size="sm"
                         variant="outline"
-                        color="#2563EB"
+                        color="#105476"
                         leftSection={<IconDownload size={14} />}
                         disabled={!form.values.file_name}
                         styles={{ root: { fontFamily: "Inter", fontSize: "13px", flex: 1 } }}
@@ -1078,7 +1078,7 @@ import {
                 px="md"
                 py="xs"
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
@@ -1095,7 +1095,7 @@ import {
                 {!isReadOnly && (
                   <ActionIcon
                     variant="white"
-                    color="#2563EB"
+                    color="#105476"
                     size="sm"
                     radius="sm"
                     onClick={() =>
@@ -1145,7 +1145,7 @@ import {
                             fontSize: "12px",
                             fontFamily: "Inter",
                             fontWeight: 700,
-                            color: "#2563EB",
+                            color: "#105476",
                             whiteSpace: "nowrap",
                             borderBottom: "2px solid #e3f2fc",
                             backgroundColor: "white",
@@ -1165,7 +1165,7 @@ import {
                             fontSize: "12px",
                             fontFamily: "Inter",
                             fontWeight: 700,
-                            color: "#2563EB",
+                            color: "#105476",
                             borderBottom: "2px solid #e3f2fc",
                             backgroundColor: "white",
                           }}
@@ -1551,7 +1551,7 @@ import {
                                 {form.values.charges.length - 1 === index && (
                                   <ActionIcon
                                     variant="light"
-                                    color="#2563EB"
+                                    color="#105476"
                                     size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -1593,7 +1593,7 @@ import {
                       <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 70 }}>
                         Debit Total
                       </Text>
-                      <Text size="sm" fw={700} c="#2563EB" style={{ fontFamily: "Inter" }}>
+                      <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
                         {totals.debit.toFixed(2)}
                       </Text>
                     </Box>
@@ -1613,7 +1613,7 @@ import {
                       <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 75 }}>
                         Credit Total
                       </Text>
-                      <Text size="sm" fw={700} c="#2563EB" style={{ fontFamily: "Inter" }}>
+                      <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
                         {totals.credit.toFixed(2)}
                       </Text>
                     </Box>
@@ -1636,7 +1636,7 @@ import {
                       <Text
                         size="sm"
                         fw={700}
-                        c={Math.abs(totals.difference) > 0.005 ? "red" : "#2563EB"}
+                        c={Math.abs(totals.difference) > 0.005 ? "red" : "#105476"}
                         style={{ fontFamily: "Inter" }}
                       >
                         {totals.difference.toFixed(2)}
@@ -1659,7 +1659,7 @@ import {
                           fontFamily: "Inter",
                           height: "36px",
                           backgroundColor: "var(--mantine-color-gray-0)",
-                          color: "#2563EB",
+                          color: "#105476",
                           fontWeight: 500,
                         },
                         label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
@@ -1690,7 +1690,7 @@ import {
             <Group justify="space-between" mt="xl" gap="sm">
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 onClick={() => navigate(-1)}
                 styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
               >
@@ -1700,7 +1700,7 @@ import {
                 {!isReadOnly && (
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() => {
                       if (supportingDocuments.length === 0) {
                         setSupportingDocuments([{ name: "", file: null }]);
@@ -1723,7 +1723,7 @@ import {
                 {!isReadOnly && (
                   <Button
                     type="submit"
-                    color="#2563EB"
+                    color="#105476"
                     rightSection={<IconChevronRight size={16} />}
                     loading={isSubmitting}
                     styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
@@ -1940,7 +1940,7 @@ import {
                   {index === supportingDocuments.length - 1 && (
                     <Button
                       variant="light"
-                      color="#2563EB"
+                      color="#105476"
                       onClick={() => {
                         setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
                       }}
@@ -1955,7 +1955,7 @@ import {
             {supportingDocuments.length === 0 && (
               <Button
                 variant="light"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconPlus size={16} />}
                 onClick={() => setSupportingDocuments([{ name: "", file: null }])}
                 fullWidth

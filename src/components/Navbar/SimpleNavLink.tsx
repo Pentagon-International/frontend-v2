@@ -89,7 +89,7 @@ export const SimpleNavLink = ({
     setOpenCollapsible("Accounts", false);
   };
   const iconColor = sectionIconColors[label] || "white";
-  const iconBackground = sectionIconBackground[label] || "#2563EB";
+  const iconBackground = sectionIconBackground[label] || "#105476";
 
   const navContent = (
     <NavLink

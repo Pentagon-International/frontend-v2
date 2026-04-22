@@ -186,9 +186,9 @@ function AirImportBookingMaster() {
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
     const label = statusUpper || "GENERATED";
-    let color: string = "#2563EB";
+    let color: string = "#105476";
     if (label === "BOOKED") color = "green";
-    else if (label === "GENERATED") color = "#2563EB";
+    else if (label === "GENERATED") color = "#105476";
     else if (label === "RECEIVED") color = "blue";
     else if (label === "CANCEL") color = "red";
     else color = "gray";
@@ -928,7 +928,7 @@ function AirImportBookingMaster() {
                       height: "36px",
                       border: "1px solid #D0D1D4",
                       "&:focus": {
-                        border: "1px solid #2563EB",
+                        border: "1px solid #105476",
                       },
                     },
                   }}
@@ -944,9 +944,9 @@ function AirImportBookingMaster() {
                       borderRadius: "4px",
                       backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                       border: showFilters
-                        ? "1px solid #2563EB"
+                        ? "1px solid #105476"
                         : "1px solid #737780",
-                      color: showFilters ? "#2563EB" : "#737780",
+                      color: showFilters ? "#105476" : "#737780",
                     },
                   }}
                 >
@@ -958,14 +958,14 @@ function AirImportBookingMaster() {
                   size="sm"
                   styles={{
                     root: {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       borderRadius: "4px",
                       color: "#FFFFFF",
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
                       "&:hover": {
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       },
                     },
                   }}
@@ -1135,8 +1135,8 @@ function AirImportBookingMaster() {
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
-                      color: "#2563EB",
-                      borderColor: "#2563EB",
+                      color: "#105476",
+                      borderColor: "#105476",
                       "&:hover": {
                         backgroundColor: "#f8f9fa",
                       },
@@ -1152,13 +1152,13 @@ function AirImportBookingMaster() {
                   variant="filled"
                   styles={{
                     root: {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       borderRadius: "4px",
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontstyle: "semibold",
                       "&:hover": {
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       },
                     },
                   }}
@@ -1182,7 +1182,7 @@ function AirImportBookingMaster() {
           {isDataLoading ? (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
                   Loading air import booking...
                 </Text>

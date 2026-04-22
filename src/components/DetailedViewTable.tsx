@@ -406,7 +406,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               <Badge
                 color={
                   key === "outstanding" || key === "local_outstanding"
-                    ? "#2563EB"
+                    ? "#105476"
                     : "#e74d3c"
                 }
                 size="md"
@@ -437,9 +437,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
         const getBadgeColor = () => {
           if (key === "actual_budget") return "#086ea1";
-          if (key === "sales_budget") return "#2563EB";
+          if (key === "sales_budget") return "#105476";
           if (key === "incentive_amount") return "#27ae60";
-          return "#2563EB";
+          return "#105476";
         };
 
         columnDefs.push({
@@ -537,7 +537,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         const getPipelineColor = (key: string) => {
           switch (key) {
             case "potential":
-              return "#2563EB";
+              return "#105476";
             case "pipeline":
               return "#086ea1";
             case "gained":
@@ -561,7 +561,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             case "CLOSED":
               return "#16a34a"; // Dark green for closed
             default:
-              return "#2563EB";
+              return "#105476";
           }
         };
 
@@ -915,7 +915,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               <Tooltip label="Send Email" position="top" withArrow>
                 <ActionIcon
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   size="md"
                   onClick={() => {
                     if (onColumnClick) {
@@ -1026,7 +1026,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                   size="sm"
                   style={{
                     cursor: "pointer",
-                    color: "#2563EB",
+                    color: "#105476",
                     textDecoration: "underline",
                   }}
                   onClick={() => {
@@ -1309,7 +1309,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 onClick={onBack}
                 variant="outline"
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Back
               </Button>
@@ -1320,7 +1320,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 onClick={onClose}
                 variant="outline"
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Back to Dashboard
               </Button>
@@ -1328,7 +1328,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           </Group>
         </Group>
         <Center py="xl">
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
         </Center>
       </Box>
     );
@@ -1354,7 +1354,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 onClick={onBack}
                 variant="outline"
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Back
               </Button>
@@ -1365,7 +1365,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 onClick={onClose}
                 variant="outline"
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Back to Dashboard
               </Button>
@@ -1401,7 +1401,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               onClick={onBack}
               variant="outline"
               size="xs"
-              color="#2563EB"
+              color="#105476"
             >
               Back
             </Button>
@@ -1412,7 +1412,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               onClick={onClose}
               variant="outline"
               size="xs"
-              color="#2563EB"
+              color="#105476"
             >
               Back to Dashboard
             </Button>

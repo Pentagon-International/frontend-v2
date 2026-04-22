@@ -380,7 +380,7 @@ function PaymentRequestApproval() {
         header: "Request No",
         size: 150,
         Cell: ({ cell }) => (
-          <Text size="sm" fw={600} c="#2563EB" style={{ fontFamily: "Inter" }}>
+          <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter" }}>
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -506,7 +506,7 @@ function PaymentRequestApproval() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEdit size={16} style={{ color: "#2563EB" }} />
+                      <IconEdit size={16} style={{ color: "#105476" }} />
                       <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
                     </Group>
                   </UnstyledButton>
@@ -522,7 +522,7 @@ function PaymentRequestApproval() {
                   }}
                 >
                   <Group gap="sm">
-                    <IconEye size={16} style={{ color: "#2563EB" }} />
+                    <IconEye size={16} style={{ color: "#105476" }} />
                     <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>View</Text>
                   </Group>
                 </UnstyledButton>
@@ -540,7 +540,7 @@ function PaymentRequestApproval() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconFileInvoice size={16} style={{ color: "#2563EB" }} />
+                      <IconFileInvoice size={16} style={{ color: "#105476" }} />
                       <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
                         Create Supplier Invoice
                       </Text>
@@ -696,7 +696,7 @@ function PaymentRequestApproval() {
                 input: {
                   borderRadius: "4px", fontSize: "13px", fontFamily: "Inter",
                   color: "#334155", height: "36px", border: "1px solid #D0D1D4",
-                  "&:focus": { border: "1px solid #2563EB" },
+                  "&:focus": { border: "1px solid #105476" },
                 },
               }}
             />
@@ -710,11 +710,11 @@ function PaymentRequestApproval() {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                   border: showFilters
-                    ? "1px solid #2563EB"
+                    ? "1px solid #105476"
                     : "1px solid #737780",
-                  color: showFilters ? "#2563EB" : "#737780",
+                  color: showFilters ? "#105476" : "#737780",
                   "&:active": {
-                    border: "1px solid #2563EB",
+                    border: "1px solid #105476",
                     color: "#FFFFFF",
                   },
                 },
@@ -729,7 +729,7 @@ function PaymentRequestApproval() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
@@ -921,7 +921,7 @@ function PaymentRequestApproval() {
               leftSection={<IconFilter size={16} />}
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -943,7 +943,7 @@ function PaymentRequestApproval() {
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
               Loading payment requests...
             </Text>

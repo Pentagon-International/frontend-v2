@@ -597,14 +597,14 @@ function CustomerRelationshipMappingCreate() {
   return (
     <Box component="form" onSubmit={form.onSubmit(handleSubmit)}>
       <Group justify="space-between" mb="md">
-        <Text size="lg" fw={600} c="#2563EB">
+        <Text size="lg" fw={600} c="#105476">
           {isEditMode
             ? "Edit Customer Relationship Mapping"
             : "Create Customer Relationship Mapping"}
         </Text>
         <Button
           variant="outline"
-          color="#2563EB"
+          color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
             if (fromCustomerMaster && customerFormDataFromState) {
@@ -1047,7 +1047,7 @@ function CustomerRelationshipMappingCreate() {
               <Flex justify="end" align="center" mt="md">
                 <Button
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconPlus size={16} />}
                   onClick={() =>
                     form.insertListItem("customer_relationship_details", {
@@ -1066,7 +1066,7 @@ function CustomerRelationshipMappingCreate() {
               <Group justify="flex-end" mt="xl">
                 <Button
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   onClick={() => {
                     if (fromCustomerMaster && customerFormDataFromState) {
                       // Determine if we're in edit mode based on customer_id existence
@@ -1101,7 +1101,7 @@ function CustomerRelationshipMappingCreate() {
                 </Button>
                 <Button
                   type="submit"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconCheck size={16} />}
                   loading={isSubmitting}
                   disabled={isSubmitting}

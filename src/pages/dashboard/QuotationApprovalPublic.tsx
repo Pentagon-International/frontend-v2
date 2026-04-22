@@ -171,7 +171,7 @@ function QuotationApprovalPublic() {
     return (
       <Center h="50vh">
         <Stack align="center">
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
           <Text c="dimmed">Loading quotation details...</Text>
         </Stack>
       </Center>
@@ -227,7 +227,7 @@ function QuotationApprovalPublic() {
           {/* Header */}
           <Group justify="space-between" align="center">
             <Stack gap={0}>
-              <Text size="xl" fw={700} c="#2563EB">
+              <Text size="xl" fw={700} c="#105476">
                 Quotation Approval Request
               </Text>
               <Text size="sm" c="dimmed">
@@ -248,7 +248,7 @@ function QuotationApprovalPublic() {
                     ? "green"
                     : quotations[0].approval_status === "LOST"
                       ? "red"
-                      : "#2563EB"
+                      : "#105476"
                 }
                 size="lg"
               >
@@ -265,7 +265,7 @@ function QuotationApprovalPublic() {
               <Card key={index} shadow="sm" padding="md" radius="md" withBorder>
                 <Stack gap="sm">
                   <Group justify="space-between" align="center">
-                    <Text size="lg" fw={600} c="#2563EB">
+                    <Text size="lg" fw={600} c="#105476">
                       Service {index + 1}
                     </Text>
                     {/* <Badge color="blue" variant="light">
@@ -315,7 +315,7 @@ function QuotationApprovalPublic() {
           {/* Approval Section */}
           {!isApproved && !isRejected ? (
             <Stack gap="sm">
-              <Text size="lg" fw={600} c="#2563EB" ta="center">
+              <Text size="lg" fw={600} c="#105476" ta="center">
                 Please review the quotation and provide your approval
               </Text>
 
@@ -342,7 +342,7 @@ function QuotationApprovalPublic() {
                 gap="sm"
                 style={{ maxWidth: "88.5%", margin: "0 auto", width: "100%" }}
               >
-                <Text size="md" fw={600} c="#2563EB">
+                <Text size="md" fw={600} c="#105476">
                   Remarks/Comments{" "}
                   <span style={{ color: "red" }}>(Required for rejection)</span>
                 </Text>

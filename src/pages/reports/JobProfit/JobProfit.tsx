@@ -50,7 +50,7 @@ export default function JobProfit() {
   return (
     <Box>
       <Group justify="space-between" mb="md">
-        <Title order={4} style={{ color: "#2563EB" }}>
+        <Title order={4} style={{ color: "#105476" }}>
           Job Profit
         </Title>
       </Group>

@@ -532,7 +532,7 @@ function LCLExportGenerationMaster() {
       {showMasterTable && (
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-            <Text size="md" fw={600} c="#2563EB">
+            <Text size="md" fw={600} c="#105476">
               LCL Export Generation Lists
             </Text>
 
@@ -541,7 +541,7 @@ function LCLExportGenerationMaster() {
                 variant={showFilters ? "filled" : "outline"}
                 leftSection={<IconFilter size={16} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
                 onClick={() => setShowFilters(!showFilters)}
               >
                 Filters
@@ -550,7 +550,7 @@ function LCLExportGenerationMaster() {
                 variant="filled"
                 leftSection={<IconPlus size={14} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
                 onClick={() => navigate("./create")}
               >
                 Create New
@@ -569,8 +569,8 @@ function LCLExportGenerationMaster() {
             >
               <Group justify="space-between" align="center">
                 <Group align="center" gap="xs">
-                  <IconFilter size={16} color="#2563EB" />
-                  <Text size="sm" fw={500} c="#2563EB">
+                  <IconFilter size={16} color="#105476" />
+                  <Text size="sm" fw={500} c="#105476">
                     Filters
                   </Text>
                 </Group>
@@ -666,7 +666,7 @@ function LCLExportGenerationMaster() {
                 <Button
                   size="xs"
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconFilterOff size={14} />}
                   onClick={clearAllFilters}
                 >
@@ -675,7 +675,7 @@ function LCLExportGenerationMaster() {
                 <Button
                   size="xs"
                   variant="filled"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={
                     isDataLoading ? (
                       <Loader size={14} />
@@ -696,7 +696,7 @@ function LCLExportGenerationMaster() {
           {isDataLoading ? (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Loading LCL export generation...</Text>
               </Stack>
             </Center>

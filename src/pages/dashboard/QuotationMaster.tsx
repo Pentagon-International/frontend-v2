@@ -2532,7 +2532,7 @@ console.log("currentQuotation: ", currentQuotation);
                     key={index}
                     style={{ cursor: "pointer" }}
                     onClick={() => fetchRevision(quote.quotation_service_id)}
-                    color="#2563EB"
+                    color="#105476"
                     size="sm"
                   >
                     {quote.revision}
@@ -2644,7 +2644,7 @@ console.log("currentQuotation: ", currentQuotation);
                     }}
                   >
                     <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text size="sm">Preview</Text>
                     </Group>
                   </UnstyledButton>
@@ -2663,7 +2663,7 @@ console.log("currentQuotation: ", currentQuotation);
                         <Group gap={"sm"}>
                           <PrimaryActionIcon
                             size={16}
-                            style={{ color: "#2563EB" }}
+                            style={{ color: "#105476" }}
                           />
                           <Text size="sm">{primaryActionLabel}</Text>
                         </Group>
@@ -2684,7 +2684,7 @@ console.log("currentQuotation: ", currentQuotation);
                         <Group gap={"sm"}>
                           <IconBook
                             size={16}
-                            style={{ color: "#2563EB" }}
+                            style={{ color: "#105476" }}
                           />
                           <Text size="sm">Create Booking</Text>
                         </Group>
@@ -2935,7 +2935,7 @@ console.log("currentQuotation: ", currentQuotation);
                     height: "36px",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
-                      border: "1px solid #2563EB",
+                      border: "1px solid #105476",
                     },
                   },
                 }}
@@ -2951,9 +2951,9 @@ console.log("currentQuotation: ", currentQuotation);
                     borderRadius: "4px",
                     backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                     border: showFilters
-                      ? "1px solid #2563EB"
+                      ? "1px solid #105476"
                       : "1px solid #737780",
-                    color: showFilters ? "#2563EB" : "#737780",
+                    color: showFilters ? "#105476" : "#737780",
                   },
                 }}
               >
@@ -3337,7 +3337,7 @@ console.log("currentQuotation: ", currentQuotation);
               <Button
                 size="sm"
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconFilterOff size={16} />}
                 onClick={clearAllFilters}
                 styles={{
@@ -3346,8 +3346,8 @@ console.log("currentQuotation: ", currentQuotation);
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
-                    borderColor: "#2563EB",
-                    color: "#2563EB",
+                    borderColor: "#105476",
+                    color: "#105476",
                     "&:hover": {
                       backgroundColor: "#E0F5FF",
                     },
@@ -3359,7 +3359,7 @@ console.log("currentQuotation: ", currentQuotation);
               <Button
                 size="sm"
                 variant="filled"
-                color="#2563EB"
+                color="#105476"
                 leftSection={
                   isLoading ? <Loader size={16} /> : <IconFilter size={16} />
                 }
@@ -3368,13 +3368,13 @@ console.log("currentQuotation: ", currentQuotation);
                 disabled={isLoading}
                 styles={{
                   root: {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
                     "&:hover": {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                     },
                   },
                 }}
@@ -3388,7 +3388,7 @@ console.log("currentQuotation: ", currentQuotation);
         {tableLoading || isFetching ? (
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
+              <Loader size="lg" color="#105476" />
               <Text c="dimmed">
                 {isInitialLoading ? "Fetching data..." : "Loading data..."}
               </Text>
@@ -3424,7 +3424,7 @@ console.log("currentQuotation: ", currentQuotation);
                   }}
                 >
                   <Stack align="center" gap="md">
-                    <Loader size="lg" color="#2563EB" />
+                    <Loader size="lg" color="#105476" />
                     <Text c="dimmed" fw={500}>
                       Approving quotation...
                     </Text>
@@ -3462,7 +3462,7 @@ console.log("currentQuotation: ", currentQuotation);
                   }}
                   variant="outline"
                   size="sm"
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Back to Dashboard
                 </Button>
@@ -3488,7 +3488,7 @@ console.log("currentQuotation: ", currentQuotation);
           opened={previewOpen}
           onClose={handleClosePreview}
           title={
-            <Text size="lg" fw={600} c="#2563EB">
+            <Text size="lg" fw={600} c="#105476">
               Quotation Preview - {currentQuotation?.enquiry_id}
             </Text>
           }
@@ -3560,14 +3560,14 @@ console.log("currentQuotation: ", currentQuotation);
                         <Button
                           onClick={handleDownloadPDF}
                           leftSection={<IconDownload size={16} />}
-                          color="#2563EB"
+                          color="#105476"
                         >
                           Download PDF
                         </Button>
                         <Button
                           onClick={handleSendEmailClick}
                           leftSection={<IconSend size={16} />}
-                          color="#2563EB"
+                          color="#105476"
                           variant="outline"
                         >
                           Send Email
@@ -3618,7 +3618,7 @@ console.log("currentQuotation: ", currentQuotation);
             ) : (
               <Center h="100%">
                 <Stack align="center">
-                  <Loader size="lg" color="#2563EB" />
+                  <Loader size="lg" color="#105476" />
                   <Text c="dimmed">Generating PDF preview...</Text>
                 </Stack>
               </Center>
@@ -3631,7 +3631,7 @@ console.log("currentQuotation: ", currentQuotation);
           opened={sendEmailOpened}
           onClose={closeSendEmail}
           title={
-            <Text size="lg" fw={600} c="#2563EB">
+            <Text size="lg" fw={600} c="#105476">
               Send Email - {currentQuotation?.enquiry_id}
             </Text>
           }
@@ -3721,7 +3721,7 @@ console.log("currentQuotation: ", currentQuotation);
                 onClick={handleSendEmail}
                 loading={sendingEmail}
                 leftSection={<IconSend size={16} />}
-                color="#2563EB"
+                color="#105476"
               >
                 Send
               </Button>

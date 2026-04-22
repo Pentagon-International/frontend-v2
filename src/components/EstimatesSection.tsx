@@ -218,7 +218,7 @@ export function EstimatesSection({
     <Box>
       <Grid
         mb="xs"
-        style={{ fontWeight: 600, color: "#2563EB" }}
+        style={{ fontWeight: 600, color: "#105476" }}
         gutter="sm"
       >
         <Grid.Col span={1.75}>
@@ -450,7 +450,7 @@ export function EstimatesSection({
                 {index === form.values.estimates.length - 1 && (
                   <ActionIcon
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() =>
                       form.insertListItem("estimates", createEmptyEstimateRow())
                     }

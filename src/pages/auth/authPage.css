@@ -30,7 +30,7 @@
   left: 10px;
   font-size: 14px;
   font-weight: 600;
-  color: #2563EB;
+  color: #105476;
   border-radius: 5px;
 }
 
@@ -44,7 +44,7 @@
 
 /* Simulated fieldset border focus effect */
 .mantine-floating-wrapper:has(input:focus) .mantine-Input-input {
-  border: 2px solid #2563EB;
+  border: 2px solid #105476;
 }
 
 /* Show the asterisk with red color when input is focused */

@@ -182,7 +182,7 @@ export default function PaymentReversalMaster() {
               ? "green"
               : statusUpper === "UNPOSTED"
                 ? "gray"
-                : "#2563EB";
+                : "#105476";
           return (
             <Badge
               size="sm"
@@ -224,7 +224,7 @@ export default function PaymentReversalMaster() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text
                         size="sm"
                         style={{ fontFamily: "Inter, sans-serif" }}
@@ -249,7 +249,7 @@ export default function PaymentReversalMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#2563EB" }} />
+                        <IconEdit size={16} style={{ color: "#105476" }} />
                         <Text
                           size="sm"
                           style={{ fontFamily: "Inter, sans-serif" }}
@@ -401,7 +401,7 @@ export default function PaymentReversalMaster() {
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed">
               Loading payment reversal data...
             </Text>

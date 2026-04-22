@@ -132,7 +132,7 @@ const headerGridStyles = {
   zIndex: 100,
   backgroundColor: "white",
   fontWeight: 600,
-  color: "#2563EB",
+  color: "#105476",
 };
 
 const readOnlyInputStyles = {

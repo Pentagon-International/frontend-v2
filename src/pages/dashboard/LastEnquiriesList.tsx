@@ -206,7 +206,7 @@ function LastEnquiriesList({
   if (isLoading) {
     return (
       <Center h="100%">
-        <Loader color="#2563EB" size="lg" />
+        <Loader color="#105476" size="lg" />
       </Center>
     );
   }

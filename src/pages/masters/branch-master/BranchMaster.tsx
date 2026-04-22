@@ -240,7 +240,7 @@ export default function BranchMaster() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEye size={16} style={{ color: "#2563EB" }} />
+                        <IconEye size={16} style={{ color: "#105476" }} />
                         <Text size="sm">View</Text>
                       </Group>
                     </UnstyledButton>
@@ -255,7 +255,7 @@ export default function BranchMaster() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#2563EB" }} />
+                        <IconEdit size={16} style={{ color: "#105476" }} />
                         <Text size="sm">Edit</Text>
                       </Group>
                     </UnstyledButton>
@@ -284,7 +284,7 @@ export default function BranchMaster() {
                         Do you want to delete this?
                       </Text>
                       <Group mt={10} gap={"lg"}>
-                        <Button variant="outline" color="#2563EB" size="xs">
+                        <Button variant="outline" color="#105476" size="xs">
                           Not now
                         </Button>
                         <Button
@@ -373,7 +373,7 @@ export default function BranchMaster() {
           Branch Master List
         </Text>
         <Button
-          color="#2563EB"
+          color="#105476"
           leftSection={<IconPlus size={16} />}
           size="xs"
           onClick={() => navigate("/master/branch-master-new")}
@@ -385,7 +385,7 @@ export default function BranchMaster() {
       {branches.length === 0 ? (
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed">Loading branches...</Text>
           </Stack>
         </Center>

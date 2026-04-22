@@ -820,7 +820,7 @@ function RFQMaster() {
     let color: string = "cyan";
     if (label === "GAINED") color = "green";
     else if (label === "LOST" || label === "CANCEL") color = "red";
-    else if (label === "ACTIVE") color = "#2563EB";
+    else if (label === "ACTIVE") color = "#105476";
     return { label, color } as const;
   };
 
@@ -2513,7 +2513,7 @@ function RFQMaster() {
                     )}
                   >
                     <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text size="sm">Create Quotation</Text>
                     </Group>
                   </UnstyledButton>
@@ -2590,7 +2590,7 @@ function RFQMaster() {
                         }}
                       >
                         <Group gap={"sm"}>
-                          <IconEdit size={16} style={{ color: "#2563EB" }} />
+                          <IconEdit size={16} style={{ color: "#105476" }} />
                           <Text size="sm">Edit Quotation</Text>
                         </Group>
                       </UnstyledButton>
@@ -2634,7 +2634,7 @@ function RFQMaster() {
                     }}
                   >
                     <Group gap={"sm"}>
-                      <IconTag size={16} style={{ color: "#2563EB" }} />
+                      <IconTag size={16} style={{ color: "#105476" }} />
                       <Text size="sm">Get Rate</Text>
                     </Group>
                   </UnstyledButton>
@@ -2681,7 +2681,7 @@ function RFQMaster() {
                           }}
                         >
                           <Group gap={"sm"}>
-                            <IconEdit size={16} style={{ color: "#2563EB" }} />
+                            <IconEdit size={16} style={{ color: "#105476" }} />
                               <Text size="sm">{`Edit ${moduleLabel}`}</Text>
                           </Group>
                         </UnstyledButton>
@@ -2697,7 +2697,7 @@ function RFQMaster() {
                     }}
                   >
                     <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text size="sm">Preview</Text>
                     </Group>
                   </UnstyledButton>
@@ -3005,7 +3005,7 @@ function RFQMaster() {
               <Text
                 size="sm"
                 style={{
-                  color: "#2563EB",
+                  color: "#105476",
                   fontFamily: "Inter",
                   fontStyle: "regular",
                   marginRight: "4px",
@@ -3019,7 +3019,7 @@ function RFQMaster() {
               size="sm"
               c="dimmed"
               style={{
-                color: "#2563EB",
+                color: "#105476",
                 fontFamily: "Inter",
                 fontStyle: "regular",
                 marginRight: "4px",
@@ -3028,7 +3028,7 @@ function RFQMaster() {
               <Text
                 size="sm"
                 style={{
-                  color: "#2563EB",
+                  color: "#105476",
                   fontFamily: "Inter",
                   fontStyle: "regular",
                   marginRight: "4px",
@@ -3069,7 +3069,7 @@ function RFQMaster() {
                   fontstyle: "semibold",
                   color: "#1E293B",
                   "&[data-active]": {
-                    color: "#2563EB",
+                    color: "#105476",
                     borderBottom: "0px",
                     backgroundColor: "#E0F5FF",
                   },
@@ -3082,7 +3082,7 @@ function RFQMaster() {
                   "&[data-active]:hover": {
                     backgroundColor: "#E0F5FF",
                     borderBottom: "0px",
-                    color: "#2563EB",
+                    color: "#105476",
                   },
                 },
                 list: {
@@ -3194,7 +3194,7 @@ function RFQMaster() {
                     height: "36px",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
-                      border: "1px solid #2563EB",
+                      border: "1px solid #105476",
                     },
                   },
                 }}
@@ -3210,19 +3210,19 @@ function RFQMaster() {
                     borderRadius: "4px",
                     backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                     border: showFilters
-                      ? "1px solid #2563EB"
+                      ? "1px solid #105476"
                       : "1px solid #737780",
-                    color: showFilters ? "#2563EB" : "#737780",
+                    color: showFilters ? "#105476" : "#737780",
                     // "&:hover": {
-                    //   backgroundColor: "#2563EB",
+                    //   backgroundColor: "#105476",
                     //   color: "#FFFFFF",
                     // },
                     // "&:focus": {
-                    //   border: "1px solid #2563EB",
+                    //   border: "1px solid #105476",
                     //   color: "#FFFFFF",
                     // },
                     "&:active": {
-                      border: "1px solid #2563EB",
+                      border: "1px solid #105476",
                       color: "#FFFFFF",
                     },
                   },
@@ -3255,14 +3255,14 @@ function RFQMaster() {
                 size="sm"
                 styles={{
                   root: {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                     borderRadius: "4px",
                     color: "#FFFFFF",
                     fontSize: "14px",
                     fontFamily: "Inter",
                     fontstyle: "semibold",
                     "&:hover": {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                     },
                   },
                 }}
@@ -3678,7 +3678,7 @@ function RFQMaster() {
                   disabled={tableLoading}
                   styles={{
                     root: {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       borderRadius: "4px",
                       fontSize: "14px",
                       fontFamily: "Inter",
@@ -3713,7 +3713,7 @@ function RFQMaster() {
             }}
           >
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
+              <Loader size="lg" color="#105476" />
               <Text c="dimmed">
                 {isRefreshingData
                   ? `Updating ${moduleLabel.toLowerCase()} list...`
@@ -3726,7 +3726,7 @@ function RFQMaster() {
             {isPreviewLoading ? (
               <Center py="xl">
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#2563EB" />
+                  <Loader size="lg" color="#105476" />
                   <Text c="dimmed">
                     {isRefreshingData
                       ? "Updating preview data..."
@@ -3769,7 +3769,7 @@ function RFQMaster() {
                       }}
                       variant="outline"
                       size="sm"
-                      color="#2563EB"
+                      color="#105476"
                     >
                       Back to Dashboard
                     </Button>
@@ -3792,7 +3792,7 @@ function RFQMaster() {
             {tableLoading ? (
               <Center py="xl">
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#2563EB" />
+                  <Loader size="lg" color="#105476" />
                   <Text c="dimmed">
                     {isRefreshingData ? "Fetching data..." : "Loading data..."}
                   </Text>
@@ -3831,7 +3831,7 @@ function RFQMaster() {
                   }}
                   variant="outline"
                   size="sm"
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Back to Dashboard
                 </Button>
@@ -3855,7 +3855,7 @@ function RFQMaster() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             {moduleLabel} Preview - {currentEnquiry?.enquiry_id}
           </Text>
         }
@@ -3904,7 +3904,7 @@ function RFQMaster() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -3913,7 +3913,7 @@ function RFQMaster() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>

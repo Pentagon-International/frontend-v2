@@ -131,11 +131,11 @@ function ContainerTypeNew() {
         <Flex gap="sm" justify="space-between" align="center" w="100%">
           <Button
             variant="outline"
-            c="#2563EB"
+            c="#105476"
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
             leftSection={<IconArrowLeft size={16} />}
@@ -146,11 +146,11 @@ function ContainerTypeNew() {
           <Flex gap="md">
             <Button
               variant="outline"
-              c="#2563EB"
+              c="#105476"
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
               onClick={() => navigate("/master/container-type")}
@@ -159,7 +159,7 @@ function ContainerTypeNew() {
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Submit

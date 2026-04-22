@@ -3909,7 +3909,7 @@ function QuotationCreate({
         style={{ minHeight: "80vh" }}
       >
         <Stack align="center" gap="xs">
-          <Loader size="xl" color="#2563EB" />
+          <Loader size="xl" color="#105476" />
           <Text size="xl" color="dimmed">
             {isLoadingQuotationData
               ? "Loading quotation details..."
@@ -4008,12 +4008,12 @@ function QuotationCreate({
                   <Text
                     size="md"
                     fw={600}
-                    c="#2563EB"
+                    c="#105476"
                     style={{
                       fontFamily: "Inter",
                       fontStyle: "medium",
                       fontSize: "16px",
-                      color: "#2563EB",
+                      color: "#105476",
                       textAlign: "center",
                     }}
                   >
@@ -4075,13 +4075,13 @@ function QuotationCreate({
                       <Text
                         size="sm"
                         fw={400}
-                        c="#2563EB"
+                        c="#105476"
                         style={{
                           lineHeight: 1.3,
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                       >
                         Customer Details
@@ -4184,7 +4184,7 @@ function QuotationCreate({
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                       >
                         Service & Cargo Details
@@ -4248,20 +4248,20 @@ function QuotationCreate({
                           height: 40,
                           borderRadius: "50%",
                           backgroundColor: "#fff",
-                          border: "2px solid #2563EB",
+                          border: "2px solid #105476",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: "16px",
                           fontWeight: 600,
-                          color: "#2563EB",
+                          color: "#105476",
                           transition: "all 0.2s",
                           flexShrink: 0,
                         }}
                       >
                         <IconFileText
                           size={20}
-                          color="#2563EB"
+                          color="#105476"
                           fill="#E6F2F8"
                         />
                       </Box>
@@ -4274,7 +4274,7 @@ function QuotationCreate({
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                       >
                         Quotation
@@ -4334,7 +4334,7 @@ function QuotationCreate({
                       }}
                     >
                       <Stack align="center" gap="md">
-                        <Loader size="xl" color="#2563EB" />
+                        <Loader size="xl" color="#105476" />
                         <Text
                           size="lg"
                           color="white"
@@ -4571,7 +4571,7 @@ function QuotationCreate({
                             <Menu.Target>
                               <ActionIcon
                                 variant="subtle"
-                                color="#2563EB"
+                                color="#105476"
                                 size="lg"
                                 styles={{
                                   root: {
@@ -4610,7 +4610,7 @@ function QuotationCreate({
                                       justifyContent: "center",
                                     }}
                                   >
-                                    <IconNotes size={16} color="#2563EB" />
+                                    <IconNotes size={16} color="#105476" />
                                   </Box>
                                 }
                                 styles={{
@@ -4648,7 +4648,7 @@ function QuotationCreate({
                                       justifyContent: "center",
                                     }}
                                   >
-                                    <IconChartBar size={16} color="#2563EB" />
+                                    <IconChartBar size={16} color="#105476" />
                                   </Box>
                                 }
                                 disabled={selectedService?.service === "LCL"}
@@ -4693,7 +4693,7 @@ function QuotationCreate({
                                         justifyContent: "center",
                                       }}
                                     >
-                                      <IconDatabase size={16} color="#2563EB" />
+                                      <IconDatabase size={16} color="#105476" />
                                     </Box>
                                   }
                                   disabled={
@@ -4740,7 +4740,7 @@ function QuotationCreate({
                                             justifyContent: "center",
                                           }}
                                         >
-                                          <IconBook size={16} color="#2563EB" />
+                                          <IconBook size={16} color="#105476" />
                                         </Box>
                                       }
                                       styles={{
@@ -4783,7 +4783,7 @@ function QuotationCreate({
                                       >
                                         <IconHistory
                                           size={16}
-                                          color="#2563EB"
+                                          color="#105476"
                                         />
                                       </Box>
                                     }
@@ -4831,7 +4831,7 @@ function QuotationCreate({
                         // mb="xs"
                         style={{
                           fontWeight: 600,
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                         gutter="sm"
                       >
@@ -5421,7 +5421,7 @@ function QuotationCreate({
                                 <Button
                                   radius={"sm"}
                                   variant="light"
-                                  color="#2563EB"
+                                  color="#105476"
                                   onClick={() =>
                                     dynamicForm.insertListItem("charges", {
                                       charge_name: "",
@@ -5466,7 +5466,7 @@ function QuotationCreate({
                       // justify="flex-end"
                       style={{
                         fontWeight: 600,
-                        color: "#2563EB",
+                        color: "#105476",
                         // borderTop: "1px solid #ccc",
                         paddingTop: "0.5rem",
                       }}
@@ -5727,7 +5727,7 @@ function QuotationCreate({
                   }}
                 >
                   <Stack align="center" gap="md">
-                    <Loader size="xl" color="#2563EB" />
+                    <Loader size="xl" color="#105476" />
                     <Text
                       size="lg"
                       color="white"
@@ -5938,7 +5938,7 @@ function QuotationCreate({
                         <Menu.Target>
                           <ActionIcon
                             variant="subtle"
-                            color="#2563EB"
+                            color="#105476"
                             size="lg"
                             styles={{
                               root: {
@@ -5977,7 +5977,7 @@ function QuotationCreate({
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconNotes size={16} color="#2563EB" />
+                                <IconNotes size={16} color="#105476" />
                               </Box>
                             }
                             styles={{
@@ -6015,7 +6015,7 @@ function QuotationCreate({
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconChartBar size={16} color="#2563EB" />
+                                <IconChartBar size={16} color="#105476" />
                               </Box>
                             }
                             disabled={selectedService?.service === "LCL"}
@@ -6059,7 +6059,7 @@ function QuotationCreate({
                                   justifyContent: "center",
                                 }}
                               >
-                                <IconDatabase size={16} color="#2563EB" />
+                                <IconDatabase size={16} color="#105476" />
                               </Box>
                             }
                             disabled={
@@ -6105,7 +6105,7 @@ function QuotationCreate({
                                         justifyContent: "center",
                                       }}
                                     >
-                                      <IconBook size={16} color="#2563EB" />
+                                      <IconBook size={16} color="#105476" />
                                     </Box>
                                   }
                                   styles={{
@@ -6146,7 +6146,7 @@ function QuotationCreate({
                                       justifyContent: "center",
                                     }}
                                   >
-                                    <IconHistory size={16} color="#2563EB" />
+                                    <IconHistory size={16} color="#105476" />
                                   </Box>
                                 }
                                 styles={{
@@ -6190,7 +6190,7 @@ function QuotationCreate({
                     <Grid
                       style={{
                         fontWeight: 600,
-                        color: "#2563EB",
+                        color: "#105476",
                       }}
                       gutter="sm"
                     >
@@ -6656,7 +6656,7 @@ function QuotationCreate({
                             <Button
                               radius={"sm"}
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               onClick={() =>
                                 dynamicForm.insertListItem("charges", {
                                   charge_name: "",
@@ -6696,7 +6696,7 @@ function QuotationCreate({
                   <Grid
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                       paddingTop: "0.5rem",
                     }}
                   >
@@ -6951,7 +6951,7 @@ function QuotationCreate({
         opened={notesConditionsModalOpened}
         onClose={() => setNotesConditionsModalOpened(false)}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             Notes & Conditions
           </Text>
         }
@@ -6963,14 +6963,14 @@ function QuotationCreate({
         }}
         styles={{
           content: {
-            border: "1px solid #2563EB",
+            border: "1px solid #105476",
             borderRadius: 12,
           },
         }}
       >
         {isLoadingNotesConditions ? (
           <Center py="xl">
-            <Loader size="md" color="#2563EB" />
+            <Loader size="md" color="#105476" />
           </Center>
         ) : (
           <Stack gap="lg">
@@ -7005,7 +7005,7 @@ function QuotationCreate({
                         : "none",
                     }}
                   >
-                    <Text fw={600} size="md" c="#2563EB">
+                    <Text fw={600} size="md" c="#105476">
                       Notes
                     </Text>
                     <Group gap="md">
@@ -7021,7 +7021,7 @@ function QuotationCreate({
                       <Button
                         size="xs"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         onClick={handleAddNote}
                         leftSection={<IconPlus size={14} />}
                         style={{ zIndex: 21 }}
@@ -7080,7 +7080,7 @@ function QuotationCreate({
                             />
                             <Text
                               size="lg"
-                              c="#2563EB"
+                              c="#105476"
                               style={{
                                 position: "absolute",
                                 left: 8,
@@ -7119,7 +7119,7 @@ function QuotationCreate({
                         <Button
                           size="xs"
                           radius="xl"
-                          color="#2563EB"
+                          color="#105476"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -7168,7 +7168,7 @@ function QuotationCreate({
                         : "none",
                     }}
                   >
-                    <Text fw={600} size="md" c="#2563EB">
+                    <Text fw={600} size="md" c="#105476">
                       Conditions
                     </Text>
                     <Group gap="md">
@@ -7184,7 +7184,7 @@ function QuotationCreate({
                       <Button
                         size="xs"
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         onClick={handleAddCondition}
                         leftSection={<IconPlus size={14} />}
                         style={{ zIndex: 21 }}
@@ -7243,7 +7243,7 @@ function QuotationCreate({
                             />
                             <Text
                               size="lg"
-                              c="#2563EB"
+                              c="#105476"
                               style={{
                                 position: "absolute",
                                 left: 8,
@@ -7282,7 +7282,7 @@ function QuotationCreate({
                         <Button
                           size="xs"
                           radius="xl"
-                          color="#2563EB"
+                          color="#105476"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -7322,7 +7322,7 @@ function QuotationCreate({
                 Close
               </Button>
               <Button
-                style={{ backgroundColor: "#2563EB", color: "white" }}
+                style={{ backgroundColor: "#105476", color: "white" }}
                 onClick={handleUpdateNotesConditions}
               >
                 Update
@@ -7337,7 +7337,7 @@ function QuotationCreate({
         opened={unfilledServicesModalOpened}
         onClose={() => setUnfilledServicesModalOpened(false)}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             Unfilled Services Detected
           </Text>
         }
@@ -7348,7 +7348,7 @@ function QuotationCreate({
         }}
         styles={{
           content: {
-            border: "1px solid #2563EB",
+            border: "1px solid #105476",
             borderRadius: 12,
             padding: "20px",
           },
@@ -7372,13 +7372,13 @@ function QuotationCreate({
             </Button>
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={handleSubmitWithIncompleteData}
             >
               Submit Current Data
             </Button>
             <Button
-              style={{ backgroundColor: "#2563EB", color: "white" }}
+              style={{ backgroundColor: "#105476", color: "white" }}
               onClick={handleProceedToUnfilledService}
             >
               Yes, Proceed
@@ -7392,7 +7392,7 @@ function QuotationCreate({
         opened={carrierModalOpened}
         onClose={closeCarrierModal}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             Carriers and Rates
           </Text>
         }
@@ -7409,7 +7409,7 @@ function QuotationCreate({
         {carrierComparisonData && (
           <>
             {/* Main Carrier Header */}
-            <Text size="lg" fw={600} c="#2563EB" mt="md" mb="sm">
+            <Text size="lg" fw={600} c="#105476" mt="md" mb="sm">
               Main Carrier
             </Text>
             {carrierComparisonData.main_carrier &&
@@ -7427,7 +7427,7 @@ function QuotationCreate({
                             backgroundColor: "white",
                             borderRadius: "8px",
                             border: isSelected
-                              ? "2px solid #2563EB"
+                              ? "2px solid #105476"
                               : "1px solid #e9ecef",
                             cursor: "pointer",
                             transition: "all 0.2s ease",
@@ -7447,7 +7447,7 @@ function QuotationCreate({
                                 "translateY(-2px)";
                               e.currentTarget.style.boxShadow =
                                 "0 4px 12px rgba(16, 84, 118, 0.15)";
-                              e.currentTarget.style.borderColor = "#2563EB";
+                              e.currentTarget.style.borderColor = "#105476";
                             }
                           }}
                           onMouseLeave={(e) => {
@@ -7467,7 +7467,7 @@ function QuotationCreate({
                             <Text
                               size="xs"
                               fw={500}
-                              c={"#2563EB"}
+                              c={"#105476"}
                               ta="center"
                               style={{ lineHeight: "1" }}
                               lineClamp={2}
@@ -7476,7 +7476,7 @@ function QuotationCreate({
                             </Text>
                             <Text
                               size="xs"
-                              c={isSelected ? "#2563EB" : "#adb5bd"}
+                              c={isSelected ? "#105476" : "#adb5bd"}
                               ta="center"
                               fw={600}
                             >
@@ -7496,7 +7496,7 @@ function QuotationCreate({
             )}
 
             {/* NVOCC Header */}
-            <Text size="lg" fw={600} c="#2563EB" mt="xl" mb="sm">
+            <Text size="lg" fw={600} c="#105476" mt="xl" mb="sm">
               NVOCC
             </Text>
             {carrierComparisonData?.Nvocc &&
@@ -7514,7 +7514,7 @@ function QuotationCreate({
                             backgroundColor: "white",
                             borderRadius: "8px",
                             border: isSelected
-                              ? "2px solid #2563EB"
+                              ? "2px solid #105476"
                               : "1px solid #e9ecef",
                             cursor: "pointer",
                             transition: "all 0.2s ease",
@@ -7534,7 +7534,7 @@ function QuotationCreate({
                                 "translateY(-2px)";
                               e.currentTarget.style.boxShadow =
                                 "0 4px 12px rgba(16, 84, 118, 0.15)";
-                              e.currentTarget.style.borderColor = "#2563EB";
+                              e.currentTarget.style.borderColor = "#105476";
                             }
                           }}
                           onMouseLeave={(e) => {
@@ -7554,7 +7554,7 @@ function QuotationCreate({
                             <Text
                               size="xs"
                               fw={500}
-                              c={"#2563EB"}
+                              c={"#105476"}
                               ta="center"
                               style={{ lineHeight: "1" }}
                               lineClamp={2}
@@ -7563,7 +7563,7 @@ function QuotationCreate({
                             </Text>
                             <Text
                               size="xs"
-                              c={isSelected ? "#2563EB" : "#adb5bd"}
+                              c={isSelected ? "#105476" : "#adb5bd"}
                               ta="center"
                               fw={600}
                             >
@@ -7598,7 +7598,7 @@ function QuotationCreate({
           setChargeHistoryData([]);
         }}
         title={
-          <Text size="lg" fw={600} c="#2563EB">
+          <Text size="lg" fw={600} c="#105476">
             Charge History
           </Text>
         }
@@ -7610,7 +7610,7 @@ function QuotationCreate({
         }}
         styles={{
           content: {
-            border: "1px solid #2563EB",
+            border: "1px solid #105476",
             borderRadius: 12,
           },
         }}
@@ -7618,7 +7618,7 @@ function QuotationCreate({
         {isLoadingChargeHistory ? (
           <Center py="xl">
             <Stack align="center" gap="md">
-              <Loader size="md" color="#2563EB" />
+              <Loader size="md" color="#105476" />
               <Text c="dimmed">Loading charge history...</Text>
             </Stack>
           </Center>
@@ -7658,7 +7658,7 @@ function QuotationCreate({
                     position: "sticky",
                     top: 0,
                     zIndex: 10,
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                   }}
                 >
                   <Table.Tr>
@@ -7667,7 +7667,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Action
@@ -7677,7 +7677,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Charge Name
@@ -7687,7 +7687,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Currency
@@ -7697,7 +7697,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       ROE
@@ -7707,7 +7707,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Unit
@@ -7717,7 +7717,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       No. of Units
@@ -7727,7 +7727,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Sell Per Unit
@@ -7737,7 +7737,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Min Sell
@@ -7747,7 +7747,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Cost Per Unit
@@ -7757,7 +7757,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Min Cost
@@ -7767,7 +7767,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Total Cost
@@ -7777,7 +7777,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Total Sell
@@ -7787,7 +7787,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Action By
@@ -7797,7 +7797,7 @@ function QuotationCreate({
                         color: "white",
                         fontWeight: 600,
                         textAlign: "center",
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       }}
                     >
                       Timestamp

@@ -308,7 +308,7 @@ function CreateLead() {
             zIndex: 15,
           }}
         >
-          <Loader color="#2563EB" size="lg" />
+          <Loader color="#105476" size="lg" />
         </Center>
       )}
 
@@ -345,12 +345,12 @@ function CreateLead() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -397,7 +397,7 @@ function CreateLead() {
                 {/* Basic Information Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Basic Information
                     </Text>
                     <Grid>
@@ -454,7 +454,7 @@ function CreateLead() {
                 {/* Location Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Location
                     </Text>
                     <Grid>
@@ -523,7 +523,7 @@ function CreateLead() {
                 {/* Assignment & Status Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Assignment & Status
                     </Text>
                     <Grid>
@@ -561,14 +561,14 @@ function CreateLead() {
                 {/* Remarks Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Remarks
                     </Text>
 
                         {/* Chat History - Only show in edit mode if messages exist */}
                         {isEditMode && chatHistory.length > 0 && (
                           <Box mb="md">
-                            <Text size="sm" fw={600} c="#2563EB" mb="sm" style={{ fontFamily: "Inter" }}>
+                            <Text size="sm" fw={600} c="#105476" mb="sm" style={{ fontFamily: "Inter" }}>
                               Previous Messages
                             </Text>
                             <Card shadow="xs" padding="md" radius="md" withBorder bg="#ffffff" style={{ maxHeight: "300px" }}>
@@ -624,7 +624,7 @@ function CreateLead() {
                                               <Text
                                                 size="xs"
                                                 fw={600}
-                                                c="#2563EB"
+                                                c="#105476"
                                                 mb={4}
                                                 style={{
                                                   paddingLeft: isSentByMe ? "0" : "8px",
@@ -639,7 +639,7 @@ function CreateLead() {
                                             {/* Message Bubble */}
                                             <Box
                                               style={{
-                                                backgroundColor: isSentByMe ? "#2563EB" : "#ffffff",
+                                                backgroundColor: isSentByMe ? "#105476" : "#ffffff",
                                                 color: isSentByMe ? "#ffffff" : "#333",
                                                 padding: "10px 14px",
                                                 borderRadius: isSentByMe
@@ -764,7 +764,7 @@ function CreateLead() {
                     size="sm"
                     disabled={isSubmitting}
                     style={{
-                      backgroundColor: isSubmitting ? "#2563EBBB" : "#2563EB",
+                      backgroundColor: isSubmitting ? "#105476BB" : "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

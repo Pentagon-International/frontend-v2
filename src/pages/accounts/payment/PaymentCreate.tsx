@@ -1764,8 +1764,8 @@ export default function PaymentCreate({
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
-            <Text size="sm" c="#2563EB" fw={500}>
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
               {isPosting
                 ? _isReversal
                   ? "Updating payment reversal..."
@@ -1783,7 +1783,7 @@ export default function PaymentCreate({
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -1796,7 +1796,7 @@ export default function PaymentCreate({
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {saveResponse.payment_no ||
@@ -1819,7 +1819,7 @@ export default function PaymentCreate({
                         ? "gray"
                         : statusUpper === "POSTED"
                           ? "green"
-                          : "#2563EB"
+                          : "#105476"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -1839,7 +1839,7 @@ export default function PaymentCreate({
                     <Badge
                       size="sm"
                       variant="light"
-                      color="#2563EB"
+                      color="#105476"
                       styles={{ root: { textTransform: "none" } }}
                     >
                       {(reversePaymentSaveResponse?.reverse_payment_no ??
@@ -1868,7 +1868,7 @@ export default function PaymentCreate({
                           ? "gray"
                           : reversalStatusUpper === "POSTED"
                             ? "green"
-                            : "#2563EB"
+                            : "#105476"
                       }
                       styles={{ root: { textTransform: "none" } }}
                     >
@@ -1879,7 +1879,7 @@ export default function PaymentCreate({
               )}
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(backPath)}
             >
@@ -2099,7 +2099,7 @@ export default function PaymentCreate({
             {/* Party details section - card with border - same as Receipt */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#2563EB">
+                <Text size="sm" fw={600} c="#105476">
                   Party details
                 </Text>
                 <Box mt="xs">
@@ -2109,7 +2109,7 @@ export default function PaymentCreate({
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2394,7 +2394,7 @@ export default function PaymentCreate({
                                 invoiceModalDetailRowIndex === idx &&
                                 (filterInvoiceLoading ||
                                   filterInvoiceFetching) ? (
-                                  <Loader size="xs" color="#2563EB" />
+                                  <Loader size="xs" color="#105476" />
                                 ) : (
                                   <IconFileInvoice size={18} />
                                 )
@@ -2412,7 +2412,7 @@ export default function PaymentCreate({
             {/* Adjustment section - card with border - same as Receipt */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#2563EB">
+                <Text size="sm" fw={600} c="#105476">
                   Adjustments
                 </Text>
                 <Box mt="xs">
@@ -2422,7 +2422,7 @@ export default function PaymentCreate({
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2646,7 +2646,7 @@ export default function PaymentCreate({
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
@@ -2721,7 +2721,7 @@ export default function PaymentCreate({
                 <Group justify="flex-end" mt="md">
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
@@ -2733,7 +2733,7 @@ export default function PaymentCreate({
                     Cancel
                   </Button>
                   <Button
-                    color="#2563EB"
+                    color="#105476"
                     onClick={handleSelectInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
@@ -2753,7 +2753,7 @@ export default function PaymentCreate({
               size="xl"
               centered
               style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
+              styles={{ title: { fontWeight: 600, color: "#105476" } }}
             >
               <Stack gap="xs">
                 {form.values.supporting_documents.map((doc, index) => (
@@ -3015,7 +3015,7 @@ export default function PaymentCreate({
                         form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
-                          color="#2563EB"
+                          color="#105476"
                           onClick={() => {
                             form.setFieldValue("supporting_documents", [
                               ...form.values.supporting_documents,
@@ -3033,7 +3033,7 @@ export default function PaymentCreate({
                 {form.values.supporting_documents.length === 0 && (
                   <Button
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     leftSection={<IconPlus size={16} />}
                     onClick={() => {
                       form.setFieldValue("supporting_documents", [
@@ -3062,7 +3062,7 @@ export default function PaymentCreate({
                 size="sm"
                 styles={{
                   root: {
-                    borderColor: "#2563EB",
+                    borderColor: "#105476",
                     color: "#666",
                     fontSize: "13px",
                     fontFamily: "Inter",
@@ -3091,7 +3091,7 @@ export default function PaymentCreate({
             )}
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={() => navigate(backPath)}
             >
               Cancel
@@ -3100,7 +3100,7 @@ export default function PaymentCreate({
               <>
                 <Button
                   type="submit"
-                  color="#2563EB"
+                  color="#105476"
                   loading={isSubmitting}
                   rightSection={
                     isSubmitting ? null : <IconChevronRight size={16} />

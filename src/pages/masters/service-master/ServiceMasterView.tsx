@@ -96,10 +96,10 @@ function ServiceMasterView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#2563EB",
+                backgroundColor: "#105476",
               },
               label: {
-                color: "#2563EB",
+                color: "#105476",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -113,8 +113,8 @@ function ServiceMasterView() {
             leftSection={<IconEdit size={16} />}
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
             onClick={() =>
@@ -197,7 +197,7 @@ function ServiceMasterView() {
                 leftSection={<IconTrash size={16} />}
                 styles={{
                   root: {
-                    color: "#2563EB",
+                    color: "#105476",
                     borderColor: "red",
                   },
                 }}
@@ -221,7 +221,7 @@ function ServiceMasterView() {
               <Group mt={10} gap="lg">
                 <Button
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   size="xs"
                   onClick={close}
                 >
@@ -249,11 +249,11 @@ function ServiceMasterView() {
             onClick={() => navigate("/master/service")}
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
-            c={"#2563EB"}
+            c={"#105476"}
           >
             Back
           </Button>

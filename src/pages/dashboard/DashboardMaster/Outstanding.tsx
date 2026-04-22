@@ -306,7 +306,7 @@ const Outstanding = ({
         </Group>
         <Text
           size="sm"
-          c="#2563EB"
+          c="#105476"
           style={{
             textDecoration: "underline",
             cursor: "pointer",
@@ -328,7 +328,7 @@ const Outstanding = ({
       >
         {isLoadingOutstandingChart ? (
           <Center h={300}>
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
           </Center>
         ) : (
           <ReactECharts

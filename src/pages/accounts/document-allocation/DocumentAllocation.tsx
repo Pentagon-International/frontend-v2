@@ -778,7 +778,7 @@ export default function DocumentAllocation() {
             py="sm"
             style={{
               fontWeight: 600,
-              color: "#2563EB",
+              color: "#105476",
             }}
           >
             <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
@@ -945,7 +945,7 @@ export default function DocumentAllocation() {
               Cancel
             </Button>
             <Button
-              style={{ backgroundColor: "#2563EB" }}
+              style={{ backgroundColor: "#105476" }}
               onClick={applySelectedRows}
             >
               Select
@@ -963,7 +963,7 @@ export default function DocumentAllocation() {
             zIndex: 15,
           }}
         >
-          <Loader color="#2563EB" size="lg" />
+          <Loader color="#105476" size="lg" />
         </Center>
       )}
 
@@ -999,7 +999,7 @@ export default function DocumentAllocation() {
                   <Group justify="space-between" align="center" wrap="nowrap">
                     <Text
                       fw={600}
-                      c="#2563EB"
+                      c="#105476"
                       size="sm"
                       style={{ fontFamily: "Inter" }}
                     >
@@ -1015,7 +1015,7 @@ export default function DocumentAllocation() {
                           <Badge
                             size="sm"
                             variant="light"
-                            color="#2563EB"
+                            color="#105476"
                             styles={{
                               root: {
                                 textTransform: "none",
@@ -1169,7 +1169,7 @@ export default function DocumentAllocation() {
                       onClick={handleGet}
                       disabled={isFetching || isLocked || isHydrating}
                       style={{
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                         fontSize: "13px",
                         fontFamily: "Inter",
                       }}
@@ -1194,7 +1194,7 @@ export default function DocumentAllocation() {
                 {rows.length > 0 ? (
                   <Grid.Col span={12}>
                     <Card withBorder p="md" mt="md" radius="md">
-                      <Text size="sm" fw={600} c="#2563EB">
+                      <Text size="sm" fw={600} c="#105476">
                         Allocations
                       </Text>
 
@@ -1207,7 +1207,7 @@ export default function DocumentAllocation() {
                           mb="sm"
                           style={{
                             fontWeight: 600,
-                            color: "#2563EB",
+                            color: "#105476",
                           }}
                         >
                           <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
@@ -1481,7 +1481,7 @@ export default function DocumentAllocation() {
                   <Group gap="sm">
                     <Button
                       size="sm"
-                      style={{ backgroundColor: "#2563EB" }}
+                      style={{ backgroundColor: "#105476" }}
                       onClick={handleSaveOrUpdate}
                       loading={isSaving}
                       disabled={isLocked || rows.length === 0}

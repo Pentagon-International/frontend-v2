@@ -69,8 +69,8 @@ function TermsOfShipmentView() {
         <Button
           size="xs"
           w={100}
-          styles={{ root: { color: "#2563EB", borderColor: "#2563EB" } }}
-          c="#2563EB"
+          styles={{ root: { color: "#105476", borderColor: "#105476" } }}
+          c="#105476"
           variant="outline"
           leftSection={<IconEdit size={16} />}
           onClick={() =>
@@ -145,7 +145,7 @@ function TermsOfShipmentView() {
               <Button
                 onClick={open}
                 w={120}
-                styles={{ root: { color: "#2563EB", borderColor: "red" } }}
+                styles={{ root: { color: "#105476", borderColor: "red" } }}
                 c="red"
                 variant="outline"
                 leftSection={<IconTrash size={16} />}
@@ -168,7 +168,7 @@ function TermsOfShipmentView() {
               <Group mt={10} gap="lg">
                 <Button
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   size="xs"
                   onClick={close}
                 >
@@ -191,8 +191,8 @@ function TermsOfShipmentView() {
 
           <Button
             w={120}
-            styles={{ root: { color: "#2563EB", borderColor: "#2563EB" } }}
-            c="#2563EB"
+            styles={{ root: { color: "#105476", borderColor: "#105476" } }}
+            c="#105476"
             variant="outline"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/terms-of-shipment")}

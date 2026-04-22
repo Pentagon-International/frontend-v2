@@ -74,10 +74,10 @@ function CallModeView() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#2563EB",
+                backgroundColor: "#105476",
               },
               label: {
-                color: "#2563EB",
+                color: "#105476",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -88,8 +88,8 @@ function CallModeView() {
             size="xs"
             w={100}
             variant="outline"
-            c="#2563EB"
-            styles={{ root: { borderColor: "#2563EB" } }}
+            c="#105476"
+            styles={{ root: { borderColor: "#105476" } }}
             leftSection={<IconEdit size={16} />}
             onClick={() =>
               navigate("/master/callmode-master-edit", { state: viewData })
@@ -150,7 +150,7 @@ function CallModeView() {
               <Group mt={10} gap="lg">
                 <Button
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   size="xs"
                   onClick={close}
                 >
@@ -174,8 +174,8 @@ function CallModeView() {
           <Button
             w={120}
             variant="outline"
-            c="#2563EB"
-            styles={{ root: { borderColor: "#2563EB" } }}
+            c="#105476"
+            styles={{ root: { borderColor: "#105476" } }}
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/call-mode")}
           >

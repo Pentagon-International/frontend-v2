@@ -130,7 +130,7 @@ export default function FollowUpMaster() {
                   onClick={() =>
                     navigate("/master/follow-up-view", { state: row.original })
                   }
-                  leftSection={<IconEye size={16} color="#2563EB" />}
+                  leftSection={<IconEye size={16} color="#105476" />}
                 >
                   View
                 </Menu.Item>
@@ -138,7 +138,7 @@ export default function FollowUpMaster() {
                   onClick={() =>
                     navigate("/master/follow-up-edit", { state: row.original })
                   }
-                  leftSection={<IconEdit size={16} color="#2563EB" />}
+                  leftSection={<IconEdit size={16} color="#105476" />}
                 >
                   Edit
                 </Menu.Item>
@@ -196,7 +196,7 @@ export default function FollowUpMaster() {
                 variant="outline"
                 rightSection={<IconChevronDown size={16} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Download
               </Button>
@@ -211,13 +211,13 @@ export default function FollowUpMaster() {
             variant="outline"
             leftSection={<IconUpload size={16} />}
             size="xs"
-            color="#2563EB"
+            color="#105476"
           >
             Bulk Upload
           </Button>
           <Button
             size="xs"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconPlus size={16} />}
             onClick={() => navigate("/master/follow-up-new")}
           >

@@ -1186,7 +1186,7 @@ function PotentialCustomers() {
                     onClick={() => handleCreateCallEntry(row.original)}
                   >
                     <Group gap={"sm"}>
-                      <IconPlus size={16} style={{ color: "#2563EB" }} />
+                      <IconPlus size={16} style={{ color: "#105476" }} />
                       <Text size="sm">Create call entry</Text>
                     </Group>
                   </UnstyledButton>
@@ -1391,7 +1391,7 @@ function PotentialCustomers() {
                     </Text>
                     <Button
                       variant="subtle"
-                      c="#2563EB"
+                      c="#105476"
                       leftSection={<IconDownload size={14} />}
                       styles={{
                         root: {
@@ -1404,7 +1404,7 @@ function PotentialCustomers() {
                     >
                       <Text
                         td="underline"
-                        c="#2563EB"
+                        c="#105476"
                         size="sm"
                         onClick={() => downloadTemplate()}
                       >
@@ -1421,7 +1421,7 @@ function PotentialCustomers() {
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     style={{
-                      border: `3px dashed ${dragActive ? "#0A74A6" : "#2563EB"}`,
+                      border: `3px dashed ${dragActive ? "#0A74A6" : "#105476"}`,
                       borderRadius: "8px",
                       padding: "3rem 7rem",
                       textAlign: "center",
@@ -1448,7 +1448,7 @@ function PotentialCustomers() {
                       Drag and drop here or{" "}
                       <span
                         style={{
-                          color: "#2563EB",
+                          color: "#105476",
                           textDecoration: "underline",
                           fontWeight: 500,
                         }}
@@ -1488,7 +1488,7 @@ function PotentialCustomers() {
                     >
                       <Group justify="space-between" align="center">
                         <Group gap="sm" wrap="nowrap">
-                          <IconFile color="#2563EB" size={24} />
+                          <IconFile color="#105476" size={24} />
                           <Box>
                             <Text size="sm" fw={500} c="dark">
                               {uploadedFile.name}
@@ -1530,11 +1530,11 @@ function PotentialCustomers() {
 
               {/* Action Buttons */}
               <Group justify="flex-end" gap="sm" mt="xl">
-                <Button variant="outline" color="#2563EB" onClick={uploadClose}>
+                <Button variant="outline" color="#105476" onClick={uploadClose}>
                   Cancel
                 </Button>
                 <Button
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconUpload size={16} />}
                   onClick={handleSubmit}
                 >
@@ -1590,7 +1590,7 @@ function PotentialCustomers() {
                   </Button>
                   <Button
                     type="submit"
-                    color="#2563EB"
+                    color="#105476"
                     loading={isAssigning}
                     disabled={isAssigning}
                   >
@@ -1636,7 +1636,7 @@ function PotentialCustomers() {
                     height: "36px",
                     border: "1px solid #D0D1D4",
                     "&:focus": {
-                      border: "1px solid #2563EB",
+                      border: "1px solid #105476",
                     },
                   },
                 }}
@@ -1650,10 +1650,10 @@ function PotentialCustomers() {
                   root: {
                     borderRadius: "4px",
                     backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
-                    color: showFilters ? "#2563EB" : "#737780",
+                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
                     "&:active": {
-                      border: "1px solid #2563EB",
+                      border: "1px solid #105476",
                       color: "#FFFFFF",
                     },
                   },
@@ -1673,13 +1673,13 @@ function PotentialCustomers() {
                     { label: "Unassigned", value: "unassigned" },
                   ]}
                   size="xs"
-                  color="#2563EB"
+                  color="#105476"
                 />
                 {/* <Button
                   variant="outline"
                   leftSection={<IconUpload size={16} />}
                   size="xs"
-                  color="#2563EB"
+                  color="#105476"
                   onClick={uploadOpen}
                 >
                   Upload
@@ -1695,8 +1695,8 @@ function PotentialCustomers() {
                         fontSize: "14px",
                         fontFamily: "Inter",
                         fontWeight: 600,
-                        border: "1px solid #2563EB",
-                        color: "#2563EB",
+                        border: "1px solid #105476",
+                        color: "#105476",
                         "&:hover": {
                           backgroundColor: "#E0F5FF",
                         },
@@ -1955,7 +1955,7 @@ function PotentialCustomers() {
                 onClick={applyFilters}
                 styles={{
                   root: {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
@@ -1976,7 +1976,7 @@ function PotentialCustomers() {
         {isLoading ? (
           <Center py="xl" style={{flex:1}}>
             <Stack align="center" gap="md">
-              <Loader size="lg" color="#2563EB" />
+              <Loader size="lg" color="#105476" />
               <Text c="dimmed">Loading potential customers data...</Text>
             </Stack>
           </Center>

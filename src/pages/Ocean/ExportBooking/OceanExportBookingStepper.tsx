@@ -3225,7 +3225,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       >
         <Stack gap="md">
           {form.values.event_modal_rows.length > 0 && (
-            <Grid gutter="sm" style={{ fontWeight: 600, color: "#2563EB" }}>
+            <Grid gutter="sm" style={{ fontWeight: 600, color: "#105476" }}>
               <Grid.Col span={5}>
                 <RequiredLabel label="Event Type" required={false} />
               </Grid.Col>
@@ -3313,7 +3313,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             <Grid
               columns={12}
               gutter="sm"
-              style={{ fontWeight: 600, color: "#2563EB" }}
+              style={{ fontWeight: 600, color: "#105476" }}
             >
               <Grid.Col span={5}>
                 <RequiredLabel label="Document Name" required={false} />
@@ -3531,7 +3531,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             <Grid
               columns={12}
               gutter="sm"
-              style={{ fontWeight: 600, color: "#2563EB" }}
+              style={{ fontWeight: 600, color: "#105476" }}
             >
               <Grid.Col span={3}>
                 <RequiredLabel label="Type" required={false} />
@@ -3640,7 +3640,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {form.values.trigger_modal_rows.length === 0 && (
             <Button
               variant="light"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconPlus size={16} />}
               onClick={addTriggerRow}
               fullWidth
@@ -3667,7 +3667,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       >
         <Box style={{ padding: "24px 24px 32px" }}>
           <Group justify="space-between" mb="md">
-            <Text size="md" fw={600} c="#2563EB">
+            <Text size="md" fw={600} c="#105476">
               {active === 0
                 ? "Export Booking"
                 : active === 1
@@ -3682,7 +3682,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Menu.Target>
                 <ActionIcon
                   variant="subtle"
-                  color="#2563EB"
+                  color="#105476"
                   size="lg"
                   styles={{
                     root: {
@@ -3832,7 +3832,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 backgroundColor: "#F8F9FA",
               }}
             >
-              <Text size="xs" fw={600} c="#2563EB" mb="xs">
+              <Text size="xs" fw={600} c="#105476" mb="xs">
                 Added until submit
               </Text>
               <Stack gap="xs">
@@ -4179,7 +4179,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="lg" />
 
               {/* Ocean Schedule Section */}
-              <Text size="md" fw={600} mb="md" c="#2563EB">
+              <Text size="md" fw={600} mb="md" c="#105476">
                 Ocean Schedule
               </Text>
               <Grid mb="lg">
@@ -4278,14 +4278,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="lg" />
 
               {/* Routing Details Section */}
-              <Text size="md" fw={600} mb="md" c="#2563EB">
+              <Text size="md" fw={600} mb="md" c="#105476">
                 Routings Details
               </Text>
               <Grid
                 mb="sm"
                 style={{
                   fontWeight: 600,
-                  color: "#2563EB",
+                  color: "#105476",
                 }}
                 gutter="sm"
               >
@@ -4589,7 +4589,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           {form.values.routingDetails.length - 1 === index && (
                             <Button
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               size="sm"
                               px={12}
                               onClick={addRoutingDetail}
@@ -4621,7 +4621,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {active === 1 && (
             <Box>
               {/* Shipper Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Shipper Details
               </Text>
               <Grid mb="md">
@@ -4743,7 +4743,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Consignee Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Consignee Details
               </Text>
               <Grid mb="md">
@@ -4862,7 +4862,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Forwarder Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Forwarder Details
               </Text>
               <Grid mb="md">
@@ -4978,7 +4978,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Destination Agent Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Destination Agent Details
               </Text>
               <Grid mb="md">
@@ -5095,7 +5095,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Billing Customer Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Billing Customer Details
               </Text>
               <Grid mb="md">
@@ -5198,7 +5198,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Notify Customer 1 Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Notify Customer 1 Details
               </Text>
               <Grid mb="md">
@@ -5358,7 +5358,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* Notify Customer 2 Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Notify Customer 2 Details
               </Text>
               <Grid mb="md">
@@ -5520,7 +5520,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Divider my="md" />
 
               {/* CHA Details */}
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 CHA Details
               </Text>
               <Grid mb="md">
@@ -5679,7 +5679,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               {/* Service-specific Cargo Details - Only show when service is selected */}
               {form.values.service && (
                 <>
-                  <Text size="sm" fw={500} mb="md" c="#2563EB">
+                  <Text size="sm" fw={500} mb="md" c="#105476">
                     Cargo Details for {form.values.service}
                   </Text>
 
@@ -5800,7 +5800,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         mb="sm"
                         style={{
                           fontWeight: 600,
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                         gutter="sm"
                       >
@@ -5867,7 +5867,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                     form.values.cargo_details.length - 1 && (
                                     <Button
                                       variant="light"
-                                      color="#2563EB"
+                                      color="#105476"
                                       size="sm"
                                       px={12}
                                       onClick={() => {
@@ -5918,7 +5918,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {/* Step 4: Pickup/Delivery */}
           {active === 3 && (
             <Box>
-              <Text size="sm" fw={500} mb="sm" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" c="#105476">
                 Pickup Details
               </Text>
               <Grid mb="lg" gutter={"sm"}>
@@ -6068,7 +6068,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               </Grid>
               <Divider my="md" />
 
-              <Text size="sm" fw={500} mb="sm" mt="lg" c="#2563EB">
+              <Text size="sm" fw={500} mb="sm" mt="lg" c="#105476">
                 Delivery Details
               </Text>
               <Grid gutter={"sm"}>
@@ -6259,7 +6259,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         label: {
                           fontSize: 14,
                           fontWeight: 600,
-                          color: "#2563EB",
+                          color: "#105476",
                           marginBottom: 8,
                         },
                       }}
@@ -6277,7 +6277,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         label: {
                           fontSize: 14,
                           fontWeight: 600,
-                          color: "#2563EB",
+                          color: "#105476",
                           marginBottom: 8,
                         },
                       }}
@@ -6292,7 +6292,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <Grid
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                     }}
                     gutter="sm"
                   >
@@ -6493,7 +6493,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                               size="sm"
                               px={12}
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               onClick={addNewCharge}
                             >
                               <IconPlus size={16} />
@@ -6521,17 +6521,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               <Grid
                 style={{
                   fontWeight: 600,
-                  color: "#2563EB",
+                  color: "#105476",
                   paddingTop: "0.5rem",
                 }}
               >
                 <Grid.Col span={1} offset={7.9} pl={8}>
-                  <Text size="sm" fw={600} mb="md" c="#2563EB">
+                  <Text size="sm" fw={600} mb="md" c="#105476">
                     Total :
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
-                  <Text size="sm" fw={600} mb="md" c="#2563EB">
+                  <Text size="sm" fw={600} mb="md" c="#105476">
                     {charges
                       .reduce((sum, charge) => {
                         const totalSell = parseFloat(charge.total_sell) || 0;
@@ -6541,7 +6541,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
-                  <Text size="sm" fw={600} mb="md" c="#2563EB">
+                  <Text size="sm" fw={600} mb="md" c="#105476">
                     {charges
                       .reduce((sum, charge) => {
                         const totalCost = parseFloat(charge.total_cost) || 0;
@@ -6570,7 +6570,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         <Group justify="space-between" gap={8}>
           <Button
             variant="outline"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("../")}
           >
@@ -6578,7 +6578,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           </Button>
           <Button
             variant="outline"
-            color="#2563EB"
+            color="#105476"
             onClick={handlePrevious}
             disabled={active === 0}
           >
@@ -6589,7 +6589,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           <Button
             variant="outline"
             onClick={handleNext}
-            color="#2563EB"
+            color="#105476"
             disabled={active === 4}
           >
             Next
@@ -6599,7 +6599,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               isSubmitting ? <Loader size={16} /> : <IconCheck size={16} />
             }
             onClick={() => handleSubmit()}
-            color="#2563EB"
+            color="#105476"
             disabled={active === 4 && isSubmitting}
           >
             {isSubmitting

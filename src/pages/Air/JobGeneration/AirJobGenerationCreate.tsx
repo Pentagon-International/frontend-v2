@@ -736,7 +736,7 @@ function AirJobGenerationCreate() {
 
   return (
     <Box px="md" py="md" w="100%">
-      <Text size="xl" fw={600} c="#2563EB" mb="lg">
+      <Text size="xl" fw={600} c="#105476" mb="lg">
         {mode === "view"
           ? "View Air Export Job Generation"
           : mode === "edit"
@@ -744,11 +744,11 @@ function AirJobGenerationCreate() {
             : "Create Air Export Job Generation"}
       </Text>
 
-      <Tabs value={String(active)} onChange={(v) => v !== null && setActive(Number(v))} color="#2563EB">
+      <Tabs value={String(active)} onChange={(v) => v !== null && setActive(Number(v))} color="#105476">
         <Tabs.List mb="md" style={{ display: "flex", gap: "8px", flexWrap: "wrap", borderBottom: "none" }}>
-          <Tabs.Tab value="0" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 0 ? "3px solid #2563EB" : "none", color: "#2563EB", fontSize: 16, fontWeight: active === 0 ? 600 : 400 }}>Job Details</Tabs.Tab>
-          <Tabs.Tab value="1" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 1 ? "3px solid #2563EB" : "none", color: "#2563EB", fontSize: 16, fontWeight: active === 1 ? 600 : 400 }}>Routing Details</Tabs.Tab>
-          <Tabs.Tab value="2" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 2 ? "3px solid #2563EB" : "none", color: "#2563EB", fontSize: 16, fontWeight: active === 2 ? 600 : 400 }}>Select Bookings</Tabs.Tab>
+          <Tabs.Tab value="0" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 0 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 0 ? 600 : 400 }}>Job Details</Tabs.Tab>
+          <Tabs.Tab value="1" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 1 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 1 ? 600 : 400 }}>Routing Details</Tabs.Tab>
+          <Tabs.Tab value="2" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 2 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 2 ? 600 : 400 }}>Select Bookings</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="0">
@@ -1014,16 +1014,16 @@ function AirJobGenerationCreate() {
             </Grid>
 
             <Group justify="space-between" mt="xl">
-              <Button variant="outline" color="#2563EB" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/air/job-generation")}>
+              <Button variant="outline" color="#105476" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/air/job-generation")}>
                 Back to List
               </Button>
               <Group gap="sm">
                 <Button variant="default" onClick={() => setActive((c) => c - 1)} disabled={active === 0}>Previous</Button>
-                <Button onClick={handleNext} color="#2563EB">Next</Button>
+                <Button onClick={handleNext} color="#105476">Next</Button>
                 {editMode && !isReadOnly && (
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={handleGenerateJob}
                   >
                     Generate Job
@@ -1036,7 +1036,7 @@ function AirJobGenerationCreate() {
 
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="md" fw={600} c="#2563EB" mb="md">
+            <Text size="md" fw={600} c="#105476" mb="md">
               Routing Details
             </Text>
             {/* Header Row - Vessel column only when at least one route is SEA (same spacing/format as Ocean) */}
@@ -1045,59 +1045,59 @@ function AirJobGenerationCreate() {
               return (
                 <Grid mb="xs">
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       Transport Type
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       From Port
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       To Port
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={hasAnySea ? 1 : 1.5}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       Carrier
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={hasAnySea ? 1 : 1.5}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       Transport No
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       ETD
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       ETA
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       ATD
                     </Text>
                   </Grid.Col>
                   <Grid.Col span={1}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       ATA
                     </Text>
                   </Grid.Col>
                   {hasAnySea && (
                     <Grid.Col span={1}>
-                      <Text size="sm" fw={500} c="#2563EB">
+                      <Text size="sm" fw={500} c="#105476">
                         Vessel
                       </Text>
                     </Grid.Col>
                   )}
                   <Grid.Col span={2}>
-                    <Text size="sm" fw={500} c="#2563EB">
+                    <Text size="sm" fw={500} c="#105476">
                       Actions
                     </Text>
                   </Grid.Col>
@@ -1263,7 +1263,7 @@ function AirJobGenerationCreate() {
                           {index === routingForm.values.routings.length - 1 && (
                             <Button
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               size="xs"
                               leftSection={<IconPlus size={14} />}
                               onClick={() => {
@@ -1303,7 +1303,7 @@ function AirJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => navigate("/air/job-generation")}
               >
@@ -1313,13 +1313,13 @@ function AirJobGenerationCreate() {
                 <Button variant="default" onClick={() => setActive((c) => c - 1)}>
                   Previous
                 </Button>
-                <Button onClick={handleNext} color="#2563EB">
+                <Button onClick={handleNext} color="#105476">
                   Next
                 </Button>
                 {editMode && !isReadOnly && (
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={handleGenerateJob}
                   >
                     Generate Job
@@ -1333,7 +1333,7 @@ function AirJobGenerationCreate() {
         <Tabs.Panel value="2">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md">
-              <Text size="md" fw={600} c="#2563EB">
+              <Text size="md" fw={600} c="#105476">
                 Select Export Bookings
               </Text>
               <Group gap="md">
@@ -1349,7 +1349,7 @@ function AirJobGenerationCreate() {
             {isLoadingBookings ? (
               <Center py="xl">
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#2563EB" />
+                  <Loader size="lg" color="#105476" />
                   <Text c="dimmed">Loading bookings...</Text>
                 </Stack>
               </Center>
@@ -1371,7 +1371,7 @@ function AirJobGenerationCreate() {
             <Group justify="space-between" mt="xl">
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconArrowLeft size={16} />}
                 onClick={() => navigate("/air/job-generation")}
               >
@@ -1394,7 +1394,7 @@ function AirJobGenerationCreate() {
                   {editMode && (
                     <Button
                       variant="outline"
-                      color="#2563EB"
+                      color="#105476"
                       onClick={handleGenerateJob}
                       loading={isGeneratingJob}
                       disabled={isGeneratingJob}
@@ -1410,7 +1410,7 @@ function AirJobGenerationCreate() {
                   </Button>
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() => navigate("/air/job-generation")}
                   >
                     Close

@@ -616,7 +616,7 @@ function DestinationCreate() {
               zIndex: 15,
             }}
           >
-            <Loader color="#2563EB" size="lg" />
+            <Loader color="#105476" size="lg" />
           </Center>
         )}
 
@@ -656,12 +656,12 @@ function DestinationCreate() {
                         <Text
                           size="md"
                           fw={600}
-                          c="#2563EB"
+                          c="#105476"
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#2563EB",
+                            color: "#105476",
                             textAlign: "Left" as any,
                           }}
                         >
@@ -684,7 +684,7 @@ function DestinationCreate() {
                               <Menu.Target>
                                 <ActionIcon
                                   variant="subtle"
-                                  color="#2563EB"
+                                  color="#105476"
                                   size="md"
                                   styles={{
                                     root: {
@@ -724,7 +724,7 @@ function DestinationCreate() {
                                         justifyContent: "center",
                                       }}
                                     >
-                                      <IconSparkles size={16} color="#2563EB" />
+                                      <IconSparkles size={16} color="#105476" />
                                     </Box>
                                   }
                                   styles={{
@@ -807,7 +807,7 @@ function DestinationCreate() {
                             size="sm"
                             px={0}
                             w={"100%"}
-                            color="#2563EB"
+                            color="#105476"
                             onClick={() => open()}
                           >
                             <IconInfoCircle size={16} />
@@ -925,12 +925,12 @@ function DestinationCreate() {
                         <Text
                           size="md"
                           fw={600}
-                          c="#2563EB"
+                          c="#105476"
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#2563EB",
+                            color: "#105476",
                             textAlign: "Left" as any,
                           }}
                         >
@@ -941,7 +941,7 @@ function DestinationCreate() {
                   </Grid.Col>
                   {/* <Grid.Col span={2}>
                     <Button
-                      color="#2563EB"
+                      color="#105476"
                       mt={25}
                       onClick={() => navigate("/tariff-bulk-upload")}
                     >
@@ -1259,7 +1259,7 @@ function DestinationCreate() {
                                     px={12}
                                     size="sm"
                                     variant="light"
-                                    color="#2563EB"
+                                    color="#105476"
                                     onClick={() =>
                                       gridForm.insertListItem("tariff_charges", {
                                         customer_code: "",
@@ -1290,13 +1290,13 @@ function DestinationCreate() {
                         <Text 
                         size="md"
                           fw={600}
-                          c="#2563EB"
+                          c="#105476"
                           pt={4}
                           style={{
                             fontFamily: "Inter",
                             fontStyle: "medium",
                             fontSize: "16px",
-                            color: "#2563EB",
+                            color: "#105476",
                             textAlign: "Left" as any,
                           }}
                         >
@@ -1328,7 +1328,7 @@ function DestinationCreate() {
                                       </Text>
                                     </Grid.Col>
                                     <Grid.Col span={!isViewMode ? 1.6 : 2}>
-                                      <Text size="md" pl="sm" fw={600} c="#2563EB">
+                                      <Text size="md" pl="sm" fw={600} c="#105476">
                                         {total.toLocaleString("en-US", {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
@@ -1384,7 +1384,7 @@ function DestinationCreate() {
                         type="submit"
                         size="sm"
                         style={{
-                          backgroundColor: "#2563EB",
+                          backgroundColor: "#105476",
                           fontSize: "13px",
                           fontFamily: "Inter",
                           fontStyle: "medium",
@@ -1449,7 +1449,7 @@ function DestinationCreate() {
           {isLoadingCharges && (
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Text size="lg" fw={600} c="#2563EB">
+                <Text size="lg" fw={600} c="#105476">
                   Redirecting to create quotation...
                 </Text>
                 <Text size="sm" c="dimmed">
@@ -1509,7 +1509,7 @@ function DestinationCreate() {
 
               {/* Container Details - Multiple containers like enquiry create */}
               <Stack gap="md">
-                <Text size="sm" fw={600} c="#2563EB">
+                <Text size="sm" fw={600} c="#105476">
                   Container Details
                 </Text>
                 {quoteForm.values.container_details.map(
@@ -1623,7 +1623,7 @@ function DestinationCreate() {
                           <Grid.Col span={1}>
                             <Button
                               variant="light"
-                              color="#2563EB"
+                              color="#105476"
                               mt={containerIndex === 0 ? 25 : 0}
                               size="sm"
                               onClick={() =>

@@ -412,7 +412,7 @@ function AirJobGenerationMaster() {
               <Box px={10} py={5}>
                 <UnstyledButton onClick={() => handleView(row.original)}>
                   <Group gap="sm">
-                    <IconEye size={16} style={{ color: "#2563EB" }} />
+                    <IconEye size={16} style={{ color: "#105476" }} />
                     <Text size="sm">View</Text>
                   </Group>
                 </UnstyledButton>
@@ -421,7 +421,7 @@ function AirJobGenerationMaster() {
               <Box px={10} py={5}>
                 <UnstyledButton onClick={() => handleEdit(row.original)}>
                   <Group gap="sm">
-                    <IconEdit size={16} style={{ color: "#2563EB" }} />
+                    <IconEdit size={16} style={{ color: "#105476" }} />
                     <Text size="sm">Edit</Text>
                   </Group>
                 </UnstyledButton>
@@ -597,7 +597,7 @@ function AirJobGenerationMaster() {
                 width: "248px",
                 height: "36px",
                 border: "1px solid #D0D1D4",
-                "&:focus": { border: "1px solid #2563EB" },
+                "&:focus": { border: "1px solid #105476" },
               },
             }}
           />
@@ -610,9 +610,9 @@ function AirJobGenerationMaster() {
               root: {
                 borderRadius: "4px",
                 backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
-                color: showFilters ? "#2563EB" : "#737780",
-                "&:active": { border: "1px solid #2563EB", color: "#FFFFFF" },
+                border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                color: showFilters ? "#105476" : "#737780",
+                "&:active": { border: "1px solid #105476", color: "#FFFFFF" },
               },
             }}
           >
@@ -622,17 +622,17 @@ function AirJobGenerationMaster() {
             variant="filled"
             leftSection={<IconPlus size={14} />}
             size="sm"
-            color="#2563EB"
+            color="#105476"
             styles={{
               root: {
-                backgroundColor: "#2563EB",
+                backgroundColor: "#105476",
                 borderRadius: "4px",
                 color: "#FFFFFF",
                 fontSize: "14px",
                 fontFamily: "Inter",
                 fontstyle: "semibold",
                 "&:hover": {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                 },
               },
             }}
@@ -856,7 +856,7 @@ function AirJobGenerationMaster() {
               disabled={isLoading}
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -877,7 +877,7 @@ function AirJobGenerationMaster() {
       {isLoading ? (
         <Center py="xl">
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed">Loading air job data...</Text>
           </Stack>
         </Center>

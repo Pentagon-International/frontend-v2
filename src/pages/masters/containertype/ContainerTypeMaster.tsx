@@ -121,7 +121,7 @@ export default function ContainerType() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEye size={16} color="#2563EB" />
+                      <IconEye size={16} color="#105476" />
                       <Text size="sm">View</Text>
                     </Group>
                   </UnstyledButton>
@@ -136,7 +136,7 @@ export default function ContainerType() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEdit size={16} color="#2563EB" />
+                      <IconEdit size={16} color="#105476" />
                       <Text size="sm">Edit</Text>
                     </Group>
                   </UnstyledButton>
@@ -164,7 +164,7 @@ export default function ContainerType() {
                       Are you sure? <br /> Do you want to delete this?
                     </Text>
                     <Group mt={10} gap="lg">
-                      <Button variant="outline" color="#2563EB" size="xs">
+                      <Button variant="outline" color="#105476" size="xs">
                         Not now
                       </Button>
                       <Button
@@ -237,7 +237,7 @@ export default function ContainerType() {
                 variant="outline"
                 rightSection={<IconChevronDown size={16} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
               >
                 Download
               </Button>
@@ -252,13 +252,13 @@ export default function ContainerType() {
             variant="outline"
             leftSection={<IconUpload size={16} />}
             size="xs"
-            color="#2563EB"
+            color="#105476"
             onClick={() => navigate("/container-type-bulk-upload")}
           >
             Bulk Upload
           </Button>
           <Button
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconPlus size={16} />}
             size="xs"
             onClick={() => navigate("/master/container-type-new")}

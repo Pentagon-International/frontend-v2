@@ -146,14 +146,14 @@ function CompanyEdit() {
           styles={{
             root: {
               backgroundColor: "#E4E4E4",
-              color: "#2563EB",
+              color: "#105476",
               width: "150px",
             },
             indicator: {
-              backgroundColor: "#2563EB",
+              backgroundColor: "#105476",
             },
             label: {
-              color: "#2563EB",
+              color: "#105476",
               "&[data-active]": {
                 color: "#ffffff",
               },
@@ -223,8 +223,8 @@ function CompanyEdit() {
           <Button
             w={130}
             variant="outline"
-            c="#2563EB"
-            styles={{ root: { borderColor: "#2563EB" } }}
+            c="#105476"
+            styles={{ root: { borderColor: "#105476" } }}
             leftSection={<IconArrowLeft size={16} />}
             // onClick={() => navigate("/master/company")}
             onClick={handleBack}
@@ -235,7 +235,7 @@ function CompanyEdit() {
             <Button
               w={130}
               variant="outline"
-              c="#2563EB"
+              c="#105476"
               onClick={() => navigate("/master/company")}
             >
               Cancel
@@ -243,7 +243,7 @@ function CompanyEdit() {
             <Button
               w={130}
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Update

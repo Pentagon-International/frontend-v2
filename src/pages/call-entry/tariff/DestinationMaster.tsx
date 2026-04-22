@@ -614,7 +614,7 @@ export default function DestinationMaster() {
                   }
                 >
                   <Group gap={"sm"}>
-                    <IconEyeSpark size={16} style={{ color: "#2563EB" }} />
+                    <IconEyeSpark size={16} style={{ color: "#105476" }} />
                     <Text size="sm">View Destination</Text>
                   </Group>
                 </UnstyledButton>
@@ -634,7 +634,7 @@ export default function DestinationMaster() {
                       }
                     >
                       <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#2563EB" }} />
+                        <IconEdit size={16} style={{ color: "#105476" }} />
                         <Text size="sm">Edit Destination</Text>
                       </Group>
                     </UnstyledButton>
@@ -873,7 +873,7 @@ export default function DestinationMaster() {
                 onClick={() => handleDestinationSubmit()}
                 loading={isModalLoading}
                 disabled={!destinationName.trim() || isModalLoading}
-                color="#2563EB"
+                color="#105476"
               >
                 {isChangeDestinationMode ? "Change" : "Submit"}
               </Button>
@@ -918,7 +918,7 @@ export default function DestinationMaster() {
                   >
                     for:
                   </Text>
-                  <Badge variant="light" color="#2563EB" size="md">
+                  <Badge variant="light" color="#105476" size="md">
                     {currentDestinationName}
                   </Badge>
                 </>
@@ -958,7 +958,7 @@ export default function DestinationMaster() {
                       color: "#334155",
                       border: "1px solid #D0D1D4",
                       "&:focus": {
-                        border: "1px solid #2563EB",
+                        border: "1px solid #105476",
                       },
                     },
                   }}
@@ -976,11 +976,11 @@ export default function DestinationMaster() {
                       borderRadius: "4px",
                       backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                       border: showFilters
-                        ? "1px solid #2563EB"
+                        ? "1px solid #105476"
                         : "1px solid #737780",
-                      color: showFilters ? "#2563EB" : "#737780",
+                      color: showFilters ? "#105476" : "#737780",
                       "&:active": {
-                        border: "1px solid #2563EB",
+                        border: "1px solid #105476",
                         color: "#FFFFFF",
                       },
                     },
@@ -1019,14 +1019,14 @@ export default function DestinationMaster() {
                   disabled={false}
                   styles={{
                     root: {
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       borderRadius: "4px",
                       color: "#FFFFFF",
                       fontSize: "14px",
                       fontFamily: "Inter",
                       fontStyle: "semibold",
                       "&:hover": {
-                        backgroundColor: "#2563EB",
+                        backgroundColor: "#105476",
                       },
                     },
                   }}
@@ -1185,7 +1185,7 @@ export default function DestinationMaster() {
                 leftSection={<IconFilter size={16} />}
                 styles={{
                   root: {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
@@ -1209,7 +1209,7 @@ export default function DestinationMaster() {
             {isLoading || filteredDestinationLoading ? (
               <Center py="xl" style={{ flex: 1 }}>
                 <Stack align="center" gap="md">
-                  <Loader size="lg" color="#2563EB" />
+                  <Loader size="lg" color="#105476" />
                   <Text c="dimmed">Loading destination data...</Text>
                 </Stack>
               </Center>

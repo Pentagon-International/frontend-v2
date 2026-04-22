@@ -133,7 +133,7 @@ function ChartOfAccountsCreate() {
             zIndex: 15,
           }}
         >
-          <Loader color="#2563EB" size="lg" />
+          <Loader color="#105476" size="lg" />
         </Center>
       )}
 
@@ -170,12 +170,12 @@ function ChartOfAccountsCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -223,7 +223,7 @@ function ChartOfAccountsCreate() {
                 {/* Account Information Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Account Information
                     </Text> */}
                     <Grid>
@@ -325,7 +325,7 @@ function ChartOfAccountsCreate() {
                 {/* Group Information Section */}
                 <Grid.Col span={12} py={0}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Group Information
                     </Text> */}
                     <Grid>
@@ -380,7 +380,7 @@ function ChartOfAccountsCreate() {
                 {/* Subgroup Information Section */}
                 <Grid.Col span={12} py={0}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#2563EB" mb="md" style={{ borderBottom: "2px solid #2563EB", paddingBottom: "8px", fontFamily: "Inter" }}>
+                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
                       Subgroup Information
                     </Text> */}
                     <Grid>
@@ -471,7 +471,7 @@ function ChartOfAccountsCreate() {
                     disabled={isSubmitting}
                     loading={isSubmitting}
                     style={{
-                      backgroundColor: isSubmitting ? "#2563EBBB" : "#2563EB",
+                      backgroundColor: isSubmitting ? "#105476BB" : "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

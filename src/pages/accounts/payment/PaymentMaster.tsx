@@ -296,7 +296,7 @@ export default function PaymentMaster() {
               ? "green"
               : statusUpper === "UNPOSTED"
                 ? "gray"
-                : "#2563EB";
+                : "#105476";
           return (
             <Badge
               size="sm"
@@ -336,7 +336,7 @@ export default function PaymentMaster() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text
                         size="sm"
                         style={{ fontFamily: "Inter, sans-serif" }}
@@ -357,7 +357,7 @@ export default function PaymentMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#2563EB" }} />
+                        <IconEdit size={16} style={{ color: "#105476" }} />
                         <Text
                           size="sm"
                           style={{ fontFamily: "Inter, sans-serif" }}
@@ -388,7 +388,7 @@ export default function PaymentMaster() {
                       <Group gap="sm">
                         <IconReceiptRefund
                           size={16}
-                          style={{ color: "#2563EB" }}
+                          style={{ color: "#105476" }}
                         />
                         <Text
                           size="sm"
@@ -555,7 +555,7 @@ export default function PaymentMaster() {
                 input: {
                   borderRadius: "4px", fontSize: "14px", fontFamily: "Inter",
                   color: "#334155", height: "36px", border: "1px solid #D0D1D4",
-                  "&:focus": { border: "1px solid #2563EB" },
+                  "&:focus": { border: "1px solid #105476" },
                 },
               }}
             />
@@ -568,9 +568,9 @@ export default function PaymentMaster() {
                 root: {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                  border: showFilters ? "1px solid #2563EB" : "1px solid #737780",
-                  color: showFilters ? "#2563EB" : "#737780",
-                  "&:active": { border: "1px solid #2563EB", color: "#FFFFFF" },
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
+                  color: showFilters ? "#105476" : "#737780",
+                  "&:active": { border: "1px solid #105476", color: "#FFFFFF" },
                 },
               }}
             >
@@ -581,14 +581,14 @@ export default function PaymentMaster() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontstyle: "semibold",
                   "&:hover": {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                   },
                 },
               }}
@@ -701,7 +701,7 @@ export default function PaymentMaster() {
               Clear Filters
             </Button>
             <Button size="sm" onClick={applyFilters} loading={isLoading} disabled={isLoading} leftSection={<IconFilter size={16} />}
-              styles={{ root: { backgroundColor: "#2563EB", borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", "&:hover": { backgroundColor: "#0d4261" } } }}>
+              styles={{ root: { backgroundColor: "#105476", borderRadius: "4px", fontSize: "14px", fontFamily: "Inter", fontWeight: 600, height: "36px", "&:hover": { backgroundColor: "#0d4261" } } }}>
               Apply Filters
             </Button>
           </Group>
@@ -711,7 +711,7 @@ export default function PaymentMaster() {
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed">Loading payment data...</Text>
           </Stack>
         </Center>

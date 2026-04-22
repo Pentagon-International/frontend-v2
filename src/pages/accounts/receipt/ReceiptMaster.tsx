@@ -332,7 +332,7 @@ export default function ReceiptMaster() {
               ? "green"
               : statusUpper === "UNPOSTED"
                 ? "gray"
-                : "#2563EB";
+                : "#105476";
           return (
             <Badge
               size="sm"
@@ -380,7 +380,7 @@ export default function ReceiptMaster() {
                     }
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#2563EB" }} />
+                      <IconEye size={16} style={{ color: "#105476" }} />
                       <Text
                         size="sm"
                         style={{ fontFamily: "Inter, sans-serif" }}
@@ -409,7 +409,7 @@ export default function ReceiptMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#2563EB" }} />
+                        <IconEdit size={16} style={{ color: "#105476" }} />
                         <Text
                           size="sm"
                           style={{ fontFamily: "Inter, sans-serif" }}
@@ -440,7 +440,7 @@ export default function ReceiptMaster() {
                       <Group gap="sm">
                         <IconReceiptRefund
                           size={16}
-                          style={{ color: "#2563EB" }}
+                          style={{ color: "#105476" }}
                         />
                         <Text
                           size="sm"
@@ -632,7 +632,7 @@ export default function ReceiptMaster() {
                   height: "36px",
                   border: "1px solid #D0D1D4",
                   "&:focus": {
-                    border: "1px solid #2563EB",
+                    border: "1px solid #105476",
                   },
                 },
               }}
@@ -647,11 +647,11 @@ export default function ReceiptMaster() {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
                   border: showFilters
-                    ? "1px solid #2563EB"
+                    ? "1px solid #105476"
                     : "1px solid #737780",
-                  color: showFilters ? "#2563EB" : "#737780",
+                  color: showFilters ? "#105476" : "#737780",
                   "&:active": {
-                    border: "1px solid #2563EB",
+                    border: "1px solid #105476",
                     color: "#FFFFFF",
                   },
                 },
@@ -664,14 +664,14 @@ export default function ReceiptMaster() {
               size="sm"
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   color: "#FFFFFF",
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontstyle: "semibold",
                   "&:hover": {
-                    backgroundColor: "#2563EB",
+                    backgroundColor: "#105476",
                   },
                 },
               }}
@@ -863,7 +863,7 @@ export default function ReceiptMaster() {
               leftSection={<IconFilter size={16} />}
               styles={{
                 root: {
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   borderRadius: "4px",
                   fontSize: "14px",
                   fontFamily: "Inter",
@@ -884,7 +884,7 @@ export default function ReceiptMaster() {
       {isLoading ? (
         <Center py="xl" style={{ flex: 1 }}>
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed">Loading receipt data...</Text>
           </Stack>
         </Center>

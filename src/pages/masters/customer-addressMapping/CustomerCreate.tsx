@@ -494,7 +494,7 @@ const AddressCard = memo(
                 borderRadius: 8,
               }}
             >
-              <Text size="sm" fw={600} c="#2563EB">
+              <Text size="sm" fw={600} c="#105476">
                 Address
               </Text>
             </Box>
@@ -749,7 +749,7 @@ const AddressCard = memo(
                 borderRadius: 8,
               }}
             >
-              <Text size="sm" fw={600} c="#2563EB">
+              <Text size="sm" fw={600} c="#105476">
                 GST
               </Text>
             </Box>
@@ -2562,7 +2562,7 @@ function CustomerCreate() {
     return (
       <Center py="xl">
         <Stack align="center" gap="md">
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
           <Text c="dimmed">Loading form data...</Text>
         </Stack>
       </Center>
@@ -2589,7 +2589,7 @@ function CustomerCreate() {
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
+            <Loader size="lg" color="#105476" />
             <Text c="dimmed" fw={500}>
               {isCreateMode
                 ? isVendorMasterRoute
@@ -2624,7 +2624,7 @@ function CustomerCreate() {
         >
           {/* Header */}
           <Group justify="space-between" align="center" mb="lg">
-            <Text size="xl" fw={600} c="#2563EB">
+            <Text size="xl" fw={600} c="#105476">
               {isCreateMode
                 ? isVendorMasterRoute
                   ? "Create Vendor"
@@ -2642,7 +2642,7 @@ function CustomerCreate() {
           <Tabs
             value={String(active)}
             onChange={(v) => v !== null && setActive(Number(v))}
-            color="#2563EB"
+            color="#105476"
             style={{
               flex: 1,
               display: "flex",
@@ -2665,8 +2665,8 @@ function CustomerCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -2680,8 +2680,8 @@ function CustomerCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -2696,8 +2696,8 @@ function CustomerCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 2 ? "3px solid #2563EB" : "none",
-                color: "#2563EB",
+                borderBottom: active === 2 ? "3px solid #105476" : "none",
+                color: "#105476",
                 fontSize: 16,
                 fontWeight: active === 2 ? 600 : 400,
               }}
@@ -2887,7 +2887,7 @@ function CustomerCreate() {
                   leftSection={<IconPlus size={16} />}
                   onClick={addAddress}
                   disabled={isViewMode}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Add Address
                 </Button>
@@ -2941,7 +2941,7 @@ function CustomerCreate() {
                       bg="#fafafa"
                     >
                       <Group justify="space-between" align="center" mb="sm">
-                        <Text size="sm" fw={600} c="#2563EB">
+                        <Text size="sm" fw={600} c="#105476">
                           TDS Section {index + 1}
                         </Text>
                         {!isViewMode &&
@@ -3275,7 +3275,7 @@ function CustomerCreate() {
                         )
                       }
                       disabled={isViewMode}
-                      color="#2563EB"
+                      color="#105476"
                     >
                       Add
                     </Button>
@@ -3344,10 +3344,10 @@ function CustomerCreate() {
           <Group gap="sm">
             {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
               <Button
-                bg="#2563EB"
+                bg="#105476"
                 onClick={handleRelationshipMapping}
                 disabled={isSubmitting}
-                style={{ border: "1px solid #2563EB" }}
+                style={{ border: "1px solid #105476" }}
                 color="white"
                 size="sm"
               >
@@ -3365,7 +3365,7 @@ function CustomerCreate() {
               <Button
                 size="sm"
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   fontSize: "13px",
                   fontFamily: "Inter",
                   fontStyle: "medium",
@@ -3382,7 +3382,7 @@ function CustomerCreate() {
               <Button
                 size="sm"
                 style={{
-                  backgroundColor: "#2563EB",
+                  backgroundColor: "#105476",
                   fontSize: "13px",
                   fontFamily: "Inter",
                   fontStyle: "medium",

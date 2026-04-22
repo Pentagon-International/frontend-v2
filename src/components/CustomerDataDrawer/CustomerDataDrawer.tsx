@@ -95,7 +95,7 @@ export default function CustomerDataDrawer({
 
       {isLoading ? (
         <Box ta="center" py="xl">
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
           <Text
             mt="md"
             c="dimmed"
@@ -120,7 +120,7 @@ export default function CustomerDataDrawer({
                 <Text
                   size="lg"
                   fw={700}
-                  c="#2563EB"
+                  c="#105476"
                   style={{
                     paddingBottom: "6px",
                     fontFamily: "Inter, sans-serif",
@@ -276,7 +276,7 @@ export default function CustomerDataDrawer({
                             <Text size="xs" fw={600} c="#666" mb={6}>
                               Total Profit
                             </Text>
-                            <Text size="sm" fw={500} c="#2563EB">
+                            <Text size="sm" fw={500} c="#105476">
                               {customerCurrency}{" "}
                               {totalProfit?.toLocaleString("en-IN")}
                             </Text>
@@ -296,9 +296,9 @@ export default function CustomerDataDrawer({
               size="lg"
               fw={700}
               mb="md"
-              c="#2563EB"
+              c="#105476"
               style={{
-                // borderBottom: "2px solid #2563EB",
+                // borderBottom: "2px solid #105476",
                 paddingBottom: "6px",
               }}
             >
@@ -337,7 +337,7 @@ export default function CustomerDataDrawer({
                           e.currentTarget.style.transform = "translateY(-2px)";
                           e.currentTarget.style.boxShadow =
                             "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#2563EB";
+                          e.currentTarget.style.borderColor = "#105476";
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
@@ -348,7 +348,7 @@ export default function CustomerDataDrawer({
                       >
                         <Stack gap="sm">
                           <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#2563EB">
+                            <Text size="sm" fw={600} c="#105476">
                               {q.enquiry_received_date
                                 ? dayjs(q.enquiry_received_date).format(
                                     "DD/MM/YYYY",
@@ -442,7 +442,7 @@ export default function CustomerDataDrawer({
 
           {/* =================== SHIPMENTS =================== */}
           <Box>
-            <Text size="lg" fw={700} mb="md" pb={6} c="#2563EB">
+            <Text size="lg" fw={700} mb="md" pb={6} c="#105476">
               📦 Recent Shipments
             </Text>
             <Box
@@ -477,7 +477,7 @@ export default function CustomerDataDrawer({
                           e.currentTarget.style.transform = "translateY(-2px)";
                           e.currentTarget.style.boxShadow =
                             "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#2563EB";
+                          e.currentTarget.style.borderColor = "#105476";
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
@@ -488,7 +488,7 @@ export default function CustomerDataDrawer({
                       >
                         <Stack gap="sm">
                           <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#2563EB">
+                            <Text size="sm" fw={600} c="#105476">
                               {shipment.customer_name || "-"}
                             </Text>
                           </Group>
@@ -526,7 +526,7 @@ export default function CustomerDataDrawer({
 
           {/* =================== CALL ENTRIES =================== */}
           <Box>
-            <Text size="lg" fw={700} mb="md" pb={6} c="#2563EB">
+            <Text size="lg" fw={700} mb="md" pb={6} c="#105476">
               📞 Recent Call Entries
             </Text>
             <Box
@@ -561,7 +561,7 @@ export default function CustomerDataDrawer({
                           e.currentTarget.style.transform = "translateY(-2px)";
                           e.currentTarget.style.boxShadow =
                             "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#2563EB";
+                          e.currentTarget.style.borderColor = "#105476";
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
@@ -572,7 +572,7 @@ export default function CustomerDataDrawer({
                       >
                         <Stack gap="sm">
                           <Group justify="space-between" align="center">
-                            <Text size="sm" fw={600} c="#2563EB">
+                            <Text size="sm" fw={600} c="#105476">
                               {call.call_date
                                 ? dayjs(call.call_date).format("DD/MM/YYYY")
                                 : "-"}
@@ -660,7 +660,7 @@ export default function CustomerDataDrawer({
 
           {/* =================== POTENTIAL PROFILING =================== */}
           <Box>
-            <Text size="lg" fw={700} mb="md" pb={6} c="#2563EB">
+            <Text size="lg" fw={700} mb="md" pb={6} c="#105476">
               🎯 Potential Profiling
             </Text>
             <Box
@@ -698,7 +698,7 @@ export default function CustomerDataDrawer({
                           e.currentTarget.style.transform = "translateY(-2px)";
                           e.currentTarget.style.boxShadow =
                             "0 8px 20px rgba(16, 84, 118, 0.1)";
-                          e.currentTarget.style.borderColor = "#2563EB";
+                          e.currentTarget.style.borderColor = "#105476";
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
@@ -708,7 +708,7 @@ export default function CustomerDataDrawer({
                         }}
                       >
                         <Stack gap="sm">
-                          <Text size="sm" fw={600} c="#2563EB">
+                          <Text size="sm" fw={600} c="#105476">
                             {profile.service || "-"}
                           </Text>
 

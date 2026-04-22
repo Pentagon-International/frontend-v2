@@ -164,12 +164,12 @@ export default function ChargeCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -334,7 +334,7 @@ export default function ChargeCreate() {
                     loading={isSubmitting}
                     disabled={isSubmitting}
                     style={{
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

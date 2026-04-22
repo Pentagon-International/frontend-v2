@@ -1763,8 +1763,8 @@ export default function ReceiptCreate({
           }}
         >
           <Stack align="center" gap="md">
-            <Loader size="lg" color="#2563EB" />
-            <Text size="sm" c="#2563EB" fw={500}>
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="#105476" fw={500}>
               {isPosting
                 ? _isReversal
                   ? "Updating reverse receipt..."
@@ -1779,7 +1779,7 @@ export default function ReceiptCreate({
       <Stack gap="md">
         {/* Header: Title | Receipt No & Status (left of Back) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {pageTitle}
           </Text>
           <Group gap="md" wrap="nowrap">
@@ -1792,7 +1792,7 @@ export default function ReceiptCreate({
                   <Badge
                     size="sm"
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     styles={{ root: { textTransform: "none" } }}
                   >
                     {saveResponse.receipt_no ||
@@ -1815,7 +1815,7 @@ export default function ReceiptCreate({
                         ? "gray"
                         : statusUpper === "POSTED"
                           ? "green"
-                          : "#2563EB"
+                          : "#105476"
                     }
                     styles={{ root: { textTransform: "none" } }}
                   >
@@ -1835,7 +1835,7 @@ export default function ReceiptCreate({
                     <Badge
                       size="sm"
                       variant="light"
-                      color="#2563EB"
+                      color="#105476"
                       styles={{ root: { textTransform: "none" } }}
                     >
                       {(reverseReceiptSaveResponse?.reverse_receipt_no ??
@@ -1862,7 +1862,7 @@ export default function ReceiptCreate({
                           ? "gray"
                           : reversalStatusUpper === "POSTED"
                             ? "green"
-                            : "#2563EB") as string
+                            : "#105476") as string
                       }
                       styles={{ root: { textTransform: "none" } }}
                     >
@@ -1887,7 +1887,7 @@ export default function ReceiptCreate({
                       }}
                     >
                       <Group gap="sm">
-                        <IconDownload size={16} style={{ color: "#2563EB" }} />
+                        <IconDownload size={16} style={{ color: "#105476" }} />
                         <Text
                           size="sm"
                           style={{ fontFamily: "Inter, sans-serif" }}
@@ -1902,7 +1902,7 @@ export default function ReceiptCreate({
             )}
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => navigate(effectiveBackPath)}
             >
@@ -2136,7 +2136,7 @@ export default function ReceiptCreate({
             {/* Party details section - card with border */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#2563EB">
+                <Text size="sm" fw={600} c="#105476">
                   Party details
                 </Text>
                 <Box mt="xs">
@@ -2146,7 +2146,7 @@ export default function ReceiptCreate({
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2454,7 +2454,7 @@ export default function ReceiptCreate({
                                   invoiceModalDetailRowIndex === idx &&
                                   (filterInvoiceLoading ||
                                     filterInvoiceFetching) ? (
-                                    <Loader size="xs" color="#2563EB" />
+                                    <Loader size="xs" color="#105476" />
                                   ) : (
                                     <IconFileInvoice size={18} />
                                   )
@@ -2473,7 +2473,7 @@ export default function ReceiptCreate({
             {/* Adjustment section - card with border */}
             <Grid.Col span={12}>
               <Card withBorder p="md" mt="md" radius="md">
-                <Text size="sm" fw={600} c="#2563EB">
+                <Text size="sm" fw={600} c="#105476">
                   Adjustments
                 </Text>
                 <Box mt="xs">
@@ -2483,7 +2483,7 @@ export default function ReceiptCreate({
                     py="sm"
                     style={{
                       fontWeight: 600,
-                      color: "#2563EB",
+                      color: "#105476",
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
@@ -2720,7 +2720,7 @@ export default function ReceiptCreate({
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
@@ -2791,7 +2791,7 @@ export default function ReceiptCreate({
                 <Group justify="flex-end" mt="md">
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
@@ -2803,7 +2803,7 @@ export default function ReceiptCreate({
                     Cancel
                   </Button>
                   <Button
-                    color="#2563EB"
+                    color="#105476"
                     onClick={handleSelectInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
@@ -2826,7 +2826,7 @@ export default function ReceiptCreate({
             size="xl"
             centered
             style={{ fontFamily: "Inter" }}
-            styles={{ title: { fontWeight: 600, color: "#2563EB" } }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             <Stack gap="xs">
               {form.values.supporting_documents.map((doc, index) => (
@@ -3093,7 +3093,7 @@ export default function ReceiptCreate({
                         form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
-                          color="#2563EB"
+                          color="#105476"
                           onClick={() => {
                             form.setFieldValue("supporting_documents", [
                               ...form.values.supporting_documents,
@@ -3112,7 +3112,7 @@ export default function ReceiptCreate({
               {!isReadOnly && form.values.supporting_documents.length === 0 && (
                 <Button
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconPlus size={16} />}
                   onClick={() => {
                     form.setFieldValue("supporting_documents", [
@@ -3141,7 +3141,7 @@ export default function ReceiptCreate({
                 size="sm"
                 styles={{
                   root: {
-                    borderColor: "#2563EB",
+                    borderColor: "#105476",
                     color: "#666",
                     fontSize: "13px",
                     fontFamily: "Inter",
@@ -3170,7 +3170,7 @@ export default function ReceiptCreate({
             )}
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={() => navigate(effectiveBackPath)}
             >
               Cancel
@@ -3179,7 +3179,7 @@ export default function ReceiptCreate({
               <>
                 <Button
                   type="submit"
-                  color="#2563EB"
+                  color="#105476"
                   loading={isSubmitting}
                   rightSection={
                     isSubmitting ? null : <IconChevronRight size={16} />

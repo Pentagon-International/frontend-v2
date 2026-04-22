@@ -28,25 +28,25 @@ export default function ReportsPage() {
       items: [
         {
           label: "Job Profit",
-          icon: <IconReportMoney size={28} color="#2563EB" />,
+          icon: <IconReportMoney size={28} color="#105476" />,
           path: "/reports/job-profit",
         },
         {
           label: "Statement of Accounts",
-          icon: <IconReceipt size={28} color="#2563EB" />,
+          icon: <IconReceipt size={28} color="#105476" />,
         },
         {
           label: "Job Ledger",
-          icon: <IconBook2 size={28} color="#2563EB" />,
+          icon: <IconBook2 size={28} color="#105476" />,
         },
         {
           label: "Subledger Outstanding",
-          icon: <IconFileAnalytics size={28} color="#2563EB" />,
+          icon: <IconFileAnalytics size={28} color="#105476" />,
           path: "/reports/subledger-outstanding",
         },
         {
           label: "Aging Report",
-          icon: <IconClockHour4 size={28} color="#2563EB" />,
+          icon: <IconClockHour4 size={28} color="#105476" />,
           path: "/reports/aging-outstanding",
         },
       ],
@@ -56,20 +56,20 @@ export default function ReportsPage() {
       items: [
         {
           label: "Balance Sheet",
-          icon: <IconScale size={28} color="#2563EB" />,
+          icon: <IconScale size={28} color="#105476" />,
         },
         {
           label: "Profit and Loss",
-          icon: <IconChartBar size={28} color="#2563EB" />,
+          icon: <IconChartBar size={28} color="#105476" />,
         },
         {
           label: "Trial Balance",
-          icon: <IconReport size={28} color="#2563EB" />,
+          icon: <IconReport size={28} color="#105476" />,
           path: "/reports/trial-balance",
         },
         {
           label: "Budget vs Actual",
-          icon: <IconChartArcs3 size={28} color="#2563EB" />,
+          icon: <IconChartArcs3 size={28} color="#105476" />,
         },
       ],
     },
@@ -85,7 +85,7 @@ export default function ReportsPage() {
               style={{
                 fontSize: "11px",
                 fontWeight: 600,
-                color: "#2563EB",
+                color: "#105476",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
               }}

@@ -349,7 +349,7 @@ export default function AgingOutstanding() {
   return (
     <Box>
       <Group justify="space-between" mb="md">
-        <Title order={4} style={{ color: "#2563EB" }}>
+        <Title order={4} style={{ color: "#105476" }}>
           Aging Report
         </Title>
       </Group>

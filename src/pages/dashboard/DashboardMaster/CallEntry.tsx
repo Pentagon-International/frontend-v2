@@ -33,7 +33,7 @@ const CallEntry = ({
     <Box style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       {isLoadingCallEntry ? (
         <Center h={200}>
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
         </Center>
       ) : (
         <Stack gap="md" w="100%" style={{ flex: 1, padding: "4px" }}>
@@ -61,13 +61,13 @@ const CallEntry = ({
               }}
             >
               <Box style={{ position: "absolute", top: "12px", right: "12px" }}>
-                <IconCalendar size={22} color="#2563EB" />
+                <IconCalendar size={22} color="#105476" />
               </Box>
               <Stack align="flex-start" gap={3} justify="center" h="100%">
                 <Text style={{ fontSize: "11px", color: "#64748B", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   Today
                 </Text>
-                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#2563EB", lineHeight: 1 }}>
+                <Text style={{ fontSize: "1.75rem", fontWeight: 700, color: "#105476", lineHeight: 1 }}>
                   {callEntrySummary?.total_today || 0}
                 </Text>
               </Stack>

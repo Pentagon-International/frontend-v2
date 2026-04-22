@@ -160,7 +160,7 @@ export default function UserMaster() {
                       <Group gap={"sm"}>
                         <IconEyeSpark
                           size={16}
-                          style={{ color: "#2563EB", marginRight: 6 }}
+                          style={{ color: "#105476", marginRight: 6 }}
                         />
                         <Text size="sm">View</Text>
                       </Group>
@@ -180,7 +180,7 @@ export default function UserMaster() {
                       <Group gap={"sm"}>
                         <IconEdit
                           size={16}
-                          style={{ color: "#2563EB", marginRight: 6 }}
+                          style={{ color: "#105476", marginRight: 6 }}
                         />
                         <Text size="sm">Edit</Text>
                       </Group>
@@ -222,7 +222,7 @@ export default function UserMaster() {
                         Do you want to delete this?
                       </Text>
                       <Group mt={10} gap={"lg"}>
-                        <Button variant="outline" color="#2563EB" size="xs">
+                        <Button variant="outline" color="#105476" size="xs">
                           Not now
                         </Button>
                         <Button
@@ -285,7 +285,7 @@ export default function UserMaster() {
       //                   <Group gap={"sm"}>
       //                     <IconEyeSpark
       //                       size={16}
-      //                       style={{ color: "#2563EB", marginRight: 6 }}
+      //                       style={{ color: "#105476", marginRight: 6 }}
       //                     />
       //                     <Text size="sm">View</Text>
       //                   </Group>
@@ -305,7 +305,7 @@ export default function UserMaster() {
       //                   <Group gap={"sm"}>
       //                     <IconEdit
       //                       size={16}
-      //                       style={{ color: "#2563EB", marginRight: 6 }}
+      //                       style={{ color: "#105476", marginRight: 6 }}
       //                     />
       //                     <Text size="sm">Edit</Text>
       //                   </Group>
@@ -347,7 +347,7 @@ export default function UserMaster() {
       //                     Do you want to delete this?
       //                   </Text>
       //                   <Group mt={10} gap={"lg"}>
-      //                     <Button variant="outline" color="#2563EB" size="xs">
+      //                     <Button variant="outline" color="#105476" size="xs">
       //                       Not now
       //                     </Button>
       //                     <Button
@@ -471,7 +471,7 @@ export default function UserMaster() {
                   variant="outline"
                   rightSection={<IconChevronDown size={16} />}
                   size="xs"
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download
                 </Button>
@@ -487,14 +487,14 @@ export default function UserMaster() {
               variant="outline"
               leftSection={<IconUpload size={16} />}
               size="xs"
-              color={"#2563EB"}
+              color={"#105476"}
             >
               Bulk Upload
             </Button>
 
             <Button
               //   variant="filled"
-              color={"#2563EB"}
+              color={"#105476"}
               leftSection={<IconPlus size={16} />}
               size="xs"
               onClick={() => navigate("/master/user-create")}

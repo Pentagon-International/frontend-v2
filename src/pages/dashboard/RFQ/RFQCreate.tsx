@@ -4253,7 +4253,7 @@ function RFQCreate() {
         <Text color="red" size="lg" ta="center">
           Something went wrong: {error}
         </Text>
-        <Button mt="md" onClick={() => setError(null)} color="#2563EB">
+        <Button mt="md" onClick={() => setError(null)} color="#105476">
           Try Again
         </Button>
       </Box>
@@ -4304,12 +4304,12 @@ function RFQCreate() {
                   <Text
                     size="md"
                     fw={600}
-                    c="#2563EB"
+                    c="#105476"
                     style={{
                       fontFamily: "Inter",
                       fontStyle: "medium",
                       fontSize: "16px",
-                      color: "#2563EB",
+                      color: "#105476",
                       textAlign: "center",
                     }}
                   >
@@ -4350,7 +4350,7 @@ function RFQCreate() {
                             active > 0
                               ? "none"
                               : active === 0
-                                ? "2px solid #2563EB"
+                                ? "2px solid #105476"
                                 : "2px solid #d1d5db",
                           display: "flex",
                           alignItems: "center",
@@ -4361,7 +4361,7 @@ function RFQCreate() {
                             active > 0
                               ? "white"
                               : active === 0
-                                ? "#2563EB"
+                                ? "#105476"
                                 : "#9ca3af",
                           transition: "all 0.2s",
                           flexShrink: 0,
@@ -4375,19 +4375,19 @@ function RFQCreate() {
                           />
                         ) : (
                           // <IconCheck size={20} />
-                          <IconUser size={20} color="#2563EB" fill="#E6F2F8" />
+                          <IconUser size={20} color="#105476" fill="#E6F2F8" />
                         )}
                       </Box>
                       <Text
                         size="sm"
                         fw={400}
-                        c="#2563EB"
+                        c="#105476"
                         style={{
                           lineHeight: 1.3,
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                       >
                         Customer Details
@@ -4436,7 +4436,7 @@ function RFQCreate() {
                             active > 1
                               ? "none"
                               : active === 1
-                                ? "2px solid #2563EB"
+                                ? "2px solid #105476"
                                 : "2px solid #d1d5db",
                           display: "flex",
                           alignItems: "center",
@@ -4447,7 +4447,7 @@ function RFQCreate() {
                             active > 1
                               ? "white"
                               : active === 1
-                                ? "#2563EB"
+                                ? "#105476"
                                 : "#9ca3af",
                           transition: "all 0.2s",
                           flexShrink: 0,
@@ -4462,7 +4462,7 @@ function RFQCreate() {
                         ) : (
                           <IconTruckDelivery
                             size={20}
-                            color="#2563EB"
+                            color="#105476"
                             fill="#E6F2F8"
                           />
                         )}
@@ -4476,7 +4476,7 @@ function RFQCreate() {
                           fontFamily: "Inter",
                           fontStyle: "regular",
                           fontSize: "13px",
-                          color: "#2563EB",
+                          color: "#105476",
                         }}
                       >
                         Service & Cargo Details
@@ -4526,7 +4526,7 @@ function RFQCreate() {
                                 active > 2
                                   ? "none"
                                   : active === 2
-                                    ? "2px solid #2563EB"
+                                    ? "2px solid #105476"
                                     : "2px solid #d1d5db",
                               display: "flex",
                               alignItems: "center",
@@ -4537,7 +4537,7 @@ function RFQCreate() {
                                 active > 2
                                   ? "white"
                                   : active === 2
-                                    ? "#2563EB"
+                                    ? "#105476"
                                     : "#9ca3af",
                               transition: "all 0.2s",
                               flexShrink: 0,
@@ -4552,7 +4552,7 @@ function RFQCreate() {
                             ) : (
                               <IconFileText
                                 size={20}
-                                color="#2563EB"
+                                color="#105476"
                                 fill="#E6F2F8"
                               />
                             )}
@@ -4566,7 +4566,7 @@ function RFQCreate() {
                               fontFamily: "Inter",
                               fontStyle: "regular",
                               fontSize: "13px",
-                              color: "#2563EB",
+                              color: "#105476",
                             }}
                           >
                             Quotation
@@ -4758,7 +4758,7 @@ function RFQCreate() {
                                 <Button
                                   size="xs"
                                   mb={4}
-                                  color="#2563EB"
+                                  color="#105476"
                                   onClick={() => {
                                     const customerCode =
                                       customerForm.values.customer_code;
@@ -4777,7 +4777,7 @@ function RFQCreate() {
                                 <Button
                                   size="xs"
                                   mb={4}
-                                  color="#2563EB"
+                                  color="#105476"
                                   variant="outline"
                                   onClick={() => {
                                     const customerCode =
@@ -5291,7 +5291,7 @@ function RFQCreate() {
                           onClick={() => handleNext()}
                           size="sm"
                           style={{
-                            backgroundColor: "#2563EB",
+                            backgroundColor: "#105476",
                             fontSize: "13px",
                             fontFamily: "Inter",
                             fontStyle: "medium",
@@ -5331,13 +5331,13 @@ function RFQCreate() {
                         <Text 
                           size="lg"
                           fw={600}
-                          c="#2563EB"
+                          c="#105476"
                           style={{
                             paddingBottom: "4px",
                             fontFamily: "Inter",
                             fontStyle: "semibold",
                             fontSize: "16px",
-                            color: "#2563EB",
+                            color: "#105476",
                             }}
                           >
                             Service Details
@@ -6120,7 +6120,7 @@ function RFQCreate() {
                         })()}
 
                         {/* SECTION B — Port & Cargo Details */}
-                        <Divider my="lg" color="#2563EB" />
+                        <Divider my="lg" color="#105476" />
 
                         {serviceForm.values.service_details.map(
                           (serviceDetail, serviceIndex) => (
@@ -6128,18 +6128,18 @@ function RFQCreate() {
                                 <Flex justify="space-between" mb="xs" gap="md">
                                   <Text size="sm"
                                       fw={600}
-                                      c="#2563EB"
+                                      c="#105476"
                                       style={{
                                         paddingBottom: "4px",
                                         fontFamily: "Inter",
                                         fontStyle: "semibold",
                                         fontSize: "16px",
-                                        color: "#2563EB",
+                                        color: "#105476",
                                       }} >Port & Cargo Details {serviceForm.values.service_details.length > 1 && `(${serviceIndex + 1})`}</Text>
                                   <Group gap={"sm"}>
                                     <Button
                                       variant="filled"
-                                      color="#2563EB"
+                                      color="#105476"
                                       size="xs"
                                       leftSection={<IconPlus size={14} />}
                                       styles={{
@@ -6917,13 +6917,13 @@ function RFQCreate() {
                                     <Text
                                       size="md"
                                       fw={500}
-                                      c="#2563EB"
+                                      c="#105476"
                                       style={{
                                         paddingBottom: "4px",
                                         fontFamily: "Inter",
                                         fontStyle: "semibold",
                                         fontSize: "16px",
-                                        color: "#2563EB",
+                                        color: "#105476",
                                       }}
                                     >
                                       Cargo Details
@@ -7173,13 +7173,13 @@ function RFQCreate() {
                                           )}
                                         <Button
                                           variant="light"
-                                          color="#2563EB"
+                                          color="#105476"
                                           leftSection={<IconPlus size={16} />}
                                           styles={{
                                             root: {
                                               fontSize: "13px",
                                               fontWeight: 500,
-                                              color: "#2563EB",
+                                              color: "#105476",
                                               fontFamily: "Inter",
                                               fontStyle: "semibold",
                                             },
@@ -7525,7 +7525,7 @@ function RFQCreate() {
                                               <Grid
                                                 style={{
                                                   fontWeight: 600,
-                                                  color: "#2563EB",
+                                                  color: "#105476",
                                                   fontSize: "13px",
                                                   fontFamily: "Inter",
                                                   fontStyle: "medium",
@@ -8194,7 +8194,7 @@ function RFQCreate() {
                                               <Grid
                                                 style={{
                                                   fontWeight: 600,
-                                                  color: "#2563EB",
+                                                  color: "#105476",
                                                   fontSize: "13px",
                                                   fontFamily: "Inter",
                                                   fontStyle: "medium",
@@ -8811,7 +8811,7 @@ function RFQCreate() {
                                                 <Grid.Col span={0.75}>
                                                   <Button
                                                     variant="light"
-                                                    color="#2563EB"
+                                                    color="#105476"
                                                     mt={25}
                                                     onClick={() =>
                                                       serviceForm.insertListItem(
@@ -8872,7 +8872,7 @@ function RFQCreate() {
                                 </>
                               )}
                               {serviceIndex < serviceForm.values.service_details.length - 1 && (
-                                <Divider my="lg" color="#2563EB" />
+                                <Divider my="lg" color="#105476" />
                               )}
                             </Box>
                           )
@@ -8987,7 +8987,7 @@ function RFQCreate() {
                           size="sm"
                           styles={{
                             root: {
-                              borderColor: "#2563EB",
+                              borderColor: "#105476",
                               color: "#666",
                               fontSize: "13px",
                               fontFamily: "Inter",
@@ -9050,7 +9050,7 @@ function RFQCreate() {
                             onClick={() => handleNext()}
                             size="sm"
                             style={{
-                              backgroundColor: "#2563EB",
+                              backgroundColor: "#105476",
                               fontSize: "13px",
                               fontFamily: "Inter",
                               fontStyle: "medium",
@@ -9072,7 +9072,7 @@ function RFQCreate() {
                               size="sm"
                               disabled={isSubmitting}
                               style={{
-                                backgroundColor: "#2563EB",
+                                backgroundColor: "#105476",
                                 fontSize: "13px",
                                 fontFamily: "Inter",
                                 fontStyle: "medium",
@@ -9093,7 +9093,7 @@ function RFQCreate() {
                               }}
                               size="sm"
                               style={{
-                                backgroundColor: "#2563EB",
+                                backgroundColor: "#105476",
                                 fontSize: "13px",
                                 fontFamily: "Inter",
                                 fontStyle: "medium",
@@ -9112,7 +9112,7 @@ function RFQCreate() {
                                 onClick={() => handleNext()}
                                 size="sm"
                                 style={{
-                                  backgroundColor: "#2563EB",
+                                  backgroundColor: "#105476",
                                   fontSize: "13px",
                                   fontFamily: "Inter",
                                   fontStyle: "medium",
@@ -9133,7 +9133,7 @@ function RFQCreate() {
                             onClick={() => handleNext()}
                             size="sm"
                             style={{
-                              backgroundColor: "#2563EB",
+                              backgroundColor: "#105476",
                               fontSize: "13px",
                               fontFamily: "Inter",
                               fontStyle: "medium",
@@ -9480,7 +9480,7 @@ function RFQCreate() {
                     customerForm.values.supporting_documents.length - 1 && (
                     <Button
                       variant="light"
-                      color="#2563EB"
+                      color="#105476"
                       onClick={() => {
                         customerForm.setFieldValue("supporting_documents", [
                           ...customerForm.values.supporting_documents,
@@ -9498,7 +9498,7 @@ function RFQCreate() {
             {customerForm.values.supporting_documents.length === 0 && (
               <Button
                 variant="light"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconPlus size={16} />}
                 onClick={() => {
                   customerForm.setFieldValue("supporting_documents", [
@@ -9533,7 +9533,7 @@ function RFQCreate() {
           title: {
             fontWeight: 700,
             fontSize: 20,
-            color: "#2563EB",
+            color: "#105476",
           },
         }}
       >
@@ -9557,7 +9557,7 @@ function RFQCreate() {
             <Box>
               <Grid>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#2563EB" mb={4}>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
                     Sales Person
                   </Text>
                   <Text size="sm" fw={500} mb="md">
@@ -9565,7 +9565,7 @@ function RFQCreate() {
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#2563EB" mb={4}>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
                     Sales Coordinator
                   </Text>
                   <Text
@@ -9578,7 +9578,7 @@ function RFQCreate() {
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={4} px={20}>
-                  <Text size="md" fw={600} c="#2563EB" mb={4}>
+                  <Text size="md" fw={600} c="#105476" mb={4}>
                     Customer Service
                   </Text>
                   <Text
@@ -9614,7 +9614,7 @@ function RFQCreate() {
               Cancel
             </Button>
             <Button
-              color="#2563EB"
+              color="#105476"
               onClick={handleUpdateSalespersonData}
               styles={{
                 root: {

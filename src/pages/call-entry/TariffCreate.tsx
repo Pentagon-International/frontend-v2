@@ -139,7 +139,7 @@ function TariffCreate() {
       {/* <Box mx="auto" p="sm"> */}
       <Box maw={1200} mx="auto" p="md">
         {" "}
-        <Title order={4} mt="md" mb={"sm"} c={"#2563EB"}>
+        <Title order={4} mt="md" mb={"sm"} c={"#105476"}>
           Tariff
         </Title>
         <Grid grow>
@@ -209,7 +209,7 @@ function TariffCreate() {
           </Grid.Col>
           <Grid.Col span={2}>
             <Button
-              color="#2563EB"
+              color="#105476"
               mt={25}
               onClick={() => navigate("/tariff-bulk-upload")}
             >
@@ -344,7 +344,7 @@ function TariffCreate() {
                     //   size="10"
                     mt={20}
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     onClick={() =>
                       gridForm.insertListItem("tariff_charges", {
                         customer_code: "",
@@ -379,10 +379,10 @@ function TariffCreate() {
         </Stack>
         <Group justify="right" mt="xl">
           <Group justify="space-between">
-            {/* <Button color="#2563EB" onClick={() => getTariffdata()}>
+            {/* <Button color="#105476" onClick={() => getTariffdata()}>
               Get tariff data
             </Button> */}
-            <Button color="#2563EB" onClick={() => tariffSubmit()}>
+            <Button color="#105476" onClick={() => tariffSubmit()}>
               Submit
             </Button>
           </Group>

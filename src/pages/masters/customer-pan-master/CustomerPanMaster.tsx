@@ -207,7 +207,7 @@ export default function CustomerPanMaster() {
           size="sm"
         />
         <Button
-          color="#2563EB"
+          color="#105476"
           variant="light"
           size="sm"
           onClick={handleSearchClick}
@@ -231,7 +231,7 @@ export default function CustomerPanMaster() {
           <Text size="xs" c="dimmed" fw={500} tt="uppercase">
             Customer from PAN
           </Text>
-          <Text size="lg" fw={700} c="#2563EB" mt={4}>
+          <Text size="lg" fw={700} c="#105476" mt={4}>
             {customerName}
           </Text>
           {apiMessage && (
@@ -260,7 +260,7 @@ export default function CustomerPanMaster() {
                 style={{
                   width: 400,
                   minHeight: 160,
-                  borderColor: selectedIds.has(addr.id) ? "#2563EB" : "#e0e0e0",
+                  borderColor: selectedIds.has(addr.id) ? "#105476" : "#e0e0e0",
                   backgroundColor: selectedIds.has(addr.id) ? "#f5fbff" : "#ffffff",
                   display: "flex",
                   alignItems: "stretch",
@@ -273,7 +273,7 @@ export default function CustomerPanMaster() {
                     mt={4}
                   />
                   <Box style={{ flex: 1, minHeight: 80 }}>
-                    <Text size="sm" fw={600} c="#2563EB">
+                    <Text size="sm" fw={600} c="#105476">
                       {addr.gst_id || "GST UIN not available"}
                     </Text>
                     <Text size="xs" c="dimmed" mt={2}>
@@ -294,7 +294,7 @@ export default function CustomerPanMaster() {
       </Stack>
 
       <Group justify="flex-end" mt="xl">
-        <Button color="#2563EB" onClick={handleCreateCustomer} disabled={selectedIds.size === 0}>
+        <Button color="#105476" onClick={handleCreateCustomer} disabled={selectedIds.size === 0}>
           Create Customer
         </Button>
       </Group>

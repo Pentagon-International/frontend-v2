@@ -2629,7 +2629,7 @@ function ExportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#2563EB" size="lg" />
+        <Loader color="#105476" size="lg" />
       </Center>
     );
   }
@@ -2638,7 +2638,7 @@ function ExportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {mode === "view"
               ? "View Export Job"
               : mode === "edit"
@@ -2646,7 +2646,7 @@ function ExportJobCreate() {
                 : "Create Export Job"}
           </Text>
           {jobData?.job_id && (
-            <Badge color="#2563EB" radius="md" size="md">
+            <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
           )}
@@ -2654,7 +2654,7 @@ function ExportJobCreate() {
         {!isReadOnly && (
           <Group gap="xs">
             <Button
-              color="#2563EB"
+              color="#105476"
               variant={canCreateJob ? "filled" : "outline"}
               onClick={handleSubmit}
               loading={isSubmitting}
@@ -2671,7 +2671,7 @@ function ExportJobCreate() {
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
-                    color="#2563EB"
+                    color="#105476"
                     size="lg"
                     styles={{
                       root: {
@@ -2727,7 +2727,7 @@ function ExportJobCreate() {
                               justifyContent: "center",
                             }}
                           >
-                            <IconEye size={16} color="#2563EB" />
+                            <IconEye size={16} color="#105476" />
                           </Box>
                         }
                         styles={{
@@ -2766,7 +2766,7 @@ function ExportJobCreate() {
                               justifyContent: "center",
                             }}
                           >
-                            <IconEye size={16} color="#2563EB" />
+                            <IconEye size={16} color="#105476" />
                           </Box>
                         }
                         styles={{
@@ -2809,7 +2809,7 @@ function ExportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#2563EB" />
+                          <IconFileInvoice size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -2849,7 +2849,7 @@ function ExportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#2563EB" />
+                          <IconFileInvoice size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -2945,7 +2945,7 @@ function ExportJobCreate() {
                             justifyContent: "center",
                           }}
                         >
-                          <IconFileInvoice size={16} color="#2563EB" />
+                          <IconFileInvoice size={16} color="#105476" />
                         </Box>
                       }
                       styles={{
@@ -2994,7 +2994,7 @@ function ExportJobCreate() {
           (isReadOnly || (mode === "edit" && jobData?.id)) &&
           setActive(Number(v))
         }
-        color="#2563EB"
+        color="#105476"
       >
         <Tabs.List
           mb="md"
@@ -3011,8 +3011,8 @@ function ExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -3025,8 +3025,8 @@ function ExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -3039,8 +3039,8 @@ function ExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -3053,8 +3053,8 @@ function ExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 3 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 3 ? 600 : 400,
             }}
@@ -3068,8 +3068,8 @@ function ExportJobCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 4 ? "3px solid #2563EB" : "none",
-                color: "#2563EB",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                color: "#105476",
                 fontSize: 16,
                 fontWeight: active === 4 ? 600 : 400,
               }}
@@ -3084,7 +3084,7 @@ function ExportJobCreate() {
           <Box mt="md">
             {/* MBL Details Section */}
             <Group align="center" mb="md">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 MBL Details
               </Text>
             </Group>
@@ -3343,7 +3343,7 @@ function ExportJobCreate() {
 
             {/* Carrier Details Section */}
             <Group justify="space-between" align="center" mb="sm">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Carrier Details
               </Text>
             </Group>
@@ -3442,7 +3442,7 @@ function ExportJobCreate() {
         {/* Tab 2: Routings */}
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#2563EB" mb="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
               Routings{" "}
               {routingsForm.values?.routings?.length > 1 &&
                 `(${routingsForm.values?.routings?.length})`}
@@ -3934,7 +3934,7 @@ function ExportJobCreate() {
                             // leftSection={<IconPlus size={16} />}
                             size="lg"
                             variant="light"
-                            color="#2563EB"
+                            color="#105476"
                             onClick={addRouting}
                             style={{ marginTop: "1.75rem" }}
                           >
@@ -3967,7 +3967,7 @@ function ExportJobCreate() {
         <Tabs.Panel value="2">
           <Box mt="md">
             <Group justify="space-between" align="flex-start" mb="md">
-              <Text size="lg" fw={600} c="#2563EB" mb="md">
+              <Text size="lg" fw={600} c="#105476" mb="md">
                 Container Details{" "}
                 {containerDetailsForm.values.containers.length > 1 &&
                   `(${containerDetailsForm.values.containers.length})`}
@@ -3976,7 +3976,7 @@ function ExportJobCreate() {
                 <Group gap="sm">
                   <Button
                     variant="light"
-                    color="#2563EB"
+                    color="#105476"
                     leftSection={<IconPlus size={16} />}
                     onClick={addContainer}
                   >
@@ -3984,7 +3984,7 @@ function ExportJobCreate() {
                   </Button>
                   <Button
                     variant={canSaveContainerDetails ? "filled" : "outline"}
-                    color="#2563EB"
+                    color="#105476"
                     onClick={handleSaveContainerDetails}
                     disabled={!canSaveContainerDetails}
                     style={{
@@ -4005,7 +4005,7 @@ function ExportJobCreate() {
                 mb="xs"
                 style={{
                   fontWeight: 600,
-                  color: "#2563EB",
+                  color: "#105476",
                 }}
                 gutter="sm"
               >
@@ -4198,7 +4198,7 @@ function ExportJobCreate() {
                   size="sm"
                   px={12}
                  variant="light"
-                 color="#2563EB"
+                 color="#105476"
                  onClick={addContainer}
                >
                  <IconPlus size={16} />
@@ -4215,14 +4215,14 @@ function ExportJobCreate() {
         <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Estimates
               </Text>
               <Group gap="xs" wrap="nowrap">
                 {mode === "edit" && !isReadOnly && (
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     size="sm"
                     onClick={() => {
                     const toStr = (v: unknown) => String(v ?? "").trim();
@@ -4330,7 +4330,7 @@ function ExportJobCreate() {
 
                 <Button
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   size="sm"
                   leftSection={<IconFileInvoice size={16} />}
                   styles={{
@@ -4422,12 +4422,12 @@ function ExportJobCreate() {
         {mode === "edit" && jobData?.id && (
           <Tabs.Panel value="4">
             <Box mt="md">
-              <Text size="md" fw={600} c="#2563EB" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
                 <Center py="xl">
-                  <Loader color="#2563EB" size="lg" />
+                  <Loader color="#105476" size="lg" />
                 </Center>
               ) : (
                 <ScrollArea>
@@ -4530,12 +4530,12 @@ function ExportJobCreate() {
                                         {isExpanded ? (
                                           <IconChevronUp
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         ) : (
                                           <IconChevronDown
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         )}
                                       </Box>
@@ -4569,7 +4569,7 @@ function ExportJobCreate() {
                                         ? "yellow"
                                         : isPosted
                                           ? "green"
-                                          : "#2563EB"
+                                          : "#105476"
                                     }
                                   >
                                     {row.status ?? "-"}
@@ -4587,7 +4587,7 @@ function ExportJobCreate() {
                                     <Menu.Target>
                                       <ActionIcon
                                         variant="subtle"
-                                        color="#2563EB"
+                                        color="#105476"
                                         size="sm"
                                         styles={{
                                           root: {
@@ -4629,7 +4629,7 @@ function ExportJobCreate() {
                                           >
                                             <IconEye
                                               size={16}
-                                              color="#2563EB"
+                                              color="#105476"
                                             />
                                           </Box>
                                         }
@@ -4684,7 +4684,7 @@ function ExportJobCreate() {
                                             >
                                               <IconEdit
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -4739,7 +4739,7 @@ function ExportJobCreate() {
                                             >
                                               <IconRefresh
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -4803,7 +4803,7 @@ function ExportJobCreate() {
                                       <Text
                                         size="sm"
                                         fw={600}
-                                        c="#2563EB"
+                                        c="#105476"
                                         mb="xs"
                                       >
                                         Reverse invoices
@@ -4920,7 +4920,7 @@ function ExportJobCreate() {
                                                     <Badge
                                                       size="sm"
                                                       variant="light"
-                                                      color="#2563EB"
+                                                      color="#105476"
                                                     >
                                                       {rev.status ?? "-"}
                                                     </Badge>
@@ -4942,7 +4942,7 @@ function ExportJobCreate() {
                                                       <Menu.Target>
                                                         <ActionIcon
                                                           variant="subtle"
-                                                          color="#2563EB"
+                                                          color="#105476"
                                                           size="sm"
                                                           styles={{
                                                             root: {
@@ -4995,7 +4995,7 @@ function ExportJobCreate() {
                                                             >
                                                               <IconEye
                                                                 size={16}
-                                                                color="#2563EB"
+                                                                color="#105476"
                                                               />
                                                             </Box>
                                                           }
@@ -5112,7 +5112,7 @@ function ExportJobCreate() {
         <Group>
           <Button
             variant="outline"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/SeaExport/export-job")}
           >
@@ -5126,7 +5126,7 @@ function ExportJobCreate() {
               <Button
                 leftSection={<IconChevronLeft size={16} />}
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 onClick={handlePrev}
               >
                 Previous
@@ -5143,7 +5143,7 @@ function ExportJobCreate() {
             >
               <Button
                 variant="outline"
-                color="#2563EB"
+                color="#105476"
                 leftSection={<IconPlus size={16} />}
                 onClick={() => navigateToHouseCreate()}
                 disabled={!canAddHBL}
@@ -5158,7 +5158,7 @@ function ExportJobCreate() {
           {active === 0 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
               loading={isSubmitting}
             >
@@ -5169,7 +5169,7 @@ function ExportJobCreate() {
           {active === 1 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -5179,7 +5179,7 @@ function ExportJobCreate() {
           {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -5190,7 +5190,7 @@ function ExportJobCreate() {
       {/* Housing Details Display - Show at the top (all steps) */}
       {housingDetails.length > 0 && (
         <Box mb="xl">
-          <Text size="lg" fw={600} c="#2563EB" mb="md" mt="md">
+          <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
             House Bill of Lading ({housingDetails.length})
           </Text>
           <Stack gap="md">
@@ -5198,7 +5198,7 @@ function ExportJobCreate() {
               <Card key={index} shadow="sm" padding="lg" radius="md" withBorder>
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
-                    <Badge color="#2563EB" size="lg">
+                    <Badge color="#105476" size="lg">
                       HBL {index + 1}
                     </Badge>
                     <Badge
@@ -5221,7 +5221,7 @@ function ExportJobCreate() {
                       </Badge>
                     )}
                     {house.shipment_id && (
-                      <Badge color="#2563EB" variant="light">
+                      <Badge color="#105476" variant="light">
                         Shipment Id : {house.shipment_id}
                       </Badge>
                     )}
@@ -5230,7 +5230,7 @@ function ExportJobCreate() {
                     <Group gap="xs">
                       <Button
                         variant="light"
-                        color="#2563EB"
+                        color="#105476"
                         size="xs"
                         leftSection={<IconEdit size={14} />}
                         onClick={() => handleEditHousingDetail(index)}
@@ -5252,7 +5252,7 @@ function ExportJobCreate() {
                           <Menu.Target>
                             <ActionIcon
                               variant="subtle"
-                              color="#2563EB"
+                              color="#105476"
                               size="lg"
                               styles={{
                                 root: {
@@ -5292,7 +5292,7 @@ function ExportJobCreate() {
                                     justifyContent: "center",
                                   }}
                                 >
-                                  <IconEye size={16} color="#2563EB" />
+                                  <IconEye size={16} color="#105476" />
                                 </Box>
                               }
                               styles={{
@@ -5333,7 +5333,7 @@ function ExportJobCreate() {
                                     justifyContent: "center",
                                   }}
                                 >
-                                  <IconEye size={16} color="#2563EB" />
+                                  <IconEye size={16} color="#105476" />
                                 </Box>
                               }
                               styles={{
@@ -5374,7 +5374,7 @@ function ExportJobCreate() {
                                     justifyContent: "center",
                                   }}
                                 >
-                                  <IconFileInvoice size={16} color="#2563EB" />
+                                  <IconFileInvoice size={16} color="#105476" />
                                 </Box>
                               }
                               styles={{
@@ -5468,7 +5468,7 @@ function ExportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
+                    <Text size="sm" fw={600} c="#105476" mb="xs">
                       Destination Agent
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -5486,7 +5486,7 @@ function ExportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
+                    <Text size="sm" fw={600} c="#105476" mb="xs">
                       Shipper
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -5504,7 +5504,7 @@ function ExportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={4}>
-                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
+                    <Text size="sm" fw={600} c="#105476" mb="xs">
                       Consignee
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -5522,7 +5522,7 @@ function ExportJobCreate() {
                   </Grid.Col>
 
                   <Grid.Col span={12}>
-                    <Text size="sm" fw={600} c="#2563EB" mb="xs">
+                    <Text size="sm" fw={600} c="#105476" mb="xs">
                       Notify Customer
                     </Text>
                     <Text size="sm" fw={500} c="dimmed">
@@ -5575,7 +5575,7 @@ function ExportJobCreate() {
           />
           <Group justify="flex-end">
             <Button
-              color="#2563EB"
+              color="#105476"
               disabled={!selectedProformaCurrency}
               onClick={() => {
                 if (!pendingProformaShipmentId) return;
@@ -5639,7 +5639,7 @@ function ExportJobCreate() {
                 <Button
                   onClick={handleProformaDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -5648,7 +5648,7 @@ function ExportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>
@@ -5706,7 +5706,7 @@ function ExportJobCreate() {
                 <Button
                   onClick={handleCargoManifestDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -5715,7 +5715,7 @@ function ExportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>
@@ -5765,7 +5765,7 @@ function ExportJobCreate() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -5774,7 +5774,7 @@ function ExportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating Bill Of Lading PDF preview...</Text>
               </Stack>
             </Center>

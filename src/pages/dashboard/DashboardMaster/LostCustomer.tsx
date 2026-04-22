@@ -137,7 +137,7 @@ const LostCustomer = ({
           Cell: ({ row }) => (
             <Text
               size="sm"
-              style={{ cursor: "pointer", color: "#2563EB" }}
+              style={{ cursor: "pointer", color: "#105476" }}
               onClick={row.original.onClick}
             >
               {row.original.label}
@@ -241,7 +241,7 @@ const LostCustomer = ({
         </Text>
         <Text
           size="md"
-          c="#2563EB"
+          c="#105476"
           style={{
             textDecoration: "underline",
             cursor: "pointer",
@@ -288,7 +288,7 @@ const LostCustomer = ({
           <Text size="xs" c="dimmed">
             {summaryData.primaryLabel}
           </Text>
-          <Badge color="#2563EB" size="lg" variant="filled">
+          <Badge color="#105476" size="lg" variant="filled">
             {summaryData.primary}
           </Badge>
         </Stack>
@@ -306,7 +306,7 @@ const LostCustomer = ({
             <Text size="xs" c="dimmed">
               Salesperson
             </Text>
-            <Text size="sm" fw={600} c="#2563EB">
+            <Text size="sm" fw={600} c="#105476">
               {summaryData.secondaryLabel}
             </Text>
           </Stack>
@@ -317,7 +317,7 @@ const LostCustomer = ({
       <Box>
         {loading ? (
           <Center py="xl">
-            <Loader size="md" color="#2563EB" />
+            <Loader size="md" color="#105476" />
           </Center>
         ) : filteredDisplayData.length === 0 ? (
           <Center py="xl">
@@ -333,7 +333,7 @@ const LostCustomer = ({
                 <Button
                   variant="subtle"
                   size="xs"
-                  color="#2563EB"
+                  color="#105476"
                   onClick={handleViewAll}
                 >
                   View More

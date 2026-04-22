@@ -930,7 +930,7 @@ function AirExportBookingMaster() {
           <button type="button" onClick={() => handleSort(col)} style={{
             background: "none", border: "none", padding: 0, cursor: "pointer",
             display: "inline-flex", alignItems: "center", gap: 4,
-            color: active ? "#2563eb" : "#64748b", fontSize: "inherit", fontWeight: "inherit",
+            color: active ? "#105476" : "#64748b", fontSize: "inherit", fontWeight: "inherit",
           }}>
             {label}
             <IconSelector size={12} style={{ opacity: active ? 1 : 0.5 }} />
@@ -944,7 +944,7 @@ function AirExportBookingMaster() {
   const border = "#e2e8f0";
   const muted = "#64748b";
   const fg = "#0f172a";
-  const primary = "#2563eb";
+  const primary = "#105476";
   /** Table header / chrome (muted band inside the white card). */
   const bg = "#f8fafc";
   /** Same as AppShell main + `--page-bg` so the column isn’t a second gray behind the card. */
@@ -1043,7 +1043,7 @@ function AirExportBookingMaster() {
                         flexShrink: 0,
                       }}
                     >
-                      <IconPackage size={14} color="#2563eb" />
+                      <IconPackage size={14} color="#105476" />
                     </Box>
                     <Box>
                       <Text fw={700} size="lg" c={fg} lh={1}>

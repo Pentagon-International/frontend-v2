@@ -121,7 +121,7 @@ function ResetPasswordForm() {
             spacing="xs"
             size="sm"
             icon={
-              <ThemeIcon color="#2563EB" size={18} radius="xl">
+              <ThemeIcon color="#105476" size={18} radius="xl">
                 <IconCircleCheck size={12} />
               </ThemeIcon>
             }
@@ -139,7 +139,7 @@ function ResetPasswordForm() {
             radius="md"
             fullWidth
             mt="20px"
-            color="#2563EB"
+            color="#105476"
             size="md"
           >
             <Text mr="xs">Update Password</Text>

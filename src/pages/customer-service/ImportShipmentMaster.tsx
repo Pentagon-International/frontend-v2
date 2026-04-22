@@ -579,7 +579,7 @@ function ImportShipmentMaster() {
       //             }
       //           >
       //             <Group gap={"sm"}>
-      //               <IconEdit size={16} style={{ color: "#2563EB" }} />
+      //               <IconEdit size={16} style={{ color: "#105476" }} />
       //               <Text size="sm">Edit</Text>
       //             </Group>
       //           </UnstyledButton>
@@ -606,7 +606,7 @@ function ImportShipmentMaster() {
       //                 style={{
       //                   color: row.original.import_to_export
       //                     ? "#ccc"
-      //                     : "#2563EB",
+      //                     : "#105476",
       //                 }}
       //               />
       //               <Text
@@ -796,7 +796,7 @@ function ImportShipmentMaster() {
           }}
         >
           <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-            <Text size="md" fw={600} c="#2563EB">
+            <Text size="md" fw={600} c="#105476">
               Import Booking Lists
             </Text>
 
@@ -805,7 +805,7 @@ function ImportShipmentMaster() {
                 variant={showFilters ? "filled" : "outline"}
                 leftSection={<IconFilter size={16} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
                 onClick={() => setShowFilters(!showFilters)}
               >
                 Filters
@@ -814,7 +814,7 @@ function ImportShipmentMaster() {
                 variant="filled"
                 leftSection={<IconPlus size={14} />}
                 size="xs"
-                color="#2563EB"
+                color="#105476"
                 onClick={() => navigate("./create")}
               >
                 Create New
@@ -837,8 +837,8 @@ function ImportShipmentMaster() {
             >
               <Group justify="space-between" align="center">
                 <Group align="center" gap="xs">
-                  <IconFilter size={16} color="#2563EB" />
-                  <Text size="sm" fw={500} c="#2563EB">
+                  <IconFilter size={16} color="#105476" />
+                  <Text size="sm" fw={500} c="#105476">
                     Filters
                   </Text>
                 </Group>
@@ -961,7 +961,7 @@ function ImportShipmentMaster() {
                 <Button
                   size="xs"
                   variant="outline"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={<IconFilterOff size={14} />}
                   onClick={clearAllFilters}
                 >
@@ -970,7 +970,7 @@ function ImportShipmentMaster() {
                 <Button
                   size="xs"
                   variant="filled"
-                  color="#2563EB"
+                  color="#105476"
                   leftSection={
                     isDataLoading ? (
                       <Loader size={14} />
@@ -1004,7 +1004,7 @@ function ImportShipmentMaster() {
               }}
             >
               <Stack align="center" gap="md">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Loading import bookings...</Text>
               </Stack>
             </Center>

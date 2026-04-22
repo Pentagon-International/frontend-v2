@@ -655,7 +655,7 @@ function PipelineCreate() {
             zIndex: 15,
           }}
         >
-          <Loader color="#2563EB" size="lg" />
+          <Loader color="#105476" size="lg" />
         </Center>
       )}
 
@@ -690,12 +690,12 @@ function PipelineCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -780,7 +780,7 @@ function PipelineCreate() {
                   <Grid.Col span={12}>
                     <Center py="xl">
                       <Stack align="center" gap="md">
-                        <Loader size="lg" color="#2563EB" />
+                        <Loader size="lg" color="#105476" />
                         <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>Loading data...</Text>
                       </Stack>
                     </Center>
@@ -812,12 +812,12 @@ function PipelineCreate() {
             <Grid.Col
               span={3.1}
               style={{
-                borderBottom: "2px solid #2563EB",
+                borderBottom: "2px solid #105476",
                 paddingBottom: "4px",
                 borderRight: "none",
               }}
             >
-              <Text fw={600} c="#2563EB" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
+              <Text fw={600} c="#105476" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
                 Profile
               </Text>
             </Grid.Col>
@@ -827,12 +827,12 @@ function PipelineCreate() {
             <Grid.Col
               span={2.8}
               style={{
-                borderBottom: "2px solid #2563EB",
+                borderBottom: "2px solid #105476",
                 paddingBottom: "4px",
                 borderLeft: "none",
               }}
             >
-              <Text fw={600} c="#2563EB" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
+              <Text fw={600} c="#105476" size="sm" ta="center" style={{ fontFamily: "Inter" }}>
                 Pipeline
               </Text>
             </Grid.Col>
@@ -1668,13 +1668,13 @@ function PipelineCreate() {
                           <Button
                             size="xs"
                             variant="outline"
-                            c="#2563EB"
+                            c="#105476"
                             leftSection={<IconPlus size={16} />}
                             onClick={handleAddNewProfile}
                             styles={{
                               root: {
-                                color: "#2563EB",
-                                borderColor: "#2563EB",
+                                color: "#105476",
+                                borderColor: "#105476",
                                 fontFamily: "Inter, sans-serif",
                               },
                             }}
@@ -1741,7 +1741,7 @@ function PipelineCreate() {
                       size="sm"
                       disabled={selectedCustomerCode === ""}
                       style={{
-                        backgroundColor: selectedCustomerCode === "" ? "#2563EBBB" : "#2563EB",
+                        backgroundColor: selectedCustomerCode === "" ? "#105476BB" : "#105476",
                         fontSize: "13px",
                         fontFamily: "Inter",
                         fontStyle: "medium",

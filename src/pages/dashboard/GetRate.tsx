@@ -541,12 +541,12 @@ const GetRate = () => {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -687,7 +687,7 @@ const GetRate = () => {
                                 <Group gap="xs">
                                   <ActionIcon
                                     variant="light"
-                                    color="#2563EB"
+                                    color="#105476"
                                     onClick={() => addRowBelow(index)}
                                     aria-label="Add row"
                                   >
@@ -837,7 +837,7 @@ const GetRate = () => {
                         <Text 
                           size="md" 
                           fw={600} 
-                          c="#2563EB"
+                          c="#105476"
                           style={{ 
                             fontFamily: "Inter",
                             fontSize: "13px",
@@ -849,7 +849,7 @@ const GetRate = () => {
                         {recentRateRequests &&
                         <Text 
                           fw={500} 
-                          c="#2563EB" 
+                          c="#105476" 
                           size="sm"
                           style={{ 
                             fontFamily: "Inter",
@@ -875,7 +875,7 @@ const GetRate = () => {
                                 cursor: "pointer",
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.borderColor = "#2563EB";
+                                e.currentTarget.style.borderColor = "#105476";
                                 e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.12)";
                               }}
                               onMouseLeave={(e) => {
@@ -889,7 +889,7 @@ const GetRate = () => {
                                     <Text 
                                       size="sm" 
                                       fw={600} 
-                                      c="#2563EB" 
+                                      c="#105476" 
                                       mb={4}
                                       style={{ 
                                         fontFamily: "Inter",
@@ -913,7 +913,7 @@ const GetRate = () => {
                                   <Text 
                                     size="sm" 
                                     fw={600} 
-                                    c="#2563EB" 
+                                    c="#105476" 
                                     mb={4}
                                     style={{ 
                                       fontFamily: "Inter",
@@ -940,7 +940,7 @@ const GetRate = () => {
                                     <Text 
                                       size="sm" 
                                       fw={600} 
-                                      c="#2563EB" 
+                                      c="#105476" 
                                       mb={4}
                                       style={{ 
                                         fontFamily: "Inter",
@@ -966,7 +966,7 @@ const GetRate = () => {
                                     <Text 
                                       size="sm" 
                                       fw={600} 
-                                      c="#2563EB" 
+                                      c="#105476" 
                                       mb={4}
                                       style={{ 
                                         fontFamily: "Inter",
@@ -992,7 +992,7 @@ const GetRate = () => {
                                     <Text 
                                       size="sm" 
                                       fw={600} 
-                                      c="#2563EB" 
+                                      c="#105476" 
                                       mb={4}
                                       style={{ 
                                         fontFamily: "Inter",
@@ -1082,7 +1082,7 @@ const GetRate = () => {
                     type="submit"
                     size="sm"
                     style={{
-                      backgroundColor: "#2563EB",
+                      backgroundColor: "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
                       fontStyle: "medium",

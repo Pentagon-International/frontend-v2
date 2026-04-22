@@ -133,7 +133,7 @@ const OutstandingBarChart = ({
 
         <Text
           size="sm"
-          c="#2563EB"
+          c="#105476"
           style={{
             textDecoration: "underline",
             cursor: "pointer",

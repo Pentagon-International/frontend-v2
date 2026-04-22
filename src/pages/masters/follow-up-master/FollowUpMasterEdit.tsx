@@ -120,14 +120,14 @@ function FollowUpMasterEdit() {
           styles={{
             root: {
               backgroundColor: "#E4E4E4",
-              color: "#2563EB",
+              color: "#105476",
               width: "150px",
             },
             indicator: {
-              backgroundColor: "#2563EB",
+              backgroundColor: "#105476",
             },
             label: {
-              color: "#2563EB",
+              color: "#105476",
               "&[data-active]": {
                 color: "#ffffff",
               },
@@ -173,8 +173,8 @@ function FollowUpMasterEdit() {
             onClick={() => navigate("/master/follow-up")}
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
           >
@@ -187,8 +187,8 @@ function FollowUpMasterEdit() {
               onClick={() => navigate("/master/follow-up")}
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
             >
@@ -196,7 +196,7 @@ function FollowUpMasterEdit() {
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Update

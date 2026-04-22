@@ -107,10 +107,10 @@ function GroupCompanyEdit() {
                 width: "150px",
               },
               indicator: {
-                backgroundColor: "#2563EB",
+                backgroundColor: "#105476",
               },
               label: {
-                color: "#2563EB",
+                color: "#105476",
                 "&[data-active]": {
                   color: "#ffffff",
                 },
@@ -149,11 +149,11 @@ function GroupCompanyEdit() {
               w={130}
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
-              c={"#2563EB"}
+              c={"#105476"}
               variant="outline"
               leftSection={<IconArrowLeft size={16} />}
               onClick={() => handleBack()}
@@ -165,11 +165,11 @@ function GroupCompanyEdit() {
                 w={130}
                 styles={{
                   root: {
-                    color: "#2563EB",
-                    borderColor: "#2563EB",
+                    color: "#105476",
+                    borderColor: "#105476",
                   },
                 }}
-                c={"#2563EB"}
+                c={"#105476"}
                 variant="outline"
                 onClick={() => navigate("/master/group-company")}
               >
@@ -178,7 +178,7 @@ function GroupCompanyEdit() {
               <Button
                 w={130}
                 type="submit"
-                color={"#2563EB"}
+                color={"#105476"}
                 variant="filled"
                 rightSection={<IconCheck size={16} />}
               >

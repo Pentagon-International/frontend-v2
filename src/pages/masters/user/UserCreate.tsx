@@ -131,11 +131,11 @@ function UserCreate() {
           <Button
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
-            c={"#2563EB"}
+            c={"#105476"}
             variant="outline"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/group-company")}
@@ -145,11 +145,11 @@ function UserCreate() {
           <Flex gap={"md"}>
             <Button
               variant="outline"
-              c={"#2563EB"}
+              c={"#105476"}
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
               onClick={() => navigate("/master/group-company")}
@@ -158,7 +158,7 @@ function UserCreate() {
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Submit

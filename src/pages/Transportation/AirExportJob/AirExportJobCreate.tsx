@@ -2350,7 +2350,7 @@ function AirExportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#2563EB" size="lg" />
+        <Loader color="#105476" size="lg" />
       </Center>
     );
   }
@@ -2359,7 +2359,7 @@ function AirExportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#2563EB">
+          <Text size="xl" fw={600} c="#105476">
             {mode === "view"
               ? "View Export Job"
               : mode === "edit"
@@ -2367,7 +2367,7 @@ function AirExportJobCreate() {
                 : "Create Export Job"}
           </Text>
           {jobData?.job_id && (
-            <Badge color="#2563EB" radius="md" size="md">
+            <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
           )}
@@ -2375,7 +2375,7 @@ function AirExportJobCreate() {
         {!isReadOnly && (
           <Group gap="sm">
             <Button
-              color="#2563EB"
+              color="#105476"
               variant={canCreateJob ? "filled" : "outline"}
               onClick={handleSubmit}
               loading={isSubmitting}
@@ -2392,7 +2392,7 @@ function AirExportJobCreate() {
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
-                    color="#2563EB"
+                    color="#105476"
                     size="lg"
                     styles={{
                       root: {
@@ -2432,7 +2432,7 @@ function AirExportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconFileInvoice size={16} color="#2563EB" />
+                        <IconFileInvoice size={16} color="#105476" />
                       </Box>
                     }
                     styles={{
@@ -2470,7 +2470,7 @@ function AirExportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconFileInvoice size={16} color="#2563EB" />
+                        <IconFileInvoice size={16} color="#105476" />
                       </Box>
                     }
                     styles={{
@@ -2557,7 +2557,7 @@ function AirExportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconFileInvoice size={16} color="#2563EB" />
+                        <IconFileInvoice size={16} color="#105476" />
                       </Box>
                     }
                     styles={{
@@ -2604,7 +2604,7 @@ function AirExportJobCreate() {
                           justifyContent: "center",
                         }}
                       >
-                        <IconFileInvoice size={16} color="#2563EB" />
+                        <IconFileInvoice size={16} color="#105476" />
                       </Box>
                     }
                     styles={{
@@ -2653,7 +2653,7 @@ function AirExportJobCreate() {
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
-        color="#2563EB"
+        color="#105476"
       >
         <Tabs.List
           mb="md"
@@ -2670,8 +2670,8 @@ function AirExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 0 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 0 ? 600 : 400,
             }}
@@ -2684,8 +2684,8 @@ function AirExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 1 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 1 ? 600 : 400,
             }}
@@ -2698,8 +2698,8 @@ function AirExportJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: active === 2 ? "3px solid #2563EB" : "none",
-              color: "#2563EB",
+              borderBottom: active === 2 ? "3px solid #105476" : "none",
+              color: "#105476",
               fontSize: 16,
               fontWeight: active === 2 ? 600 : 400,
             }}
@@ -2713,8 +2713,8 @@ function AirExportJobCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 3 ? "3px solid #2563EB" : "none",
-                color: "#2563EB",
+                borderBottom: active === 3 ? "3px solid #105476" : "none",
+                color: "#105476",
                 fontSize: 16,
                 fontWeight: active === 3 ? 600 : 400,
               }}
@@ -2729,7 +2729,7 @@ function AirExportJobCreate() {
           <Box mt="md">
             {/* MAWB Details Section */}
             <Group align="center" mb="md">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 MAWB Details
               </Text>
             </Group>
@@ -2951,7 +2951,7 @@ function AirExportJobCreate() {
 
             {/* Carrier Details Section */}
             <Group justify="space-between" align="center" mb="sm">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Carrier Details
               </Text>
             </Group>
@@ -3036,7 +3036,7 @@ function AirExportJobCreate() {
         {/* Tab 2: Routings */}
         <Tabs.Panel value="1">
           <Box mt="md">
-            <Text size="lg" fw={600} c="#2563EB" mb="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
               Routings
             </Text>
 
@@ -3538,7 +3538,7 @@ function AirExportJobCreate() {
                           <ActionIcon
                             size="lg"
                             variant="light"
-                            color="#2563EB"
+                            color="#105476"
                             onClick={addRouting}
                             style={{ marginTop: "1.75rem" }}
                           >
@@ -3561,14 +3561,14 @@ function AirExportJobCreate() {
         <Tabs.Panel value="2">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-              <Text size="lg" fw={600} c="#2563EB">
+              <Text size="lg" fw={600} c="#105476">
                 Estimates
               </Text>
               <Group gap="xs" wrap="nowrap">
                 {mode === "edit" && !isReadOnly && (
                   <Button
                     variant="outline"
-                    color="#2563EB"
+                    color="#105476"
                     size="sm"
                     onClick={() => {
                     const toStr = (v: unknown) => String(v ?? "").trim();
@@ -3676,7 +3676,7 @@ function AirExportJobCreate() {
 
                 <Button
                   variant="light"
-                  color="#2563EB"
+                  color="#105476"
                   size="sm"
                   leftSection={<IconFileInvoice size={16} />}
                   styles={{
@@ -3768,12 +3768,12 @@ function AirExportJobCreate() {
         {jobData?.id != null && (
           <Tabs.Panel value="3">
             <Box mt="md">
-              <Text size="md" fw={600} c="#2563EB" mb="md">
+              <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
               </Text>
               {invoiceListLoading ? (
                 <Center py="xl">
-                  <Loader color="#2563EB" size="lg" />
+                  <Loader color="#105476" size="lg" />
                 </Center>
               ) : (
                 <ScrollArea>
@@ -3869,12 +3869,12 @@ function AirExportJobCreate() {
                                         {isExpanded ? (
                                           <IconChevronUp
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         ) : (
                                           <IconChevronDown
                                             size={14}
-                                            color="#2563EB"
+                                            color="#105476"
                                           />
                                         )}
                                       </Box>
@@ -3908,7 +3908,7 @@ function AirExportJobCreate() {
                                         ? "yellow"
                                         : isPosted
                                           ? "green"
-                                          : "#2563EB"
+                                          : "#105476"
                                     }
                                   >
                                     {row.status ?? "-"}
@@ -3926,7 +3926,7 @@ function AirExportJobCreate() {
                                     <Menu.Target>
                                       <ActionIcon
                                         variant="subtle"
-                                        color="#2563EB"
+                                        color="#105476"
                                         size="sm"
                                         styles={{
                                           root: {
@@ -3968,7 +3968,7 @@ function AirExportJobCreate() {
                                           >
                                             <IconEye
                                               size={16}
-                                              color="#2563EB"
+                                              color="#105476"
                                             />
                                           </Box>
                                         }
@@ -4023,7 +4023,7 @@ function AirExportJobCreate() {
                                             >
                                               <IconEdit
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -4078,7 +4078,7 @@ function AirExportJobCreate() {
                                             >
                                               <IconRefresh
                                                 size={16}
-                                                color="#2563EB"
+                                                color="#105476"
                                               />
                                             </Box>
                                           }
@@ -4142,7 +4142,7 @@ function AirExportJobCreate() {
                                       <Text
                                         size="sm"
                                         fw={600}
-                                        c="#2563EB"
+                                        c="#105476"
                                         mb="xs"
                                       >
                                         Reverse invoices
@@ -4259,7 +4259,7 @@ function AirExportJobCreate() {
                                                     <Badge
                                                       size="sm"
                                                       variant="light"
-                                                      color="#2563EB"
+                                                      color="#105476"
                                                     >
                                                       {rev.status ?? "-"}
                                                     </Badge>
@@ -4281,7 +4281,7 @@ function AirExportJobCreate() {
                                                       <Menu.Target>
                                                         <ActionIcon
                                                           variant="subtle"
-                                                          color="#2563EB"
+                                                          color="#105476"
                                                           size="sm"
                                                           styles={{
                                                             root: {
@@ -4334,7 +4334,7 @@ function AirExportJobCreate() {
                                                             >
                                                               <IconEye
                                                                 size={16}
-                                                                color="#2563EB"
+                                                                color="#105476"
                                                               />
                                                             </Box>
                                                           }
@@ -4451,7 +4451,7 @@ function AirExportJobCreate() {
         <Group>
           <Button
             variant="outline"
-            color="#2563EB"
+            color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/air/export-job")}
           >
@@ -4461,7 +4461,7 @@ function AirExportJobCreate() {
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               onClick={handlePrev}
             >
               Previous
@@ -4473,7 +4473,7 @@ function AirExportJobCreate() {
           {!isReadOnly && (
             <Button
               variant="outline"
-              color="#2563EB"
+              color="#105476"
               leftSection={<IconPlus size={16} />}
               onClick={() => navigateToHawbCreate()}
             >
@@ -4483,7 +4483,7 @@ function AirExportJobCreate() {
           {active === 0 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -4492,7 +4492,7 @@ function AirExportJobCreate() {
           {active === 1 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
             >
               Next
@@ -4502,7 +4502,7 @@ function AirExportJobCreate() {
           {active === 2 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
-              color="#2563EB"
+              color="#105476"
               onClick={handleNext}
               loading={isSubmitting}
             >
@@ -4561,7 +4561,7 @@ function AirExportJobCreate() {
                 <Button
                   onClick={handleDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -4570,7 +4570,7 @@ function AirExportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>
@@ -4610,7 +4610,7 @@ function AirExportJobCreate() {
           />
           <Group justify="flex-end">
             <Button
-              color="#2563EB"
+              color="#105476"
               disabled={!selectedProformaCurrency}
               onClick={() => {
                 if (!pendingProformaShipmentId) return;
@@ -4674,7 +4674,7 @@ function AirExportJobCreate() {
                 <Button
                   onClick={handleProformaDownloadPDF}
                   leftSection={<IconDownload size={16} />}
-                  color="#2563EB"
+                  color="#105476"
                 >
                   Download PDF
                 </Button>
@@ -4683,7 +4683,7 @@ function AirExportJobCreate() {
           ) : (
             <Center h="100%">
               <Stack align="center">
-                <Loader size="lg" color="#2563EB" />
+                <Loader size="lg" color="#105476" />
                 <Text c="dimmed">Generating PDF preview...</Text>
               </Stack>
             </Center>
@@ -4694,7 +4694,7 @@ function AirExportJobCreate() {
       {/* HAWB Details Display - Show at the top (all steps) */}
       {hawbDetails.length > 0 && (
         <Box mb="xl">
-          <Text size="lg" fw={600} c="#2563EB" mb="md" mt="md">
+          <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
             House Air Waybill (HAWB) ({hawbDetails.length})
           </Text>
           <Stack gap="md">
@@ -4702,7 +4702,7 @@ function AirExportJobCreate() {
               <Card key={index} shadow="sm" padding="lg" radius="md" withBorder>
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
-                    <Badge color="#2563EB" size="lg">
+                    <Badge color="#105476" size="lg">
                       HAWB {index + 1}
                     </Badge>
                     <Badge
@@ -4725,7 +4725,7 @@ function AirExportJobCreate() {
                       </Badge>
                     )}
                     {hawb.shipment_id && (
-                      <Badge color="#2563EB" variant="light">
+                      <Badge color="#105476" variant="light">
                         Shipment Id : {hawb.shipment_id}
                       </Badge>
                     )}
@@ -4735,7 +4735,7 @@ function AirExportJobCreate() {
                       <>
                         <Button
                           variant="light"
-                          color="#2563EB"
+                          color="#105476"
                           size="xs"
                           leftSection={<IconEdit size={14} />}
                           onClick={() => handleEditHawbDetail(index)}
@@ -4757,7 +4757,7 @@ function AirExportJobCreate() {
                       <Menu.Target>
                         <ActionIcon
                           variant="light"
-                          color="#2563EB"
+                          color="#105476"
                           size="sm"
                           styles={{
                             root: {
@@ -4791,7 +4791,7 @@ function AirExportJobCreate() {
                                 justifyContent: "center",
                               }}
                             >
-                              <IconFileInvoice size={14} color="#2563EB" />
+                              <IconFileInvoice size={14} color="#105476" />
                             </Box>
                           }
                           styles={{

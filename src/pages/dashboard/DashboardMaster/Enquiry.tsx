@@ -24,7 +24,7 @@ const Enquiry = ({
     <Box>
       {isLoadingEnquiryConversion || isLoadingEnquiryChart ? (
         <Center h="70%">
-          <Loader size="lg" color="#2563EB" />
+          <Loader size="lg" color="#105476" />
         </Center>
       ) : (
         <Stack gap="md" style={{ paddingTop: "16px" }}>

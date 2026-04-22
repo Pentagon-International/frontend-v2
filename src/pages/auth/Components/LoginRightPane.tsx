@@ -72,7 +72,7 @@ function LoginRightPane() {
             color: "#FFF",
           },
           indicator: {
-            backgroundColor: "#2563EB",
+            backgroundColor: "#105476",
             color: "#FFF",
           },
         }}

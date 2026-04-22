@@ -164,8 +164,8 @@ function ServiceMasterNew() {
             variant="outline"
             styles={{
               root: {
-                color: "#2563EB",
-                borderColor: "#2563EB",
+                color: "#105476",
+                borderColor: "#105476",
               },
             }}
             leftSection={<IconArrowLeft size={16} />}
@@ -178,8 +178,8 @@ function ServiceMasterNew() {
               variant="outline"
               styles={{
                 root: {
-                  color: "#2563EB",
-                  borderColor: "#2563EB",
+                  color: "#105476",
+                  borderColor: "#105476",
                 },
               }}
               onClick={() => navigate("/master/service")}
@@ -188,7 +188,7 @@ function ServiceMasterNew() {
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Submit

@@ -136,7 +136,7 @@ function NewTermsOfShipment() {
         <Flex gap="sm" justify="space-between" align="center" w="100%">
           <Button
             variant="outline"
-            c="#2563EB"
+            c="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => navigate("/master/terms-of-shipment")}
           >
@@ -145,14 +145,14 @@ function NewTermsOfShipment() {
           <Flex gap="md">
             <Button
               variant="outline"
-              c="#2563EB"
+              c="#105476"
               onClick={() => navigate("/master/terms-of-shipment")}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              color="#2563EB"
+              color="#105476"
               rightSection={<IconCheck size={16} />}
             >
               Submit

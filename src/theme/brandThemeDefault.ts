@@ -19,7 +19,7 @@ export const defaultTheme = createTheme({
       "#93C5FD",
       "#60A5FA",
       "#3B82F6",
-      "#2563EB",
+      "#105476",
       "#1D4ED8",
       "#1E40AF",
       "#1E3A8A",
@@ -43,7 +43,7 @@ export const defaultTheme = createTheme({
       "#93C5FD",
       "#60A5FA",
       "#3B82F6",
-      "#2563EB",
+      "#105476",
       "#1D4ED8",
       "#1E40AF",
       "#1E3A8A",
@@ -107,7 +107,7 @@ export const defaultTheme = createTheme({
   },
 
   other: {
-    primaryGradient: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+    primaryGradient: "linear-gradient(135deg, #105476 0%, #1D4ED8 100%)",
     sidebarBg: "#0D1B2E",
     pageBg: "#F0F4F8",
   },

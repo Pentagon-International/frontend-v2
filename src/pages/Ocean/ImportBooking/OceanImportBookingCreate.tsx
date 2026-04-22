@@ -392,7 +392,7 @@ function OceanImportBookingCreate() {
             zIndex: 15,
           }}
         >
-          <Loader color="#2563EB" size="lg" />
+          <Loader color="#105476" size="lg" />
         </Center>
       )}
 
@@ -431,12 +431,12 @@ function OceanImportBookingCreate() {
               <Text
                 size="md"
                 fw={600}
-                c="#2563EB"
+                c="#105476"
                 style={{
                   fontFamily: "Inter",
                   fontStyle: "medium",
                   fontSize: "16px",
-                  color: "#2563EB",
+                  color: "#105476",
                   textAlign: "center",
                 }}
               >
@@ -466,7 +466,7 @@ function OceanImportBookingCreate() {
                       active > 0
                         ? "none"
                         : active === 0
-                          ? "2px solid #2563EB"
+                          ? "2px solid #105476"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -477,7 +477,7 @@ function OceanImportBookingCreate() {
                       active > 0
                         ? "white"
                         : active === 0
-                          ? "#2563EB"
+                          ? "#105476"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -486,19 +486,19 @@ function OceanImportBookingCreate() {
                   {active > 0 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconUser size={20} color="#2563EB" fill="#E6F2F8" />
+                    <IconUser size={20} color="#105476" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
                   size="sm"
                   fw={400}
-                  c="#2563EB"
+                  c="#105476"
                   style={{
                     lineHeight: 1.3,
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   Import Booking
@@ -547,7 +547,7 @@ function OceanImportBookingCreate() {
                       active > 1
                         ? "none"
                         : active === 1
-                          ? "2px solid #2563EB"
+                          ? "2px solid #105476"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -558,7 +558,7 @@ function OceanImportBookingCreate() {
                       active > 1
                         ? "white"
                         : active === 1
-                          ? "#2563EB"
+                          ? "#105476"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -569,7 +569,7 @@ function OceanImportBookingCreate() {
                   ) : (
                     <IconTruckDelivery
                       size={20}
-                      color="#2563EB"
+                      color="#105476"
                       fill="#E6F2F8"
                     />
                   )}
@@ -583,7 +583,7 @@ function OceanImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   Party Details
@@ -632,7 +632,7 @@ function OceanImportBookingCreate() {
                       active > 2
                         ? "none"
                         : active === 2
-                          ? "2px solid #2563EB"
+                          ? "2px solid #105476"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -643,7 +643,7 @@ function OceanImportBookingCreate() {
                       active > 2
                         ? "white"
                         : active === 2
-                          ? "#2563EB"
+                          ? "#105476"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -652,7 +652,7 @@ function OceanImportBookingCreate() {
                   {active > 2 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconPackage size={20} color="#2563EB" fill="#E6F2F8" />
+                    <IconPackage size={20} color="#105476" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
@@ -664,7 +664,7 @@ function OceanImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   Cargo Details
@@ -713,7 +713,7 @@ function OceanImportBookingCreate() {
                       active > 3
                         ? "none"
                         : active === 3
-                          ? "2px solid #2563EB"
+                          ? "2px solid #105476"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -724,7 +724,7 @@ function OceanImportBookingCreate() {
                       active > 3
                         ? "white"
                         : active === 3
-                          ? "#2563EB"
+                          ? "#105476"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -733,7 +733,7 @@ function OceanImportBookingCreate() {
                   {active > 3 ? (
                     <IconCircleCheck size={20} color="#289D69" fill="#EAF9F1" />
                   ) : (
-                    <IconMapPin size={20} color="#2563EB" fill="#E6F2F8" />
+                    <IconMapPin size={20} color="#105476" fill="#E6F2F8" />
                   )}
                 </Box>
                 <Text
@@ -745,7 +745,7 @@ function OceanImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   Pickup/Delivery
@@ -794,7 +794,7 @@ function OceanImportBookingCreate() {
                       active > 4
                         ? "none"
                         : active === 4
-                          ? "2px solid #2563EB"
+                          ? "2px solid #105476"
                           : "2px solid #d1d5db",
                     display: "flex",
                     alignItems: "center",
@@ -805,7 +805,7 @@ function OceanImportBookingCreate() {
                       active > 4
                         ? "white"
                         : active === 4
-                          ? "#2563EB"
+                          ? "#105476"
                           : "#9ca3af",
                     transition: "all 0.2s",
                     flexShrink: 0,
@@ -816,7 +816,7 @@ function OceanImportBookingCreate() {
                   ) : (
                     <IconCurrencyDollar
                       size={20}
-                      color="#2563EB"
+                      color="#105476"
                       fill="#E6F2F8"
                     />
                   )}
@@ -830,7 +830,7 @@ function OceanImportBookingCreate() {
                     fontFamily: "Inter",
                     fontStyle: "regular",
                     fontSize: "13px",
-                    color: "#2563EB",
+                    color: "#105476",
                   }}
                 >
                   Rate Details
