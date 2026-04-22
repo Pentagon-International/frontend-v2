@@ -104,10 +104,35 @@ const AIR_EXPORT_FILTER_SELECT_CLASSNAMES = {
   option: AIR_EXPORT_GEIST_ROOT_CLASS,
 };
 
-const AIR_EXPORT_FILTER_FIELD_FONT_STYLES = {
-  input: { fontFamily: V0_FONT_SANS },
-  label: { fontFamily: V0_FONT_SANS },
-};
+/** One visual rhythm for all filter controls (labels + 32px inputs, Geist) — matches toolbar / ERP density. */
+const AIR_EXPORT_FILTER_BORDER = "#e2e8f0";
+const AIR_EXPORT_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#64748b",
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: AIR_EXPORT_FILTER_BORDER,
+  },
+  dropdown: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+  },
+} as const;
 
 /** Mantine theme slice: v0 uses Geist + Tailwind defaults (text-xs 12px, text-sm 14px, text-lg 18px). */
 const airExportV0MantineTheme = createTheme({
@@ -1294,85 +1319,298 @@ function AirExportBookingMaster() {
             </Box>
           </Box>
 
-          {/* ===== ADVANCED FILTER PANEL ===== */}
+          {/* ===== ADVANCED FILTER PANEL (aligned with toolbar insets; grid spans sum to 12 per row) ===== */}
           {showFilters && (
-            <Box py="sm" style={{ backgroundColor: "#fff", borderBottom: `1px solid ${border}` }}>
-              <Box style={{ border: `1px solid ${border}`, borderRadius: 8, overflow: "hidden" }}>
-                <Group justify="space-between" align="center" px="sm" py={6} style={{ backgroundColor: bg }}>
-                  <Text size="sm" fw={600} c={fg}>Advanced Filters</Text>
-                  <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setShowFilters(false)}>
+            <Box
+              mx={{ base: -16, sm: -24 }}
+              px={{ base: 16, lg: 24 }}
+              pt="sm"
+              pb="md"
+              style={{
+                backgroundColor: pageBg,
+                borderBottom: `1px solid ${border}`,
+              }}
+            >
+              <Paper
+                withBorder
+                radius="md"
+                p={0}
+                shadow="sm"
+                style={{
+                  borderColor: border,
+                  backgroundColor: cardBg,
+                  overflow: "hidden",
+                }}
+              >
+                <Group
+                  justify="space-between"
+                  align="center"
+                  wrap="nowrap"
+                  gap="sm"
+                  px="md"
+                  py={10}
+                  style={{
+                    backgroundColor: bg,
+                    borderBottom: `1px solid ${border}`,
+                  }}
+                >
+                  <Group gap={10} wrap="nowrap" align="center">
+                    <Box
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        backgroundColor: `${primary}14`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconFilter size={16} color={primary} stroke={1.5} />
+                    </Box>
+                    <Box style={{ minWidth: 0 }}>
+                      <Text size="sm" fw={600} c={fg} lh={1.3} style={{ fontFamily: V0_FONT_SANS }}>
+                        Filters
+                      </Text>
+                      <Text size="xs" c={muted} lh={1.2} style={{ fontFamily: V0_FONT_SANS }}>
+                        Refine bookings by reference, customer, route, or date
+                      </Text>
+                    </Box>
+                  </Group>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    aria-label="Close filters"
+                    onClick={() => setShowFilters(false)}
+                  >
                     <IconX size={16} />
                   </ActionIcon>
                 </Group>
-                <Box p="md">
-                  <Grid gutter="md">
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <FormTextInput size="xs" label="Booking ID" placeholder="Enter Booking ID"
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                        value={filterForm.values.booking_id ?? ""}
-                        onChange={(e) => filterForm.setFieldValue("booking_id", e.currentTarget.value || null)} />
+                <Box p={{ base: "md", sm: "lg" }}>
+                  <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <FormTextInput
+                          size="xs"
+                          label="Booking ID"
+                          placeholder="Enter Booking ID"
+                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                          value={filterForm.values.booking_id ?? ""}
+                          onChange={(e) =>
+                            filterForm.setFieldValue(
+                              "booking_id",
+                              e.currentTarget.value || null
+                            )
+                          }
+                        />
+                      </Box>
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <FormTextInput size="xs" label="Enquiry ID" placeholder="Enter Enquiry ID"
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                        value={filterForm.values.enquiry_id ?? ""}
-                        onChange={(e) => filterForm.setFieldValue("enquiry_id", e.currentTarget.value || null)} />
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <FormTextInput
+                          size="xs"
+                          label="Enquiry ID"
+                          placeholder="Enter Enquiry ID"
+                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                          value={filterForm.values.enquiry_id ?? ""}
+                          onChange={(e) =>
+                            filterForm.setFieldValue(
+                              "enquiry_id",
+                              e.currentTarget.value || null
+                            )
+                          }
+                        />
+                      </Box>
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <SearchableSelect size="xs" label="Customer" placeholder="Type customer name"
-                        apiEndpoint={URL.allCustomers} searchFields={["customer_name", "customer_code"]}
-                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.customer_code), label: String(item.customer_name) })}
-                        value={filterForm.values.customer} displayValue={customerDisplayName}
-                        onChange={(value, selectedData) => { filterForm.setFieldValue("customer", value || ""); setCustomerDisplayName(selectedData?.label || null); }}
-                        minSearchLength={2} dropdownZIndex={1000}
-                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                      />
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <SearchableSelect
+                          size="xs"
+                          label="Customer"
+                          placeholder="Type customer name"
+                          apiEndpoint={URL.allCustomers}
+                          searchFields={["customer_name", "customer_code"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.customer_code),
+                            label: String(item.customer_name),
+                          })}
+                          value={filterForm.values.customer}
+                          displayValue={customerDisplayName}
+                          onChange={(value, selectedData) => {
+                            filterForm.setFieldValue("customer", value || "");
+                            setCustomerDisplayName(selectedData?.label || null);
+                          }}
+                          minSearchLength={2}
+                          dropdownZIndex={1000}
+                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        />
+                      </Box>
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <SingleDateInput key={`date-${filterForm.values.date}`} label="Date" placeholder="YYYY-MM-DD"
-                        size="xs" value={filterForm.values.date}
-                        onChange={(d) => filterForm.setFieldValue("date", d)}
-                        classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                      />
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <SingleDateInput
+                          key={`date-${filterForm.values.date}`}
+                          label="Date"
+                          placeholder="YYYY-MM-DD"
+                          size="xs"
+                          value={filterForm.values.date}
+                          onChange={(d) => filterForm.setFieldValue("date", d)}
+                          classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                          styles={{
+                            ...AIR_EXPORT_FILTER_UNIFIED_STYLES,
+                            input: {
+                              ...AIR_EXPORT_FILTER_UNIFIED_STYLES.input,
+                              minHeight: 32,
+                            },
+                          }}
+                        />
+                      </Box>
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <SearchableSelect size="xs" label="Origin" placeholder="Type origin code or name"
-                        apiEndpoint={URL.portMaster} searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
-                        value={filterForm.values.origin} displayValue={originDisplayName}
-                        onChange={(value, selectedData) => { filterForm.setFieldValue("origin", value || ""); setOriginDisplayName(selectedData?.label || null); }}
-                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000}
-                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                      />
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <SearchableSelect
+                          size="xs"
+                          label="Origin"
+                          placeholder="Type origin code or name"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={filterForm.values.origin}
+                          displayValue={originDisplayName}
+                          onChange={(value, selectedData) => {
+                            filterForm.setFieldValue("origin", value || "");
+                            setOriginDisplayName(selectedData?.label || null);
+                          }}
+                          minSearchLength={3}
+                          additionalParams={airTransportParams}
+                          dropdownZIndex={1000}
+                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        />
+                      </Box>
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, xs: 6, sm: 4, md: 2.4 }}>
-                      <SearchableSelect size="xs" label="Destination" placeholder="Type destination code or name"
-                        apiEndpoint={URL.portMaster} searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({ value: String(item.port_code), label: `${item.port_name} (${item.port_code})` })}
-                        value={filterForm.values.destination} displayValue={destinationDisplayName}
-                        onChange={(value, selectedData) => { filterForm.setFieldValue("destination", value || ""); setDestinationDisplayName(selectedData?.label || null); }}
-                        minSearchLength={3} additionalParams={airTransportParams} dropdownZIndex={1000}
-                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                        styles={AIR_EXPORT_FILTER_FIELD_FONT_STYLES}
-                      />
+                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                      <Box
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          width: "100%",
+                          minHeight: 0,
+                        }}
+                      >
+                        <SearchableSelect
+                          size="xs"
+                          label="Destination"
+                          placeholder="Type destination code or name"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={filterForm.values.destination}
+                          displayValue={destinationDisplayName}
+                          onChange={(value, selectedData) => {
+                            filterForm.setFieldValue("destination", value || "");
+                            setDestinationDisplayName(selectedData?.label || null);
+                          }}
+                          minSearchLength={3}
+                          additionalParams={airTransportParams}
+                          dropdownZIndex={1000}
+                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        />
+                      </Box>
                     </Grid.Col>
                   </Grid>
-                  <Group justify="flex-end" gap={8} mt="md">
-                    <Button size="xs" variant="outline" leftSection={<IconX size={13} />}
-                      styles={{ root: { borderColor: primary, color: primary } }} onClick={clearAllFilters}>
+                  <Group
+                    justify="flex-end"
+                    gap={8}
+                    mt="lg"
+                    pt="md"
+                    style={{
+                      borderTop: `1px solid ${border}`,
+                    }}
+                  >
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      leftSection={<IconX size={13} />}
+                      styles={{
+                        root: {
+                          height: 32,
+                          fontSize: 12,
+                          borderColor: primary,
+                          color: primary,
+                          fontFamily: V0_FONT_SANS,
+                        },
+                      }}
+                      onClick={clearAllFilters}
+                    >
                       Clear
                     </Button>
-                    <Button size="xs" leftSection={<IconFilter size={13} />}
-                      styles={{ root: { backgroundColor: primary } }}
-                      onClick={applyFilters} loading={isDataLoading} disabled={isDataLoading}>
+                    <Button
+                      size="xs"
+                      leftSection={<IconFilter size={13} />}
+                      styles={{
+                        root: {
+                          height: 32,
+                          fontSize: 12,
+                          backgroundColor: primary,
+                          border: "none",
+                          fontFamily: V0_FONT_SANS,
+                        },
+                      }}
+                      onClick={applyFilters}
+                      loading={isDataLoading}
+                      disabled={isDataLoading}
+                    >
                       Apply Filters
                     </Button>
                   </Group>
                 </Box>
-              </Box>
+              </Paper>
             </Box>
           )}
 
@@ -1434,7 +1672,7 @@ function AirExportBookingMaster() {
                         </th> */}
                         {/* {visibleColumns.shipment && <Th col="shipment" label="Shipment" sortable />} */}
                         {visibleColumns.sno && <Th col="sno" label="S.No"  />}
-                        {visibleColumns.shipment && <Th col="shipment" label="Shipment"  />}
+                        {visibleColumns.shipment && <Th col="shipment" label="Booking ID"  />}
                         {visibleColumns.date && <Th col="date" label="Date"  />}
                         {visibleColumns.customer && <Th col="customer" label="Customer"  />}
                         {visibleColumns.route && <Th col="route" label="Route" />}

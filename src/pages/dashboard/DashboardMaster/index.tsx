@@ -151,6 +151,9 @@ const dashToolbarSearchInputStyles = {
 /** Page chrome behind the white toolbar — matches AirExportBookingMaster `pageBg`. */
 const DASH_PAGE_BG = "#F0F4F8";
 
+/** Matches AppShellLayout main `px`; negative margin on dashboard root cancels this so scrollbars align to the main column edge, then content uses this as padding inside scroll areas. */
+const DASH_MAIN_PAD_X = { base: 16, sm: 24 } as const;
+
 const Dashboard = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -7468,7 +7471,7 @@ const Dashboard = () => {
 
   return (
     <Box
-      px="xs"
+      mx={{ base: -16, sm: -24 }}
       pb="xs"
       pt={0}
       h="calc(100vh - 95px)"
@@ -7477,19 +7480,19 @@ const Dashboard = () => {
         flexDirection: "column",
         boxSizing: "border-box",
         backgroundColor: DASH_PAGE_BG,
+        minWidth: 0,
       }}
     >
-      {/* Toolbar: mirrors AirExportBookingMaster stats row — full-bleed white bar, one horizontal scroll strip, gap-24, ml-auto actions */}
+      {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
       {!showDetailedView && (
         <Box
-          mx={{ base: -16, sm: -24 }}
           style={{
             backgroundColor: "#ffffff",
             borderBottom: `1px solid ${DASH_TOOLBAR_BORDER}`,
           }}
         >
           <Box
-            px={{ base: 16, lg: 24 }}
+            px={DASH_MAIN_PAD_X}
             py={12}
             style={{
               fontFamily: DASH_TOOLBAR_FONT,
@@ -7725,7 +7728,6 @@ const Dashboard = () => {
 
         <Tabs.Panel
           value="overall"
-          pt="sm"
           style={{
             flex: 1,
             minHeight: 0,
@@ -7734,51 +7736,61 @@ const Dashboard = () => {
           }}
         >
           {showDetailedView ? (
-            <DetailedViewTable
-              data={detailedViewData}
-              title={(() => {
-                // For budget type, use title as-is without appending drill level name
-                if (detailedViewType === "budget") {
-                  return detailedViewTitle;
-                }
-                // For other types, append drill level display name
-                if (detailedViewDrillLevel === 0) return detailedViewTitle;
-                const displayName = getDrillLevelDisplayName();
-                return displayName
-                  ? `${detailedViewTitle} - ${displayName}`
-                  : detailedViewTitle;
-              })()}
-              onClose={handleCloseDetailedView}
-              loading={isLoadingDetailedView}
-              moduleType={detailedViewType || undefined}
-              drillLevel={detailedViewDrillLevel}
-              totalRecords={
-                detailedViewType === "customerNotVisited"
-                  ? customerNotVisitedTotalRecords
-                  : detailedViewType === "lostCustomer"
-                    ? lostCustomerTotalRecords
-                    : detailedViewType === "newCustomer"
-                      ? newCustomerTotalRecords
-                      : undefined
-              }
-              onColumnClick={handleDetailedViewColumnClick}
-              onBack={handleDetailedViewBack}
-              initialSearch={detailedViewSearch}
-              onSearchChange={handleDetailedViewSearchChange}
-              showBackButton={
-                detailedViewDrillLevel > 1 ||
-                (detailedViewDrillLevel > 0 &&
-                  (detailedViewType === "lostCustomer" ||
-                    detailedViewType === "newCustomer" ||
-                    detailedViewType === "callentry" ||
-                    detailedViewType === "customerNotVisited"))
-              }
-              headerActions={
-                // Commented out - can be used in future case
-                // Period filter is now common at top level
-                undefined
-              }
-            />
+            <Box
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+              }}
+            >
+              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="xs">
+                <DetailedViewTable
+                  data={detailedViewData}
+                  title={(() => {
+                    // For budget type, use title as-is without appending drill level name
+                    if (detailedViewType === "budget") {
+                      return detailedViewTitle;
+                    }
+                    // For other types, append drill level display name
+                    if (detailedViewDrillLevel === 0) return detailedViewTitle;
+                    const displayName = getDrillLevelDisplayName();
+                    return displayName
+                      ? `${detailedViewTitle} - ${displayName}`
+                      : detailedViewTitle;
+                  })()}
+                  onClose={handleCloseDetailedView}
+                  loading={isLoadingDetailedView}
+                  moduleType={detailedViewType || undefined}
+                  drillLevel={detailedViewDrillLevel}
+                  totalRecords={
+                    detailedViewType === "customerNotVisited"
+                      ? customerNotVisitedTotalRecords
+                      : detailedViewType === "lostCustomer"
+                        ? lostCustomerTotalRecords
+                        : detailedViewType === "newCustomer"
+                          ? newCustomerTotalRecords
+                          : undefined
+                  }
+                  onColumnClick={handleDetailedViewColumnClick}
+                  onBack={handleDetailedViewBack}
+                  initialSearch={detailedViewSearch}
+                  onSearchChange={handleDetailedViewSearchChange}
+                  showBackButton={
+                    detailedViewDrillLevel > 1 ||
+                    (detailedViewDrillLevel > 0 &&
+                      (detailedViewType === "lostCustomer" ||
+                        detailedViewType === "newCustomer" ||
+                        detailedViewType === "callentry" ||
+                        detailedViewType === "customerNotVisited"))
+                  }
+                  headerActions={
+                    // Commented out - can be used in future case
+                    // Period filter is now common at top level
+                    undefined
+                  }
+                />
+              </Box>
+            </Box>
           ) : (
             <Box
               style={{
@@ -7789,7 +7801,8 @@ const Dashboard = () => {
                 overflow: "auto",
               }}
             >
-              <Grid gutter="lg" align="stretch" pb="lg" columns={12}>
+              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="lg">
+                <Grid gutter="lg" align="stretch" columns={12}>
                 <Grid.Col
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}
@@ -7960,43 +7973,60 @@ const Dashboard = () => {
                   </Box>
                 </Grid.Col>
               </Grid>
+              </Box>
             </Box>
           )}
         </Tabs.Panel>
 
         <Tabs.Panel value="pipeline-Report" pt="md">
-          <PipelineReport
-            key={tabsRefreshKey}
-            initialState={pipelineReportState || undefined}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <PipelineReport
+              key={tabsRefreshKey}
+              initialState={pipelineReportState || undefined}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
 
         <Tabs.Panel value="booking" pt="md">
-          <Booking
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <Booking
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceReport
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service-import" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceImportReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service-import"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceImportReport
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
       </Tabs>
 
