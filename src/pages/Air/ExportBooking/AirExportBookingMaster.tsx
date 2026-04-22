@@ -1074,7 +1074,7 @@ function AirExportBookingMaster() {
                         {stats.pending}
                       </Text>
                       <Text size={10} c={muted} lh={1.2}>
-                        Pending
+                        Generated
                       </Text>
                     </Box>
                   </Group>

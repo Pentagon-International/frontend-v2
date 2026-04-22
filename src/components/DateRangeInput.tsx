@@ -26,6 +26,8 @@ export interface DateRangeInputProps {
   minDate?: Date;
   maxDate?: Date;
   hideLabels?: boolean;
+  /** Match Air Export / list toolbar: 32px inputs, Geist 12px, #E2E8F0 border */
+  compactToolbar?: boolean;
 }
 
 const DateRangeInput: React.FC<DateRangeInputProps> = ({
@@ -46,6 +48,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   containerStyle,
   inputWidth,
   hideLabels = false,
+  compactToolbar = false,
 }) => {
   const dateFormat = useDateFormat();
 
@@ -173,12 +176,33 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
     };
   };
 
+  const toolbarInputStyles = compactToolbar
+    ? {
+        input: {
+          height: 32,
+          minHeight: 32,
+          fontSize: 12,
+          borderColor: "#e2e8f0",
+          fontFamily: "'Geist', sans-serif",
+        },
+      }
+    : {
+        input: {
+          height: "36px",
+          fontSize: "13px",
+          fontFamily: "Inter",
+        },
+      };
+
+  const calendarIconSize = compactToolbar ? 14 : 18;
+
   return (
     <Group
-      gap="md"
+      gap={compactToolbar ? "sm" : "md"}
       align={hideLabels ? "center" : "flex-end"}
-      w={"100%"}
-      grow
+      w={compactToolbar ? "auto" : "100%"}
+      grow={!compactToolbar}
+      wrap="nowrap"
       style={containerStyle}
     >
       <DateInput
@@ -198,9 +222,9 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         value={fromDate}
         onChange={handleFromDateChange}
         valueFormat={dateFormat}
-        leftSection={<IconCalendar size={18} />}
+        leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
-        radius="md"
+        radius={compactToolbar ? "sm" : "md"}
         size={size}
         nextIcon={<IconChevronRight size={16} />}
         previousIcon={<IconChevronLeft size={16} />}
@@ -251,11 +275,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         }}
         styles={{
           ...getDateStyles(),
-          input: {
-            height: "36px",
-            fontSize: "13px",
-            fontFamily: "Inter",
-          },
+          ...toolbarInputStyles,
         }}
       />
       <DateInput
@@ -275,9 +295,9 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         value={toDate}
         onChange={handleToDateChange}
         valueFormat={dateFormat}
-        leftSection={<IconCalendar size={18} />}
+        leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
-        radius="md"
+        radius={compactToolbar ? "sm" : "md"}
         size={size}
         nextIcon={<IconChevronRight size={16} />}
         previousIcon={<IconChevronLeft size={16} />}
@@ -353,11 +373,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         }}
         styles={{
           ...getDateStyles(),
-          input: {
-            height: "36px",
-            fontSize: "13px",
-            fontFamily: "Inter",
-          },
+          ...toolbarInputStyles,
         }}
       />
     </Group>

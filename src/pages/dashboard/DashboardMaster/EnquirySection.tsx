@@ -2,6 +2,13 @@ import { Box, Text, Group, Badge } from "@mantine/core";
 import { DateRangeInput } from "../../../components";
 import Enquiry from "./Enquiry";
 import { EnquiryConversionAggregatedData } from "../../../service/dashboard.service";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelBody,
+  dashboardPanelTitleStyle,
+  dashboardViewAllStyle,
+} from "./dashboardPanelStyles";
 
 interface EnquirySectionProps {
   enquiryConversionAggregatedData: EnquiryConversionAggregatedData;
@@ -37,38 +44,31 @@ const EnquirySection = ({
   hideDateFilter = false,
 }: EnquirySectionProps) => {
   return (
-    <Box
-      style={{
-        background: "#ffffff",
-        border: "1px solid #E2E8F0",
-        borderRadius: "10px",
-        padding: "16px",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)",
-      }}
-    >
-      <Group justify="space-between" align="center" mb="md">
-        <Group gap="md" align="center">
-          <Text
-            fw={600}
-            style={{ fontSize: "13.5px", color: "#1E293B", letterSpacing: 0.1 }}
+    <Box style={dashboardPanelShell}>
+      <Box style={dashboardPanelHeaderBand}>
+        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
+          <Group
+            gap="sm"
+            align="center"
+            wrap="nowrap"
+            style={{ flex: 1, minWidth: 0 }}
           >
-            Enquiry
-          </Text>
-          <Badge color="blue" variant="filled" size="sm">
-            Total {enquiryConversionAggregatedData.totalEnquiries}
-          </Badge>
-        </Group>
-        <Group gap="xs" align="center">
+            <Text style={dashboardPanelTitleStyle}>Enquiry</Text>
+            <Badge
+              color="#105476"
+              variant="light"
+              size="sm"
+              radius="sm"
+              style={{ flexShrink: 0 }}
+            >
+              Total {enquiryConversionAggregatedData.totalEnquiries}
+            </Badge>
+          </Group>
+          <Group gap="xs" align="center" wrap="nowrap" style={{ flexShrink: 0 }}>
           <Text
             size="sm"
             c="#105476"
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-            }}
+            style={dashboardViewAllStyle}
             onClick={() => handleEnquiryConversionViewAll("all")}
           >
             View All
@@ -109,10 +109,11 @@ const EnquirySection = ({
               input: { fontSize: "12px" },
             }}
           /> */}
+          </Group>
         </Group>
-      </Group>
+      </Box>
 
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <Box style={dashboardPanelBody}>
         <Enquiry
           enquiryConversionAggregatedData={enquiryConversionAggregatedData}
           isLoadingEnquiryConversion={isLoadingEnquiryConversion}

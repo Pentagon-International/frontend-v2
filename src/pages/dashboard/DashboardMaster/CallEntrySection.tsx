@@ -2,6 +2,13 @@ import { Box, Text, Group } from "@mantine/core";
 import { DateRangeInput } from "../../../components";
 import CallEntry from "./CallEntry";
 import { CallEntryStatisticsSummary } from "../../../service/dashboard.service";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelBody,
+  dashboardPanelTitleStyle,
+  dashboardViewAllStyle,
+} from "./dashboardPanelStyles";
 
 interface CallEntrySectionProps {
   callEntrySummary: CallEntryStatisticsSummary | null;
@@ -33,33 +40,17 @@ const CallEntrySection = ({
   hideDateFilter = false,
 }: CallEntrySectionProps) => {
   return (
-    <Box
-      style={{
-        background: "#ffffff",
-        border: "1px solid #E2E8F0",
-        borderRadius: "10px",
-        padding: "16px",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)",
-      }}
-    >
-      <Group justify="space-between" align="center" mb="md">
-        <Text
-          fw={600}
-          style={{ fontSize: "13.5px", color: "#1E293B", letterSpacing: 0.1 }}
-        >
-          Call Entry
-        </Text>
-        <Group gap="xs">
+    <Box style={dashboardPanelShell}>
+      <Box style={dashboardPanelHeaderBand}>
+        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
+          <Box style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <Text style={dashboardPanelTitleStyle}>Call Entry</Text>
+          </Box>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
           <Text
             size="sm"
             c="#105476"
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-            }}
+            style={dashboardViewAllStyle}
             onClick={() => handleCallEntryViewAll("all")}
           >
             View All
@@ -100,10 +91,11 @@ const CallEntrySection = ({
               input: { fontSize: "12px" },
             }}
           /> */}
+          </Group>
         </Group>
-      </Group>
+      </Box>
 
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <Box style={dashboardPanelBody}>
         <CallEntry
           callEntrySummary={callEntrySummary}
           isLoadingCallEntry={isLoadingCallEntry}
