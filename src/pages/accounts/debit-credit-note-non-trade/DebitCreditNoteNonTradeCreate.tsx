@@ -775,17 +775,27 @@ export default function DebitCreditNoteNonTradeCreate() {
                 ? "Edit Debit / Credit Note (Non Trade)"
                 : "Create Debit / Credit Note (Non Trade)"}
             </Text>
-            {isEditMode && (
-              <Badge
-                size="sm"
-                variant="light"
-                color={isPosted ? "green" : "gray"}
-              >
+          </Group>
+          {isEditMode && (
+            <Group gap="sm" wrap="nowrap" justify="flex-end">
+              <Text size="sm" fw={600} c="#105476">
+                Status:
+              </Text>
+              <Badge size="sm" variant="light" color={isPosted ? "green" : "gray"}>
                 {isPosted ? "POSTED" : "UNPOSTED"}
               </Badge>
-            )}
-          </Group>
-          {/* Post button is shown near Update button (bottom actions) */}
+              {isPosted && form.values.documentNo ? (
+                <>
+                  <Text size="sm" fw={600} c="#105476">
+                    Document No:
+                  </Text>
+                  <Text size="sm" fw={600} c="#105476">
+                    {form.values.documentNo}
+                  </Text>
+                </>
+              ) : null}
+            </Group>
+          )}
         </Group>
 
         {/* Header section (Grid 1) */}

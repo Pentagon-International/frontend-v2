@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Card,
@@ -161,7 +162,25 @@ export default function DebitCreditNoteNonTradeMaster() {
       },
       { accessorKey: "document_date", header: "Document Date", size: 140 },
       { accessorKey: "party_name", header: "Party Name", size: 200 },
-      { accessorKey: "status", header: "Status", size: 120 },
+      {
+        accessorKey: "status",
+        header: "Status",
+        size: 120,
+        Cell: ({ cell }) => {
+          const v = String(cell.getValue<unknown>() ?? "").toUpperCase();
+          const isPosted = v === "POSTED";
+          const isUnposted = v === "UNPOSTED";
+          return (
+            <Badge
+              size="sm"
+              variant="light"
+              color={isPosted ? "green" : isUnposted ? "gray" : "blue"}
+            >
+              {v || "-"}
+            </Badge>
+          );
+        },
+      },
       {
         id: "amount",
         header: "Amount",
