@@ -99,7 +99,8 @@ const Navbar = ({
       location.pathname.startsWith("/journal-voucher") ||
       location.pathname.startsWith("/journal-voucher-reversal") ||
       location.pathname.startsWith("/subledger-enquiry") ||
-      location.pathname.startsWith("/document-allocation")
+      location.pathname.startsWith("/document-allocation") ||
+      location.pathname.startsWith("/debit-credit-note-non-trade")
     ) {
       setIsAccountsOpen(true);
     }
@@ -802,6 +803,19 @@ const Navbar = ({
                       label="Supplier Invoice RCM"
                       icon={IconFileAnalytics}
                       path="/supplier-invoice-rcm"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Debit/Credit Note Non Trade"
+                      icon={IconReceiptTax}
+                      path="/debit-credit-note-non-trade"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

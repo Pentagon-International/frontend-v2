@@ -163,6 +163,10 @@ export const URL = {
   outstandingAllocationDocumentsFilter:
     "outstanding-details/filter/allocation-documents/",
 
+  // Debit / Credit Note (new API)
+  debitCreditNote: "debit_credit_note/",
+  debitCreditNoteFilter: "filter/debit_credit_note/",
+
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",
 

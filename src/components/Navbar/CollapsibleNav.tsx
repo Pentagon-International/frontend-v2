@@ -62,7 +62,8 @@ export const CollapsibleNav = ({
         activeSubNav === "Journal Voucher" ||
         activeSubNav === "JournalVoucherReversal" ||
         activeSubNav === "Subledger Enquiry" ||
-        activeSubNav === "Document Allocation"));
+        activeSubNav === "Document Allocation" ||
+        activeSubNav === "Debit/Credit Note Non Trade"));
 
   // compute opened based on mode
   const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;

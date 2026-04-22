@@ -1,4 +1,4 @@
-import { Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate, Outlet } from "react-router-dom";
 import RootLayout from "../layout/RootLayout";
 import {
   CallModeEdit,
@@ -179,6 +179,8 @@ import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAllocation";
 import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
+import DebitCreditNoteNonTradeMaster from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeMaster";
+import DebitCreditNoteNonTradeCreate from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeCreate";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -390,6 +392,10 @@ const NavigationRoutes = () => {
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
         <Route path="/document-allocation" element={<DocumentAllocationList />} />
         <Route path="/document-allocation/create" element={<DocumentAllocation />} />
+        <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
+          <Route index element={<DebitCreditNoteNonTradeMaster />} />
+          <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
+        </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />
