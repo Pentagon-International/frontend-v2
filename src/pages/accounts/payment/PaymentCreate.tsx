@@ -1341,6 +1341,17 @@ export default function PaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    const hasAdjustments = (values.adjustments ?? []).some((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
     const partyLocalTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
@@ -1359,14 +1370,19 @@ export default function PaymentCreate({
             : 0),
         0,
       ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
+    // Validation aligned with Receipt: when adjustments exist, Party total
+    // should not be less than total allocation amount.
+    if (hasAdjustments && partyLocalTotal < adjLocalTotal) {
       ToastNotification({
         type: "error",
         message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
+          "The total Local Amount of Payment cannot be less than the total Local Amount of Invoice.",
       });
       return;
     }
+    // Important: allow saving "open payment" (no adjustments),
+    // same as Receipt. So we DO NOT restrict party totals when allocations are empty.
+    // Also, unlike the earlier logic, we don't block when partyLocalTotal > adjLocalTotal.
     setIsSubmitting(true);
     try {
       if (_isReversal) {

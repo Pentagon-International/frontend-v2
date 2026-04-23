@@ -256,13 +256,7 @@ const addressValidationSchema = yup.object({
           .max(20, "Phone number must not exceed 20 characters"), // Optional - lanline number
         mobile_no: yup
           .string()
-          .required("Mobile number is required")
-          .matches(
-            /^[\d\s\-+()]+$/,
-            "Mobile number can only contain digits, spaces, hyphens, plus signs, and parentheses",
-          )
-          .min(10, "Mobile number must be at least 10 digits")
-          .max(15, "Mobile number must not exceed 15 digits"),
+          .required("Mobile number is required"),
         email: yup
           .string()
           .email("Please enter a valid email address")
