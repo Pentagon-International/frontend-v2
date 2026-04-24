@@ -1535,6 +1535,8 @@ export default function ReceiptCreate({
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          // After update, reflect the exact API response (can include appended party rows like TDS)
+          applyCreatedReceiptToUI(res);
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           ToastNotification({
             type: "success",
@@ -1591,6 +1593,7 @@ export default function ReceiptCreate({
 
   const applyCreatedReceiptToUI = (created: unknown) => {
     const data = created as {
+      roe?: number | string | null;
       parties?: Array<{
         id?: number;
         subledger_id?: number;
@@ -1614,6 +1617,15 @@ export default function ReceiptCreate({
       const n = parseFloat(String(v));
       return Number.isFinite(n) ? n : null;
     };
+
+    const nextHeaderRoe = parseNum(data.roe);
+    if (
+      nextHeaderRoe != null &&
+      Number.isFinite(nextHeaderRoe) &&
+      form.values.roe !== nextHeaderRoe
+    ) {
+      form.setFieldValue("roe", nextHeaderRoe);
+    }
 
     const details: DetailRow[] = data.parties.map((p) => ({
       id: p.id ?? null,
