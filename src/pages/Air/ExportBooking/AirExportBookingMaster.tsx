@@ -192,7 +192,7 @@ type ExportShipmentData = {
   ata?: string;
   carrier_code_read?: string;
   voyage_no?: string;
-  mawb_no?: string;
+  flight_no?: string;
   mawb_date?: string;
   /** When set, shipment has passed pickup — drives “Picked up” milestone in list/drawer. */
   actual_pickup_date?: string | null;
@@ -761,7 +761,7 @@ function AirExportBookingMaster() {
         Destination: r.destination_code_read || r.destination_code || "",
         Status: normalizeBookingStatus(r.status),
         "Last Milestone": getLastMilestoneLabel(r),
-        MAWB: r.mawb_no ?? "", Flight: r.voyage_no ?? "",
+        MAWB: r.mawb_no ?? "", Flight: r.flight_no ?? "",
         Pcs: pw.pieces, "Weight kg": pw.weight,
         Handler: r.customer_service_name ?? "",
       };
@@ -1453,8 +1453,8 @@ function AirExportBookingMaster() {
                               )}
                               {visibleColumns.flight && (
                                 <td style={{ padding: "10px 14px" }}>
-                                  {booking.voyage_no
-                                    ? <Text size="xs" fw={500} c={fg}>{booking.voyage_no}</Text>
+                                  {booking.flight_no
+                                    ? <Text size="xs" fw={500} c={fg}>{booking.flight_no}</Text>
                                     : <Text size="sm" c={muted}>—</Text>}
                                 </td>
                               )}

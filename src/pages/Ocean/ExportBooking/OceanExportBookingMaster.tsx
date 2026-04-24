@@ -1,19 +1,12 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
-import {
   Group,
   Button,
   Text,
-  Center,
   Stack,
   Grid,
   Menu,
   ActionIcon,
-  Badge,
   Modal,
   Tooltip,
   Select,
@@ -40,6 +33,9 @@ import {
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
+  BookingMasterListTable,
+  DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  getBookingRowPW,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
@@ -55,6 +51,8 @@ import {
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   DEFAULT_ERP_LIST_THEME,
+  type BookingMasterTableRowModel,
+  type BookingMasterVisibleColumns,
   type ErpListTheme,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
@@ -64,23 +62,14 @@ import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { useListFilterStore } from "../../../store/listFilterStore";
 
 const LIST_KEY = "OCEAN_EXPORT_BOOKING_MASTER";
 
-type OceanExportListColumnKey =
-  | "shipment_code"
-  | "enquiry_id"
-  | "date"
-  | "service"
-  | "customer_name"
-  | "origin_name"
-  | "destination_name"
-  | "customer_service_name"
-  | "status";
-
-type OceanExportVisibleColumnsState = Record<OceanExportListColumnKey, boolean>;
+const OCEAN_EXPORT_VISIBLE_COLUMNS: BookingMasterVisibleColumns = {
+  ...DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  service: true,
+};
 
 const OCEAN_EXPORT_FILTER_UNIFIED_STYLES = {
   label: {
@@ -120,8 +109,29 @@ type ExportShipmentData = {
   customer_name: string;
   origin_name: string;
   destination_name: string;
+  origin_code_read?: string;
+  origin_code?: string;
+  destination_code_read?: string;
+  destination_code?: string;
   customer_service_name: string;
   status?: string;
+  mawb_no?: string | null;
+  carrier_booking_no?: string | null;
+  voyage_no?: string | null;
+  vessel_name?: string | null;
+  etd?: string | null;
+  eta?: string | null;
+  atd?: string | null;
+  ata?: string | null;
+  actual_pickup_date?: string | null;
+  actual_delivery_date?: string | null;
+  events?: Array<Record<string, unknown>>;
+  sno?: number;
+  cargo_details?: Array<{
+    no_of_packages?: number;
+    no_of_containers?: number;
+    gross_weight?: string | number;
+  }>;
 };
 
 type FilterState = {
@@ -147,6 +157,59 @@ type PersistedListFilters = {
   pageIndex: number;
 };
 
+function oceanExportRowToTableModel(
+  r: ExportShipmentData,
+  index: number,
+  pageIndex: number,
+  pageSize: number,
+): BookingMasterTableRowModel<ExportShipmentData> {
+  const pw = getBookingRowPW(r.cargo_details);
+  const mawb =
+    (r.mawb_no && String(r.mawb_no).trim()) ||
+    (r.carrier_booking_no && String(r.carrier_booking_no).trim()) ||
+    "";
+  const v = r.voyage_no?.trim();
+  const vessel = r.vessel_name?.trim();
+  const flight = [vessel, v].filter(Boolean).join(" · ") || "";
+  return {
+    raw: r,
+    id: r.id,
+    sno: typeof r.sno === "number" ? r.sno : pageIndex * pageSize + index + 1,
+    milestone: {
+      status: r.status,
+      events: r.events ?? null,
+      actual_delivery_date: r.actual_delivery_date ?? null,
+      ata: r.ata ?? null,
+      atd: r.atd ?? null,
+      etd: r.etd ?? null,
+      eta: r.eta ?? null,
+      actual_pickup_date: r.actual_pickup_date ?? null,
+      mawb_no: r.mawb_no ?? null,
+      carrier_booking_no: r.carrier_booking_no ?? null,
+      origin_name: r.origin_name,
+      origin_code_read: r.origin_code_read,
+      origin_code: r.origin_code ?? null,
+      destination_name: r.destination_name,
+      destination_code_read: r.destination_code_read,
+      destination_code: r.destination_code ?? null,
+      date: r.date,
+    },
+    shipment_code: r.shipment_code,
+    enquiry_id: r.enquiry_id,
+    date: r.date,
+    customer_name: r.customer_name,
+    originCode: r.origin_code_read || r.origin_code || "",
+    destCode: r.destination_code_read || r.destination_code || "",
+    service: r.service,
+    status: r.status,
+    mawb,
+    flight,
+    pieces: pw.pieces,
+    weight: pw.weight,
+    customer_service_name: r.customer_service_name,
+  };
+}
+
 function OceanExportBookingMaster() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -159,7 +222,6 @@ function OceanExportBookingMaster() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
-  const dateFormat = useDateFormat();
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
 
   const [isRestoring, setIsRestoring] = useState(true);
@@ -171,17 +233,8 @@ function OceanExportBookingMaster() {
   const [pageSize, setPageSize] = useState(25); // Default page size
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [visibleColumns, setVisibleColumns] = useState<OceanExportVisibleColumnsState>({
-    shipment_code: true,
-    enquiry_id: true,
-    date: true,
-    service: true,
-    customer_name: true,
-    origin_name: true,
-    destination_name: true,
-    customer_service_name: true,
-    status: true,
-  });
+  const [visibleColumns, setVisibleColumns] =
+    useState<BookingMasterVisibleColumns>(OCEAN_EXPORT_VISIBLE_COLUMNS);
 
   // Display name states for filter fields
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
@@ -193,19 +246,6 @@ function OceanExportBookingMaster() {
   const [destinationDisplayName, setDestinationDisplayName] = useState<
     string | null
   >(null);
-
-  // Map booking status to badge label and color
-  const getStatusBadge = (statusRaw: string | undefined | null) => {
-    const statusUpper = (statusRaw || "").toUpperCase();
-    const label = statusUpper || "GENERATED";
-    let color: string = "#105476";
-    if (label === "BOOKED") color = "green";
-    else if (label === "GENERATED") color = "#105476";
-    else if (label === "RECEIVED") color = "blue";
-    else if (label === "CANCEL") color = "red";
-    else color = "gray";
-    return { label, color } as const;
-  };
 
   const [cancelConfirmRow, setCancelConfirmRow] =
     useState<ExportShipmentData | null>(null);
@@ -364,6 +404,12 @@ function OceanExportBookingMaster() {
 
   const displayData = exportShipmentsResponse?.data ?? [];
 
+  const tableRowModels = useMemo(
+    () =>
+      displayData.map((r, i) => oceanExportRowToTableModel(r, i, pageIndex, pageSize)),
+    [displayData, pageIndex, pageSize],
+  );
+
   const oceanStats = useMemo(() => {
     const rows = displayData;
     const st = (s: string | undefined) => (s || "").toUpperCase();
@@ -381,29 +427,13 @@ function OceanExportBookingMaster() {
     };
   }, [displayData, totalRecords]);
 
-  const columnVisibility = useMemo(
-    () => ({
-      shipment_code: visibleColumns.shipment_code,
-      enquiry_id: visibleColumns.enquiry_id,
-      date: visibleColumns.date,
-      service: visibleColumns.service,
-      customer_name: visibleColumns.customer_name,
-      origin_name: visibleColumns.origin_name,
-      destination_name: visibleColumns.destination_name,
-      customer_service_name: visibleColumns.customer_service_name,
-      status: visibleColumns.status,
-      actions: true,
-    }),
-    [visibleColumns],
-  );
-
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as OceanExportListColumnKey[]).map(
+      (Object.keys(visibleColumns) as (keyof BookingMasterVisibleColumns)[]).map(
         (key) => ({
-          id: key,
-          label: key.replace(/_/g, " "),
-          checked: visibleColumns[key],
+          id: String(key),
+          label: String(key),
+          checked: Boolean(visibleColumns[key]),
           onToggle: () =>
             setVisibleColumns((prev) => ({
               ...prev,
@@ -668,274 +698,69 @@ function OceanExportBookingMaster() {
     }
   };
 
-  const columns = useMemo<MRT_ColumnDef<ExportShipmentData>[]>(
-    () => [
-      {
-        accessorKey: "shipment_code",
-        header: "Booking ID",
-        size: 120,
-      },
-      {
-        accessorKey: "enquiry_id",
-        header: "Enquiry ID",
-        size: 150,
-        Cell: ({ cell }) => {
-          const v = cell.getValue<string | null | undefined>();
-          return v != null && String(v) !== "" ? String(v) : "-";
-        },
-      },
-      {
-        accessorKey: "date",
-        header: "Date",
-        size: 120,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.date
-              ? dayjs(row.original.date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "service",
-        header: "Service",
-        size: 100,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 150,
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 150,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 150,
-      },
-      {
-        accessorKey: "customer_service_name",
-        header: "Customer Service",
-        size: 150,
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        size: 140,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          const { label, color } = getStatusBadge(value ?? undefined);
-          return (
-            <Badge
-              size="sm"
-              variant="light"
-              color={color}
-              styles={{
-                root: {
-                  textTransform: "none",
-                  minWidth: "fit-content",
-                  whiteSpace: "nowrap",
-                },
-              }}
+  const renderRowActions = useCallback(
+    (row: ExportShipmentData) => {
+      const statusUpper = (row.status ?? "").toUpperCase();
+      const isCancel = statusUpper === "CANCEL";
+      const canCancel = statusUpper !== "GENERATED" && !isCancel;
+      const isBooked = statusUpper === "BOOKED";
+      return (
+        <Menu shadow="md" width={140}>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray">
+              <IconDotsVertical size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Tooltip
+              label="Edit disabled because booking is cancelled"
+              disabled={!isCancel}
             >
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 80,
-        Cell: ({ row }) => {
-          const statusUpper = (row.original.status ?? "").toUpperCase();
-          const isCancel = statusUpper === "CANCEL";
-          const canCancel = statusUpper !== "GENERATED" && !isCancel;
-          const isBooked = statusUpper === "BOOKED";
-          return (
-            <Menu shadow="md" width={140}>
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Tooltip
-                  label="Edit disabled because booking is cancelled"
-                  disabled={!isCancel}
+              <Menu.Item
+                leftSection={<IconEdit size={14} />}
+                disabled={isCancel}
+                onClick={() => {
+                  if (!isCancel) {
+                    navigate(`./edit`, {
+                      state: { job: row },
+                    });
+                  }
+                }}
+              >
+                Edit
+              </Menu.Item>
+            </Tooltip>
+            {isBooked && (
+              <Menu.Item
+                leftSection={<IconPlus size={14} />}
+                onClick={() => {}}
+              >
+                Create Job
+              </Menu.Item>
+            )}
+            {canCancel && (
+              <Tooltip
+                label="This booking already has a job. If required, you can cancel the job."
+                disabled={statusUpper !== "GENERATED"}
+              >
+                <Menu.Item
+                  leftSection={<IconX size={14} />}
+                  color="red"
+                  disabled={!canCancel}
+                  onClick={() => {
+                    if (canCancel) setCancelConfirmRow(row);
+                  }}
                 >
-                  <Menu.Item
-                    leftSection={<IconEdit size={14} />}
-                    disabled={isCancel}
-                    onClick={() => {
-                      if (!isCancel) {
-                        navigate(`./edit`, {
-                          state: { job: row.original },
-                        });
-                      }
-                    }}
-                  >
-                    Edit
-                  </Menu.Item>
-                </Tooltip>
-                {isBooked && (
-                  <Menu.Item
-                    leftSection={<IconPlus size={14} />}
-                    onClick={() => {
-                      // const { id: _ignoredId, ...jobWithoutId } =
-                      //   row.original as unknown as Record<string, unknown>;
-                      // navigate("/SeaExport/export-job/create", {
-                      //   state: { job: jobWithoutId },
-                      // });
-                    }}
-                  >
-                    Create Job
-                  </Menu.Item>
-                )}
-                {canCancel && (
-                  <Tooltip
-                    label="This booking already has a job. If required, you can cancel the job."
-                    disabled={statusUpper !== "GENERATED"}
-                  >
-                    <Menu.Item
-                      leftSection={<IconX size={14} />}
-                      color="red"
-                      disabled={!canCancel}
-                      onClick={() => {
-                        if (canCancel) setCancelConfirmRow(row.original);
-                      }}
-                    >
-                      Cancel
-                    </Menu.Item>
-                  </Tooltip>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [navigate, dateFormat],
+                  Cancel
+                </Menu.Item>
+              </Tooltip>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+      );
+    },
+    [navigate],
   );
-
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    state: { columnVisibility },
-    enableColumnFilters: false,
-    enablePagination: false, // Disable built-in pagination - using server-side pagination
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: undefined,
-      p: 0,
-      radius: 0,
-      withBorder: false,
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 320,
-        maxHeight: "min(75vh, 1536px)",
-        overflow: "hidden",
-        backgroundColor: "transparent",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "30px",
-          zIndex: 2,
-          borderLeft: "1px solid #F3F3F3",
-          boxShadow: "1px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "80px",
-          zIndex: 2,
-          backgroundColor: "#F8FAFC",
-          boxShadow: "0px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-    renderEmptyRowsFallback: () => (
-      <tr>
-        <td colSpan={columns.length}>
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Text c="dimmed" size="lg">
-                No data to display
-              </Text>
-            </Stack>
-          </Center>
-        </td>
-      </tr>
-    ),
-  });
 
   const border = DEFAULT_ERP_LIST_THEME.border;
   const muted = DEFAULT_ERP_LIST_THEME.muted;
@@ -1266,9 +1091,15 @@ function OceanExportBookingMaster() {
                 message="Loading ocean export bookings..."
               />
             ) : (
-              <MantineReactTable
-                key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-                table={table}
+              <BookingMasterListTable
+                theme={erpTheme}
+                geistRootClass={ERP_LIST_GEIST_ROOT_CLASS}
+                monoClass="air-export-geist-mono"
+                fontSans={erpTheme.fontSans}
+                rows={tableRowModels}
+                visibleColumns={visibleColumns}
+                showServiceColumn
+                renderActions={renderRowActions}
               />
             ),
           }}
