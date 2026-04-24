@@ -336,7 +336,7 @@ export default function SubledgerEnquiry() {
               const name = String(item.account_name ?? "").trim();
               return {
                 value: id,
-                label: [glName, gl, name].filter(Boolean).join(" - "),
+                label: [name, gl, glName].filter(Boolean).join(" - "),
               };
             }}
             displayValue={selectedAccount?.account_name ?? ""}

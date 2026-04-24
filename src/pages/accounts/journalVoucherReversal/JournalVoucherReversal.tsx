@@ -1318,7 +1318,7 @@ import {
                               const name = String(item.account_name ?? "").trim();
                               return {
                                 value: id,
-                                label: [glName, gl, name].filter(Boolean).join(" - "),
+                                label: [name, gl, glName].filter(Boolean).join(" - "),
                               };
                             }}
                             displayValue={
@@ -1359,9 +1359,9 @@ import {
                               form.setFieldValue(
                                 `charges.${index}.account_name`,
                                 [
-                                  String((originalData as any).gl_name ?? "").trim(),
                                   String((originalData as any).gl_account_code ?? "").trim(),
                                   String((originalData as any).account_name ?? "").trim(),
+                                  String((originalData as any).gl_name ?? "").trim(),
                                 ]
                                   .filter(Boolean)
                                   .join(" - "),

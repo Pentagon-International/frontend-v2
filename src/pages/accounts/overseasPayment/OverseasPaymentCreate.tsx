@@ -131,7 +131,7 @@ function formatChartOfAccountsLabel(
   const a = String(glName ?? "").trim();
   const b = String(glAccountCode ?? "").trim();
   const c = String(accountName ?? "").trim();
-  return [a, b, c].filter(Boolean).join(" - ");
+  return [c, b, a].filter(Boolean).join(" - ");
 }
 
 type DetailRow = {

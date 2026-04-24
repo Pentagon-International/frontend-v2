@@ -145,10 +145,23 @@ import {
     return rounded;
   }
   
+  function formatChartOfAccountsLabel(
+    accountName: string | null | undefined,
+    glAccountCode: string | null | undefined,
+    glName: string | null | undefined,
+  ): string {
+    const a = String(accountName ?? "").trim();
+    const b = String(glAccountCode ?? "").trim();
+    const c = String(glName ?? "").trim();
+    return [a, b, c].filter(Boolean).join(" - ");
+  }
+
   /** Party row: customer_display = label in UI (subledger_name from list / customer_name from search); customer_code = subledger_code in payload */
   type DetailRow = {
     id?: number | null;
     subledger_id?: string | null;
+    /** GL account code (used for document details lookup) */
+    account_code: string;
     customer_code: string;
     customer_display: string;
     narration: string;
@@ -190,12 +203,13 @@ import {
     [key: string]: unknown;
   };
   
-  const fetchFilterInvoice = async (
-    billTo: string,
-  ): Promise<InvoiceCombinedItem[]> => {
+  const fetchOutstandingAllocations = async (payload: {
+    account_code: string;
+    subledger_code: string;
+  }): Promise<InvoiceCombinedItem[]> => {
     const response = await postAPICall(
-      URL.filterInvoice,
-      { filters: { status: "POSTED", bill_to: billTo ,"is_agent": true} },
+      URL.outstandingAllocations,
+      payload,
       API_HEADER,
     );
     const res = response as
@@ -302,6 +316,7 @@ import {
   
   const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
     subledger_id: null,
+    account_code: "",
     customer_code: "",
     customer_display: "",
     narration: "",
@@ -473,10 +488,9 @@ import {
     const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
       number | null
     >(null);
-    /** When set, invoice combined API is triggered (or served from cache) for this billTo */
-    const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
-      null,
-    );
+    /** When set, allocations API is triggered (or served from cache) for this filter */
+    const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
+      useState<{ account_code: string; subledger_code: string } | null>(null);
     const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
     const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
       Set<number>
@@ -559,9 +573,16 @@ import {
       isFetching: filterInvoiceFetching,
       isError: filterInvoiceError,
     } = useQuery({
-      queryKey: ["filterInvoice", invoiceModalBillTo ?? ""],
-      queryFn: () => fetchFilterInvoice(invoiceModalBillTo!),
-      enabled: invoiceModalOpen && !!invoiceModalBillTo,
+      queryKey: [
+        "outstandingAllocationsForOverseasReceipt",
+        invoiceModalAllocationFilter?.account_code ?? "",
+        invoiceModalAllocationFilter?.subledger_code ?? "",
+      ],
+      queryFn: () => fetchOutstandingAllocations(invoiceModalAllocationFilter!),
+      enabled:
+        invoiceModalOpen &&
+        !!invoiceModalAllocationFilter?.account_code &&
+        !!invoiceModalAllocationFilter?.subledger_code,
       staleTime: 5 * 60 * 1000,
     });
   
@@ -662,7 +683,8 @@ import {
         parties.length > 0
           ? parties.map((p) => ({
               id: p.id ?? null,
-              subledger_id: p.subledger_id ?? null,
+              subledger_id: p.subledger_id != null ? String(p.subledger_id) : null,
+              account_code: String((p as { account_code?: string }).account_code ?? "").trim(),
               customer_code: String(p.subledger_code ?? "").trim(),
               customer_display: String(p.subledger_name ?? "").trim(),
               narration: String(p.narration ?? "").trim(),
@@ -934,10 +956,14 @@ import {
   
     const openInvoiceModal = (detailRowIndex: number) => {
       const row = form.values.details[detailRowIndex];
-      const billTo = row?.customer_display?.trim() || row?.customer_code?.trim();
-      if (!billTo) return;
+      const accountCode = (row?.account_code ?? "").toString().trim();
+      const subledgerCode = (row?.customer_code ?? "").toString().trim();
+      if (!accountCode || !subledgerCode) return;
       setInvoiceModalDetailRowIndex(detailRowIndex);
-      setInvoiceModalBillTo(billTo);
+      setInvoiceModalAllocationFilter({
+        account_code: accountCode,
+        subledger_code: subledgerCode,
+      });
       setInvoiceModalOpen(true);
       setInvoiceList([]);
       setSelectedInvoiceIndices(new Set());
@@ -966,7 +992,7 @@ import {
       if (invoiceModalOpen && filterInvoiceError) {
         ToastNotification({
           type: "error",
-          message: "Failed to load invoices",
+          message: "Failed to load documents",
         });
         setInvoiceList([]);
       }
@@ -987,7 +1013,7 @@ import {
       if (sorted.length === 0) {
         ToastNotification({
           type: "warning",
-          message: "Please select at least one invoice",
+          message: "Please select at least one document",
         });
         return;
       }
@@ -1075,7 +1101,7 @@ import {
       syncPartyDetailsFromAllocations(nextAdjustments);
       setInvoiceModalOpen(false);
       setInvoiceModalDetailRowIndex(null);
-      setInvoiceModalBillTo(null);
+      setInvoiceModalAllocationFilter(null);
       setInvoiceList([]);
       setSelectedInvoiceIndices(new Set());
       // ToastNotification({
@@ -2252,7 +2278,7 @@ import {
                             <SearchableSelect
                               key={partyKey}
                               placeholder="Account Name"
-                              apiEndpoint={URL.allCustomers}
+                              apiEndpoint={URL.chartOfAccounts}
                               value={row?.customer_code || null}
                               displayValue={row?.customer_display || null}
                               disabled={
@@ -2264,13 +2290,15 @@ import {
                                 setLoadedDetails(null);
                                 const orig = originalData as {
                                   id?: number;
-                                  customer_code?: string;
-                                  customer_name?: string;
-                                  name?: string;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  sl_code?: string;
+                                  account_name?: string;
                                 };
-                                const name =
-                                  orig?.customer_name ?? orig?.name ?? "";
-                                const code = orig?.customer_code ?? "";
+                                const name = orig?.account_name ?? "";
+                                const code = orig?.sl_code ?? "";
+                                const glAccountCode = orig?.gl_account_code ?? "";
+                                const glName = orig?.gl_name ?? "";
                                 const sid =
                                   orig?.id != null
                                     ? orig.id
@@ -2283,12 +2311,20 @@ import {
                                   sid,
                                 );
                                 form.setFieldValue(
+                                  `details.${idx}.account_code`,
+                                  glAccountCode,
+                                );
+                                form.setFieldValue(
                                   `details.${idx}.customer_code`,
                                   code || (value ?? ""),
                                 );
                                 form.setFieldValue(
                                   `details.${idx}.customer_display`,
-                                  name,
+                                  formatChartOfAccountsLabel(
+                                    name,
+                                    glAccountCode,
+                                    glName,
+                                  ),
                                 );
                                 form.setFieldValue(
                                   `details.${idx}.currency`,
@@ -2300,18 +2336,26 @@ import {
                               displayFormat={(item) => {
                                 const i = item as {
                                   id?: number;
-                                  customer_code?: string;
-                                  customer_name?: string;
-                                  name?: string;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  account_name?: string;
                                 };
                                 return {
-                                  value: String(i?.id ?? i?.customer_code ?? ""),
-                                  label: String(
-                                    i?.customer_name ?? i?.name ?? "",
+                                  value: String(i?.id ?? "").trim(),
+                                  label: formatChartOfAccountsLabel(
+                                    String(i?.account_name ?? "").trim(),
+                                    String(i?.gl_account_code ?? "").trim(),
+                                    String(i?.gl_name ?? "").trim(),
                                   ),
                                 };
                               }}
-                              searchFields={["customer_name", "customer_code"]}
+                              searchFields={[
+                                "account_name",
+                                "gl_account_code",
+                                "gl_name",
+                                "sl_code",
+                                "id",
+                              ]}
                               returnOriginalData
                               styles={partyFieldStyles}
                             />
@@ -2489,7 +2533,7 @@ import {
                                   type="button"
                                   variant="subtle"
                                   size="sm"
-                                  title="Get invoice details"
+                                  title="Get document details"
                                   disabled={
                                     isReadOnly ||
                                     (invoiceModalDetailRowIndex === idx &&
@@ -2749,11 +2793,11 @@ import {
               onClose={() => {
                 setInvoiceModalOpen(false);
                 setInvoiceModalDetailRowIndex(null);
-                setInvoiceModalBillTo(null);
+                setInvoiceModalAllocationFilter(null);
                 setInvoiceList([]);
                 setSelectedInvoiceIndices(new Set());
               }}
-              title="Select Invoice"
+              title="Select Document"
               size="lg"
               styles={{ title: { fontWeight: 600, color: "#105476" } }}
             >
@@ -2818,7 +2862,7 @@ import {
                       onClick={() => {
                         setInvoiceModalOpen(false);
                         setInvoiceModalDetailRowIndex(null);
-                        setInvoiceModalBillTo(null);
+                          setInvoiceModalAllocationFilter(null);
                         setInvoiceList([]);
                         setSelectedInvoiceIndices(new Set());
                       }}

@@ -2711,7 +2711,7 @@ export default function SupplierInvoiceCreate({
                           const name = String(item.account_name ?? "").trim();
                           return {
                             value: id,
-                            label: [glName, gl, name].filter(Boolean).join(" - "),
+                            label: [name, gl, glName].filter(Boolean).join(" - "),
                           };
                         }}
                         displayValue={
@@ -2766,16 +2766,16 @@ export default function SupplierInvoiceCreate({
                             `charges_data.${index}.account_name`,
                             [
                               String(
-                                (originalData as Record<string, unknown>).gl_name ??
-                                  "",
-                              ).trim(),
-                              String(
                                 (originalData as Record<string, unknown>)
                                   .gl_account_code ?? "",
                               ).trim(),
                               String(
                                 (originalData as Record<string, unknown>)
                                   .account_name ?? "",
+                              ).trim(),
+                              String(
+                                (originalData as Record<string, unknown>).gl_name ??
+                                  "",
                               ).trim(),
                             ]
                               .filter(Boolean)

@@ -153,7 +153,7 @@ function formatChartOfAccountsLabel(
   const a = String(glName ?? "").trim();
   const b = String(glAccountCode ?? "").trim();
   const c = String(accountName ?? "").trim();
-  return [a, b, c].filter(Boolean).join(" - ");
+  return [c, b, a].filter(Boolean).join(" - ");
 }
 
 /** Party row: customer_display = label in UI (subledger_name from list / customer_name from search); customer_code = subledger_code in payload */
@@ -520,13 +520,6 @@ export default function ReceiptCreate({
     document_no?: string;
     status?: string;
   } | null>(null);
-  const [
-    createResponseModalOpened,
-    { open: openCreateResponseModal, close: closeCreateResponseModal },
-  ] = useDisclosure(false);
-  const [createReceiptResponseData, setCreateReceiptResponseData] = useState<
-    unknown | null
-  >(null);
 
   const [reverseReceiptSaveResponse, setReverseReceiptSaveResponse] = useState<{
     id: number;
@@ -1563,8 +1556,6 @@ export default function ReceiptCreate({
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
           // After create, reflect the exact API response (can include extra party rows like TDS)
-          setCreateReceiptResponseData(data);
-          openCreateResponseModal();
           applyCreatedReceiptToUI(data);
           if (
             data.allocations &&
