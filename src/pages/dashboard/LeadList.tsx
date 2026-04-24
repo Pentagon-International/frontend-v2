@@ -47,11 +47,20 @@ import {
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
   ERP_LIST_GEIST_ROOT_CLASS,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
   type ErpListTheme,
   type ERPListColumnToggleItem,
+  erpListTableElementStyle,
+  erpListThStyle,
+  erpListTdPaddingStyle,
+  erpListThActionsSpacer,
+  erpListStickyActionTdStyle,
+  erpListDataRowProps,
 } from "../../components";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
@@ -149,34 +158,6 @@ const DEFAULT_LEAD_VISIBLE_COLUMNS: LeadVisibleColumns = {
   createdAt: true,
   updatedAt: true,
 };
-
-const LEAD_FILTER_UNIFIED_STYLES = {
-  label: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-    fontWeight: 500,
-    color: DEFAULT_ERP_LIST_THEME.muted,
-    lineHeight: 1.25,
-    marginBottom: 6,
-    display: "block" as const,
-    minHeight: 15,
-  },
-  input: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-    height: 32,
-    minHeight: 32,
-    borderColor: DEFAULT_ERP_LIST_THEME.border,
-  },
-  dropdown: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-  },
-  option: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-  },
-} as const;
 
 function LeadsStatusPill({ status }: { status: string | undefined | null }) {
   const s = (status || "").trim() || "—";
@@ -970,7 +951,7 @@ function LeadList() {
     fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
   };
 
-  const { border, muted, fg, primary, headerBg, cardBg, fontSans } = erpTheme;
+  const { border, muted, fg, primary, fontSans } = erpTheme;
 
   const visibleDataColumnCount = useMemo(() => {
     const v = visibleColumns;
@@ -1159,8 +1140,8 @@ function LeadList() {
               ),
               children: (
                 <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                       <Select
                         size="xs"
                         label="Status"
@@ -1173,12 +1154,12 @@ function LeadList() {
                         value={filterForm.values.status || ""}
                         onChange={(value) => filterForm.setFieldValue("status", value || null)}
                         classNames={erpListGeistSelectClassNames}
-                        styles={LEAD_FILTER_UNIFIED_STYLES}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       />
                     </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                       <Select
                         key={`assigned-to-${filterForm.values.assigned_to}-${usersLoading}-${userOptions.length}`}
                         label="Assigned to"
@@ -1191,7 +1172,7 @@ function LeadList() {
                         value={filterForm.values.assigned_to || ""}
                         onChange={(value) => filterForm.setFieldValue("assigned_to", value || null)}
                         classNames={erpListGeistSelectClassNames}
-                        styles={LEAD_FILTER_UNIFIED_STYLES}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       />
                     </Box>
                   </Grid.Col>
@@ -1217,232 +1198,75 @@ function LeadList() {
               children: isTableDataLoading ? (
                 <ERPListTableLoading theme={erpTheme} message="Loading leads…" />
               ) : (
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    fontSize: 14,
-                    backgroundColor: cardBg,
-                    fontFamily: fontSans,
-                  }}
-                >
+                <table style={erpListTableElementStyle(erpTheme)}>
                   <thead>
                     <tr>
                       {visibleColumns.sno && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           S.No
                         </th>
                       )}
                       {visibleColumns.company && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Company
                         </th>
                       )}
                       {visibleColumns.contactPerson && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Contact person
                         </th>
                       )}
                       {visibleColumns.contactNumber && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Contact number
                         </th>
                       )}
                       {visibleColumns.email && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Email
                         </th>
                       )}
                       {visibleColumns.location && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Location
                         </th>
                       )}
                       {visibleColumns.status && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Status
                         </th>
                       )}
                       {visibleColumns.assignedTo && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Assigned to
                         </th>
                       )}
                       {visibleColumns.createdBy && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Created by
                         </th>
                       )}
                       {visibleColumns.interest && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Interest
                         </th>
                       )}
                       {visibleColumns.latestRemark && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Latest remark
                         </th>
                       )}
                       {visibleColumns.createdAt && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Created at
                         </th>
                       )}
                       {visibleColumns.updatedAt && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Updated at
                         </th>
                       )}
-                      <th
-                        style={{
-                          width: 48,
-                          backgroundColor: headerBg,
-                          borderBottom: `1px solid ${border}`,
-                        }}
-                      />
+                      <th style={erpListThActionsSpacer(erpTheme)} />
                     </tr>
                   </thead>
                   <tbody>
@@ -1482,56 +1306,44 @@ function LeadList() {
                           row.remark?.messages && row.remark.messages.length > 0,
                         );
                         return (
-                          <tr
-                            key={row.id}
-                            style={{
-                              borderBottom: `1px solid ${border}`,
-                              transition: "background 0.12s",
-                            }}
-                            onMouseEnter={(e) => {
-                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc";
-                            }}
-                            onMouseLeave={(e) => {
-                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "";
-                            }}
-                          >
+                          <tr key={row.id} {...erpListDataRowProps(erpTheme)}>
                             {visibleColumns.sno && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {sno}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.company && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {row.name || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.contactPerson && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.contact_person || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.contactNumber && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.contact_number || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.email && (
-                              <td style={{ padding: "10px 14px", color: muted, maxWidth: 220 }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted, maxWidth: 220 }}>
                                 <Text size="sm" lineClamp={1} style={{ fontFamily: fontSans }}>
                                   {row.email_id || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.location && (
-                              <td style={{ padding: "10px 14px", color: muted, maxWidth: 200 }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted, maxWidth: 200 }}>
                                 <Tooltip
                                   label={formatLocation(row.location)}
                                   withArrow
@@ -1544,33 +1356,33 @@ function LeadList() {
                               </td>
                             )}
                             {visibleColumns.status && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <LeadsStatusPill status={row.status} />
                               </td>
                             )}
                             {visibleColumns.assignedTo && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text fw={500} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {row.assigned_to || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.createdBy && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.created_by || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.interest && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Badge size="sm" color={getInterestLevelColor(row.remark?.interest_level)}>
                                   {row.remark?.interest_level || "—"}
                                 </Badge>
                               </td>
                             )}
                             {visibleColumns.latestRemark && (
-                              <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                              <td style={{ ...erpListTdPaddingStyle(), maxWidth: 200 }}>
                                 <Tooltip
                                   label={hasMessages ? "Click to view full conversation" : remarkMessage}
                                   maw={400}
@@ -1600,7 +1412,7 @@ function LeadList() {
                               </td>
                             )}
                             {visibleColumns.createdAt && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.created_at
                                     ? dayjs(row.created_at).format(`${dateFormat} HH:mm`)
@@ -1609,7 +1421,7 @@ function LeadList() {
                               </td>
                             )}
                             {visibleColumns.updatedAt && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.updated_at
                                     ? dayjs(row.updated_at).format(`${dateFormat} HH:mm`)
@@ -1617,17 +1429,7 @@ function LeadList() {
                                 </Text>
                               </td>
                             )}
-                            <td
-                              style={{
-                                padding: "10px 8px",
-                                position: "sticky",
-                                right: 0,
-                                backgroundColor: cardBg,
-                                borderLeft: `1px solid ${border}`,
-                                boxShadow: "-4px 0 8px -4px rgba(15, 23, 42, 0.08)",
-                                zIndex: 2,
-                              }}
-                            >
+                            <td style={erpListStickyActionTdStyle(erpTheme)}>
                               <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
                                 <Menu.Target>
                                   <ActionIcon variant="subtle" color="gray">

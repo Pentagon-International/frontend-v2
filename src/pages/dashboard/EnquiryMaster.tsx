@@ -53,6 +53,10 @@ import {
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE,
   ERP_LIST_GEIST_ROOT_CLASS,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
@@ -205,8 +209,7 @@ function EnquiryMaster() {
     customer_name: true,
     sales_person: true,
     service: true,
-    origin: true,
-    destination: true,
+    route: true,
     reference_no: true,
     date: true,
     status: true,
@@ -2081,6 +2084,44 @@ function EnquiryMaster() {
     [tablePreviewData, previewColumnToKeyMap],
   );
 
+  /** Detailed view: per-column visibility (keyed by `PreviewColDef.id`). New API columns default to visible. */
+  const [previewColumnVisibility, setPreviewColumnVisibility] = useState<Record<string, boolean>>({});
+  const previewColumnIdsKey = useMemo(
+    () => previewLayout.columns.map((c) => c.id).join("|"),
+    [previewLayout.columns],
+  );
+  useEffect(() => {
+    setPreviewColumnVisibility((prev) => {
+      const next = { ...prev };
+      for (const c of previewLayout.columns) {
+        if (next[c.id] === undefined) next[c.id] = true;
+      }
+      return next;
+    });
+  }, [previewColumnIdsKey, previewLayout.columns]);
+
+  const visiblePreviewColumns = useMemo(() => {
+    const cols = previewLayout.columns;
+    const visible = cols.filter((c) => previewColumnVisibility[c.id] !== false);
+    if (visible.length > 0) return visible;
+    return cols;
+  }, [previewLayout.columns, previewColumnVisibility]);
+
+  const previewColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () =>
+      previewLayout.columns.map((col) => ({
+        id: col.id,
+        label: col.header,
+        checked: previewColumnVisibility[col.id] !== false,
+        onToggle: () =>
+          setPreviewColumnVisibility((p) => {
+            const wasVisible = p[col.id] !== false;
+            return { ...p, [col.id]: !wasVisible };
+          }),
+      })),
+    [previewLayout.columns, previewColumnVisibility],
+  );
+
   const enquiryRowMenuCtx: EnquiryRowMenuContext = useMemo(
     () => ({
       navigate,
@@ -2128,8 +2169,7 @@ function EnquiryMaster() {
       { id: "customer", label: "Customer", checked: summaryVisibleColumns.customer_name, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
       { id: "sales", label: "Sales Person", checked: summaryVisibleColumns.sales_person, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
       { id: "service", label: "Service", checked: summaryVisibleColumns.service, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, service: !p.service })) },
-      { id: "origin", label: "Origin", checked: summaryVisibleColumns.origin, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, origin: !p.origin })) },
-      { id: "destination", label: "Destination", checked: summaryVisibleColumns.destination, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, destination: !p.destination })) },
+      { id: "route", label: "Route", checked: summaryVisibleColumns.route, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, route: !p.route })) },
       { id: "ref", label: "Reference No", checked: summaryVisibleColumns.reference_no, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
       { id: "date", label: "Enquiry Date", checked: summaryVisibleColumns.date, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })) },
       { id: "status", label: "Status", checked: summaryVisibleColumns.status, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, status: !p.status })) },
@@ -2294,24 +2334,33 @@ function EnquiryMaster() {
                       },
                     }}
                   />
-                  {!showPreviewTable && (
+                  {showPreviewTable ? (
+                    <>
+                      {previewColumnToggleItems.length > 0 && (
+                        <ERPListColumnToggleMenu
+                          theme={erpTheme}
+                          items={previewColumnToggleItems}
+                          menuStyles={erpListGeistMenuDropdownStyles}
+                          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                        />
+                      )}
+                      <ActionIcon
+                        variant="default"
+                        size="sm"
+                        onClick={downloadExcel}
+                        loading={downloading}
+                        title="Download Excel"
+                      >
+                        <IconDownload size={16} />
+                      </ActionIcon>
+                    </>
+                  ) : (
                     <ERPListColumnToggleMenu
                       theme={erpTheme}
                       items={summaryColumnToggleItems}
                       menuStyles={erpListGeistMenuDropdownStyles}
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                     />
-                  )}
-                  {showPreviewTable && (
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={downloadExcel}
-                      loading={downloading}
-                      title="Download Excel"
-                    >
-                      <IconDownload size={16} />
-                    </ActionIcon>
                   )}
                   <Button
                     variant="default"
@@ -2358,7 +2407,9 @@ function EnquiryMaster() {
             filters={{
               opened: showFilters,
               title: "Filters",
-              subtitle: "Narrow enquiries by customer, route, service, or status",
+              subtitle: showPreviewTable
+                ? "Apply to detailed list (same as summary: customer, ports, service, status, date range, IDs)"
+                : "Narrow enquiries by customer, route, service, or status",
               onClose: () => setShowFilters(false),
                 footer: (
                 <ERPListFilterActionsFooter
@@ -2371,9 +2422,10 @@ function EnquiryMaster() {
               ),
               children: (
                 <>
-              <Grid gutter="md" px="md">
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                 {/* Row 1 */}
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <SearchableSelect
                     size="xs"
                     label="Customer Name"
@@ -2398,11 +2450,16 @@ function EnquiryMaster() {
                       }
                     }}
                     minSearchLength={3}
+                    dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     className="filter-searchable-select"
                   />
+                  </Box>
                 </Grid.Col>
 
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <SearchableSelect
                     size="xs"
                     label="Origin"
@@ -2426,10 +2483,15 @@ function EnquiryMaster() {
                       }
                     }}
                     minSearchLength={3}
+                    dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     className="filter-searchable-select"
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <SearchableSelect
                     size="xs"
                     label="Destination"
@@ -2453,10 +2515,15 @@ function EnquiryMaster() {
                       }
                     }}
                     minSearchLength={3}
+                    dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     className="filter-searchable-select"
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={4}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <DateRangeInput
                     fromDate={fromDate}
                     toDate={toDate}
@@ -2478,11 +2545,15 @@ function EnquiryMaster() {
                     allowDeselection={true}
                     showRangeInCalendar={false}
                     inputWidth={260}
+                    filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                    dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                   />
+                  </Box>
                 </Grid.Col>
 
                 {/* Row 2 */}
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`sales-person-${filters.sales_person}`}
                     label="Sales Person"
@@ -2509,19 +2580,13 @@ function EnquiryMaster() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`service-${filters.service}`}
                     label="Service"
@@ -2543,19 +2608,13 @@ function EnquiryMaster() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`trade-${filters.trade}`}
                     label="Trade"
@@ -2577,19 +2636,13 @@ function EnquiryMaster() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`status-${filters.status}`}
                     label="Status"
@@ -2611,19 +2664,13 @@ function EnquiryMaster() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <TextInput
                     label="Enquiry ID"
                     placeholder="Placeholder"
@@ -2636,19 +2683,13 @@ function EnquiryMaster() {
                         updatePreviewFilter("enquiry_id", val);
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <TextInput
                     label="Reference No"
                     placeholder="Placeholder"
@@ -2661,17 +2702,10 @@ function EnquiryMaster() {
                         updatePreviewFilter("reference_no", val);
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
               </Grid>
                 </>
@@ -2710,7 +2744,7 @@ function EnquiryMaster() {
                 ) : (
                   <EnquiryPreviewNativeTable
                     theme={erpTheme}
-                    columns={previewLayout.columns}
+                    columns={visiblePreviewColumns}
                     data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
                     dateFormat={dateFormat}
                     getStatusBadge={getStatusBadge}

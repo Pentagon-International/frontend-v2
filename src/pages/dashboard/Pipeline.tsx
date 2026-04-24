@@ -1,41 +1,49 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
-import {
   ActionIcon,
   Button,
-  Card,
-  Group,
-  Loader,
-  Select,
   Text,
   Grid,
-  Center,
-  Stack,
-  Menu,
-  UnstyledButton,
   Box,
   TextInput,
+  MantineProvider,
+  Select,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconPlus,
   IconFilter,
-  IconDotsVertical,
-  IconEdit,
-  IconEye,
   IconX,
   IconSearch,
+  IconUsers,
+  IconCoin,
+  IconChartBar,
+  IconRoute,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAPICall } from "../../service/getApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
-import { ToastNotification, SearchableSelect } from "../../components";
+import {
+  ToastNotification,
+  SearchableSelect,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistRootTypography,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  type ErpListTheme,
+} from "../../components";
+import { PipelineListNativeTable, type PipelineListRow } from "./PipelineListNativeTable";
 import { useDebouncedValue } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -81,8 +89,8 @@ type FilterState = {
 const LIST_KEY = "PIPELINE";
 
 function Pipeline() {
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize] = useState(5);
+  const [listCurrentPage, setListCurrentPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(25);
   const queryClient = useQueryClient();
   const hasRestoredFromStore = useRef(false);
 
@@ -446,7 +454,7 @@ function Pipeline() {
       };
       setAppliedFilters(filtersToApply);
 
-      setPageIndex(0); // Reset to first page when applying filters
+      setListCurrentPage(1);
       setFiltersApplied(true); // Mark filters as applied
 
       setShowFilters(false);
@@ -465,7 +473,7 @@ function Pipeline() {
 
     filterForm.reset(); // Reset form to initial values
     setSearchQuery("");
-    setPageIndex(0);
+    setListCurrentPage(1);
     setFiltersApplied(false); // Reset filters applied state
 
     // Reset applied filters state
@@ -505,7 +513,7 @@ function Pipeline() {
     const runSearchEffect = async () => {
       try {
         if (trimmedSearch !== "") {
-          setPageIndex(0);
+          setListCurrentPage(1);
 
           setAppliedFilters((prev) => ({
             ...prev,
@@ -552,364 +560,198 @@ function Pipeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const columns = useMemo<MRT_ColumnDef<CustomerPipelineData>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "customer_code",
-        header: "Customer Code",
-        size: 150,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 200,
-      },
-      {
-        accessorKey: "created_by",
-        header: "Sales Person",
-        size: 150,
-      },
-      {
-        accessorKey: "total_profit",
-        header: "Total Profit",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<number>();
-          return `${value?.toLocaleString() || "0"}`;
-        },
-      },
-      {
-        accessorKey: "total_volume",
-        header: "Total Volume",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<number>();
-          return `${value?.toLocaleString() || "0"}`;
-        },
-      },
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, muted, primary, fontSans, fg } = erpTheme;
 
-      // Action column
-      {
-        id: "actions",
-        header: "Actions",
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() => {
-                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                    navigate("/pipeline/create", {
-                      state: {
-                        customer_code: row.original.customer_code,
-                        customer_name: row.original.customer_name,
-                        pipelines: row.original.pipelines,
-                        actionType: "view",
-                        returnTo: "/pipeline",
-                      },
-                    });
-                  }}
-                >
-                  <Group gap={"sm"}>
-                    <IconEye size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">View</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              <Menu.Divider />
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() => {
-                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                    navigate("/pipeline/create", {
-                      state: {
-                        customer_code: row.original.customer_code,
-                        customer_name: row.original.customer_name,
-                        pipelines: row.original.pipelines,
-                        actionType: "edit",
-                        returnTo: "/pipeline",
-                      },
-                    });
-                  }}
-                >
-                  <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">Edit</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-            </Menu.Dropdown>
-          </Menu>
-        ),
-        size: 80,
+  const pipelineStats = useMemo(() => {
+    const rows = displayData;
+    let profit = 0;
+    let vol = 0;
+    let lines = 0;
+    for (const r of rows) {
+      profit += Number(r.total_profit) || 0;
+      vol += Number(r.total_volume) || 0;
+      lines += r.pipelines?.length || 0;
+    }
+    return { n: rows.length, profit, vol, lines };
+  }, [displayData]);
+
+  const pipelineTableRows: PipelineListRow[] = useMemo(() => {
+    const total = displayData.length;
+    const start = (listCurrentPage - 1) * listPageSize;
+    const slice = displayData.slice(start, Math.min(start + listPageSize, total));
+    return slice.map((r, i) => ({
+      sno: start + i + 1,
+      customer_code: r.customer_code,
+      customer_name: r.customer_name,
+      created_by: r.created_by,
+      total_profit: r.total_profit,
+      total_volume: r.total_volume,
+      pipelines: r.pipelines,
+      raw: {
+        customer_code: r.customer_code,
+        customer_name: r.customer_name,
+        created_by: r.created_by,
+        pipelines: r.pipelines,
+        total_profit: r.total_profit,
+        total_volume: r.total_volume,
       },
-    ],
+    }));
+  }, [displayData, listCurrentPage, listPageSize]);
+
+  const openPipeline = useCallback(
+    (row: PipelineListRow, actionType: "view" | "edit") => {
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+      navigate("/pipeline/create", {
+        state: {
+          customer_code: row.customer_code,
+          customer_name: row.customer_name,
+          pipelines: row.raw.pipelines,
+          actionType,
+          returnTo: "/pipeline",
+        },
+      });
+    },
     [navigate]
   );
 
-  const table = useMantineReactTable({
-    columns: columns as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      radius: "md",
-      style: { 
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto", 
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#F8FAFC",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+  const tableLoading = pipelineLoading || pipelineFetching;
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex:1,
-        }}
-      >
-        <Box >
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c={"#1E293B"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              List of Pipelines
-            </Text>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search pipelines"
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      aria-label="Clear search"
-                      onClick={() => setSearchQuery("")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={260}
-                size="xs"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    height: "36px",
-                    borderRadius: "4px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontStyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-                onClick={() => {
-                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                  navigate("/pipeline/create");
-                }}
-              >
-                Create New
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUsers size={14} color={primary} />}
+                    value={pipelineStats.n}
+                    label="Total"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCoin size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={Math.round(pipelineStats.profit).toLocaleString()}
+                    label="Total profit"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconChartBar size={14} color="#105476" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#105476"
+                    value={Number.isFinite(pipelineStats.vol)
+                      ? pipelineStats.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                      : "0"}
+                    label="Total volume"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconRoute size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={pipelineStats.lines}
+                    label="Line items"
+                  />
+                </>
+              ),
+              secondary: (
+                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                  List of Pipelines
+                </Text>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search pipelines"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          aria-label="Clear search"
+                          onClick={() => {
+                            setSearchQuery("");
+                            clearStoreSearch(LIST_KEY);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={260}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                    onClick={() => {
+                      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      navigate("/pipeline/create");
+                    }}
+                  >
+                    Create New
+                  </Button>
+                </>
+              ),
             }}
-          >
-            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#F8FAFC", padding: "8px 8px", borderRadius: "8px" }}>
-              <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Refine by customer, service, route, or frequency",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={isLoading}
+                  applyDisabled={isLoading}
+                />
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
               {/* Sales Person Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
                   label="Sales Person"
@@ -938,21 +780,15 @@ function Pipeline() {
                       input.select();
                     }
                   }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
               {/* Customer Name Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <SearchableSelect
                   size="xs"
                   label="Customer Name"
@@ -968,12 +804,17 @@ function Pipeline() {
                     filterForm.setFieldValue("customer", value || "")
                   }
                   minSearchLength={2}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   className="filter-searchable-select"
                 />
+                </Box>
               </Grid.Col>
 
               {/* Service Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   key={`service-${filterForm.values.service}`}
                   label="Service"
@@ -996,21 +837,15 @@ function Pipeline() {
                       input.select();
                     }
                   }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
               {/* Origin Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <SearchableSelect
                   size="xs"
                   label="Origin"
@@ -1026,12 +861,17 @@ function Pipeline() {
                     filterForm.setFieldValue("origin", value || "")
                   }
                   minSearchLength={3}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   className="filter-searchable-select"
                 />
+                </Box>
               </Grid.Col>
 
               {/* Destination Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <SearchableSelect
                   size="xs"
                   label="Destination"
@@ -1047,12 +887,17 @@ function Pipeline() {
                     filterForm.setFieldValue("destination", value || "")
                   }
                   minSearchLength={3}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   className="filter-searchable-select"
                 />
+                </Box>
               </Grid.Col>
 
               {/* Frequency Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   key={`frequency-${filterForm.values.frequency}-${frequencyDataLoading}-${frequencyOptionsData.length}`}
                   label="Frequency"
@@ -1078,183 +923,60 @@ function Pipeline() {
                       input.select();
                     }
                   }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
             </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#1E293B",
-                  },
-                }}
-              >
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {isLoading ? (
-          <Center py="xl" style={{flex:1}}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading pipeline data...</Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable
-              key={`table-${displayData.length}`}
-              table={table}
-            />
-
-            {/* Custom Pagination Bar */}
-            <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              pt="sm"
-              pl="sm"
-              pr="xl"
-              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              wrap="nowrap"
-              mt="sm"
-            >
-              {/* Rows per page and range */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                <Text size="sm" c="dimmed">
-                  Rows per page
-                </Text>
-                <Select
-                  size="xs"
-                  data={["10", "25", "50"]}
-                  value={String(table.getState().pagination.pageSize)}
-                  onChange={(val) => {
-                    if (!val) return;
-                    table.setPageSize(Number(val));
-                    table.setPageIndex(0);
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={displayData.length}
+                  pageIndex={listCurrentPage - 1}
+                  pageSize={listPageSize}
+                  onPageIndexChange={(idx) => setListCurrentPage(idx + 1)}
+                  onPageSizeChange={(size) => {
+                    setListPageSize(size);
+                    setListCurrentPage(1);
                   }}
-                  w={110}
-                  styles={{ input: { fontSize: 12, height: 30 } }}
+                  pageSizeOptions={["10", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
+                  }}
                 />
-                <Text size="sm" c="dimmed">
-                  {(() => {
-                    const { pageIndex, pageSize } = table.getState().pagination;
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    if (total === 0) return "0–0 of 0";
-                    const start = pageIndex * pageSize + 1;
-                    const end = Math.min((pageIndex + 1) * pageSize, total);
-                    return `${start}–${end} of ${total}`;
-                  })()}
-                </Text>
-              </Group>
-
-              {/* Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap">
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    table.setPageIndex(
-                      Math.max(0, table.getState().pagination.pageIndex - 1)
-                    )
-                  }
-                  disabled={table.getState().pagination.pageIndex === 0}
-                >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {table.getState().pagination.pageIndex + 1}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of{" "}
-                  {Math.max(
-                    1,
-                    Math.ceil(
-                      (table.getPrePaginationRowModel().rows.length || 0) /
-                        table.getState().pagination.pageSize
-                    )
-                  )}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    table.setPageIndex(
-                      Math.min(
-                        totalPages - 1,
-                        table.getState().pagination.pageIndex + 1
-                      )
-                    );
+              ),
+              children: tableLoading ? (
+                <ERPListTableLoading
+                  theme={erpTheme}
+                  message="Loading pipeline data…"
+                />
+              ) : (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
                   }}
-                  disabled={(() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    return (
-                      table.getState().pagination.pageIndex >= totalPages - 1
-                    );
-                  })()}
                 >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
-            </Group>
-          </>
-        )}
-      </Card>
+                  <PipelineListNativeTable
+                    theme={erpTheme}
+                    rows={pipelineTableRows}
+                    isEmpty={displayData.length === 0}
+                    onView={(row) => openPipeline(row, "view")}
+                    onEdit={(row) => openPipeline(row, "edit")}
+                  />
+                </Box>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
     </>
   );
 }

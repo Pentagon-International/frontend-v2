@@ -34,6 +34,16 @@ export type EnquiryRowMenuContext = {
   cancellingEnquiryId: number | null;
   listKey: string;
   detailedListKey: string;
+  /**
+   * Create / edit targets for the record form. Defaults: `/enquiry-create`.
+   * Use for RFQ lists: `{ createQuotation: "/rfq-create", editRecord: "/rfq-create" }`.
+   */
+  recordFormPaths?: {
+    createQuotation?: string;
+    editRecord?: string;
+  };
+  /** Shown in the "Edit …" item (default "Enquiry"). */
+  editRecordLabel?: string;
 };
 
 type Props = {
@@ -87,6 +97,9 @@ function preserveAndNavigate(
 }
 
 export function EnquirySummaryRowMenu({ row, opened, onOpenChange, ctx, menuStyles, dropdownClassName }: Props) {
+  const createQuotationPath = ctx.recordFormPaths?.createQuotation ?? "/enquiry-create";
+  const editRecordPath = ctx.recordFormPaths?.editRecord ?? "/enquiry-create";
+  const editRecordLabel = ctx.editRecordLabel ?? "Enquiry";
   const statusU = String(row?.status ?? "").toUpperCase();
   const isTerminalQuote = ["GAINED", "LOST", "QUOTE CREATED"].includes(statusU);
   const rowId = (row as { id?: number })?.id;
@@ -112,7 +125,7 @@ export function EnquirySummaryRowMenu({ row, opened, onOpenChange, ctx, menuStyl
           <UnstyledButton
             onClick={() => {
               onOpenChange(false);
-              preserveAndNavigate(ctx, "/enquiry-create", { ...row });
+              preserveAndNavigate(ctx, createQuotationPath, { ...row });
             }}
             style={{
               opacity: isTerminalQuote ? 0.5 : 1,
@@ -184,12 +197,12 @@ export function EnquirySummaryRowMenu({ row, opened, onOpenChange, ctx, menuStyl
               <UnstyledButton
                 onClick={() => {
                   onOpenChange(false);
-                  preserveAndNavigate(ctx, "/enquiry-create", { ...row, actionType: "edit" });
+                  preserveAndNavigate(ctx, editRecordPath, { ...row, actionType: "edit" });
                 }}
               >
                 <Group gap="sm">
                   <IconEdit size={16} style={{ color: "#105476" }} />
-                  <Text size="sm">Edit Enquiry</Text>
+                  <Text size="sm">Edit {editRecordLabel}</Text>
                 </Group>
               </UnstyledButton>
             </Box>

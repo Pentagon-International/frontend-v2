@@ -3,6 +3,7 @@ export type PreviewColKind =
   | "service"
   | "enquiryDate"
   | "status"
+  | "route"
   | "text";
 
 export type PreviewColDef = {
@@ -10,6 +11,8 @@ export type PreviewColDef = {
   header: string;
   key: string;
   kind: PreviewColKind;
+  /** When `kind === "route"`, key for the destination value (e.g. `"destination"`). */
+  routeDestKey?: string;
 };
 
 const desiredOrder = [
@@ -72,7 +75,8 @@ export function buildPreviewColumnDescriptors(
     { id: "sno", header: "S.No", key: "sno", kind: "sno" },
   ];
 
-  for (const col of orderedColumns) {
+  for (let i = 0; i < orderedColumns.length; i++) {
+    const col = orderedColumns[i];
     if (col === "Service") {
       columns.push({ id: "service_trade", header: "Service", key: "service", kind: "service" });
       continue;
@@ -87,6 +91,19 @@ export function buildPreviewColumnDescriptors(
       continue;
     }
     if (col === "Trade") {
+      continue;
+    }
+    if (col === "Origin" && orderedColumns[i + 1] === "Destination") {
+      const ok = previewColumnToKeyMap["Origin"] || PREVIEW_KEY_MAP["Origin"] || "origin";
+      const dk = previewColumnToKeyMap["Destination"] || PREVIEW_KEY_MAP["Destination"] || "destination";
+      columns.push({
+        id: "route",
+        header: "Route",
+        key: ok,
+        kind: "route",
+        routeDestKey: dk,
+      });
+      i += 1;
       continue;
     }
     const key = previewColumnToKeyMap[col] || PREVIEW_KEY_MAP[col] || col;

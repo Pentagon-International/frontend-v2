@@ -1,45 +1,62 @@
 import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
-import {
   Button,
-  Card,
   Group,
   Text,
-  Center,
-  Loader,
   Modal,
   Select,
   Stack,
   MultiSelect,
   SegmentedControl,
   ActionIcon,
-  Menu,
   Box,
-  UnstyledButton,
   Drawer,
   Flex,
   TextInput,
   Grid,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconPlus,
   IconUpload,
   IconUserPlus,
-  IconDotsVertical,
   IconDownload,
   IconFile,
   IconX,
   IconFilter,
-  IconFilterOff,
   IconSearch,
+  IconUsers,
+  IconMail,
+  IconPhone,
+  IconListNumbers,
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../api/serverUrls";
-import { ToastNotification } from "../../components";
-import PaginationBar from "../../components/PaginationBar/PaginationBar";
+import {
+  ToastNotification,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
+  erpToolbarOutlineButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
+} from "../../components";
+import {
+  PotentialCustomersListNativeTable,
+  type PotentialCustomerTableRow,
+  type PotentialCustomerVisibleColumns,
+} from "./PotentialCustomersListNativeTable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_HEADER } from "../../store/storeKeys";
 import { apiCallProtected } from "../../api/axios";
@@ -178,6 +195,26 @@ function PotentialCustomers() {
   const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
   const hasRestoredFromStore = useRef(false);
   const location = useLocation();
+
+  const [potentialVisibleColumns, setPotentialVisibleColumns] =
+    useState<PotentialCustomerVisibleColumns>({
+      sno: true,
+      customer: true,
+      email_id: true,
+      commodity: true,
+      ice: true,
+      pin: true,
+      phone_no: true,
+      contact_person: true,
+      address: true,
+      city: true,
+      state: true,
+      total_value: true,
+      total_quantity: true,
+      unit: true,
+      assigned_to: true,
+      created_at: true,
+    });
 
   // Zustand store for filter and search preservation
   const setStoreFilters = useListFilterStore((state) => state.setFilters);
@@ -1063,246 +1100,73 @@ function PotentialCustomers() {
   //   });
   // };
 
-  const columns = useMemo<MRT_ColumnDef<PotentialCustomerData>[]>(() => {
-    const baseColumns: MRT_ColumnDef<PotentialCustomerData>[] = [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "customer",
-        header: "Customer",
-        size: 250,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "email_id",
-        header: "Email Id",
-        size: 200,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "commodity",
-        header: "Commodity",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "ice",
-        header: "Ice",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "pin",
-        header: "Pin",
-        size: 100,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "phone_no",
-        header: "Phone No.",
-        size: 130,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "contact_person",
-        header: "Contact Person",
-        size: 180,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "address",
-        header: "Address",
-        size: 200,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "city",
-        header: "City",
-        size: 150,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "state",
-        header: "State",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "total_value",
-        header: "Total Value",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "total_quantity",
-        header: "Total Quantity",
-        size: 130,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "unit",
-        header: "Unit",
-        size: 80,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-    ];
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, muted, primary, fontSans, fg } = erpTheme;
 
-    // Only add actions column when statusFilter is "assigned"
-    if (statusFilter === "assigned") {
-      baseColumns.push(
-        {
-          accessorKey: "assigned_to",
-          header: "Assigned to",
-          size: 130,
-          Cell: ({ cell }): string => String(cell.getValue() || "-"),
-        },
-        {
-          accessorKey: "created_at",
-          header: "Assigned date",
-          size: 100,
-          Cell: ({ cell }): string => String(cell.getValue() || "-"),
-        },
-        {
-          id: "actions",
-          header: "Actions",
-          size: 80,
-          Cell: ({ row }) => (
-            <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => handleCreateCallEntry(row.original)}
-                  >
-                    <Group gap={"sm"}>
-                      <IconPlus size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Create call entry</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              </Menu.Dropdown>
-            </Menu>
-          ),
-        }
-      );
+  const potentialPageStats = useMemo(() => {
+    let withEmail = 0;
+    let withPhone = 0;
+    for (const r of displayData) {
+      if (r.email_id && String(r.email_id).trim()) withEmail += 1;
+      const ph = r.phone_no || r.ctc_no;
+      if (ph && String(ph).trim()) withPhone += 1;
     }
+    return { withEmail, withPhone };
+  }, [displayData]);
 
-    return baseColumns;
-  }, [statusFilter, handleCreateCallEntry]);
+  const potentialTableRows: PotentialCustomerTableRow[] = useMemo(
+    () =>
+      displayData.map((r, i) => ({
+        ...r,
+        sno: (currentPage - 1) * pageSize + i + 1,
+      })),
+    [displayData, currentPage, pageSize]
+  );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      radius: "md",
-      style: { 
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto", 
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
+  const potentialColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () => {
+      const labelMap: Record<keyof PotentialCustomerVisibleColumns, string> = {
+        sno: "S.No",
+        customer: "Customer",
+        email_id: "Email",
+        commodity: "Commodity",
+        ice: "Ice",
+        pin: "Pin",
+        phone_no: "Phone",
+        contact_person: "Contact Person",
+        address: "Address",
+        city: "City",
+        state: "State",
+        total_value: "Total Value",
+        total_quantity: "Total Qty",
+        unit: "Unit",
+        assigned_to: "Assigned to",
+        created_at: "Assigned date",
       };
+      return (
+        Object.keys(labelMap) as (keyof PotentialCustomerVisibleColumns)[]
+      ).map((id) => ({
+        id: id as string,
+        label: labelMap[id],
+        checked: potentialVisibleColumns[id] !== false,
+        onToggle: () =>
+          setPotentialVisibleColumns((p) => ({ ...p, [id]: !p[id] })),
+      }));
     },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#F8FAFC",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+    [potentialVisibleColumns]
+  );
+
+  const tableLoading = isLoading;
+  const assignedListMode = statusFilter === "assigned";
 
   const handleAssign = async (values: AssignFormValues) => {
     setIsAssigning(true);
@@ -1344,33 +1208,7 @@ function PotentialCustomers() {
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex:1,
-        }}
-      >
-        <Box >
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c={"#1E293B"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              Potential Customers
-            </Text>
-
-          <Drawer
+      <Drawer
             opened={uploadOpenFlag}
             onClose={uploadClose}
             title="Potential Customers Bulk Upload"
@@ -1601,149 +1439,150 @@ function PotentialCustomers() {
             </form>
           </Modal>
 
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => {
-                        setSearchQuery("");
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-            {((user as UserWithManager)?.is_manager || user?.is_staff) && (
-              <>
-                <SegmentedControl
-                  value={statusFilter}
-                  onChange={(value) =>
-                    setStatusFilter(value as "assigned" | "unassigned")
-                  }
-                  data={[
-                    { label: "Assigned", value: "assigned" },
-                    { label: "Unassigned", value: "unassigned" },
-                  ]}
-                  size="xs"
-                  color="#105476"
-                />
-                {/* <Button
-                  variant="outline"
-                  leftSection={<IconUpload size={16} />}
-                  size="xs"
-                  color="#105476"
-                  onClick={uploadOpen}
-                >
-                  Upload
-                </Button> */}
-                {statusFilter === "unassigned" && (
-                  <Button
-                    variant="outline"
-                    leftSection={<IconUserPlus size={16} />}
-                    size="sm"
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUsers size={14} color={primary} />}
+                    value={totalCount}
+                    label="Total"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconListNumbers size={14} color="#105476" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#105476"
+                    value={displayData.length}
+                    label="On page"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconMail size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={potentialPageStats.withEmail}
+                    label="With email"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconPhone size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={potentialPageStats.withPhone}
+                    label="With phone"
+                  />
+                </>
+              ),
+              secondary: (
+                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                  Potential Customers
+                </Text>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            clearStoreSearch(LIST_KEY);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={{
-                      root: {
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        fontFamily: "Inter",
-                        fontWeight: 600,
-                        border: "1px solid #105476",
-                        color: "#105476",
-                        "&:hover": {
-                          backgroundColor: "#E0F5FF",
-                        },
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
                       },
                     }}
-                    onClick={open}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={potentialColumnToggleItems}
+                    menuStyles={erpListGeistMenuDropdownStyles}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
                   >
-                    Assign to salesperson
+                    {showFilters ? "Hide filters" : "Filters"}
                   </Button>
-                )}
-              </>
-            )}
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+                  {((user as UserWithManager)?.is_manager || user?.is_staff) && (
+                    <>
+                      <SegmentedControl
+                        value={statusFilter}
+                        onChange={(value) =>
+                          setStatusFilter(value as "assigned" | "unassigned")
+                        }
+                        data={[
+                          { label: "Assigned", value: "assigned" },
+                          { label: "Unassigned", value: "unassigned" },
+                        ]}
+                        size="xs"
+                        color="#105476"
+                      />
+                      {statusFilter === "unassigned" && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          leftSection={<IconUserPlus size={16} />}
+                          styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                          onClick={open}
+                        >
+                          Assign to salesperson
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </>
+              ),
             }}
-          >
-            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#F8FAFC", padding: "8px 8px", borderRadius: "8px" }}>
-              <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Refine by customer, location, or salesperson",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={isLoading}
+                  applyDisabled={isLoading}
+                />
+              ),
+              children: (
+            <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
               {/* Sales Person Filter - Only show when statusFilter is "assigned" and should be first */}
               {statusFilter === "assigned" && (
-                <Grid.Col span={2.4}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
                     label="Sales Person"
@@ -1775,22 +1614,16 @@ function PotentialCustomers() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
               )}
 
               {/* Customer Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   label="Customer"
                   placeholder="Type customer name"
@@ -1812,17 +1645,10 @@ function PotentialCustomers() {
                         : "No customers found"
                   }
                   disabled={customerOptionsLoading && customerOptions.length === 0}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
                   {/* Customer Name Filter - Commented out */}
@@ -1846,7 +1672,8 @@ function PotentialCustomers() {
                   </Grid.Col> */}
 
               {/* City Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   label="City"
                   placeholder="Type to search city"
@@ -1865,21 +1692,15 @@ function PotentialCustomers() {
                       ? "Type to search cities"
                       : "No cities found"
                   }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
               {/* State Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <Select
                   label="State"
                   placeholder="Select State"
@@ -1891,21 +1712,15 @@ function PotentialCustomers() {
                   }
                   searchable
                   clearable
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
               {/* Commodity Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <TextInput
                   label="Commodity"
                   placeholder="Search Commodity"
@@ -1917,95 +1732,61 @@ function PotentialCustomers() {
                       e.currentTarget.value || null
                     )
                   }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
             </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#1E293B",
-                  },
-                }}
-              >
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {isLoading ? (
-          <Center py="xl" style={{flex:1}}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading potential customers data...</Text>
-            </Stack>
-          </Center>
-        ) : displayData.length === 0 ? (
-          <Center py="xl" style={{flex:1}}>
-            <Text c="dimmed" size="lg">
-              No data available
-            </Text>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable table={table} />
-
-            <Box
-              w="100%"
-              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              mt="sm"
-            >
-              <PaginationBar
-                pageSize={pageSize}
-                currentPage={currentPage}
-                totalRecords={totalCount}
-                onPageSizeChange={handlePageSizeChange}
-                onPageChange={handlePageChange}
-              />
-            </Box>
-          </>
-        )}
-      </Card>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={totalCount}
+                  pageIndex={currentPage - 1}
+                  pageSize={pageSize}
+                  onPageIndexChange={(idx) => setCurrentPage(idx + 1)}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                  pageSizeOptions={["10", "15", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
+                  }}
+                />
+              ),
+              children: tableLoading ? (
+                <ERPListTableLoading
+                  theme={erpTheme}
+                  message="Loading potential customers…"
+                />
+              ) : (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <PotentialCustomersListNativeTable
+                    theme={erpTheme}
+                    rows={potentialTableRows}
+                    visible={potentialVisibleColumns}
+                    isEmpty={displayData.length === 0}
+                    assignedMode={assignedListMode}
+                    onCreateCallEntry={handleCreateCallEntry}
+                  />
+                </Box>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
     </>
   );
 }

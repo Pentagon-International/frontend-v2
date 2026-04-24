@@ -1,7 +1,17 @@
-import { Badge, Box, Text } from "@mantine/core";
+import { Badge, Box, Group, Stack, Text, Tooltip } from "@mantine/core";
 import type { ReactNode } from "react";
 import dayjs from "dayjs";
+import { IconArrowRight, IconFileText, IconPackage } from "@tabler/icons-react";
 import type { ErpListTheme } from "../../components/ERPListPage/erpListTheme";
+import {
+  erpListDataRowProps,
+  erpListRouteListCell,
+  erpListRowActionMenuTdStyle,
+  erpListTableElementStyle,
+  erpListTdPaddingStyle,
+  erpListThActionsSpacer,
+  erpListThStyle,
+} from "../../components";
 import { EnquirySummaryRowMenu, type EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
 import type { PreviewColDef } from "./EnquiryListPreviewBuild";
 
@@ -11,33 +21,13 @@ export type EnquirySummaryVisibleColumns = {
   customer_name: boolean;
   sales_person: boolean;
   service: boolean;
-  origin: boolean;
-  destination: boolean;
+  /** One column: origin → destination (same layout as Air Export Booking “Route”). */
+  route: boolean;
   reference_no: boolean;
   date: boolean;
   status: boolean;
   remark: boolean;
 };
-
-const thStyle = (theme: ErpListTheme): React.CSSProperties => ({
-  padding: "10px 14px",
-  textAlign: "left",
-  fontWeight: 500,
-  fontSize: 14,
-  color: theme.muted,
-  backgroundColor: theme.headerBg,
-  borderBottom: `1px solid ${theme.border}`,
-  whiteSpace: "nowrap",
-});
-
-const tdStyle = (theme: ErpListTheme): React.CSSProperties => ({
-  padding: "10px 14px",
-  fontSize: 14,
-  color: theme.fg,
-  fontFamily: theme.fontSans,
-  borderBottom: `1px solid ${theme.border}`,
-  verticalAlign: "top",
-});
 
 type SummaryRow = Record<string, unknown> & {
   sno?: number;
@@ -52,9 +42,15 @@ type SummaryRow = Record<string, unknown> & {
   status?: string;
 };
 
-function renderServiceCell(services: unknown): ReactNode {
+function renderServiceCell(services: unknown, fg: string, fontSans: string): ReactNode {
   const list = services as Array<{ service?: string; trade?: string }> | undefined;
-  if (!list || !Array.isArray(list) || list.length === 0) return "—";
+  if (!list || !Array.isArray(list) || list.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" style={{ fontFamily: fontSans }}>
+        —
+      </Text>
+    );
+  }
   const pairs = list
     .map((s) => {
       const service = s.service || "";
@@ -66,40 +62,50 @@ function renderServiceCell(services: unknown): ReactNode {
     })
     .filter((p): p is string => p !== null);
   const unique = [...new Set(pairs)];
-  if (unique.length === 0) return "—";
+  if (unique.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" style={{ fontFamily: fontSans }}>
+        —
+      </Text>
+    );
+  }
   return (
-    <div style={{ lineHeight: 1.4 }}>
+    <Stack gap={2}>
       {unique.map((p, i) => (
-        <div key={i}>{p}</div>
+        <Text key={i} size="sm" c={fg} style={{ fontFamily: fontSans, lineHeight: 1.4 }}>
+          {p}
+        </Text>
       ))}
-    </div>
+    </Stack>
   );
 }
 
-function renderStringListCell(list: unknown): ReactNode {
-  const arr = list as string[] | undefined;
-  if (!arr || !Array.isArray(arr) || arr.length === 0) return "—";
-  return (
-    <div style={{ lineHeight: 1.4 }}>
-      {arr.map((item, i) => (
-        <div key={i}>{item}</div>
-      ))}
-    </div>
-  );
-}
-
-function renderRemarkCell(services: unknown): ReactNode {
+function renderRemarkCell(services: unknown, fg: string, fontSans: string): ReactNode {
   const list = services as Array<{ service_remark?: string }> | undefined;
-  if (!list || !Array.isArray(list) || list.length === 0) return "—";
+  if (!list || !Array.isArray(list) || list.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" style={{ fontFamily: fontSans }}>
+        —
+      </Text>
+    );
+  }
   const remarks = list.map((s) => s.service_remark).filter((r) => r);
   const unique = [...new Set(remarks as string[])];
-  if (unique.length === 0) return "—";
+  if (unique.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" style={{ fontFamily: fontSans }}>
+        —
+      </Text>
+    );
+  }
   return (
-    <div style={{ lineHeight: 1.4 }}>
+    <Stack gap={2}>
       {unique.map((r, i) => (
-        <div key={i}>{r}</div>
+        <Text key={i} size="sm" c={fg} style={{ fontFamily: fontSans, lineHeight: 1.4 }}>
+          {r}
+        </Text>
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -119,6 +125,9 @@ function rowKey(r: SummaryRow, index: number) {
   return (r.id as number | undefined) ?? (r.enquiry_id as string | undefined) ?? `row-${index}`;
 }
 
+/**
+ * List table: matches {@link AirExportBookingMaster} — `Th` + row borders + `10px 14px` data cells, empty 44px menu header, `10px 8px` centered menu cell.
+ */
 export function EnquirySummaryNativeTable({
   theme,
   rows,
@@ -130,70 +139,64 @@ export function EnquirySummaryNativeTable({
   onActionsKeyChange,
   menuDropdownClassName,
 }: SummaryTableProps) {
-  const { border, headerBg, cardBg, fontSans, muted } = theme;
+  const { fg, fontSans, muted, primary } = theme;
   const visibleCount =
     (visible.sno ? 1 : 0) +
     (visible.enquiry_id ? 1 : 0) +
     (visible.customer_name ? 1 : 0) +
     (visible.sales_person ? 1 : 0) +
     (visible.service ? 1 : 0) +
-    (visible.origin ? 1 : 0) +
-    (visible.destination ? 1 : 0) +
+    (visible.route ? 1 : 0) +
     (visible.reference_no ? 1 : 0) +
     (visible.date ? 1 : 0) +
     (visible.status ? 1 : 0) +
     (visible.remark ? 1 : 0) +
     1;
-  const stickyAction: React.CSSProperties = {
-    position: "sticky",
-    right: 0,
-    zIndex: 2,
-    backgroundColor: cardBg,
-    boxShadow: "-4px 0 8px rgba(15, 23, 42, 0.06)",
-    borderLeft: `1px solid ${border}`,
-    minWidth: 48,
-  };
-  const stickyTh: React.CSSProperties = {
-    ...thStyle(theme),
-    ...stickyAction,
-    backgroundColor: headerBg,
-  };
 
   return (
-    <table
-      style={{
-        width: "100%",
-        borderCollapse: "separate",
-        borderSpacing: 0,
-        fontSize: 14,
-        backgroundColor: cardBg,
-        fontFamily: fontSans,
-      }}
-    >
+    <table style={erpListTableElementStyle(theme)}>
       <thead>
         <tr>
-          {visible.sno && <th style={thStyle(theme)}>S.No</th>}
-          {visible.enquiry_id && <th style={{ ...thStyle(theme), minWidth: 200 }}>Enquiry ID</th>}
-          {visible.customer_name && <th style={{ ...thStyle(theme), minWidth: 200 }}>Customer</th>}
-          {visible.sales_person && <th style={thStyle(theme)}>Sales Person</th>}
-          {visible.service && <th style={thStyle(theme)}>Service</th>}
-          {visible.origin && <th style={thStyle(theme)}>Origin</th>}
-          {visible.destination && <th style={thStyle(theme)}>Destination</th>}
-          {visible.reference_no && <th style={thStyle(theme)}>Reference No</th>}
-          {visible.date && <th style={thStyle(theme)}>Enquiry Date</th>}
-          {visible.status && <th style={thStyle(theme)}>Status</th>}
-          {visible.remark && <th style={thStyle(theme)}>Remark</th>}
-          <th style={stickyTh}>Actions</th>
+          {visible.sno && <th style={erpListThStyle(theme)}>S.No</th>}
+          {visible.enquiry_id && <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Enquiry ID</th>}
+          {visible.customer_name && <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Customer</th>}
+          {visible.sales_person && <th style={erpListThStyle(theme)}>Sales Person</th>}
+          {visible.service && <th style={erpListThStyle(theme)}>Service</th>}
+          {visible.route && <th style={erpListThStyle(theme)}>Route</th>}
+          {visible.reference_no && <th style={erpListThStyle(theme)}>Reference No</th>}
+          {visible.date && <th style={erpListThStyle(theme)}>Enquiry Date</th>}
+          {visible.status && <th style={erpListThStyle(theme)}>Status</th>}
+          {visible.remark && <th style={erpListThStyle(theme)}>Remark</th>}
+          <th style={erpListThActionsSpacer(theme, 44)} />
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td
-              colSpan={visibleCount}
-              style={{ ...tdStyle(theme), textAlign: "center", padding: 48, color: muted }}
-            >
-              No enquiries to display
+            <td colSpan={visibleCount} style={{ padding: 60, textAlign: "center" }}>
+              <Stack align="center" gap="md">
+                <Box
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: "50%",
+                    backgroundColor: "#f1f5f9",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <IconPackage size={24} color={muted} />
+                </Box>
+                <Box>
+                  <Text fw={500} c={fg} style={{ fontFamily: fontSans }}>
+                    No enquiries found
+                  </Text>
+                  <Text size="sm" c={muted} mt={4} style={{ fontFamily: fontSans }}>
+                    Try adjusting your search or filters
+                  </Text>
+                </Box>
+              </Stack>
             </td>
           </tr>
         ) : (
@@ -201,37 +204,78 @@ export function EnquirySummaryNativeTable({
             const k = rowKey(row, index);
             const { label, color } = getStatusBadge(String(row.status ?? ""));
             return (
-              <tr key={String(k)}>
-                {visible.sno && <td style={tdStyle(theme)}>{row.sno != null ? String(row.sno) : "—"}</td>}
-                {visible.enquiry_id && <td style={{ ...tdStyle(theme), minWidth: 200 }}>{row.enquiry_id || "—"}</td>}
+              <tr key={String(k)} {...erpListDataRowProps(theme)}>
+                {visible.sno && (
+                  <td style={erpListTdPaddingStyle()}>
+                    <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {row.sno != null ? String(row.sno) : "—"}
+                    </Text>
+                  </td>
+                )}
+                {visible.enquiry_id && (
+                  <td style={erpListTdPaddingStyle()}>
+                    <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {row.enquiry_id || "—"}
+                    </Text>
+                  </td>
+                )}
                 {visible.customer_name && (
-                  <td style={{ ...tdStyle(theme), minWidth: 200 }}>{row.customer_name || "—"}</td>
+                  <td style={{ ...erpListTdPaddingStyle(), maxWidth: 200 }}>
+                    <Tooltip
+                      label={String(row.customer_name ?? "")}
+                      withArrow
+                      styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+                    >
+                      <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default", fontFamily: fontSans }}>
+                        {row.customer_name ?? "—"}
+                      </Text>
+                    </Tooltip>
+                  </td>
                 )}
-                {visible.sales_person && <td style={tdStyle(theme)}>{row.sales_person || "—"}</td>}
-                {visible.service && <td style={tdStyle(theme)}>{renderServiceCell(row.services)}</td>}
-                {visible.origin && <td style={tdStyle(theme)}>{renderStringListCell(row.origin_list)}</td>}
-                {visible.destination && (
-                  <td style={tdStyle(theme)}>{renderStringListCell(row.destination_list)}</td>
+                {visible.sales_person && (
+                  <td style={erpListTdPaddingStyle()}>
+                    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {row.sales_person || "—"}
+                    </Text>
+                  </td>
                 )}
-                {visible.reference_no && <td style={tdStyle(theme)}>{row.reference_no || "—"}</td>}
+                {visible.service && (
+                  <td style={erpListTdPaddingStyle()}>{renderServiceCell(row.services, fg, fontSans)}</td>
+                )}
+                {visible.route && (
+                  <td style={erpListTdPaddingStyle()}>
+                    {erpListRouteListCell(row.origin_list, row.destination_list, { primary, fg, muted, fontSans })}
+                  </td>
+                )}
+                {visible.reference_no && (
+                  <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
+                    <Text size="sm" style={{ fontFamily: fontSans }}>
+                      {row.reference_no || "—"}
+                    </Text>
+                  </td>
+                )}
                 {visible.date && (
-                  <td style={tdStyle(theme)}>
-                    {row.enquiry_received_date
-                      ? dayjs(row.enquiry_received_date).format(dateFormat)
-                      : "—"}
+                  <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
+                    <Text size="sm" style={{ fontFamily: fontSans }}>
+                      {row.enquiry_received_date
+                        ? dayjs(row.enquiry_received_date).format(dateFormat)
+                        : "—"}
+                    </Text>
                   </td>
                 )}
                 {visible.status && (
-                  <td style={tdStyle(theme)}>
+                  <td style={erpListTdPaddingStyle()}>
                     <Badge
                       size="sm"
                       variant="light"
+                      radius="xl"
                       color={color}
                       styles={{
                         root: {
                           textTransform: "none",
                           minWidth: "fit-content",
                           whiteSpace: "nowrap",
+                          fontFamily: fontSans,
                         },
                       }}
                     >
@@ -239,8 +283,10 @@ export function EnquirySummaryNativeTable({
                     </Badge>
                   </td>
                 )}
-                {visible.remark && <td style={tdStyle(theme)}>{renderRemarkCell(row.services)}</td>}
-                <td style={{ ...tdStyle(theme), ...stickyAction }}>
+                {visible.remark && (
+                  <td style={erpListTdPaddingStyle()}>{renderRemarkCell(row.services, fg, fontSans)}</td>
+                )}
+                <td style={erpListRowActionMenuTdStyle()}>
                   <EnquirySummaryRowMenu
                     row={row}
                     opened={actionsOpenKey === k}
@@ -265,85 +311,77 @@ type PreviewTableProps = {
   data: Record<string, unknown>[];
   dateFormat: string;
   getStatusBadge: (s: string | undefined | null) => { label: string; color: string };
-  stickySnoColumn?: boolean;
 };
 
-export function EnquiryPreviewNativeTable({
-  theme,
-  columns,
-  data,
-  dateFormat,
-  getStatusBadge,
-  stickySnoColumn = true,
-}: PreviewTableProps) {
-  const { cardBg, fontSans, muted } = theme;
+/**
+ * Detailed (preview) list: same table chrome as {@link AirExportBookingMaster} — no sticky columns, `10px 14px` cells, `Text` for values.
+ */
+export function EnquiryPreviewNativeTable({ theme, columns, data, dateFormat, getStatusBadge }: PreviewTableProps) {
+  const { fg, fontSans, muted, primary } = theme;
   return (
-    <Box style={{ overflow: "auto", maxHeight: "min(70vh, 900px)" }}>
-      <table
-        style={{
-          width: "100%",
-          minWidth: 800,
-          borderCollapse: "separate",
-          borderSpacing: 0,
-          fontSize: 14,
-          backgroundColor: cardBg,
-          fontFamily: fontSans,
-        }}
-      >
+    <Box style={{ overflow: "auto" }}>
+      <table style={erpListTableElementStyle(theme)}>
         <thead>
           <tr>
-            {columns.map((col, idx) => {
-              const isSno = col.kind === "sno" && idx === 0;
-              return (
-                <th
-                  key={col.id}
-                  style={{
-                    ...thStyle(theme),
-                    position: stickySnoColumn && isSno ? "sticky" : undefined,
-                    left: stickySnoColumn && isSno ? 0 : undefined,
-                    zIndex: stickySnoColumn && isSno ? 3 : undefined,
-                    minWidth: col.kind === "sno" ? 56 : 160,
-                  }}
-                >
-                  {col.header}
-                </th>
-              );
-            })}
+            {columns.map((col) => (
+              <th
+                key={col.id}
+                style={{
+                  ...erpListThStyle(theme),
+                  minWidth: col.kind === "sno" ? 70 : 160,
+                }}
+              >
+                {col.header}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={Math.max(1, columns.length)} style={{ ...tdStyle(theme), textAlign: "center", padding: 40, color: muted }}>
-                No data
+              <td colSpan={Math.max(1, columns.length)} style={{ padding: 60, textAlign: "center" }}>
+                <Stack align="center" gap="md">
+                  <Box
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "50%",
+                      backgroundColor: "#f1f5f9",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconFileText size={24} color={muted} />
+                  </Box>
+                  <Box>
+                    <Text fw={500} c={fg} style={{ fontFamily: fontSans }}>
+                      No detailed data
+                    </Text>
+                    <Text size="sm" c={muted} mt={4} style={{ fontFamily: fontSans }}>
+                      Try adjusting your search or filters
+                    </Text>
+                  </Box>
+                </Stack>
               </td>
             </tr>
           ) : (
             data.map((row, ri) => (
-              <tr key={ri}>
-                {columns.map((col, cidx) => {
-                  const isSno = col.kind === "sno" && cidx === 0;
-                  return (
-                    <td
-                      key={`${ri}-${col.id}`}
-                      style={{
-                        ...tdStyle(theme),
-                        position: stickySnoColumn && isSno ? "sticky" : undefined,
-                        left: stickySnoColumn && isSno ? 0 : undefined,
-                        zIndex: stickySnoColumn && isSno ? 1 : undefined,
-                        backgroundColor: stickySnoColumn && isSno ? cardBg : undefined,
-                        boxShadow: stickySnoColumn && isSno ? "2px 0 6px rgba(15,23,42,0.06)" : undefined,
-                      }}
-                    >
-                      {renderPreviewCell({
-                        col,
-                        row: row as Record<string, string | number | null | undefined>,
-                        dateFormat,
-                        getStatusBadge,
-                      })}
-                    </td>
-                  );
-                })}
+              <tr key={ri} {...erpListDataRowProps(theme)}>
+                {columns.map((col) => (
+                  <td key={`${ri}-${col.id}`} style={erpListTdPaddingStyle()}>
+                    {renderPreviewCell({
+                      col,
+                      row: row as Record<string, string | number | null | undefined>,
+                      dateFormat,
+                      getStatusBadge,
+                      fg,
+                      muted,
+                      primary,
+                      fontSans,
+                    })}
+                  </td>
+                ))}
               </tr>
             ))
           )}
@@ -358,37 +396,108 @@ function renderPreviewCell({
   row,
   dateFormat,
   getStatusBadge,
+  fg,
+  muted,
+  primary,
+  fontSans,
 }: {
   col: PreviewColDef;
   row: Record<string, string | number | null | undefined>;
   dateFormat: string;
   getStatusBadge: (s: string | undefined | null) => { label: string; color: string };
+  fg: string;
+  muted: string;
+  primary: string;
+  fontSans: string;
 }): ReactNode {
   if (col.kind === "sno") {
-    return row.sno != null ? String(row.sno) : "—";
+    return (
+      <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+        {row.sno != null ? String(row.sno) : "—"}
+      </Text>
+    );
   }
   if (col.kind === "service") {
     const serviceValue = String(row.service ?? "");
     const tradeValue = String(row.trade ?? "");
-    if (!serviceValue && !tradeValue) return "—";
-    if (!serviceValue) return tradeValue;
-    if (!tradeValue) return serviceValue;
-    return `${serviceValue} - ${tradeValue}`;
+    if (!serviceValue && !tradeValue) {
+      return (
+        <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+          —
+        </Text>
+      );
+    }
+    if (!serviceValue) {
+      return (
+        <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+          {tradeValue}
+        </Text>
+      );
+    }
+    if (!tradeValue) {
+      return (
+        <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+          {serviceValue}
+        </Text>
+      );
+    }
+    return (
+      <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+        {`${serviceValue} - ${tradeValue}`}
+      </Text>
+    );
   }
   if (col.kind === "enquiryDate") {
     const d = row.enquiry_date;
-    return d ? dayjs(String(d)).format(dateFormat) : "—";
+    return (
+      <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+        {d ? dayjs(String(d)).format(dateFormat) : "—"}
+      </Text>
+    );
   }
   if (col.kind === "status") {
     const v = row[col.key as keyof typeof row];
     const { label, color } = getStatusBadge(String(v ?? ""));
     return (
-      <Badge size="sm" color={color}>
+      <Badge
+        size="sm"
+        variant="light"
+        radius="xl"
+        color={color}
+        styles={{ root: { textTransform: "none", fontFamily: fontSans } }}
+      >
         {label}
       </Badge>
     );
   }
+  if (col.kind === "route" && col.routeDestKey) {
+    const os = row[col.key as keyof typeof row];
+    const ds = row[col.routeDestKey as keyof typeof row];
+    const oc = os != null && String(os).trim() !== "" ? String(os) : "—";
+    const dc = ds != null && String(ds).trim() !== "" ? String(ds) : "—";
+    return (
+      <Group gap={6} wrap="nowrap" align="center">
+        <Text fw={600} size="sm" c={primary} style={{ fontFamily: fontSans }}>
+          {oc}
+        </Text>
+        <IconArrowRight size={12} color={muted} style={{ flexShrink: 0 }} />
+        <Text fw={500} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+          {dc}
+        </Text>
+      </Group>
+    );
+  }
   const v = row[col.key as keyof typeof row];
-  if (v === null || v === undefined || v === "") return "—";
-  return String(v);
+  if (v === null || v === undefined || v === "") {
+    return (
+      <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+        —
+      </Text>
+    );
+  }
+  return (
+    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+      {String(v)}
+    </Text>
+  );
 }

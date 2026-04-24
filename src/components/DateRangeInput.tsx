@@ -1,5 +1,5 @@
 import React from "react";
-import { DateInput } from "@mantine/dates";
+import { DateInput, type DateInputProps } from "@mantine/dates";
 import { Group } from "@mantine/core";
 import {
   IconCalendar,
@@ -28,6 +28,17 @@ export interface DateRangeInputProps {
   hideLabels?: boolean;
   /** Match Air Export / list toolbar: 32px inputs, Geist 12px, #E2E8F0 border */
   compactToolbar?: boolean;
+  /**
+   * Merged into each from/to `DateInput` `styles` (label + input + calendar bits).
+   * Use `erpListFilterUnifiedMantineStyles(theme)` on ERP list filter panels.
+   * When set, default Inter 13px labels and legacy input sizing are skipped.
+   */
+  filterFieldStyles?: DateInputProps["styles"];
+  /**
+   * Class names for both date fields (e.g. `{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }`).
+   * `Record` allowed so `dropdown` is not lost when Mantine’s type omits it.
+   */
+  dateInputClassNames?: DateInputProps["classNames"] | Record<string, string>;
 }
 
 const DateRangeInput: React.FC<DateRangeInputProps> = ({
@@ -49,7 +60,15 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
   inputWidth,
   hideLabels = false,
   compactToolbar = false,
+  filterFieldStyles,
+  dateInputClassNames,
 }) => {
+  const hasUnifiedFilterStyles =
+    filterFieldStyles != null &&
+    typeof filterFieldStyles === "object" &&
+    !Array.isArray(filterFieldStyles);
+  /** List filters + compact 32px row (Air Export) */
+  const filterRowLayout = hasUnifiedFilterStyles || compactToolbar;
   const dateFormat = useDateFormat();
 
   // Helper to check if date is selected
@@ -176,32 +195,50 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
     };
   };
 
-  const toolbarInputStyles = compactToolbar
-    ? {
-        input: {
-          height: 32,
-          minHeight: 32,
-          fontSize: 12,
-          borderColor: "#e2e8f0",
-          fontFamily: "'Geist', sans-serif",
-        },
-      }
-    : {
-        input: {
-          height: "36px",
-          fontSize: "13px",
-          fontFamily: "Inter",
-        },
-      };
+  const toolbarInputStyles = hasUnifiedFilterStyles
+    ? {}
+    : compactToolbar
+      ? {
+          input: {
+            height: 32,
+            minHeight: 32,
+            fontSize: 12,
+            borderColor: "#e2e8f0",
+            fontFamily: "'Geist', sans-serif",
+          },
+        }
+      : {
+          input: {
+            height: "36px",
+            fontSize: "13px",
+            fontFamily: "Inter",
+          },
+        };
 
-  const calendarIconSize = compactToolbar ? 14 : 18;
+  const legacyLabelStyle = {
+    fontSize: "13px" as const,
+    fontWeight: 500,
+    color: "#000000",
+    marginBottom: "4px",
+    fontFamily: "Inter",
+  };
+
+  const mergedFieldStyles: DateInputProps["styles"] = {
+    ...getDateStyles(),
+    ...toolbarInputStyles,
+    ...(hasUnifiedFilterStyles
+      ? (filterFieldStyles as NonNullable<typeof filterFieldStyles>)
+      : {}),
+  };
+
+  const calendarIconSize = filterRowLayout ? 14 : 18;
 
   return (
     <Group
-      gap={compactToolbar ? "sm" : "md"}
+      gap={filterRowLayout ? "sm" : "md"}
       align={hideLabels ? "center" : "flex-end"}
-      w={compactToolbar ? "auto" : "100%"}
-      grow={!compactToolbar}
+      w={filterRowLayout ? "auto" : "100%"}
+      grow={!filterRowLayout}
       wrap="nowrap"
       style={containerStyle}
     >
@@ -209,22 +246,19 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         key={`from-${dateFormat}`}
         style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : fromLabel}
-        labelProps={{
-          style: {
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "#000000",
-            marginBottom: "4px",
-            fontFamily: "Inter",
-          },
-        }}
+        labelProps={
+          hasUnifiedFilterStyles || hideLabels
+            ? undefined
+            : { style: legacyLabelStyle }
+        }
         placeholder={dateFormat}
         value={fromDate}
         onChange={handleFromDateChange}
         valueFormat={dateFormat}
         leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
-        radius={compactToolbar ? "sm" : "md"}
+        radius={filterRowLayout ? "sm" : "md"}
+        classNames={dateInputClassNames}
         size={size}
         nextIcon={<IconChevronRight size={16} />}
         previousIcon={<IconChevronLeft size={16} />}
@@ -273,31 +307,25 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             },
           };
         }}
-        styles={{
-          ...getDateStyles(),
-          ...toolbarInputStyles,
-        }}
+        styles={mergedFieldStyles}
       />
       <DateInput
         key={`to-${dateFormat}`}
         style={inputWidth ? { width: inputWidth } : undefined}
         label={hideLabels ? undefined : toLabel}
-        labelProps={{
-          style: {
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "#000000",
-            marginBottom: "4px",
-            fontFamily: "Inter",
-          },
-        }}
+        labelProps={
+          hasUnifiedFilterStyles || hideLabels
+            ? undefined
+            : { style: legacyLabelStyle }
+        }
         placeholder={dateFormat}
         value={toDate}
         onChange={handleToDateChange}
         valueFormat={dateFormat}
         leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
-        radius={compactToolbar ? "sm" : "md"}
+        radius={filterRowLayout ? "sm" : "md"}
+        classNames={dateInputClassNames}
         size={size}
         nextIcon={<IconChevronRight size={16} />}
         previousIcon={<IconChevronLeft size={16} />}
@@ -371,10 +399,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
             },
           };
         }}
-        styles={{
-          ...getDateStyles(),
-          ...toolbarInputStyles,
-        }}
+        styles={mergedFieldStyles}
       />
     </Group>
   );

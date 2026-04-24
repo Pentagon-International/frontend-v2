@@ -54,3 +54,37 @@ export function erpPaginationSelectStyles(theme: ErpListTheme) {
     option: { fontFamily: theme.fontSans, fontSize: 14 },
   } as const;
 }
+
+/**
+ * Filter panel fields: Geist labels (muted) + 32px inputs — matches Air Export
+ * `AIR_EXPORT_FILTER_UNIFIED_STYLES` / list filter density.
+ */
+export function erpListFilterUnifiedMantineStyles(theme: ErpListTheme) {
+  return {
+    label: {
+      fontFamily: theme.fontSans,
+      fontSize: 12,
+      fontWeight: 500,
+      color: theme.muted,
+      lineHeight: 1.25,
+      marginBottom: 6,
+      display: "block" as const,
+      minHeight: 15,
+    },
+    input: {
+      fontFamily: theme.fontSans,
+      fontSize: 12,
+      height: 32,
+      minHeight: 32,
+      borderColor: theme.border,
+    },
+    dropdown: {
+      fontFamily: theme.fontSans,
+      fontSize: 12,
+    },
+    option: {
+      fontFamily: theme.fontSans,
+      fontSize: 12,
+    },
+  } as const;
+}

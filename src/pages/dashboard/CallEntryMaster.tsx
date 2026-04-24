@@ -18,11 +18,8 @@ import {
 } from "@mantine/core";
 import {
   IconCalendarTime,
-  IconChevronLeft,
-  IconChevronRight,
   IconPlus,
   IconSearch,
-  IconCalendar,
   IconFilter,
   IconEdit,
   IconDotsVertical,
@@ -56,11 +53,21 @@ import {
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE,
   ERP_LIST_GEIST_ROOT_CLASS,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
   type ErpListTheme,
   type ERPListColumnToggleItem,
+  erpListTableElementStyle,
+  erpListThStyle,
+  erpListTdPaddingStyle,
+  erpListThActionsSpacer,
+  erpListStickyActionTdStyle,
+  erpListDataRowProps,
 } from "../../components";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { searchAPI } from "../../service/searchApi";
@@ -69,6 +76,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { useListFilterStore } from "../../store/listFilterStore";
 import useDateFormat from "../../hooks/useDateFormat";
+import FormTextInput from "../../components/FormTextInput";
 
 /** Call entry row as returned from filter/list APIs (flat row for the table). */
 type CallEntryTableRow = {
@@ -117,34 +125,6 @@ const DEFAULT_CALL_ENTRY_VISIBLE_COLUMNS: CallEntryVisibleColumns = {
   status: true,
   remark: true,
 };
-
-const CALL_FILTER_UNIFIED_STYLES = {
-  label: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-    fontWeight: 500,
-    color: DEFAULT_ERP_LIST_THEME.muted,
-    lineHeight: 1.25,
-    marginBottom: 6,
-    display: "block" as const,
-    minHeight: 15,
-  },
-  input: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-    height: 32,
-    minHeight: 32,
-    borderColor: DEFAULT_ERP_LIST_THEME.border,
-  },
-  dropdown: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-  },
-  option: {
-    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
-    fontSize: 12,
-  },
-} as const;
 
 function CallEntryStatusPill({ status }: { status: string | undefined | null }) {
   const closed = String(status || "").toUpperCase() === "CLOSE";
@@ -1072,7 +1052,7 @@ function CallEntry() {
       if (!debounced.trim()) return null;
       try {
         const result = await searchAPI(debounced, new AbortController().signal);
-        return result?.results;
+        return Array.isArray(result) ? result : [];
       } catch (error) {
         console.error("Search API Error:", error);
         return [];
@@ -1530,7 +1510,7 @@ function CallEntry() {
     cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
     fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
   };
-  const { border, muted, fg, primary, headerBg, cardBg, fontSans } = erpTheme;
+  const { border, muted, fg, primary, cardBg, fontSans } = erpTheme;
 
   const visibleDataColumnCount = useMemo(() => {
     const v = visibleColumns;
@@ -1735,8 +1715,8 @@ function CallEntry() {
               ),
               children: (
                 <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                       <Select
                         key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
                         label="Sales person"
@@ -1750,12 +1730,12 @@ function CallEntry() {
                         value={filterForm.values.sales_person}
                         onChange={(value) => filterForm.setFieldValue("sales_person", value || null)}
                         classNames={erpListGeistSelectClassNames}
-                        styles={CALL_FILTER_UNIFIED_STYLES}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       />
                     </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                       <SearchableSelect
                         size="xs"
                         label="Customer name"
@@ -1773,27 +1753,32 @@ function CallEntry() {
                           setCustomerDisplayValue(selectedData?.label || null);
                         }}
                         minSearchLength={2}
+                        dropdownZIndex={1000}
                         classNames={erpListGeistSelectClassNames}
-                        styles={CALL_FILTER_UNIFIED_STYLES}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       />
                     </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, md: 8 }}>
-                    <DateRangeInput
-                      fromDate={fromDate}
-                      toDate={toDate}
-                      onFromDateChange={setFromDate}
-                      onToDateChange={setToDate}
-                      fromLabel="From date"
-                      toLabel="To date"
-                      size="xs"
-                      allowDeselection={true}
-                      showRangeInCalendar={false}
-                      compactToolbar
-                      containerStyle={{ gap: 8 }}
-                    />
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <DateRangeInput
+                        fromDate={fromDate}
+                        toDate={toDate}
+                        onFromDateChange={setFromDate}
+                        onToDateChange={setToDate}
+                        fromLabel="From date"
+                        toLabel="To date"
+                        size="xs"
+                        allowDeselection={true}
+                        showRangeInCalendar={false}
+                        filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                        containerStyle={{ gap: 8 }}
+                      />
+                    </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                     <Select
                       key={`call-mode-${filterForm.values.call_mode}-${callModeDataLoading}-${callModeOptionsData.length}`}
                       label="Mode of call"
@@ -1806,31 +1791,33 @@ function CallEntry() {
                       disabled={callModeDataLoading}
                       {...filterForm.getInputProps("call_mode")}
                       classNames={erpListGeistSelectClassNames}
-                      styles={CALL_FILTER_UNIFIED_STYLES}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     />
+                    </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       key={`followup-date-${filterForm.values.followup_date}`}
                       label="Follow-up date"
                       placeholder="YYYY-MM-DD"
                       size="xs"
-                      {...filterForm.getInputProps("followup_date")}
-                      valueFormat="YYYY-MM-DD"
-                      leftSection={<IconCalendar size={14} />}
-                      leftSectionPointerEvents="none"
-                      radius="md"
-                      nextIcon={<IconChevronRight size={16} />}
-                      previousIcon={<IconChevronLeft size={16} />}
-                      clearable
+                      value={filterForm.values.followup_date}
+                      onChange={(d) => filterForm.setFieldValue("followup_date", d)}
+                      error={filterForm.errors.followup_date as string | undefined}
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={{
-                        ...CALL_FILTER_UNIFIED_STYLES,
-                        input: { ...CALL_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                        ...erpListFilterUnifiedMantineStyles(erpTheme),
+                        input: {
+                          ...erpListFilterUnifiedMantineStyles(erpTheme).input,
+                          minHeight: 32,
+                        },
                       }}
                     />
+                    </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                     <Select
                       key={`status-${filterForm.values.status}-${followUpActionDataLoading}-${followUpActionOptionsData.length}`}
                       label="Status"
@@ -1843,28 +1830,35 @@ function CallEntry() {
                       disabled={followUpActionDataLoading}
                       {...filterForm.getInputProps("status")}
                       classNames={erpListGeistSelectClassNames}
-                      styles={CALL_FILTER_UNIFIED_STYLES}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     />
+                    </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <TextInput
-                      label="Customer location"
-                      placeholder="City / area"
-                      size="xs"
-                      {...filterForm.getInputProps("city")}
-                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={CALL_FILTER_UNIFIED_STYLES}
-                    />
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <FormTextInput
+                        size="xs"
+                        format="normal"
+                        label="Customer location"
+                        placeholder="City / area"
+                        {...filterForm.getInputProps("city")}
+                        classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                    <TextInput
-                      label="Call entry location"
-                      placeholder="Area"
-                      size="xs"
-                      {...filterForm.getInputProps("area")}
-                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={CALL_FILTER_UNIFIED_STYLES}
-                    />
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <FormTextInput
+                        size="xs"
+                        format="normal"
+                        label="Call entry location"
+                        placeholder="Area"
+                        {...filterForm.getInputProps("area")}
+                        classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
                   </Grid.Col>
                 </Grid>
               ),
@@ -1927,184 +1921,60 @@ function CallEntry() {
               children: isTableDataLoading ? (
                 <ERPListTableLoading theme={erpTheme} message="Loading call entries…" />
               ) : (
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    fontSize: 14,
-                    backgroundColor: cardBg,
-                    fontFamily: fontSans,
-                  }}
-                >
+                <table style={erpListTableElementStyle(erpTheme)}>
                   <thead>
                     <tr>
                       {visibleColumns.sno && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           S.No
                         </th>
                       )}
                       {visibleColumns.customerName && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Customer
                         </th>
                       )}
                       {visibleColumns.customerLocation && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Customer location
                         </th>
                       )}
                       {visibleColumns.salesPerson && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Sales person
                         </th>
                       )}
                       {visibleColumns.callEntryLocation && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Call entry location
                         </th>
                       )}
                       {visibleColumns.callDate && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Call date
                         </th>
                       )}
                       {visibleColumns.modeOfCall && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Mode
                         </th>
                       )}
                       {visibleColumns.followupDates && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Follow-up
                         </th>
                       )}
                       {visibleColumns.status && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Status
                         </th>
                       )}
                       {visibleColumns.remark && (
-                        <th
-                          style={{
-                            padding: "10px 14px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            fontSize: 14,
-                            color: muted,
-                            backgroundColor: headerBg,
-                            borderBottom: `1px solid ${border}`,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={erpListThStyle(erpTheme)}>
                           Remark
                         </th>
                       )}
-                      <th
-                        style={{
-                          width: 48,
-                          backgroundColor: headerBg,
-                          borderBottom: `1px solid ${border}`,
-                        }}
-                      />
+                      <th style={erpListThActionsSpacer(erpTheme)} />
                     </tr>
                   </thead>
                   <tbody>
@@ -2140,35 +2010,23 @@ function CallEntry() {
                       (displayData as CallEntryTableRow[]).map((row, idx) => {
                         const sno = pageIndex * pageSize + idx + 1;
                         return (
-                          <tr
-                            key={row.id}
-                            style={{
-                              borderBottom: `1px solid ${border}`,
-                              transition: "background 0.12s",
-                            }}
-                            onMouseEnter={(e) => {
-                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc";
-                            }}
-                            onMouseLeave={(e) => {
-                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "";
-                            }}
-                          >
+                          <tr key={row.id} {...erpListDataRowProps(erpTheme)}>
                             {visibleColumns.sno && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {sno}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.customerName && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {row.customer_name || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.customerLocation && (
-                              <td style={{ padding: "10px 14px", maxWidth: 180 }}>
+                              <td style={{ ...erpListTdPaddingStyle(), maxWidth: 180 }}>
                                 <Tooltip
                                   label={row.address || "No address"}
                                   maw={400}
@@ -2183,63 +2041,53 @@ function CallEntry() {
                               </td>
                             )}
                             {visibleColumns.salesPerson && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
                                   {row.created_by_name || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.callEntryLocation && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
                                   {row.area || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.callDate && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.call_date ? dayjs(row.call_date).format(dateFormat) : "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.modeOfCall && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.call_mode_name || "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.followupDates && (
-                              <td style={{ padding: "10px 14px", color: muted }}>
+                              <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
                                 <Text size="sm" style={{ fontFamily: fontSans }}>
                                   {row.followup_date ? dayjs(row.followup_date).format(dateFormat) : "—"}
                                 </Text>
                               </td>
                             )}
                             {visibleColumns.status && (
-                              <td style={{ padding: "10px 14px" }}>
+                              <td style={erpListTdPaddingStyle()}>
                                 <CallEntryStatusPill status={row.status} />
                               </td>
                             )}
                             {visibleColumns.remark && (
-                              <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                              <td style={{ ...erpListTdPaddingStyle(), maxWidth: 200 }}>
                                 <Text size="sm" lineClamp={2} style={{ fontFamily: fontSans }}>
                                   {row.remark != null && String(row.remark).trim() !== "" ? String(row.remark) : "—"}
                                 </Text>
                               </td>
                             )}
-                            <td
-                              style={{
-                                padding: "10px 8px",
-                                position: "sticky",
-                                right: 0,
-                                backgroundColor: cardBg,
-                                borderLeft: `1px solid ${border}`,
-                                boxShadow: "-4px 0 8px -4px rgba(15, 23, 42, 0.08)",
-                                zIndex: 2,
-                              }}
-                            >
+                            <td style={erpListStickyActionTdStyle(erpTheme)}>
                               {renderRowActions(row)}
                             </td>
                           </tr>

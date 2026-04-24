@@ -3,39 +3,27 @@ import {
   Box,
   Button,
   Group,
-  Menu,
   Stack,
   Text,
   TextInput,
-  UnstyledButton,
   Grid,
   Select,
   Loader,
   Center,
-  Badge,
   Modal,
-  Tabs,
-  Breadcrumbs,
-  Anchor,
-  Card,
+  MantineProvider,
 } from "@mantine/core";
 import {
-  IconDotsVertical,
-  IconEdit,
-  IconEye,
   IconPlus,
   IconSearch,
   IconFilter,
   IconX,
-  IconTag,
   IconDownload,
   IconArrowLeft,
+  IconList,
+  IconFileText,
+  IconUsers,
 } from "@tabler/icons-react";
-import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -47,8 +35,34 @@ import {
   ToastNotification,
   SearchableSelect,
   DateRangeInput,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
 } from "../../../components";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { buildPreviewColumnDescriptors } from "../EnquiryListPreviewBuild";
+import {
+  EnquiryPreviewNativeTable,
+  EnquirySummaryNativeTable,
+  type EnquirySummaryVisibleColumns,
+} from "../EnquiryListNativeTables";
+import type { EnquiryRowMenuContext } from "../EnquirySummaryRowMenu";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
@@ -87,22 +101,6 @@ type PreviewFilterState = {
   // Optional fields for store compatibility (dates are already included above)
 };
 
-/** De-dupe repeated origin/destination lines in list cells (case-insensitive key, first label kept). */
-function distinctLocationListValues(list: unknown): string[] {
-  if (!Array.isArray(list) || list.length === 0) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of list) {
-    const raw = String(item ?? "").trim();
-    if (!raw) continue;
-    const key = raw.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(raw);
-  }
-  return out;
-}
-
 function RFQMaster() {
   const moduleLabel = "RFQ";
   const moduleKeyPrefix = "RFQ";
@@ -111,10 +109,7 @@ function RFQMaster() {
   const LIST_KEY = `${moduleKeyPrefix}_MASTER`;
   const DETAILED_LIST_KEY = `${moduleKeyPrefix}_MASTER_DETAILED`;
   const queryBase = moduleKeyPrefix.toLowerCase();
-  const modulePluralLower =
-    moduleLabel === "Enquiry"
-      ? "enquiries"
-      : `${moduleLabel.toLowerCase()}s`;
+  const modulePluralLower = `${moduleLabel.toLowerCase()}s`;
   const dateFormat = useDateFormat();
   const moduleFilteredPluralKey = `filtered${modulePluralLower.charAt(0).toUpperCase()}${modulePluralLower.slice(1)}`;
   // Get first day of current month and today's date
@@ -205,6 +200,23 @@ function RFQMaster() {
   const [listPageSize, setListPageSize] = useState(25);
   const [listTotalRecords, setListTotalRecords] = useState(0);
   const [cancellingEnquiryId, setCancellingEnquiryId] = useState<number | null>(null);
+
+  const [summaryVisibleColumns, setSummaryVisibleColumns] =
+    useState<EnquirySummaryVisibleColumns>({
+      sno: true,
+      enquiry_id: true,
+      customer_name: true,
+      sales_person: true,
+      service: true,
+      route: true,
+      reference_no: true,
+      date: true,
+      status: true,
+      remark: true,
+    });
+  const [summaryActionsMenuKey, setSummaryActionsMenuKey] = useState<
+    string | number | null
+  >(null);
 
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
@@ -824,216 +836,6 @@ function RFQMaster() {
     return { label, color } as const;
   };
 
-  // Create preview table using MantineReactTable
-  const previewTable = useMantineReactTable({
-    columns: (() => {
-      const desiredOrder = [
-        "Customer Name",
-        "Enquiry ID",
-        "Reference No",
-        "Sales Person",
-        "Enquiry Date",
-        "Shipment",
-        "Location",
-        "Service",
-        "Origin",
-        "Destination",
-      ];
-
-      const availableColumns = (tablePreviewData?.columns || []).filter(
-        (col: string) =>
-          !["No of Containers", "sno", "S.No", "SNO", "S No"].includes(col),
-      );
-
-      if (!availableColumns.includes("Reference No")) {
-        availableColumns.push("Reference No");
-      }
-
-      const orderedColumns: string[] = [
-        ...desiredOrder.filter((col: string) => availableColumns.includes(col)),
-        ...availableColumns.filter(
-          (col: string) => !desiredOrder.includes(col),
-        ),
-      ];
-
-      const columnDefs: MRT_ColumnDef<any>[] = [];
-
-      // Add S.No as the first column for detailed view
-      columnDefs.push({
-        accessorKey: "sno",
-        header: "S.No",
-        size: 70,
-      });
-
-      orderedColumns.forEach((col: string) => {
-        // Combine Service and Trade columns
-        if (col === "Service") {
-          columnDefs.push({
-            accessorKey: "service_trade_combined",
-            header: "Service",
-            size: 130,
-            Cell: ({ row }: any) => {
-              const serviceValue = row.original?.service || "";
-              const tradeValue = row.original?.trade || "";
-
-              if (!serviceValue && !tradeValue) {
-                return "-";
-              }
-              if (!serviceValue) {
-                return tradeValue;
-              }
-              if (!tradeValue) {
-                return serviceValue;
-              }
-              return `${serviceValue} - ${tradeValue}`;
-            },
-          });
-          return;
-        }
-
-        if (col === "Enquiry Date") {
-          columnDefs.push({
-            accessorKey: "enquiry_date",
-            header: col,
-            size: 120,
-            Cell: ({ row }: any) => {
-              return (
-                <Text size="sm">
-                  {row.original.enquiry_date
-                    ? dayjs(row.original.enquiry_date).format(dateFormat)
-                    : "-"}
-                </Text>
-              );
-            },
-          });
-          return;
-        };
-
-        // Skip Trade column (handled with Service)
-        if (col === "Trade") {
-          return;
-        }
-
-        columnDefs.push({
-          accessorKey: previewColumnToKeyMap[col] || col,
-          header: col,
-          size:
-            col === "Customer Name" || col.toLowerCase().includes("customer")
-              ? 218
-              : col === "Enquiry ID"
-                ? 218
-                : col === "Sales Person"
-                  ? 120
-                  : col === "Enquiry Date"
-                    ? 120
-                    : col === "Remark"
-                      ? 180
-                      : col === "Status"
-                        ? 130
-                        : col === "Shipment"
-                          ? 163
-                          : col === "Location"
-                            ? 218
-                            : col === "Service"
-                              ? 140
-                              : col === "Origin"
-                                ? 150
-                                : col === "Destination"
-                                  ? 150
-                                  : col === "Cargo Details"
-                                    ? 150
-                                    : col === "Reference No"
-                                      ? 120
-                                      : 100,
-          Cell: ({ cell, column }: any) => {
-            const value = cell.getValue();
-
-            // Apply badge for Status column
-            if (column.id === "status" || column.id === "Status") {
-              const { label, color } = getStatusBadge(String(value || ""));
-              return (
-                <Badge color={color} size="sm">
-                  {label}
-                </Badge>
-              );
-            }
-
-            return value === null || value === undefined || value === ""
-              ? "-"
-              : String(value);
-          },
-        });
-      });
-
-      return columnDefs;
-    })(),
-    data: tablePreviewData?.data || [],
-    enableColumnFilters: false,
-    enablePagination: false, // Removed pagination
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      // Pin S.No first, then Customer Name on the left
-      columnPinning: { left: ["sno", "customer_name"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    // Keep cell/head styles minimal to avoid interfering with built-in sticky behavior
-    mantineTableBodyCellProps: {
-      style: {
-        padding: "8px 16px",
-        fontSize: "14px",
-        fontstyle: "regular",
-        fontFamily: "Inter",
-        color: "#334155",
-        backgroundColor: "#ffffff",
-      },
-    },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "8px 16px",
-        fontSize: "14px",
-        fontFamily: "Inter",
-        fontstyle: "bold",
-        color: "#1E293B",
-        backgroundColor: "#F8FAFC",
-        borderBottom: "1px solid #F3F3F3",
-      },
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
-
   const applyFilters = async () => {
     try {
       console.log("filters.status", filters.status);
@@ -1222,7 +1024,7 @@ function RFQMaster() {
     });
   };
 
-  const handleCancelEnquiry = async (enquiry: number) => {
+  const handleCancelEnquiry = async (enquiry: unknown) => {
     const enquiryData = enquiry as any;
     setCancellingEnquiryId(enquiryData.id ?? null);
     try {
@@ -2276,1579 +2078,712 @@ function RFQMaster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewCurrentPage, previewPageSize, showPreviewTable]);
 
-  const columns = useMemo<MRT_ColumnDef<any>[]>(
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, muted, primary, fontSans } = erpTheme;
+
+  const previewLayout = useMemo(
+    () => buildPreviewColumnDescriptors(tablePreviewData, previewColumnToKeyMap),
+    [tablePreviewData, previewColumnToKeyMap],
+  );
+
+  const [previewColumnVisibility, setPreviewColumnVisibility] = useState<Record<string, boolean>>({});
+  const previewColumnIdsKey = useMemo(
+    () => previewLayout.columns.map((c) => c.id).join("|"),
+    [previewLayout.columns],
+  );
+  useEffect(() => {
+    setPreviewColumnVisibility((prev) => {
+      const next = { ...prev };
+      for (const c of previewLayout.columns) {
+        if (next[c.id] === undefined) next[c.id] = true;
+      }
+      return next;
+    });
+  }, [previewColumnIdsKey, previewLayout.columns]);
+
+  const visiblePreviewColumns = useMemo(() => {
+    const cols = previewLayout.columns;
+    const visible = cols.filter((c) => previewColumnVisibility[c.id] !== false);
+    if (visible.length > 0) return visible;
+    return cols;
+  }, [previewLayout.columns, previewColumnVisibility]);
+
+  const previewColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () =>
+      previewLayout.columns.map((col) => ({
+        id: col.id,
+        label: col.header,
+        checked: previewColumnVisibility[col.id] !== false,
+        onToggle: () =>
+          setPreviewColumnVisibility((p) => {
+            const wasVisible = p[col.id] !== false;
+            return { ...p, [col.id]: !wasVisible };
+          }),
+      })),
+    [previewLayout.columns, previewColumnVisibility],
+  );
+
+  const summaryColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
     () => [
-      {
-        id: "sno",
-        accessorKey: "sno",
-        header: "S.No",
-        size: 70,
-      },
-      {
-        id: "enquiry_id",
-        accessorKey: "enquiry_id",
-        header: "Enquiry ID",
-      },
-      {
-        id: "customer_name",
-        accessorKey: "customer_name",
-        header: "Customer",
-      },
-      {
-        id: "sales_person",
-        accessorKey: "sales_person",
-        header: "Sales Person",
-      },
-      {
-        id: "service_list",
-        accessorKey: "services",
-        header: "Service",
-        Cell: ({ cell }) => {
-          const services = cell.getValue<any[]>();
-          if (!services || !Array.isArray(services) || services.length === 0) {
-            return "-";
-          }
-          const serviceTradePairs = services
-            .map((s) => {
-              const service = s.service || "";
-              const trade = s.trade || "";
-              if (!service && !trade) return null;
-              if (!service) return trade;
-              if (!trade) return service;
-              return `${service} - ${trade}`;
-            })
-            .filter((pair) => pair !== null);
-          const uniquePairs = [...new Set(serviceTradePairs)];
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {uniquePairs.length > 0 ? (
-                uniquePairs.map((pair, index) => <div key={index}>{pair}</div>)
-              ) : (
-                <div>-</div>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        id: "origin_list",
-        accessorKey: "origin_list",
-        header: "Origin",
-        Cell: ({ cell }) => {
-          const originList = distinctLocationListValues(cell.getValue<string[]>());
-          if (originList.length === 0) {
-            return "-";
-          }
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {originList.map((origin, index) => (
-                <div key={`${origin}-${index}`}>{origin}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        id: "destination_list",
-        accessorKey: "destination_list",
-        header: "Destination",
-        Cell: ({ cell }) => {
-          const destinationList = distinctLocationListValues(
-            cell.getValue<string[]>(),
-          );
-          if (destinationList.length === 0) {
-            return "-";
-          }
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {destinationList.map((destination, index) => (
-                <div key={`${destination}-${index}`}>{destination}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        id: "reference_no",
-        accessorKey: "reference_no",
-        header: "Reference No",
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string>();
-          return value || "-";
-        },
-      },
-      {
-        id: "enquiry_received_date",
-        accessorKey: "enquiry_received_date",
-        header: "Enquiry Date",
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.enquiry_received_date
-              ? dayjs(row.original.enquiry_received_date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        size: 180,
-        minSize: 120,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string>();
-          const { label, color } = getStatusBadge(value ?? undefined);
-          return (
-            <Badge
-              size="sm"
-              variant="light"
-              color={color}
-              styles={{
-                root: {
-                  textTransform: "none",
-                  minWidth: "fit-content",
-                  whiteSpace: "nowrap",
-                },
-              }}
-            >
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "remark_list",
-        accessorKey: "services",
-        header: "Remark",
-        Cell: ({ cell }) => {
-          const services = cell.getValue<any[]>();
-          if (!services || !Array.isArray(services) || services.length === 0) {
-            return "-";
-          }
-          const remarkList = services
-            .map((s) => s.service_remark)
-            .filter((r) => r);
-          const uniqueRemarks = [...new Set(remarkList)];
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {uniqueRemarks.length > 0 ? (
-                uniqueRemarks.map((remark, index) => (
-                  <div key={index}>{remark}</div>
-                ))
-              ) : (
-                <div>-</div>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        Cell: ({ row }) => {
-          const [menuOpened, setMenuOpened] = useState(false);
-          return (
-            <Menu
-              withinPortal
-              position="bottom-end"
-              shadow="sm"
-              radius={"md"}
-              opened={menuOpened}
-              onChange={setMenuOpened}
-            >
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setMenuOpened(false);
-                      saveFiltersToStore();
-                      if (showPreviewTable) savePreviewFiltersToStore();
-                      const currentFilterState = {
-                        filters,
-                        filtersApplied,
-                        fromDate,
-                        toDate,
-                        displayValues: {
-                          customer_code: customerDisplayValue,
-                          origin_code: originDisplayValue,
-                          destination_code: destinationDisplayValue,
-                        },
-                      };
-                      if (showPreviewTable) {
-                        useListFilterStore
-                          .getState()
-                          .setShouldRestore(DETAILED_LIST_KEY, true);
-                      } else {
-                        useListFilterStore
-                          .getState()
-                          .setShouldRestore(LIST_KEY, true);
-                      }
-                      navigate(moduleCreatePath, {
-                        state: {
-                          ...row.original,
-                          preserveFilters: currentFilterState,
-                          fromEnquiry: true, // Flag to indicate navigation from enquiry page
-                        },
-                      });
-                    }}
-                    style={{
-                      opacity: ["GAINED", "LOST", "QUOTE CREATED"].includes(
-                        (row.original.status || "").toUpperCase(),
-                      )
-                        ? 0.5
-                        : 1,
-                      cursor: ["GAINED", "LOST", "QUOTE CREATED"].includes(
-                        (row.original.status || "").toUpperCase(),
-                      )
-                        ? "not-allowed"
-                        : "pointer",
-                    }}
-                    disabled={["GAINED", "LOST", "QUOTE CREATED"].includes(
-                      (row.original.status || "").toUpperCase(),
-                    )}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Create Quotation</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-                <Menu.Divider />
-                {/* Edit Quotation - Only show for gained, lost, quote created */}
-                {["GAINED", "LOST", "QUOTE CREATED"].includes(
-                  (row.original.status || "").toUpperCase(),
-                ) && (
-                  <>
-                    <Box px={10} py={5}>
-                      <UnstyledButton
-                        onClick={async () => {
-                          try {
-                            setMenuOpened(false);
-                            // Fetch quotation data by enquiry_id
-                            const filterPayload = {
-                              filters: { enquiry_id: row.original.enquiry_id },
-                            };
-                            const response = await apiCallProtected.post(
-                              `${URL.quotationFilter}?index=0&limit=1`,
-                              filterPayload,
-                            );
-                            const data = response as any;
-                            if (
-                              data &&
-                              Array.isArray(data.data) &&
-                              data.data.length > 0
-                            ) {
-                              const quotationData = data.data[0];
-                              saveFiltersToStore();
-                              if (showPreviewTable) savePreviewFiltersToStore();
-                              const currentFilterState = {
-                                filters,
-                                filtersApplied,
-                                fromDate,
-                                toDate,
-                                displayValues: {
-                                  customer_code: customerDisplayValue,
-                                  origin_code: originDisplayValue,
-                                  destination_code: destinationDisplayValue,
-                                },
-                              };
-                              if (showPreviewTable) {
-                                useListFilterStore
-                                  .getState()
-                                  .setShouldRestore(DETAILED_LIST_KEY, true);
-                              } else {
-                                useListFilterStore
-                                  .getState()
-                                  .setShouldRestore(LIST_KEY, true);
-                              }
-                              // Navigate to quotation-create in edit mode
-                              navigate("/quotation-create", {
-                                state: {
-                                  ...quotationData,
-                                  actionType: "edit",
-                                  preserveFilters: currentFilterState,
-                                  fromEnquiry: true, // Flag to indicate navigation from enquiry page
-                                },
-                              });
-                            } else {
-                              ToastNotification({
-                                type: "warning",
-                                message: "No quotation found for this enquiry",
-                              });
-                            }
-                          } catch (error: any) {
-                            ToastNotification({
-                              type: "error",
-                              message: `Error fetching quotation: ${error?.message || "Unknown error"}`,
-                            });
-                          }
-                        }}
-                      >
-                        <Group gap={"sm"}>
-                          <IconEdit size={16} style={{ color: "#105476" }} />
-                          <Text size="sm">Edit Quotation</Text>
-                        </Group>
-                      </UnstyledButton>
-                    </Box>
-                    <Menu.Divider />
-                  </>
-                )}
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setMenuOpened(false);
-                      saveFiltersToStore();
-                      if (showPreviewTable) savePreviewFiltersToStore();
-                      const currentFilterState = {
-                        filters,
-                        filtersApplied,
-                        fromDate,
-                        toDate,
-                        displayValues: {
-                          customer_code: customerDisplayValue,
-                          origin_code: originDisplayValue,
-                          destination_code: destinationDisplayValue,
-                        },
-                      };
-                      if (showPreviewTable) {
-                        useListFilterStore
-                          .getState()
-                          .setShouldRestore(DETAILED_LIST_KEY, true);
-                      } else {
-                        useListFilterStore
-                          .getState()
-                          .setShouldRestore(LIST_KEY, true);
-                      }
-                      navigate("/get-rate", {
-                        state: {
-                          ...row.original,
-                          preserveFilters: currentFilterState,
-                          fromEnquiry: true,
-                        },
-                      });
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconTag size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Get Rate</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-                <Menu.Divider />
-                {/* Hide Edit Enquiry option if opened from Dashboard */}
-                {!location.state?.returnToDashboard &&
-                  !returnToDashboardRef.current && (
-                    <>
-                      <Box px={10} py={5}>
-                        <UnstyledButton
-                          onClick={() => {
-                            setMenuOpened(false);
-                            saveFiltersToStore();
-                            if (showPreviewTable) savePreviewFiltersToStore();
-                            const currentFilterState = {
-                              filters,
-                              filtersApplied,
-                              fromDate,
-                              toDate,
-                              displayValues: {
-                                customer_code: customerDisplayValue,
-                                origin_code: originDisplayValue,
-                                destination_code: destinationDisplayValue,
-                              },
-                            };
-                            if (showPreviewTable) {
-                              useListFilterStore
-                                .getState()
-                                .setShouldRestore(DETAILED_LIST_KEY, true);
-                            } else {
-                              useListFilterStore
-                                .getState()
-                                .setShouldRestore(LIST_KEY, true);
-                            }
-                            navigate(moduleCreatePath, {
-                              state: {
-                                ...row.original,
-                                actionType: "edit",
-                                preserveFilters: currentFilterState,
-                                fromEnquiry: true, // Flag to indicate navigation from enquiry page
-                              },
-                            });
-                          }}
-                        >
-                          <Group gap={"sm"}>
-                            <IconEdit size={16} style={{ color: "#105476" }} />
-                              <Text size="sm">{`Edit ${moduleLabel}`}</Text>
-                          </Group>
-                        </UnstyledButton>
-                      </Box>
-                      <Menu.Divider />
-                    </>
-                  )}
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setMenuOpened(false);
-                      showEnquiryPreview(row.original);
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Preview</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-                <Menu.Divider />
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      handleCancelEnquiry(row.original);
-                    }}
-                    disabled={cancellingEnquiryId === (row.original as { id?: number })?.id}
-                  >
-                    <Group gap={"sm"}>
-                      {cancellingEnquiryId === (row.original as { id?: number })?.id ? (
-                        <Loader size={16} color="red" />
-                      ) : (
-                        <IconX size={16} style={{ color: "red" }} />
-                      )}
-                      <Text size="sm" c="red">
-                        {cancellingEnquiryId === (row.original as { id?: number })?.id ? "Cancelling..." : "Cancel"}
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
+      { id: "sno", label: "S.No", checked: summaryVisibleColumns.sno, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
+      { id: "enquiry_id", label: "Enquiry ID", checked: summaryVisibleColumns.enquiry_id, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, enquiry_id: !p.enquiry_id })) },
+      { id: "customer", label: "Customer", checked: summaryVisibleColumns.customer_name, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
+      { id: "sales", label: "Sales Person", checked: summaryVisibleColumns.sales_person, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
+      { id: "service", label: "Service", checked: summaryVisibleColumns.service, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, service: !p.service })) },
+      { id: "route", label: "Route", checked: summaryVisibleColumns.route, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, route: !p.route })) },
+      { id: "ref", label: "Reference No", checked: summaryVisibleColumns.reference_no, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
+      { id: "date", label: "Enquiry Date", checked: summaryVisibleColumns.date, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })) },
+      { id: "status", label: "Status", checked: summaryVisibleColumns.status, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, status: !p.status })) },
+      { id: "remark", label: "Remark", checked: summaryVisibleColumns.remark, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, remark: !p.remark })) },
     ],
-    [
+    [summaryVisibleColumns],
+  );
+
+  const rfqRowMenuCtx: EnquiryRowMenuContext = useMemo(
+    () => ({
       navigate,
+      location,
+      saveFiltersToStore,
+      savePreviewFiltersToStore,
+      showPreviewTable,
+      filters: filters as unknown as Record<string, unknown>,
+      filtersApplied,
+      fromDate,
+      toDate,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      returnToDashboardRef,
+      showEnquiryPreview,
       handleCancelEnquiry,
       cancellingEnquiryId,
+      listKey: LIST_KEY,
+      detailedListKey: DETAILED_LIST_KEY,
+      recordFormPaths: {
+        createQuotation: moduleCreatePath,
+        editRecord: moduleCreatePath,
+      },
+      editRecordLabel: moduleLabel,
+    }),
+    [
+      navigate,
+      location,
+      saveFiltersToStore,
+      savePreviewFiltersToStore,
+      showPreviewTable,
       filters,
       filtersApplied,
       fromDate,
       toDate,
-      showEnquiryPreview,
       customerDisplayValue,
       originDisplayValue,
       destinationDisplayValue,
+      showEnquiryPreview,
+      handleCancelEnquiry,
+      cancellingEnquiryId,
+      moduleCreatePath,
+      moduleLabel,
     ],
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: tableData,
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    // Use table's built-in loading state - shows loader while keeping previous rows visible
-    // tableLoading is the single source of truth for loader state
-    // state: {
-    //   isLoading: tableLoading,
-    //   showProgressBars: tableLoading,
-    // },
-    initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        case "enquiry_id":
-          extraStyles = {
-            minWidth: "218px",
-          };
-          break;
-        case "customer_name":
-          extraStyles = {
-            minWidth: "218px",
-          };
-          break;
-        case "sales_person":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "service_list":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "trade_list":
-          extraStyles = {
-            minWidth: "100px",
-          };
-          break;
-        case "origin_list":
-          extraStyles = {
-            minWidth: "145px",
-          };
-          break;
-        case "destination_list":
-          extraStyles = {
-            minWidth: "181px",
-          };
-          break;
-        case "reference_no":
-          extraStyles = {
-            minWidth: "125px",
-          };
-          break;
-        case "enquiry_received_date":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "remark_list":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "status":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#F8FAFC",
-            // borderLeft: "2px solid red",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        case "enquiry_id":
-          extraStyles = {
-            minWidth: "218px",
-          };
-          break;
-        case "customer_name":
-          extraStyles = {
-            minWidth: "218px",
-          };
-          break;
-        case "sales_person":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "service_list":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "trade_list":
-          extraStyles = {
-            minWidth: "100px",
-          };
-          break;
-        case "remark_list":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "origin_list":
-          extraStyles = {
-            minWidth: "145px",
-          };
-          break;
-        case "destination_list":
-          extraStyles = {
-            minWidth: "181px",
-          };
-          break;
-        case "reference_no":
-          extraStyles = {
-            minWidth: "125px",
-          };
-          break;
-        case "enquiry_received_date":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-        case "status":
-          extraStyles = {
-            minWidth: "120px",
-          };
-          break;
-
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          // height: "38px",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+  const isSummaryTableDataLoading =
+    !showPreviewTable && tableLoading && tableData.length === 0;
+  const isPreviewListDataLoading =
+    showPreviewTable &&
+    isPreviewLoading &&
+    (tablePreviewData?.data?.length ?? 0) === 0;
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          {/* Breadcrumbs */}
-          {/* <Breadcrumbs mb={8}>
-            <Text
-              size="sm"
-              style={{
-                fontFamily: "Inter",
-                fontStyle: "regular",
-                color: "#000000",
-              }}
-            >
-              Enquiry
-            </Text>
-            <Anchor href="#" size="sm" c="dimmed">
-              <Text
-                size="sm"
-                style={{
-                  color: "#105476",
-                  fontFamily: "Inter",
-                  fontStyle: "regular",
-                  marginRight: "4px",
-                }}
-              >
-                Core
-              </Text>
-            </Anchor>
-            <Anchor
-              href="#"
-              size="sm"
-              c="dimmed"
-              style={{
-                color: "#105476",
-                fontFamily: "Inter",
-                fontStyle: "regular",
-                marginRight: "4px",
-              }}
-            >
-              <Text
-                size="sm"
-                style={{
-                  color: "#105476",
-                  fontFamily: "Inter",
-                  fontStyle: "regular",
-                  marginRight: "4px",
-                }}
-              >
-                Sale
-              </Text>
-            </Anchor>
-            <Text
-              size="sm"
-              c="dimmed"
-              style={{
-                fontFamily: "Inter",
-                fontStyle: "regular",
-                marginRight: "4px",
-              }}
-            >
-              Enquiry
-            </Text>
-          </Breadcrumbs> */}
-
-          {/* Tabs and Actions */}
-          <Group justify="space-between" align="center" mb="md">
-            <Tabs
-              value={showPreviewTable ? "detailed" : "summary"}
-              onChange={(value) => {
-                if (value === "detailed" && !showPreviewTable) {
-                  openPreview();
-                } else if (value === "summary" && showPreviewTable) {
-                  closePreview();
-                }
-              }}
-              styles={{
-                tab: {
-                  padding: "8px 8px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontstyle: "semibold",
-                  color: "#1E293B",
-                  "&[data-active]": {
-                    color: "#105476",
-                    borderBottom: "0px",
-                    backgroundColor: "#E0F5FF",
-                  },
-                  "&:hover": {
-                    backgroundColor: "#f8f9fa",
-                    borderBottom: "0px",
-                    color: "#1E293B",
-                    // borderColor: "transparent",
-                  },
-                  "&[data-active]:hover": {
-                    backgroundColor: "#E0F5FF",
-                    borderBottom: "0px",
-                    color: "#105476",
-                  },
-                },
-                list: {
-                  borderBottom: "0px",
-                },
-              }}
-            >
-              <Tabs.List
-                style={{
-                  border: "1px solid #E0E0E0",
-                  borderRadius: "6px",
-                  borderBottom: "0px",
-                }}
-              >
-                <Tabs.Tab value="summary" style={{ borderBottom: "0px" }}>
-                  Summary
-                </Tabs.Tab>
-                <Tabs.Tab value="detailed" style={{ borderBottom: "0px" }}>
-                  Detailed
-                </Tabs.Tab>
-              </Tabs.List>
-            </Tabs>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => {
-                        // Clear search - this will trigger the search change useEffect
-                        // which will update store and trigger API
-                        setSearchQuery("");
-                        // Clear search from store immediately (use correct LIST_KEY based on view)
-                        const currentListKey = showPreviewTable
-                          ? DETAILED_LIST_KEY
-                          : LIST_KEY;
-                        clearStoreSearch(currentListKey);
-                        // Reset search ref to current debouncedSearch value
-                        // This ensures the useEffect will detect the change when debouncedSearch becomes ""
-                        if (showPreviewTable) {
-                          prevPreviewSearchRef.current = debouncedSearch;
-                        } else {
-                          prevSearchRef.current = debouncedSearch;
-                        }
-                        // Check if other filters exist to determine filtersApplied state
-                        if (showPreviewTable) {
-                          // For preview view, check preview filters
-                          const hasOtherPreviewFilters =
-                            previewFilters.customer_name ||
-                            previewFilters.sales_person ||
-                            previewFilters.origin_name ||
-                            previewFilters.destination_name ||
-                            previewFilters.service ||
-                            previewFilters.trade ||
-                            previewFilters.terms_of_shipment ||
-                            (previewFilters.status &&
-                              previewFilters.status !== "ALL") ||
-                            previewFilters.enquiry_id ||
-                            previewFilters.reference_no ||
-                            (previewFilters.enquiry_received_date &&
-                              previewFilters.enquiry_received_date_to);
-                          if (!hasOtherPreviewFilters) {
-                            setPreviewFiltersApplied(false);
-                          }
-                        } else {
-                          // For summary view, check summary filters
-                          const hasOtherFilters =
-                            filters.customer_code ||
-                            filters.sales_person ||
-                            filters.origin_code ||
-                            filters.destination_code ||
-                            filters.service ||
-                            filters.trade ||
-                            filters.enquiry_id ||
-                            filters.reference_no ||
-                            (filters.status && filters.status !== "ALL") ||
-                            (fromDate && toDate);
-                          if (!hasOtherFilters) {
-                            setFiltersApplied(false);
-                          }
-                        }
-                        // Note: The search change useEffect will handle API trigger after debounce
-                        // and will save the empty search to store
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={toggleFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters
-                      ? "1px solid #105476"
-                      : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    // "&:hover": {
-                    //   backgroundColor: "#105476",
-                    //   color: "#FFFFFF",
-                    // },
-                    // "&:focus": {
-                    //   border: "1px solid #105476",
-                    //   color: "#FFFFFF",
-                    // },
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              {showPreviewTable && (
-                <ActionIcon
-                  variant="outline"
-                  size={36}
-                  color="gray"
-                  onClick={downloadExcel}
-                  loading={downloading}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      borderColor: "#737780",
-                      color: "#737780",
-                    },
-                  }}
-                >
-                  <IconDownload size={18} />
-                </ActionIcon>
-              )}
-
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-                onClick={() => {
-                  saveFiltersToStore();
-                  if (showPreviewTable) savePreviewFiltersToStore();
-                  const currentFilterState = {
-                    filters,
-                    filtersApplied,
-                    fromDate,
-                    toDate,
-                    displayValues: {
-                      customer_code: customerDisplayValue,
-                      origin_code: originDisplayValue,
-                      destination_code: destinationDisplayValue,
-                    },
-                  };
-                  if (showPreviewTable) {
-                    useListFilterStore
-                      .getState()
-                      .setShouldRestore(DETAILED_LIST_KEY, true);
-                  } else {
-                    useListFilterStore
-                      .getState()
-                      .setShouldRestore(LIST_KEY, true);
-                  }
-                  navigate(moduleCreatePath, {
-                    state: {
-                      preserveFilters: currentFilterState,
-                      fromEnquiry: true,
-                    },
-                  });
-                }}
-              >
-                Create New
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section - shared between Summary & Detailed views */}
-        {showFilters && (
-          <Box
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
-            }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              mb="lg"
-              style={{
-                backgroundColor: "#F8FAFC",
-                padding: "8px 8px",
-                borderRadius: "8px",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#1E293B"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <>
-              <Grid gutter="md" px="md">
-                {/* Row 1 */}
-                <Grid.Col span={2}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Customer Name"
-                    placeholder="Select Service"
-                    apiEndpoint={URL.customer}
-                    searchFields={["customer_code", "customer_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={filters.customer_code}
-                    displayValue={customerDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("customer_code", value || null);
-                      setCustomerDisplayValue(selectedData?.label || null);
-                      // Keep detailed-view filter state in sync when in Detailed view
-                      if (showPreviewTable) {
-                        updatePreviewFilter("customer_name", value || null);
-                        setPreviewCustomerDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={2}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Origin"
-                    placeholder="Type Origin Code"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filters.origin_code}
-                    displayValue={originDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("origin_code", value || null);
-                      setOriginDisplayValue(selectedData?.label || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("origin_name", value || null);
-                        setPreviewOriginDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Destination"
-                    placeholder="Type destination code"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filters.destination_code}
-                    displayValue={destinationDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("destination_code", value || null);
-                      setDestinationDisplayValue(selectedData?.label || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("destination_name", value || null);
-                        setPreviewDestinationDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                  />
-                </Grid.Col>
-                <Grid.Col span={4}>
-                  <DateRangeInput
-                    fromDate={fromDate}
-                    toDate={toDate}
-                    onFromDateChange={(date) => {
-                      setFromDate(date);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_received_date", date);
-                      }
-                    }}
-                    onToDateChange={(date) => {
-                      setToDate(date);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_received_date_to", date);
-                      }
-                    }}
-                    fromLabel="From Date"
-                    toLabel="To Date"
-                    size="xs"
-                    allowDeselection={true}
-                    showRangeInCalendar={false}
-                    inputWidth={260}
-                  />
-                </Grid.Col>
-
-                {/* Row 2 */}
-                <Grid.Col span={2}>
-                  <Select
-                    key={`sales-person-${filters.sales_person}`}
-                    label="Sales Person"
-                    placeholder={
-                      salespersonsLoading
-                        ? "Loading salespersons..."
-                        : "Select Service"
-                    }
-                    searchable
-                    clearable
-                    size="xs"
-                    data={salespersonOptions}
-                    disabled={salespersonsLoading}
-                    value={filters.sales_person}
-                    onChange={(value) => {
-                      updateFilter("sales_person", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("sales_person", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <Select
-                    key={`service-${filters.service}`}
-                    label="Service"
-                    placeholder="Select Service"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={serviceOptions}
-                    value={filters.service}
-                    onChange={(value) => {
-                      updateFilter("service", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("service", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <Select
-                    key={`trade-${filters.trade}`}
-                    label="Trade"
-                    placeholder="Select Service"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={tradeOptions}
-                    value={filters.trade}
-                    onChange={(value) => {
-                      updateFilter("trade", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("trade", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <Select
-                    key={`status-${filters.status}`}
-                    label="Status"
-                    placeholder="Active"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={statusOptions}
-                    value={filters.status}
-                    onChange={(value) => {
-                      updateFilter("status", value || "all");
-                      if (showPreviewTable) {
-                        updatePreviewFilter("status", value || "all");
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <TextInput
-                    label="Enquiry ID"
-                    placeholder="Placeholder"
-                    size="xs"
-                    value={filters.enquiry_id || ""}
-                    onChange={(e) => {
-                      const val = e.currentTarget.value || null;
-                      updateFilter("enquiry_id", val);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_id", val);
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={2}>
-                  <TextInput
-                    label="Reference No"
-                    placeholder="Placeholder"
-                    size="xs"
-                    value={filters.reference_no || ""}
-                    onChange={(e) => {
-                      const val = e.currentTarget.value || null;
-                      updateFilter("reference_no", val);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("reference_no", val);
-                      }
-                    }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-              </Grid>
-              <Group
-                justify="flex-end"
-                mt="lg"
-                gap="sm"
-                style={{ margin: "8px 8px" }}
-              >
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={clearAllFilters}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontWeight: 600,
-                      height: "36px",
-                      border: "1px solid #D0D1D4",
-                      color: "#1E293B",
-                    },
-                  }}
-                >
-                  Clear
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={applyFilters}
-                  loading={tableLoading}
-                  disabled={tableLoading}
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontWeight: 600,
-                      height: "36px",
-                      "&:hover": {
-                        backgroundColor: "#0d4261",
-                      },
-                    },
-                  }}
-                >
-                  Apply
-                </Button>
-              </Group>
-            </>
-          </Box>
-        )}
-
-        {isPreviewLoading ? (
-          <Center
-            p="md"
-            style={{
-              marginBottom: "52px",
-              boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.05)",
-              border: "1px solid #dee2e6",
-              borderRadius: "calc(0.5rem * 1)",
-              display: "flex",
-              flexDirection: "column",
-              height: "78%",
-              maxHeight: "1536px",
-              flex: 1,
-            }}
-          >
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">
-                {isRefreshingData
-                  ? `Updating ${moduleLabel.toLowerCase()} list...`
-                  : `Loading ${modulePluralLower}...`}
-              </Text>
-            </Stack>
-          </Center>
-        ) : showPreviewTable ? (
-          <>
-            {isPreviewLoading ? (
-              <Center py="xl">
-                <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed">
-                    {isRefreshingData
-                      ? "Updating preview data..."
-                      : "Loading preview data..."}
-                  </Text>
-                </Stack>
-              </Center>
-            ) : (
-              <>
-                <MantineReactTable table={previewTable} />
-
-                <Group
-                  w="100%"
-                  justify="space-between"
-                  align="center"
-                  px="md"
-                  py="xs"
-                  style={{ borderTop: "1px solid #e9ecef" }}
-                  wrap="nowrap"
-                  mt="xs"
-                >
-                  {(location.state?.returnToDashboard ||
-                    returnToDashboardRef.current) && (
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <Group gap={6} wrap="nowrap" align="center">
                     <Button
-                      leftSection={<IconArrowLeft size={16} />}
+                      size="xs"
+                      variant={!showPreviewTable ? "filled" : "default"}
+                      styles={
+                        !showPreviewTable
+                          ? erpToolbarPrimaryButtonStyles(erpTheme)
+                          : erpToolbarOutlineButtonStyles(erpTheme)
+                      }
+                      leftSection={<IconList size={14} />}
+                      onClick={() => {
+                        if (showPreviewTable) void closePreview();
+                      }}
+                    >
+                      Summary
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant={showPreviewTable ? "filled" : "default"}
+                      styles={
+                        showPreviewTable
+                          ? erpToolbarPrimaryButtonStyles(erpTheme)
+                          : erpToolbarOutlineButtonStyles(erpTheme)
+                      }
+                      leftSection={<IconFileText size={14} />}
+                      onClick={() => {
+                        if (!showPreviewTable) void openPreview();
+                      }}
+                    >
+                      Detailed
+                    </Button>
+                  </Group>
+                  {(location.state?.returnToDashboard || returnToDashboardRef.current) && (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconArrowLeft size={14} />}
+                      styles={erpToolbarOutlineButtonStyles(erpTheme)}
                       onClick={() => {
                         const dashboardState =
-                          location.state?.dashboardState ||
-                          dashboardStateRef.current;
+                          location.state?.dashboardState || dashboardStateRef.current;
                         if (dashboardState) {
                           navigate("/", {
-                            state: {
-                              returnToEnquiryDetailedView: true,
-                              dashboardState: dashboardState,
-                            },
+                            state: { returnToEnquiryDetailedView: true, dashboardState },
                           });
                         } else {
                           navigate("/");
                         }
                       }}
-                      variant="outline"
-                      size="sm"
-                      color="#105476"
                     >
                       Back to Dashboard
                     </Button>
                   )}
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    <PaginationBar
-                      pageSize={previewPageSize}
-                      currentPage={previewCurrentPage}
-                      totalRecords={tablePreviewData?.total || 0}
-                      onPageSizeChange={handlePreviewPageSizeChange}
-                      onPageChange={handlePreviewPageChange}
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUsers size={14} color={primary} />}
+                    value={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
+                    label="Total"
+                  />
+                </>
+              ),
+              secondary: (
+                <Text size="xs" c={muted} style={{ fontFamily: fontSans }}>
+                  {showPreviewTable ? "Detailed list" : "Summary list"}
+                </Text>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            const currentListKey = showPreviewTable ? DETAILED_LIST_KEY : LIST_KEY;
+                            clearStoreSearch(currentListKey);
+                            if (showPreviewTable) {
+                              prevPreviewSearchRef.current = debouncedSearch;
+                            } else {
+                              prevSearchRef.current = debouncedSearch;
+                            }
+                            if (showPreviewTable) {
+                              const hasOtherPreviewFilters =
+                                previewFilters.customer_name ||
+                                previewFilters.sales_person ||
+                                previewFilters.origin_name ||
+                                previewFilters.destination_name ||
+                                previewFilters.service ||
+                                previewFilters.trade ||
+                                previewFilters.terms_of_shipment ||
+                                (previewFilters.status && previewFilters.status !== "ALL") ||
+                                previewFilters.enquiry_id ||
+                                previewFilters.reference_no ||
+                                (previewFilters.enquiry_received_date &&
+                                  previewFilters.enquiry_received_date_to);
+                              if (!hasOtherPreviewFilters) {
+                                setPreviewFiltersApplied(false);
+                              }
+                            } else {
+                              const hasOtherFilters =
+                                filters.customer_code ||
+                                filters.sales_person ||
+                                filters.origin_code ||
+                                filters.destination_code ||
+                                filters.service ||
+                                filters.trade ||
+                                filters.enquiry_id ||
+                                filters.reference_no ||
+                                (filters.status && filters.status !== "ALL") ||
+                                (fromDate && toDate);
+                              if (!hasOtherFilters) {
+                                setFiltersApplied(false);
+                              }
+                            }
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  {showPreviewTable ? (
+                    <>
+                      {previewColumnToggleItems.length > 0 && (
+                        <ERPListColumnToggleMenu
+                          theme={erpTheme}
+                          items={previewColumnToggleItems}
+                          menuStyles={erpListGeistMenuDropdownStyles}
+                          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                        />
+                      )}
+                      <ActionIcon
+                        variant="default"
+                        size="sm"
+                        onClick={downloadExcel}
+                        loading={downloading}
+                        title="Download Excel"
+                      >
+                        <IconDownload size={16} />
+                      </ActionIcon>
+                    </>
+                  ) : (
+                    <ERPListColumnToggleMenu
+                      theme={erpTheme}
+                      items={summaryColumnToggleItems}
+                      menuStyles={erpListGeistMenuDropdownStyles}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                     />
-                  </Box>
-                </Group>
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            {tableLoading ? (
-              <Center py="xl">
-                <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed">
-                    {isRefreshingData ? "Fetching data..." : "Loading data..."}
-                  </Text>
-                </Stack>
-              </Center>
-            ) : (
-              <MantineReactTable table={table} />
-            )}
-
-            <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              p="xs"
-              wrap="nowrap"
-              pt="md"
-            >
-              {(location.state?.returnToDashboard ||
-                returnToDashboardRef.current) && (
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => {
-                    const dashboardState =
-                      location.state?.dashboardState ||
-                      dashboardStateRef.current;
-                    if (dashboardState) {
-                      navigate("/", {
-                        state: {
-                          returnToEnquiryDetailedView: true,
-                          dashboardState: dashboardState,
+                  )}
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={toggleFilters}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                    onClick={() => {
+                      saveFiltersToStore();
+                      if (showPreviewTable) savePreviewFiltersToStore();
+                      const currentFilterState = {
+                        filters,
+                        filtersApplied,
+                        fromDate,
+                        toDate,
+                        displayValues: {
+                          customer_code: customerDisplayValue,
+                          origin_code: originDisplayValue,
+                          destination_code: destinationDisplayValue,
                         },
+                      };
+                      if (showPreviewTable) {
+                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true);
+                      } else {
+                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      }
+                      navigate(moduleCreatePath, {
+                        state: { preserveFilters: currentFilterState, fromEnquiry: true },
                       });
+                    }}
+                  >
+                    Create New
+                  </Button>
+                </>
+              ),
+            }}
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: showPreviewTable
+                ? `Apply to detailed list (same as summary: customer, ports, service, status, date range, IDs for ${moduleLabel})`
+                : `Narrow ${moduleLabel} by customer, route, service, or status`,
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={showPreviewTable ? isPreviewLoading : tableLoading}
+                  applyDisabled={showPreviewTable ? isPreviewLoading : tableLoading}
+                />
+              ),
+              children: (
+                <>
+                  <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <SearchableSelect
+                        size="xs"
+                        label="Customer Name"
+                        placeholder="Select Service"
+                        apiEndpoint={URL.customer}
+                        searchFields={["customer_code", "customer_name"]}
+                        displayFormat={(item: any) => ({
+                          value: String(item.customer_code),
+                          label: String(item.customer_name),
+                        })}
+                        value={filters.customer_code}
+                        displayValue={customerDisplayValue}
+                        onChange={(value, selectedData) => {
+                          updateFilter("customer_code", value || null);
+                          setCustomerDisplayValue(selectedData?.label || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("customer_name", value || null);
+                            setPreviewCustomerDisplayValue(selectedData?.label || null);
+                          }
+                        }}
+                        minSearchLength={3}
+                        dropdownZIndex={1000}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        className="filter-searchable-select"
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <SearchableSelect
+                        size="xs"
+                        label="Origin"
+                        placeholder="Type Origin Code"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: any) => ({
+                          value: String(item.port_code),
+                          label: `${item.port_name} (${item.port_code})`,
+                        })}
+                        value={filters.origin_code}
+                        displayValue={originDisplayValue}
+                        onChange={(value, selectedData) => {
+                          updateFilter("origin_code", value || null);
+                          setOriginDisplayValue(selectedData?.label || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("origin_name", value || null);
+                            setPreviewOriginDisplayValue(selectedData?.label || null);
+                          }
+                        }}
+                        minSearchLength={3}
+                        dropdownZIndex={1000}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        className="filter-searchable-select"
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <SearchableSelect
+                        size="xs"
+                        label="Destination"
+                        placeholder="Type destination code"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: any) => ({
+                          value: String(item.port_code),
+                          label: `${item.port_name} (${item.port_code})`,
+                        })}
+                        value={filters.destination_code}
+                        displayValue={destinationDisplayValue}
+                        onChange={(value, selectedData) => {
+                          updateFilter("destination_code", value || null);
+                          setDestinationDisplayValue(selectedData?.label || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("destination_name", value || null);
+                            setPreviewDestinationDisplayValue(selectedData?.label || null);
+                          }
+                        }}
+                        minSearchLength={3}
+                        dropdownZIndex={1000}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        className="filter-searchable-select"
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <DateRangeInput
+                        fromDate={fromDate}
+                        toDate={toDate}
+                        onFromDateChange={(date) => {
+                          setFromDate(date);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("enquiry_received_date", date);
+                          }
+                        }}
+                        onToDateChange={(date) => {
+                          setToDate(date);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("enquiry_received_date_to", date);
+                          }
+                        }}
+                        fromLabel="From Date"
+                        toLabel="To Date"
+                        size="xs"
+                        allowDeselection={true}
+                        showRangeInCalendar={false}
+                        inputWidth={260}
+                        filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        key={`sales-person-${filters.sales_person}`}
+                        label="Sales Person"
+                        placeholder={
+                          salespersonsLoading
+                            ? "Loading salespersons..."
+                            : "Select Service"
+                        }
+                        searchable
+                        clearable
+                        size="xs"
+                        data={salespersonOptions}
+                        disabled={salespersonsLoading}
+                        value={filters.sales_person}
+                        onChange={(value) => {
+                          updateFilter("sales_person", value || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("sales_person", value || null);
+                          }
+                        }}
+                        onFocus={(event) => {
+                          const input = event.target as HTMLInputElement;
+                          if (input && input.value) {
+                            input.select();
+                          }
+                        }}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        key={`service-${filters.service}`}
+                        label="Service"
+                        placeholder="Select Service"
+                        searchable
+                        clearable
+                        size="xs"
+                        data={serviceOptions}
+                        value={filters.service}
+                        onChange={(value) => {
+                          updateFilter("service", value || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("service", value || null);
+                          }
+                        }}
+                        onFocus={(event) => {
+                          const input = event.target as HTMLInputElement;
+                          if (input && input.value) {
+                            input.select();
+                          }
+                        }}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        key={`trade-${filters.trade}`}
+                        label="Trade"
+                        placeholder="Select Service"
+                        searchable
+                        clearable
+                        size="xs"
+                        data={tradeOptions}
+                        value={filters.trade}
+                        onChange={(value) => {
+                          updateFilter("trade", value || null);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("trade", value || null);
+                          }
+                        }}
+                        onFocus={(event) => {
+                          const input = event.target as HTMLInputElement;
+                          if (input && input.value) {
+                            input.select();
+                          }
+                        }}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        key={`status-${filters.status}`}
+                        label="Status"
+                        placeholder="Active"
+                        searchable
+                        clearable
+                        size="xs"
+                        data={statusOptions}
+                        value={filters.status}
+                        onChange={(value) => {
+                          updateFilter("status", value || "all");
+                          if (showPreviewTable) {
+                            updatePreviewFilter("status", value || "all");
+                          }
+                        }}
+                        onFocus={(event) => {
+                          const input = event.target as HTMLInputElement;
+                          if (input && input.value) {
+                            input.select();
+                          }
+                        }}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        label="Enquiry ID"
+                        placeholder="Placeholder"
+                        size="xs"
+                        value={filters.enquiry_id || ""}
+                        onChange={(e) => {
+                          const val = e.currentTarget.value || null;
+                          updateFilter("enquiry_id", val);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("enquiry_id", val);
+                          }
+                        }}
+                        classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        label="Reference No"
+                        placeholder="Placeholder"
+                        size="xs"
+                        value={filters.reference_no || ""}
+                        onChange={(e) => {
+                          const val = e.currentTarget.value || null;
+                          updateFilter("reference_no", val);
+                          if (showPreviewTable) {
+                            updatePreviewFilter("reference_no", val);
+                          }
+                        }}
+                        classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                      </Box>
+                    </Grid.Col>
+                  </Grid>
+                </>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
+                  pageIndex={showPreviewTable ? previewCurrentPage - 1 : listCurrentPage - 1}
+                  pageSize={showPreviewTable ? previewPageSize : listPageSize}
+                  onPageIndexChange={(idx) => {
+                    if (showPreviewTable) {
+                      handlePreviewPageChange(idx + 1);
                     } else {
-                      navigate("/");
+                      handlePageChange(idx + 1);
                     }
                   }}
-                  variant="outline"
-                  size="sm"
-                  color="#105476"
-                >
-                  Back to Dashboard
-                </Button>
-              )}
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <PaginationBar
-                  pageSize={listPageSize}
-                  currentPage={listCurrentPage}
-                  totalRecords={listTotalRecords}
-                  onPageSizeChange={handlePageSizeChange}
-                  onPageChange={handlePageChange}
+                  onPageSizeChange={showPreviewTable ? handlePreviewPageSizeChange : handlePageSizeChange}
+                  pageSizeOptions={["10", "15", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
+                  }}
                 />
-              </Box>
-            </Group>
-          </>
-        )}
-      </Card>
+              ),
+              children: showPreviewTable ? (
+                isPreviewListDataLoading ? (
+                  <ERPListTableLoading
+                    theme={erpTheme}
+                    message={
+                      isRefreshingData
+                        ? "Updating detailed list…"
+                        : `Loading detailed ${modulePluralLower}…`
+                    }
+                  />
+                ) : (
+                  <EnquiryPreviewNativeTable
+                    theme={erpTheme}
+                    columns={visiblePreviewColumns}
+                    data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
+                    dateFormat={dateFormat}
+                    getStatusBadge={getStatusBadge}
+                  />
+                )
+              ) : isSummaryTableDataLoading ? (
+                <ERPListTableLoading
+                  theme={erpTheme}
+                  message={
+                    isRefreshingData
+                      ? `Updating ${modulePluralLower}…`
+                      : `Loading ${modulePluralLower}…`
+                  }
+                />
+              ) : (
+                <EnquirySummaryNativeTable
+                  theme={erpTheme}
+                  rows={tableData as Record<string, unknown>[]}
+                  dateFormat={dateFormat}
+                  getStatusBadge={getStatusBadge}
+                  visible={summaryVisibleColumns}
+                  rowMenuCtx={rfqRowMenuCtx}
+                  actionsOpenKey={summaryActionsMenuKey}
+                  onActionsKeyChange={setSummaryActionsMenuKey}
+                  menuDropdownClassName={ERP_LIST_GEIST_ROOT_CLASS}
+                />
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
 
       {/* PDF Preview Modal */}
       <Modal
