@@ -196,6 +196,38 @@ const getBranchInfo = (branchName: string, country?: any) => {
   };
 };
 
+/** Display label for FCL container type from API row (name/read/code fields vary by endpoint). */
+const fclContainerTypeDisplay = (row: any): string => {
+  const candidates = [
+    row.container_type_name,
+    row.container_type_read,
+    row.container_type_code_read,
+    row.container_type,
+    row.container_type_code,
+  ];
+  const first = candidates.find((v) => v != null && String(v).trim() !== "");
+  return first != null ? String(first) : "N/A";
+};
+
+/** FCL line items: prefer `fcl_details`, then `cargo_details`, else one row from flattened service fields. */
+const resolveFclDetailRows = (service: any): any[] => {
+  const arr = service.fcl_details || service.cargo_details;
+  if (Array.isArray(arr) && arr.length > 0) {
+    return arr;
+  }
+  return [
+    {
+      container_type_name: service.container_type_name,
+      container_type_code: service.container_type_code,
+      container_type_code_read: service.container_type_code_read,
+      container_type_read: service.container_type_read,
+      container_type: service.container_type,
+      no_of_containers: service.no_of_containers ?? service.no_of_packages,
+      gross_weight: service.gross_weight,
+    },
+  ];
+};
+
 export const generateEnquiryPDF = (
   rowData: any,
   defaultBranch: any,
@@ -618,31 +650,92 @@ export const generateEnquiryPDF = (
         }
 
         // ===== CARGO DETAILS SECTION =====
-        if (service.no_of_packages || service.gross_weight || service.volume || service.volume_weight || service.chargeable_weight || service.chargeable_volume) {
-          // Check if table fits on current page
-          if (yPos + 30 > pageHeight - 20) {
-            doc.addPage();
-            yPos = 10;
-          }
+        // Always render for every service type (FCL uses no_of_containers; omitting it hid this block for FCL-only data).
+        // Check if table fits on current page
+        if (yPos + 30 > pageHeight - 20) {
+          doc.addPage();
+          yPos = 10;
+        }
 
-          // CARGO DETAILS header
-          doc.setFillColor(0, 0, 0);
-          doc.rect(margin, yPos, pageWidth - 2 * margin, 5, "F");
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(9);
+        // CARGO DETAILS header
+        doc.setFillColor(0, 0, 0);
+        doc.rect(margin, yPos, pageWidth - 2 * margin, 5, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("CARGO DETAILS", pageWidth / 2, yPos + 3.5, {
+          align: "center",
+        });
+        doc.setTextColor(0, 0, 0);
+        yPos += 5;
+
+        const serviceType = service.service?.toUpperCase() || "";
+
+        if (serviceType === "FCL") {
+          const cargoHeaders = [
+            "Container Type *",
+            "No of Containers *",
+            "Gross Weight (kg)",
+          ];
+          const colCount = cargoHeaders.length;
+          const colWidth = (pageWidth - 2 * margin) / colCount;
+
+          doc.setFillColor(220, 220, 220);
+          doc.rect(margin, yPos, pageWidth - 2 * margin, 6, "F");
           doc.setFont("helvetica", "bold");
-          doc.text("CARGO DETAILS", pageWidth / 2, yPos + 3.5, {
-            align: "center",
-          });
-          doc.setTextColor(0, 0, 0);
-          yPos += 5;
+          doc.setFontSize(7);
 
-          const serviceType = service.service?.toUpperCase() || "";
+          cargoHeaders.forEach((header, index) => {
+            doc.text(header, margin + 2 + index * colWidth, yPos + 4);
+          });
+          yPos += 6;
+
+          doc.setFont("helvetica", "normal");
+          doc.setDrawColor(200, 200, 200);
+
+          const fclRows = resolveFclDetailRows(service);
+          let totalContainers = 0;
+          let totalGrossWeight = 0;
+
+          fclRows.forEach((row: any) => {
+            if (yPos + 8 > pageHeight - 20) {
+              doc.addPage();
+              yPos = 10;
+            }
+
+            const n = Number(row.no_of_containers ?? row.no_of_packages ?? 0);
+            const gw = Number(row.gross_weight ?? 0);
+            totalContainers += Number.isNaN(n) ? 0 : n;
+            totalGrossWeight += Number.isNaN(gw) ? 0 : gw;
+
+            const values = [
+              fclContainerTypeDisplay(row),
+              String(row.no_of_containers ?? row.no_of_packages ?? "0"),
+              String(row.gross_weight ?? "0"),
+            ];
+
+            doc.rect(margin, yPos, pageWidth - 2 * margin, 5);
+            values.forEach((value, index) => {
+              doc.text(value, margin + 2 + index * colWidth, yPos + 3.5);
+            });
+            yPos += 5;
+          });
+
+          doc.setFont("helvetica", "bold");
+          doc.setFillColor(230, 230, 230);
+          doc.rect(margin, yPos, pageWidth - 2 * margin, 5, "F");
+          const totalLabels: string[] = ["", `Total Containers: ${totalContainers}`, `Total Gross Weight: ${totalGrossWeight}`];
+          totalLabels.forEach((value, index) => {
+            if (value) {
+              doc.text(value, margin + 2 + index * colWidth, yPos + 3.5);
+            }
+          });
+          yPos += 5;
+          doc.setFont("helvetica", "normal");
+        } else {
           let cargoHeaders: string[] = [];
 
-          if (serviceType === "FCL") {
-            cargoHeaders = ["No. of Containers", "Gross Weight (KG)"];
-          } else if (serviceType === "LCL") {
+          if (serviceType === "LCL") {
             cargoHeaders = [
               "No. of Packages",
               "Gross Weight (KG)",
@@ -657,14 +750,12 @@ export const generateEnquiryPDF = (
               "Chargeable Weight (KG)",
             ];
           } else {
-            // Default for unknown service types
             cargoHeaders = ["No. of Packages", "Gross Weight (KG)", "Volume (CBM)"];
           }
 
           const colCount = cargoHeaders.length;
           const colWidth = (pageWidth - 2 * margin) / colCount;
 
-          // Table header
           doc.setFillColor(220, 220, 220);
           doc.rect(margin, yPos, pageWidth - 2 * margin, 6, "F");
           doc.setFont("helvetica", "bold");
@@ -675,17 +766,11 @@ export const generateEnquiryPDF = (
           });
           yPos += 6;
 
-          // Table row
           doc.setFont("helvetica", "normal");
           doc.setDrawColor(200, 200, 200);
 
           let values: string[] = [];
-          if (serviceType === "FCL") {
-            values = [
-              String(service.no_of_packages || service.no_of_containers || "0"),
-              String(service.gross_weight || "0"),
-            ];
-          } else if (serviceType === "LCL") {
+          if (serviceType === "LCL") {
             values = [
               String(service.no_of_packages || "0"),
               String(service.gross_weight || "0"),
