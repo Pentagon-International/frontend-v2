@@ -98,12 +98,12 @@ function formatAmount(value: number | null | undefined): string {
 function formatSubledgerCell(
   key: keyof SubledgerEntryRow,
   value: unknown,
-  dateFormat: unknown
+  dateFormat: string,
 ): string {
   if (value === null || value === undefined || value === "") return "";
   if (key === "sno") return String(value);
   if (key === "date_document" || key === "due_date") {
-    const parsed = dayjs(value);
+    const parsed = dayjs(value as string | number | Date | null | undefined);
     if (!parsed.isValid()) return String(value);
     return parsed.format(dateFormat);
   }
@@ -328,14 +328,15 @@ export default function SubledgerEnquiry() {
             placeholder="Search by account name"
             withAsterisk
             minSearchLength={1}
-            searchFields={["gl_account_code", "account_name", "id"]}
+            searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
             displayFormat={(item: Record<string, unknown>) => {
               const id = String(item.id ?? "").trim();
+              const glName = String(item.gl_name ?? "").trim();
               const gl = String(item.gl_account_code ?? "").trim();
               const name = String(item.account_name ?? "").trim();
               return {
                 value: id,
-                label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                label: [glName, gl, name].filter(Boolean).join(" - "),
               };
             }}
             displayValue={selectedAccount?.account_name ?? ""}

@@ -1337,21 +1337,20 @@ function JournalVoucher() {
                             value={row.account_id != null ? String(row.account_id) : null}
                             dropdownZIndex={1100}
                             minSearchLength={1}
-                            searchFields={["gl_account_code", "account_name", "id"]}
+                            searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
                             displayFormat={(item: Record<string, unknown>) => {
                               const id = String(item.id ?? "").trim();
+                              const glName = String(item.gl_name ?? "").trim();
                               const gl = String(item.gl_account_code ?? "").trim();
                               const name = String(item.account_name ?? "").trim();
                               return {
                                 value: id,
-                                label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                                label: [glName, gl, name].filter(Boolean).join(" - "),
                               };
                             }}
                             displayValue={
                               row.account_name
-                                ? `${row.account_name}${
-                                    row.account_code ? ` - ${row.account_code}` : ""
-                                  }`
+                                ? `${row.account_name}${row.account_code ? ` - ${row.account_code}` : ""}`
                                 : row.account_code || undefined
                             }
                             returnOriginalData
@@ -1378,10 +1377,13 @@ function JournalVoucher() {
                               );
                               form.setFieldValue(
                                 `charges.${index}.account_name`,
-                                originalData.account_name !== undefined &&
-                                  originalData.account_name !== null
-                                  ? String(originalData.account_name)
-                                  : "",
+                                [
+                                  String((originalData as any).gl_name ?? "").trim(),
+                                  String((originalData as any).gl_account_code ?? "").trim(),
+                                  String((originalData as any).account_name ?? "").trim(),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" - "),
                               );
                             }}
                             readOnly={isReadOnly}

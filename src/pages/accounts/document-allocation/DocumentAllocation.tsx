@@ -1087,16 +1087,17 @@ export default function DocumentAllocation() {
                     }
                     dropdownZIndex={1100}
                     minSearchLength={1}
-                    searchFields={["gl_account_code", "account_name", "id"]}
+                    searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
                     disabled={isLocked}
                     readOnly={isLocked}
                     displayFormat={(item: Record<string, unknown>) => {
                       const id = String(item.id ?? "").trim();
+                      const glName = String(item.gl_name ?? "").trim();
                       const gl = String(item.gl_account_code ?? "").trim();
                       const name = String(item.account_name ?? "").trim();
                       return {
                         value: id,
-                        label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                        label: [glName, gl, name].filter(Boolean).join(" - "),
                       };
                     }}
                     displayValue={selectedAccount?.account_name ?? ""}

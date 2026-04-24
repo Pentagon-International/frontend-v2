@@ -138,6 +138,17 @@ function clampAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [a, b, c].filter(Boolean).join(" - ");
+}
+
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
@@ -2180,10 +2191,12 @@ export default function PaymentCreate({
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 sl_code?: string;
                                 account_name?: string;
                               };
+                              const glName = orig?.gl_name ?? "";
                               const name = orig?.account_name ?? "";
                               const subledgerCode = orig?.sl_code ?? "";
                               const glAccountCode = orig?.gl_account_code ?? "";
@@ -2208,7 +2221,11 @@ export default function PaymentCreate({
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
-                                name,
+                                formatChartOfAccountsLabel(
+                                  glName,
+                                  glAccountCode,
+                                  name,
+                                ),
                               );
                               form.setFieldValue(
                                 `details.${idx}.currency`,
@@ -2220,18 +2237,22 @@ export default function PaymentCreate({
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 account_name?: string;
                               };
                               return {
                                 value: String(i?.id ?? ""),
-                                label: String(
-                                  `${String(i?.gl_account_code ?? "").trim()} - ${String(i?.account_name ?? "").trim()}`.trim(),
+                                label: formatChartOfAccountsLabel(
+                                  String(i?.gl_name ?? "").trim(),
+                                  String(i?.gl_account_code ?? "").trim(),
+                                  String(i?.account_name ?? "").trim(),
                                 ),
                               };
                             }}
                             searchFields={[
                               "account_name",
+                              "gl_name",
                               "gl_account_code",
                               "sl_code",
                             ]}

@@ -145,6 +145,17 @@ function clampAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [a, b, c].filter(Boolean).join(" - ");
+}
+
 /** Party row: customer_display = label in UI (subledger_name from list / customer_name from search); customer_code = subledger_code in payload */
 type DetailRow = {
   id?: number | null;
@@ -509,6 +520,13 @@ export default function ReceiptCreate({
     document_no?: string;
     status?: string;
   } | null>(null);
+  const [
+    createResponseModalOpened,
+    { open: openCreateResponseModal, close: closeCreateResponseModal },
+  ] = useDisclosure(false);
+  const [createReceiptResponseData, setCreateReceiptResponseData] = useState<
+    unknown | null
+  >(null);
 
   const [reverseReceiptSaveResponse, setReverseReceiptSaveResponse] = useState<{
     id: number;
@@ -1544,18 +1562,10 @@ export default function ReceiptCreate({
             document_no: data.receipt_no ?? "",
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
-          // Merge party and allocation ids from response into form for future updates
-          if (
-            data.parties &&
-            Array.isArray(data.parties) &&
-            data.parties.length === form.values.details.length
-          ) {
-            const updatedDetails = form.values.details.map((d, i) => ({
-              ...d,
-              id: data.parties![i]?.id ?? d.id,
-            }));
-            form.setFieldValue("details", updatedDetails);
-          }
+          // After create, reflect the exact API response (can include extra party rows like TDS)
+          setCreateReceiptResponseData(data);
+          openCreateResponseModal();
+          applyCreatedReceiptToUI(data);
           if (
             data.allocations &&
             Array.isArray(data.allocations) &&
@@ -1585,6 +1595,50 @@ export default function ReceiptCreate({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const applyCreatedReceiptToUI = (created: unknown) => {
+    const data = created as {
+      parties?: Array<{
+        id?: number;
+        subledger_id?: number;
+        subledger_code?: string;
+        subledger_name?: string;
+        account_code?: string;
+        narration?: string;
+        currency_code?: string;
+        roe?: number | string | null;
+        amount?: number | string | null;
+        local_amount?: number | string | null;
+        dr_cr?: "Cr" | "Dr" | string;
+      }>;
+    };
+
+    if (!Array.isArray(data?.parties) || data.parties.length === 0) return;
+
+    const parseNum = (v: unknown): number | null => {
+      if (v == null) return null;
+      if (typeof v === "number") return Number.isFinite(v) ? v : null;
+      const n = parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const details: DetailRow[] = data.parties.map((p) => ({
+      id: p.id ?? null,
+      subledger_id: p.subledger_id != null ? String(p.subledger_id) : null,
+      account_code: String(p.account_code ?? "").trim(),
+      customer_code: String(p.subledger_code ?? "").trim(),
+      customer_display: String(p.subledger_name ?? "").trim(),
+      narration: String(p.narration ?? "").trim(),
+      currency: String(p.currency_code ?? localCurrency).trim(),
+      roe: parseNum(p.roe) ?? 1,
+      amount: parseNum(p.amount),
+      local_amount: parseNum(p.local_amount),
+      dr_cr: p.dr_cr === "Dr" ? "Dr" : "Cr",
+    }));
+
+    setLoadedDetails(details);
+    form.setFieldValue("details", details);
   };
 
   const handlePostReverseReceipt = async () => {
@@ -2205,10 +2259,12 @@ export default function ReceiptCreate({
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 sl_code?: string;
                                 account_name?: string;
                               };
+                              const glName = orig?.gl_name ?? "";
                               const name = orig?.account_name ?? "";
                               const subledgerCode = orig?.sl_code ?? "";
                               const glAccountCode = orig?.gl_account_code ?? "";
@@ -2233,7 +2289,11 @@ export default function ReceiptCreate({
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
-                                name,
+                                formatChartOfAccountsLabel(
+                                  glName,
+                                  glAccountCode,
+                                  name,
+                                ),
                               );
                               form.setFieldValue(
                                 `details.${idx}.currency`,
@@ -2245,20 +2305,21 @@ export default function ReceiptCreate({
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 account_name?: string;
                               };
                               const id = String(i.id ?? "").trim();
                               const gl = String(i.gl_account_code ?? "").trim();
                               const name = String(i.account_name ?? "").trim();
+                              const glName = String(i.gl_name ?? "").trim();
                               return {
                                 value: id,
-                                label: name
-                                  ? `${name}${gl ? ` - ${gl}` : ""}`
-                                  : gl,
+                                label: formatChartOfAccountsLabel(glName, gl, name),
                               };
                             }}
                             searchFields={[
+                              "gl_name",
                               "gl_account_code",
                               "account_name",
                               "id",

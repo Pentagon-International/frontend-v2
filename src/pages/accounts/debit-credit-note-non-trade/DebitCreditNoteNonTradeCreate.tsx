@@ -79,6 +79,17 @@ type LineItem = {
   note: string;
 };
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [a, b, c].filter(Boolean).join(" - ");
+}
+
 const newLineItem = (n: number): LineItem => ({
   id: `line-${Date.now()}-${n}`,
   account_id: "",
@@ -1124,19 +1135,22 @@ export default function DebitCreditNoteNonTradeCreate() {
                       const name = String(
                         orig?.account_name ?? selected?.label ?? "",
                       );
+                      const glName = String((orig as { gl_name?: string })?.gl_name ?? "");
                       const subledgerCode = String(orig?.sl_code ?? "");
                       setLineById(l.id, {
                         account_id: accountId,
                         account_code: code,
-                        account_name: name,
+                        account_name: formatChartOfAccountsLabel(glName, code, name),
                         subledger: subledgerCode || l.subledger,
                       });
                     }}
                     displayFormat={(item) => ({
                       value: String(item.id ?? ""),
-                      label: String(
-                        item.account_name ?? item.name ?? item.id ?? "",
-                      ).trim(),
+                      label: formatChartOfAccountsLabel(
+                        String((item as { gl_name?: string })?.gl_name ?? "").trim(),
+                        String(item.gl_account_code ?? item.account_code ?? "").trim(),
+                        String(item.account_name ?? item.name ?? item.id ?? "").trim(),
+                      ),
                     })}
                     size="xs"
                     disabled={isReadOnly}
