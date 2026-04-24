@@ -848,41 +848,42 @@ export default function ReceiptCreate({
     }
   }, [form.values.currency, localCurrency, userCountryCode]);
 
-  // When party details Local Amount changes: set header Local Amount = sum(party details), header Amount = header Local Amount / header ROE (same idea as party: adj local → party local, party amount = party local/roe)
-  const partyLocalAmountsSnapshot = form.values.details
-    .map((d) => d.local_amount ?? "")
+  // When party details change: header amount = Σ(Cr) − Σ(Dr)
+  // This is important because backend may append extra party rows (ex: TDS) on save.
+  const partyNetSnapshot = form.values.details
+    .map(
+      (d) =>
+        `${d.dr_cr}|${d.amount ?? ""}|${d.local_amount ?? ""}|${d.roe ?? ""}`,
+    )
     .join(";");
   useEffect(() => {
-    const sum = (form.values.details ?? []).reduce(
-      (s, d) =>
-        s +
-        (d.local_amount != null && Number.isFinite(d.local_amount)
-          ? d.local_amount
-          : 0),
-      0,
-    );
-    const headerLocal = clampAmount(sum);
+    const details = form.values.details ?? [];
+    const netAmount = details.reduce((s, d) => {
+      const sign = d.dr_cr === "Dr" ? -1 : 1;
+      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+      return s + sign * amt;
+    }, 0);
+    const headerAmount = clampAmount(netAmount);
     const roeVal = form.values.roe;
-    const derivedHeaderAmount =
-      headerLocal != null &&
+    const headerLocal =
+      headerAmount != null &&
       roeVal != null &&
       Number.isFinite(roeVal) &&
       roeVal !== 0
-        ? clampAmount(headerLocal / roeVal)
+        ? clampAmount(headerAmount * roeVal)
         : null;
+
+    if (form.values.amount !== headerAmount) {
+      form.setFieldValue("amount", headerAmount);
+    }
     if (form.values.local_amount !== headerLocal) {
       form.setFieldValue("local_amount", headerLocal);
     }
-    if (
-      derivedHeaderAmount != null &&
-      form.values.amount !== derivedHeaderAmount
-    ) {
-      form.setFieldValue("amount", derivedHeaderAmount);
-    }
-  }, [partyLocalAmountsSnapshot]);
+  }, [partyNetSnapshot, form.values.roe]);
 
-  // Header: when user changes ROE or Amount, set Local Amount = Amount × ROE (same as party details; header not forced to party sum)
+  // Header: keep local_amount aligned with amount only when no party rows exist
   useEffect(() => {
+    if ((form.values.details ?? []).length > 0) return;
     const amt = form.values.amount;
     const roeVal = form.values.roe;
     const local =
