@@ -1,21 +1,13 @@
 import { useEffect, useMemo, useRef, useState, startTransition, useCallback } from "react";
 import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
-import {
   ActionIcon,
   Button,
-  Card,
   Group,
-  Loader,
-  Select,
   Text,
   TextInput,
+  Select,
   Grid,
   Box,
-  Center,
   Stack,
   Badge,
   Tooltip,
@@ -23,22 +15,44 @@ import {
   ScrollArea,
   Menu,
   UnstyledButton,
+  MantineProvider,
+  Center,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconSearch,
   IconFilter,
   IconPlus,
   IconEdit,
   IconDotsVertical,
   IconX,
+  IconUsers,
+  IconSparkles,
+  IconMessageCircle,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAPICall } from "../../service/getApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
-import { ToastNotification } from "../../components";
+import {
+  ToastNotification,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  DEFAULT_ERP_LIST_THEME,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
+} from "../../components";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -104,6 +118,111 @@ const statusOptions = [
   { label: "Lost", value: "Lost" },
 ];
 
+type LeadVisibleColumns = {
+  sno: boolean;
+  company: boolean;
+  contactPerson: boolean;
+  contactNumber: boolean;
+  email: boolean;
+  location: boolean;
+  status: boolean;
+  assignedTo: boolean;
+  createdBy: boolean;
+  interest: boolean;
+  latestRemark: boolean;
+  createdAt: boolean;
+  updatedAt: boolean;
+};
+
+const DEFAULT_LEAD_VISIBLE_COLUMNS: LeadVisibleColumns = {
+  sno: true,
+  company: true,
+  contactPerson: true,
+  contactNumber: true,
+  email: true,
+  location: true,
+  status: true,
+  assignedTo: true,
+  createdBy: true,
+  interest: true,
+  latestRemark: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+const LEAD_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    fontWeight: 500,
+    color: DEFAULT_ERP_LIST_THEME.muted,
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: DEFAULT_ERP_LIST_THEME.border,
+  },
+  dropdown: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+} as const;
+
+function LeadsStatusPill({ status }: { status: string | undefined | null }) {
+  const s = (status || "").trim() || "—";
+  const cfg =
+    s === "New"
+      ? { label: "New", dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
+      : s === "Contacted"
+        ? { label: "Contacted", dot: "#8b5cf6", bg: "#f5f3ff", color: "#6d28d9" }
+        : s === "Qualified"
+          ? { label: "Qualified", dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
+          : s === "Converted"
+            ? { label: "Converted", dot: "#0d9488", bg: "#ccfbf1", color: "#0f766e" }
+            : s === "Lost"
+              ? { label: "Lost", dot: "#ef4444", bg: "#fef2f2", color: "#b91c1c" }
+              : { label: s, dot: "#94a3b8", bg: "#f1f5f9", color: "#475569" };
+
+  return (
+    <Box
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "2px 10px",
+        borderRadius: 9999,
+        backgroundColor: cfg.bg,
+        color: cfg.color,
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+        fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+      }}
+    >
+      <Box
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: cfg.dot,
+          flexShrink: 0,
+        }}
+      />
+      {cfg.label}
+    </Box>
+  );
+}
+
 function LeadList() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -152,6 +271,9 @@ function LeadList() {
   );
   const [debounced] = useDebouncedValue(searchQuery, 500);
   const [showFilters, setShowFilters] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [visibleColumns, setVisibleColumns] = useState<LeadVisibleColumns>(DEFAULT_LEAD_VISIBLE_COLUMNS);
 
   // Modal state for remark conversation
   const [
@@ -259,7 +381,6 @@ function LeadList() {
   const {
     data: leadData = [],
     isLoading: leadLoading,
-    isFetching: leadFetching,
     refetch: refetchLeads,
   } = useQuery({
     queryKey: ["leads"],
@@ -308,7 +429,6 @@ function LeadList() {
   const {
     data: filteredLeadData = [],
     isLoading: filteredLeadLoading,
-    isFetching: filteredLeadFetching,
     refetch: refetchFilteredLeads,
   } = useQuery({
     queryKey: [
@@ -379,16 +499,6 @@ function LeadList() {
       (filters.status && filters.status.trim() !== "")
     );
   }, []);
-
-  // Loading state - include refreshing state
-  const isLoading =
-    leadLoading ||
-    filteredLeadLoading ||
-    usersLoading;
-  // Use isFetching to show loader while keeping previous data visible (prevents empty state flicker)
-  const isFetching =
-    leadFetching ||
-    filteredLeadFetching;
 
   const applyFilters = async () => {
     try {
@@ -677,7 +787,7 @@ function LeadList() {
   ]);
 
   // Track if we're restoring filters to trigger refetch after state updates
-  const [isRestoringFilters, setIsRestoringFilters] = useState(
+  const [, setIsRestoringFilters] = useState(
     Boolean(location.state?.restoreFilters)
   );
 
@@ -801,23 +911,6 @@ function LeadList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.restoreFilters, navigate, location.pathname]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "New":
-        return "blue";
-      case "Contacted":
-        return "cyan";
-      case "Qualified":
-        return "green";
-      case "Converted":
-        return "teal";
-      case "Lost":
-        return "red";
-      default:
-        return "gray";
-    }
-  };
-
   const getInterestLevelColor = (level: string | undefined) => {
     switch (level) {
       case "High":
@@ -846,753 +939,741 @@ function LeadList() {
     return latest.message || "-";
   };
 
-  const columns = useMemo<MRT_ColumnDef<LeadData>[]>(
+  const leadStats = useMemo(() => {
+    const list = displayData;
+    const inPipeline = list.filter(
+      (l: LeadData) => l.status === "Contacted" || l.status === "Qualified",
+    ).length;
+    return {
+      total: list.length,
+      new: list.filter((l: LeadData) => l.status === "New").length,
+      inPipeline,
+      converted: list.filter((l: LeadData) => l.status === "Converted").length,
+    };
+  }, [displayData]);
+
+  const totalRecords = displayData.length;
+
+  const pagedRows = useMemo(() => {
+    const start = pageIndex * pageSize;
+    return displayData.slice(start, start + pageSize);
+  }, [displayData, pageIndex, pageSize]);
+
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+
+  const { border, muted, fg, primary, headerBg, cardBg, fontSans } = erpTheme;
+
+  const visibleDataColumnCount = useMemo(() => {
+    const v = visibleColumns;
+    let n = 0;
+    if (v.sno) n++;
+    if (v.company) n++;
+    if (v.contactPerson) n++;
+    if (v.contactNumber) n++;
+    if (v.email) n++;
+    if (v.location) n++;
+    if (v.status) n++;
+    if (v.assignedTo) n++;
+    if (v.createdBy) n++;
+    if (v.interest) n++;
+    if (v.latestRemark) n++;
+    if (v.createdAt) n++;
+    if (v.updatedAt) n++;
+    return n + 1;
+  }, [visibleColumns]);
+
+  const columnToggleItems: ERPListColumnToggleItem[] = useMemo(
     () => [
-      {
-        id: "sno",
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-        enableColumnOrdering: false,
-        Cell: ({ row, table }) => {
-          // Calculate S.No based on pagination: (pageIndex * pageSize) + rowIndex + 1
-          const { pageIndex, pageSize } = table.getState().pagination;
-          const sno = pageIndex * pageSize + row.index + 1;
-          return <Text size="sm">{sno}</Text>;
-        },
-      },
-      {
-        accessorKey: "name",
-        header: "Company Name",
-        size: 180,
-        Cell: ({ row }) => (
-          <Text fw={600} size="sm">
-            {row.original.name || "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "contact_person",
-        header: "Contact Person",
-        size: 140,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.contact_person || "-"}</Text>
-        ),
-      },
-      {
-        accessorKey: "contact_number",
-        header: "Contact Number",
-        size: 140,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.contact_number || "-"}</Text>
-        ),
-      },
-      {
-        accessorKey: "email_id",
-        header: "Email",
-        size: 180,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.email_id || "-"}</Text>
-        ),
-      },
-      {
-        accessorKey: "location",
-        header: "Location",
-        size: 180,
-        Cell: ({ row }) => (
-          <Text size="sm">{formatLocation(row.original.location)}</Text>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        size: 120,
-        Cell: ({ row }) => (
-          <Badge size="sm" color={getStatusColor(row.original.status)}>
-            {row.original.status || "-"}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "assigned_to",
-        header: "Assigned To",
-        size: 130,
-        Cell: ({ row }) => (
-          <Text fw={500} size="sm">
-            {row.original.assigned_to || "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "created_by",
-        header: "Created By",
-        size: 120,
-        Cell: ({ row }) => (
-          <Text size="sm">{row.original.created_by || "-"}</Text>
-        ),
-      },
-      {
-        accessorKey: "interest_level",
-        header: "Interest Level",
-        size: 120,
-        Cell: ({ row }) => (
-          <Badge
-            size="sm"
-            color={getInterestLevelColor(row.original.remark?.interest_level)}
-          >
-            {row.original.remark?.interest_level || "-"}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "latest_remark",
-        header: "Latest Remark",
-        size: 150,
-        minSize: 150,
-        maxSize: 150,
-        enableResizing: false,
-        Cell: ({ row }) => {
-          const message = getLatestMessage(row.original.remark);
-          const hasMessages =
-            row.original.remark?.messages &&
-            row.original.remark.messages.length > 0;
-
-          const handleClick = () => {
-            if (hasMessages) {
-              setSelectedLeadForRemark(row.original);
-              openRemarkModal();
-            }
-          };
-
-          return (
-            <Tooltip
-              label={hasMessages ? "Click to view full conversation" : message}
-              maw={400}
-              fw={500}
-              position="top-start"
-              bg="#fff"
-              style={{
-                whiteSpace: "normal",
-                padding: "5px 15px",
-                color: "#3f3f3fff",
-                border: "1px solid #105476",
-                boxShadow: "0 2px 10px rgba(0,0,0, 0.2)",
-                wordBreak: "break-word",
-              }}
-              multiline
-            >
-              <Text
-                size="sm"
-                style={{
-                  cursor: hasMessages ? "pointer" : "default",
-                  color: hasMessages ? "#105476" : "inherit",
-                  textDecoration: hasMessages ? "underline" : "none",
-                }}
-                truncate
-                onClick={handleClick}
-              >
-                {message}
-              </Text>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        accessorKey: "created_at",
-        header: "Created At",
-        size: 140,
-        Cell: ({ row }) => (
-          <Text size="sm">
-            {row.original.created_at
-              ? dayjs(row.original.created_at).format(`${dateFormat} HH:mm`)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "updated_at",
-        header: "Updated At",
-        size: 140,
-        Cell: ({ row }) => (
-          <Text size="sm">
-            {row.original.updated_at
-              ? dayjs(row.original.updated_at).format(`${dateFormat} HH:mm`)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() => {
-                    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                    navigate("/lead-create", {
-                      state: {
-                        leadData: row.original,
-                        returnTo: "/lead",
-                        restoreFilters: {
-                          filters: appliedFilters,
-                          filtersApplied,
-                          fromDashboard: fromDashboardRef.current,
-                        },
-                      },
-                    });
-                  }}
-                >
-                  <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">Edit</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-            </Menu.Dropdown>
-          </Menu>
-        ),
-        size: 80,
-      },
+      { id: "sno", label: "S.No", checked: visibleColumns.sno, onToggle: () => setVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
+      { id: "company", label: "Company name", checked: visibleColumns.company, onToggle: () => setVisibleColumns((p) => ({ ...p, company: !p.company })) },
+      { id: "contactPerson", label: "Contact person", checked: visibleColumns.contactPerson, onToggle: () => setVisibleColumns((p) => ({ ...p, contactPerson: !p.contactPerson })) },
+      { id: "contactNumber", label: "Contact number", checked: visibleColumns.contactNumber, onToggle: () => setVisibleColumns((p) => ({ ...p, contactNumber: !p.contactNumber })) },
+      { id: "email", label: "Email", checked: visibleColumns.email, onToggle: () => setVisibleColumns((p) => ({ ...p, email: !p.email })) },
+      { id: "location", label: "Location", checked: visibleColumns.location, onToggle: () => setVisibleColumns((p) => ({ ...p, location: !p.location })) },
+      { id: "status", label: "Status", checked: visibleColumns.status, onToggle: () => setVisibleColumns((p) => ({ ...p, status: !p.status })) },
+      { id: "assignedTo", label: "Assigned to", checked: visibleColumns.assignedTo, onToggle: () => setVisibleColumns((p) => ({ ...p, assignedTo: !p.assignedTo })) },
+      { id: "createdBy", label: "Created by", checked: visibleColumns.createdBy, onToggle: () => setVisibleColumns((p) => ({ ...p, createdBy: !p.createdBy })) },
+      { id: "interest", label: "Interest level", checked: visibleColumns.interest, onToggle: () => setVisibleColumns((p) => ({ ...p, interest: !p.interest })) },
+      { id: "latestRemark", label: "Latest remark", checked: visibleColumns.latestRemark, onToggle: () => setVisibleColumns((p) => ({ ...p, latestRemark: !p.latestRemark })) },
+      { id: "createdAt", label: "Created at", checked: visibleColumns.createdAt, onToggle: () => setVisibleColumns((p) => ({ ...p, createdAt: !p.createdAt })) },
+      { id: "updatedAt", label: "Updated at", checked: visibleColumns.updatedAt, onToggle: () => setVisibleColumns((p) => ({ ...p, updatedAt: !p.updatedAt })) },
     ],
-    [navigate, appliedFilters, filtersApplied]
+    [visibleColumns],
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    // Use table's built-in loading state - shows loader while keeping previous rows visible
-    state: {
-      isLoading: isFetching,
-    },
-    initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#F8FAFC",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+  useEffect(() => {
+    setPageIndex(0);
+  }, [buildLeadPayload]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(Math.max(0, totalRecords) / pageSize));
+    if (pageIndex > totalPages - 1) {
+      setPageIndex(Math.max(0, totalPages - 1));
+    }
+  }, [totalRecords, pageSize, pageIndex]);
+
+  const isTableDataLoading = (leadLoading || filteredLeadLoading) && displayData.length === 0;
+  const filterApplyBusy = leadLoading || filteredLeadLoading;
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c={"#1E293B"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              Lead List
-            </Text>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => {
-                        // Clear search and update filtersApplied if no other filters exist
-                        setSearchQuery("");
-                        clearStoreSearch(LIST_KEY);
-                        // Check if other filters exist to determine filtersApplied state
-                        const hasOtherFilters =
-                          appliedFilters.assigned_to ||
-                          appliedFilters.status;
-                        if (!hasOtherFilters) {
-                          setFiltersApplied(false);
-                        }
-                        // React Query will auto-refetch when queryKey changes (buildLeadPayload will update)
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontStyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-                onClick={() =>{
-                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                  navigate("/lead-create", {
-                    state: {
-                      returnTo: "/lead",
-                      restoreFilters: {
-                        filters: appliedFilters,
-                        filtersApplied,
-                        fromDashboard: fromDashboardRef.current,
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUsers size={14} color={primary} />}
+                    value={leadStats.total}
+                    label="Total"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconSparkles size={14} color="#2563eb" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#2563eb"
+                    value={leadStats.new}
+                    label="New"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconMessageCircle size={14} color="#7c3aed" />}
+                    iconBackground="#f3e8ff"
+                    iconColor="#7c3aed"
+                    value={leadStats.inPipeline}
+                    label="In pipeline"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCircleCheck size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={leadStats.converted}
+                    label="Converted"
+                  />
+                </>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            clearStoreSearch(LIST_KEY);
+                            const hasOtherFilters =
+                              appliedFilters.assigned_to || appliedFilters.status;
+                            if (!hasOtherFilters) {
+                              setFiltersApplied(false);
+                            }
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
                       },
-                    },
-                  })
-                }
-                }
-              >
-                Create New
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+                    }}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={columnToggleItems}
+                    menuStyles={erpListGeistMenuDropdownStyles}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                    onClick={() => {
+                      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      navigate("/lead-create", {
+                        state: {
+                          returnTo: "/lead",
+                          restoreFilters: {
+                            filters: appliedFilters,
+                            filtersApplied,
+                            fromDashboard: fromDashboardRef.current,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create new
+                  </Button>
+                </>
+              ),
             }}
-          >
-            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#F8FAFC", padding: "8px 8px", borderRadius: "8px" }}>
-              <Text size="sm" fw={600} c="#1E293B" style={{ fontFamily: "Inter", fontSize: "14px" }}>
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
-              {/* Status Filter */}
-              <Grid.Col span={6}>
-                <Select
-                  label="Status"
-                  placeholder="Select Service"
-                  searchable
-                  clearable
-                  size="xs"
-                  data={statusOptions}
-                  nothingFoundMessage="No status found"
-                  disabled={isLoading}
-                  value={filterForm.values.status || ""}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("status", value || null)
-                  }
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Refine by status or assignee; search is in the toolbar",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={filterApplyBusy}
+                  applyDisabled={filterApplyBusy}
+                />
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                      <Select
+                        size="xs"
+                        label="Status"
+                        placeholder="All statuses"
+                        searchable
+                        clearable
+                        data={statusOptions}
+                        nothingFoundMessage="No status found"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.status || ""}
+                        onChange={(value) => filterForm.setFieldValue("status", value || null)}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={LEAD_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                      <Select
+                        key={`assigned-to-${filterForm.values.assigned_to}-${usersLoading}-${userOptions.length}`}
+                        label="Assigned to"
+                        placeholder={usersLoading ? "Loading users…" : "All users"}
+                        searchable
+                        clearable
+                        data={userOptions}
+                        nothingFoundMessage={usersLoading ? "Loading users…" : "No users found"}
+                        disabled={filterApplyBusy || usersLoading}
+                        value={filterForm.values.assigned_to || ""}
+                        onChange={(value) => filterForm.setFieldValue("assigned_to", value || null)}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={LEAD_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                </Grid>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={totalRecords}
+                  pageIndex={pageIndex}
+                  pageSize={pageSize}
+                  onPageIndexChange={setPageIndex}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={["10", "15", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
                   }}
                 />
-              </Grid.Col>
-
-              {/* Assigned To Filter */}
-              <Grid.Col span={6}>
-                <Select
-                  key={`assigned-to-${filterForm.values.assigned_to}-${usersLoading}-${userOptions.length}`}
-                  label="Assigned To"
-                  placeholder={
-                    usersLoading
-                      ? "Loading users..."
-                      : "Select Service"
-                  }
-                  searchable
-                  clearable
-                  size="xs"
-                  data={userOptions}
-                  nothingFoundMessage={
-                    usersLoading
-                      ? "Loading users..."
-                      : "No users found"
-                  }
-                  disabled={usersLoading}
-                  value={filterForm.values.assigned_to || ""}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("assigned_to", value || null)
-                  }
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
+              ),
+              children: isTableDataLoading ? (
+                <ERPListTableLoading theme={erpTheme} message="Loading leads…" />
+              ) : (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 14,
+                    backgroundColor: cardBg,
+                    fontFamily: fontSans,
                   }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#1E293B",
-                  },
-                }}
-              >
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {/* Show full-screen loader when loading and no data available */}
-        {/* Loader should show when: */}
-        {/* 1. Initial load (isLoading) and no data exists */}
-        {/* 2. Fetching (isFetching) and we don't have data yet (check if data is undefined, not just empty) */}
-        {/* Use table's built-in loading state for refetches to keep previous data visible */}
-        {(isLoading || isFetching) ? (
-          <Center py="xl" style={{ flex: 1 }}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                Loading leads...
-              </Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            {/* Table's built-in loading state handles display during refetches - placeholderData keeps previous rows visible */}
-            <MantineReactTable
-              key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-              table={table}
-            />
-
-            {/* Custom Pagination Bar */}
-            <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              pt="sm"
-              pl="sm"
-              pr="xl"
-              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              wrap="nowrap"
-              mt="sm"
-            >
-              {/* Rows per page and range */}
-              <Group gap="sm" align="center" wrap="nowrap">
-                <Text size="sm" c="dimmed">
-                  Rows per page
-                </Text>
-                <Select
-                  size="xs"
-                  data={["10", "25", "50"]}
-                  value={String(table.getState().pagination.pageSize)}
-                  onChange={(val) => {
-                    if (!val) return;
-                    table.setPageSize(Number(val));
-                    table.setPageIndex(0);
-                  }}
-                  w={110}
-                  styles={{ input: { fontSize: 12, height: 30 } }}
-                />
-                <Text size="sm" c="dimmed">
-                  {(() => {
-                    const { pageIndex, pageSize } = table.getState().pagination;
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    if (total === 0) return "0–0 of 0";
-                    const start = pageIndex * pageSize + 1;
-                    const end = Math.min((pageIndex + 1) * pageSize, total);
-                    return `${start}–${end} of ${total}`;
-                  })()}
-                </Text>
-              </Group>
-
-              {/* Page controls */}
-              <Group gap="xs" align="center" wrap="nowrap">
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    table.setPageIndex(
-                      Math.max(0, table.getState().pagination.pageIndex - 1)
-                    )
-                  }
-                  disabled={table.getState().pagination.pageIndex === 0}
                 >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {table.getState().pagination.pageIndex + 1}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of{" "}
-                  {Math.max(
-                    1,
-                    Math.ceil(
-                      (table.getPrePaginationRowModel().rows.length || 0) /
-                        table.getState().pagination.pageSize
-                    )
-                  )}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    table.setPageIndex(
-                      Math.min(
-                        totalPages - 1,
-                        table.getState().pagination.pageIndex + 1
-                      )
-                    );
-                  }}
-                  disabled={(() => {
-                    const total =
-                      table.getPrePaginationRowModel().rows.length || 0;
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(total / table.getState().pagination.pageSize)
-                    );
-                    return (
-                      table.getState().pagination.pageIndex >= totalPages - 1
-                    );
-                  })()}
-                >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
-            </Group>
-          </>
-        )}
-      </Card>
+                  <thead>
+                    <tr>
+                      {visibleColumns.sno && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          S.No
+                        </th>
+                      )}
+                      {visibleColumns.company && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Company
+                        </th>
+                      )}
+                      {visibleColumns.contactPerson && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Contact person
+                        </th>
+                      )}
+                      {visibleColumns.contactNumber && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Contact number
+                        </th>
+                      )}
+                      {visibleColumns.email && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Email
+                        </th>
+                      )}
+                      {visibleColumns.location && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Location
+                        </th>
+                      )}
+                      {visibleColumns.status && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Status
+                        </th>
+                      )}
+                      {visibleColumns.assignedTo && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Assigned to
+                        </th>
+                      )}
+                      {visibleColumns.createdBy && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Created by
+                        </th>
+                      )}
+                      {visibleColumns.interest && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Interest
+                        </th>
+                      )}
+                      {visibleColumns.latestRemark && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Latest remark
+                        </th>
+                      )}
+                      {visibleColumns.createdAt && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Created at
+                        </th>
+                      )}
+                      {visibleColumns.updatedAt && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Updated at
+                        </th>
+                      )}
+                      <th
+                        style={{
+                          width: 48,
+                          backgroundColor: headerBg,
+                          borderBottom: `1px solid ${border}`,
+                        }}
+                      />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={visibleDataColumnCount} style={{ padding: 60, textAlign: "center" }}>
+                          <Stack align="center" gap="md">
+                            <Box
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                backgroundColor: "#f1f5f9",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconUsers size={24} color={muted} />
+                            </Box>
+                            <Box>
+                              <Text fw={500} c={fg} style={{ fontFamily: fontSans }}>
+                                No leads found
+                              </Text>
+                              <Text size="sm" c={muted} mt={4} style={{ fontFamily: fontSans }}>
+                                Try adjusting your search or filters
+                              </Text>
+                            </Box>
+                          </Stack>
+                        </td>
+                      </tr>
+                    ) : (
+                      pagedRows.map((row: LeadData, rowIdx: number) => {
+                        const sno = pageIndex * pageSize + rowIdx + 1;
+                        const remarkMessage = getLatestMessage(row.remark);
+                        const hasMessages = Boolean(
+                          row.remark?.messages && row.remark.messages.length > 0,
+                        );
+                        return (
+                          <tr
+                            key={row.id}
+                            style={{
+                              borderBottom: `1px solid ${border}`,
+                              transition: "background 0.12s",
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc";
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "";
+                            }}
+                          >
+                            {visibleColumns.sno && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {sno}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.company && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {row.name || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.contactPerson && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.contact_person || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.contactNumber && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.contact_number || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.email && (
+                              <td style={{ padding: "10px 14px", color: muted, maxWidth: 220 }}>
+                                <Text size="sm" lineClamp={1} style={{ fontFamily: fontSans }}>
+                                  {row.email_id || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.location && (
+                              <td style={{ padding: "10px 14px", color: muted, maxWidth: 200 }}>
+                                <Tooltip
+                                  label={formatLocation(row.location)}
+                                  withArrow
+                                  styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+                                >
+                                  <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default", fontFamily: fontSans }}>
+                                    {formatLocation(row.location)}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
+                            {visibleColumns.status && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <LeadsStatusPill status={row.status} />
+                              </td>
+                            )}
+                            {visibleColumns.assignedTo && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text fw={500} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {row.assigned_to || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.createdBy && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.created_by || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.interest && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Badge size="sm" color={getInterestLevelColor(row.remark?.interest_level)}>
+                                  {row.remark?.interest_level || "—"}
+                                </Badge>
+                              </td>
+                            )}
+                            {visibleColumns.latestRemark && (
+                              <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                                <Tooltip
+                                  label={hasMessages ? "Click to view full conversation" : remarkMessage}
+                                  maw={400}
+                                  withArrow
+                                  multiline
+                                  styles={{ tooltip: { fontFamily: fontSans, fontSize: 12, whiteSpace: "normal" } }}
+                                >
+                                  <Text
+                                    size="sm"
+                                    lineClamp={2}
+                                    style={{
+                                      cursor: hasMessages ? "pointer" : "default",
+                                      color: hasMessages ? primary : fg,
+                                      textDecoration: hasMessages ? "underline" : "none",
+                                      fontFamily: fontSans,
+                                    }}
+                                    onClick={() => {
+                                      if (hasMessages) {
+                                        setSelectedLeadForRemark(row);
+                                        openRemarkModal();
+                                      }
+                                    }}
+                                  >
+                                    {remarkMessage}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
+                            {visibleColumns.createdAt && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.created_at
+                                    ? dayjs(row.created_at).format(`${dateFormat} HH:mm`)
+                                    : "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.updatedAt && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.updated_at
+                                    ? dayjs(row.updated_at).format(`${dateFormat} HH:mm`)
+                                    : "—"}
+                                </Text>
+                              </td>
+                            )}
+                            <td
+                              style={{
+                                padding: "10px 8px",
+                                position: "sticky",
+                                right: 0,
+                                backgroundColor: cardBg,
+                                borderLeft: `1px solid ${border}`,
+                                boxShadow: "-4px 0 8px -4px rgba(15, 23, 42, 0.08)",
+                                zIndex: 2,
+                              }}
+                            >
+                              <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+                                <Menu.Target>
+                                  <ActionIcon variant="subtle" color="gray">
+                                    <IconDotsVertical size={16} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                  <Box px={10} py={5}>
+                                    <UnstyledButton
+                                      onClick={() => {
+                                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                                        navigate("/lead-create", {
+                                          state: {
+                                            leadData: row,
+                                            returnTo: "/lead",
+                                            restoreFilters: {
+                                              filters: appliedFilters,
+                                              filtersApplied,
+                                              fromDashboard: fromDashboardRef.current,
+                                            },
+                                          },
+                                        });
+                                      }}
+                                    >
+                                      <Group gap="sm">
+                                        <IconEdit size={16} style={{ color: primary }} />
+                                        <Text size="sm" style={{ fontFamily: fontSans }}>
+                                          Edit
+                                        </Text>
+                                      </Group>
+                                    </UnstyledButton>
+                                  </Box>
+                                </Menu.Dropdown>
+                              </Menu>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
 
       {/* Conversation Modal */}
       <Modal

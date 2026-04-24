@@ -13,6 +13,11 @@ export interface ERPListTableCardProps {
   theme?: ErpListTheme;
   /** Outer vertical padding for the card block (default matches Air Export). */
   mainPy?: "xs" | "sm" | "md" | "lg";
+  /**
+   * When `true`, no horizontal `px` on the outer `main` wrapper (e.g. embedded in dashboard panels).
+   * @default false
+   */
+  flush?: boolean;
 }
 
 /**
@@ -24,9 +29,15 @@ export function ERPListTableCard({
   footer,
   theme = DEFAULT_ERP_LIST_THEME,
   mainPy = "md",
+  flush = false,
 }: ERPListTableCardProps) {
   return (
-    <Box component="main" py={mainPy} px={ERP_LIST_INNER_PAD_X} style={{ flexShrink: 0 }}>
+    <Box
+      component="main"
+      py={mainPy}
+      px={flush ? 0 : ERP_LIST_INNER_PAD_X}
+      style={{ flexShrink: 0 }}
+    >
       <Paper
         withBorder
         radius="xl"

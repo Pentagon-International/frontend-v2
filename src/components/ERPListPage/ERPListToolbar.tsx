@@ -15,6 +15,12 @@ export interface ERPListToolbarProps {
   /** Right cluster — use `marginLeft: auto` on a wrapping Flex for toolbar actions. */
   actions: ReactNode;
   theme?: ErpListTheme;
+  /**
+   * When `false` (e.g. dashboard tiles), horizontal bleed is off and inner padding is removed
+   * so the strip lines up with a parent `padding` (see `layout="embedded"` on `ERPListScreen`).
+   * @default true
+   */
+  bleed?: boolean;
 }
 
 /**
@@ -26,16 +32,17 @@ export function ERPListToolbar({
   secondary,
   actions,
   theme = DEFAULT_ERP_LIST_THEME,
+  bleed = true,
 }: ERPListToolbarProps) {
   return (
     <Box
-      mx={ERP_LIST_FULL_BLEED_MX}
+      mx={bleed ? ERP_LIST_FULL_BLEED_MX : 0}
       style={{
         backgroundColor: theme.cardBg,
         borderBottom: `1px solid ${theme.border}`,
       }}
     >
-      <Box px={ERP_LIST_INNER_PAD_X} py={12}>
+      <Box px={bleed ? ERP_LIST_INNER_PAD_X : 0} py={12}>
         <Flex
           align="center"
           gap={24}

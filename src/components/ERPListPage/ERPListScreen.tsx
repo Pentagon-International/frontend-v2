@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Box } from "@mantine/core";
 import { ERPListFilterPanel } from "./ERPListFilterPanel";
 import type { ERPListFilterPanelProps } from "./ERPListFilterPanel";
 import { ERPListPageRoot } from "./ERPListPageRoot";
@@ -31,7 +32,12 @@ export type ERPListScreenTableConfig = {
 
 export interface ERPListScreenProps {
   theme?: ErpListTheme;
-  /** Passed to `ERPListPageRoot` (page background column). */
+  /**
+   * `page` — full list route (bleed, `100vh` column background; default).
+   * `embedded` — dashboard / inset panels: no full-bleed, no `minHeight: 100vh`, no outer horizontal padding on table.
+   */
+  layout?: "page" | "embedded";
+  /** Passed to the outer wrapper (`ERPListPageRoot` or `embedded` column). */
   className?: string;
   toolbar: ERPListScreenToolbarConfig;
   /**
@@ -57,20 +63,24 @@ export interface ERPListScreenProps {
  */
 export function ERPListScreen({
   theme = DEFAULT_ERP_LIST_THEME,
+  layout = "page",
   className,
   toolbar,
   filters,
   table,
 }: ERPListScreenProps) {
   const showFilters = Boolean(filters?.opened);
+  const embedded = layout === "embedded";
+  const bleed = !embedded;
 
-  return (
-    <ERPListPageRoot theme={theme} className={className}>
+  const content = (
+    <>
       <ERPListToolbar
         theme={theme}
         leading={toolbar.leading}
         secondary={toolbar.secondary}
         actions={toolbar.actions}
+        bleed={bleed}
       />
       {showFilters && filters ? (
         <ERPListFilterPanel
@@ -89,10 +99,29 @@ export function ERPListScreen({
         theme={theme}
         selectionBar={table.selectionBar}
         footer={table.footer}
-        mainPy={table.mainPy}
+        mainPy={table.mainPy ?? (embedded ? "xs" : "md")}
+        flush={embedded}
       >
         {table.children}
       </ERPListTableCard>
-    </ERPListPageRoot>
+    </>
   );
+
+  if (embedded) {
+    return (
+      <Box
+        className={className}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {content}
+      </Box>
+    );
+  }
+
+  return <ERPListPageRoot theme={theme} className={className}>{content}</ERPListPageRoot>;
 }

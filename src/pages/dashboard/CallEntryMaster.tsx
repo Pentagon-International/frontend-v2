@@ -1,51 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
-import {
   ActionIcon,
   Button,
-  Card,
   Group,
-  Loader,
   Select,
   Text,
   TextInput,
   Grid,
   Box,
-  Divider,
-  Flex,
-  Center,
   Stack,
   Menu,
   UnstyledButton,
-  Badge,
   Tooltip,
   Modal,
   Textarea,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconCalendarTime,
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconFilterOff,
   IconPlus,
   IconSearch,
   IconCalendar,
   IconFilter,
-  IconDots,
   IconEdit,
-  IconTrash,
   IconDotsVertical,
   IconX,
   IconArrowLeft,
   IconFileText,
+  IconPhone,
+  IconList,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { DateInput } from "@mantine/dates";
 import dayjs from "dayjs";
 import { getAPICall } from "../../service/getApiCall";
 import { deleteApiCall } from "../../service/deleteApiCall";
@@ -57,8 +45,23 @@ import {
   SearchableSelect,
   DateRangeInput,
   SingleDateInput,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  DEFAULT_ERP_LIST_THEME,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
 } from "../../components";
-import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { searchAPI } from "../../service/searchApi";
 import { apiCallProtected } from "../../api/axios";
@@ -67,17 +70,118 @@ import { useForm } from "@mantine/form";
 import { useListFilterStore } from "../../store/listFilterStore";
 import useDateFormat from "../../hooks/useDateFormat";
 
-type CompanyData = {
+/** Call entry row as returned from filter/list APIs (flat row for the table). */
+type CallEntryTableRow = {
   id: number;
-  company_code: string;
-  company_name: string;
-  website: string;
-  reporting_name: string;
-  status: string;
-  city: string;
-  address: string;
-  group_name: string;
+  customer_code?: string;
+  customer_name?: string;
+  city?: string;
+  address?: string;
+  created_by_name?: string;
+  area?: string;
+  call_date?: string;
+  call_mode_name?: string;
+  call_mode_id?: string | number;
+  followup_date?: string;
+  followup_id?: string | number;
+  status?: string;
+  remark?: string;
+  call_summary?: string;
+  expected_profit?: string | number;
+  latitude?: string;
+  longitude?: string;
 };
+
+type CallEntryVisibleColumns = {
+  sno: boolean;
+  customerName: boolean;
+  customerLocation: boolean;
+  salesPerson: boolean;
+  callEntryLocation: boolean;
+  callDate: boolean;
+  modeOfCall: boolean;
+  followupDates: boolean;
+  status: boolean;
+  remark: boolean;
+};
+
+const DEFAULT_CALL_ENTRY_VISIBLE_COLUMNS: CallEntryVisibleColumns = {
+  sno: true,
+  customerName: true,
+  customerLocation: true,
+  salesPerson: true,
+  callEntryLocation: true,
+  callDate: true,
+  modeOfCall: true,
+  followupDates: true,
+  status: true,
+  remark: true,
+};
+
+const CALL_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    fontWeight: 500,
+    color: DEFAULT_ERP_LIST_THEME.muted,
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: DEFAULT_ERP_LIST_THEME.border,
+  },
+  dropdown: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+} as const;
+
+function CallEntryStatusPill({ status }: { status: string | undefined | null }) {
+  const closed = String(status || "").toUpperCase() === "CLOSE";
+  const label = status || (closed ? "CLOSE" : "ACTIVE");
+  const cfg = closed
+    ? { label, dot: "#ef4444", bg: "#fef2f2", color: "#b91c1c" }
+    : { label, dot: "#105476", bg: "#e0f2fe", color: "#105476" };
+
+  return (
+    <Box
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "2px 10px",
+        borderRadius: 9999,
+        backgroundColor: cfg.bg,
+        color: cfg.color,
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+        fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+      }}
+    >
+      <Box
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: cfg.dot,
+          flexShrink: 0,
+        }}
+      />
+      {cfg.label}
+    </Box>
+  );
+}
 
 type FilterState = {
   customer: string | null;
@@ -176,14 +280,17 @@ function CallEntry() {
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<CallEntryVisibleColumns>(
+    DEFAULT_CALL_ENTRY_VISIBLE_COLUMNS
+  );
   const [filtersApplied, setFiltersApplied] = useState(false);
   const prevSearchRef = useRef<string>(searchQuery);
   const [isClosingCallEntry, setIsClosingCallEntry] = useState(false);
   const [closeModalOpened, { open: openCloseModal, close: closeCloseModal }] =
     useDisclosure(false);
-  const [selectedCallEntryForClose, setSelectedCallEntryForClose] = useState<
-    any | null
-  >(null);
+  const [selectedCallEntryForClose, setSelectedCallEntryForClose] = useState<CallEntryTableRow | null>(
+    null
+  );
   const [remark, setRemark] = useState<string>("");
   const [openedMenuRowId, setOpenedMenuRowId] = useState<number | null>(null);
   const hasRestoredFromStore = useRef(false);
@@ -1178,12 +1285,12 @@ function CallEntry() {
     }
   };
 
-  const handleCloseCallEntry = (callEntry: any) => {
+  const handleCloseCallEntry = useCallback((callEntry: CallEntryTableRow) => {
     setSelectedCallEntryForClose(callEntry);
     setRemark("");
-    setOpenedMenuRowId(null); // Close the menu when opening the modal
+    setOpenedMenuRowId(null);
     openCloseModal();
-  };
+  }, [openCloseModal]);
 
   const handleCloseCallEntryConfirm = async () => {
     if (!remark.trim()) {
@@ -1251,135 +1358,77 @@ function CallEntry() {
     }
   };
 
-  const columns = useMemo<MRT_ColumnDef<CompanyData>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 150,
-      },
-      {
-        accessorKey: "city",
-        header: "Customer Location",
-        size: 150,
-        Cell: ({ row }) => {
-          const city = row.original.city;
-          const address = row.original.address;
-
-          return (
-            <Tooltip
-              label={address || "No Address"}
-              maw={400}
-              fw={500}
-              position="top-start"
-              bg="#fff"
-              style={{
-                whiteSpace: "normal",
-                padding: "5px 15px",
-                color: "#3f3f3fff",
-                border: "1px solid #105476",
-                boxShadow: "0 2px 10px rgba(0,0,0, 0.2)",
-                wordBreak: "break-word",
+  const renderRowActions = useCallback(
+    (row: CallEntryTableRow) => (
+      <Menu
+        withinPortal
+        position="bottom-end"
+        shadow="sm"
+        opened={openedMenuRowId === row.id}
+        onChange={(opened) => setOpenedMenuRowId(opened ? row.id : null)}
+      >
+        <Menu.Target>
+          <ActionIcon variant="subtle" color="gray">
+            <IconDotsVertical size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Box px={10} py={5}>
+            <UnstyledButton
+              onClick={() => {
+                const currentFilterState = {
+                  filters: {
+                    customer: appliedFilters.customer,
+                    call_date: appliedFilters.call_date,
+                    call_mode: appliedFilters.call_mode,
+                    followup_date: appliedFilters.followup_date,
+                    status: appliedFilters.status,
+                    sales_person: appliedFilters.sales_person,
+                    city: appliedFilters.city,
+                    area: appliedFilters.area,
+                  },
+                  displayValues: { customer: customerDisplayValue },
+                  filtersApplied,
+                  fromDate,
+                  toDate,
+                  fromDashboard: fromDashboardRef.current,
+                };
+                useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                navigate("/enquiry-create", {
+                  state: {
+                    actionType: "createEnquiry",
+                    customer_code: row.customer_code,
+                    customer_code_read: row.customer_code,
+                    customer_name: row.customer_name,
+                    call_entry_id: row.id,
+                    preserveFilters: currentFilterState,
+                  },
+                });
               }}
-              multiline
+              disabled={row.status === "CLOSE"}
+              style={{
+                cursor: row.status === "CLOSE" ? "not-allowed" : "pointer",
+                opacity: row.status === "CLOSE" ? 0.5 : 1,
+              }}
             >
-              <Text size="xs" style={{ cursor: "pointer" }}>
-                {city || "-"}
-              </Text>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        accessorKey: "created_by_name",
-        header: "Sales Person",
-        size: 100,
-      },
-      {
-        accessorKey: "area",
-        header: "Call Entry Location",
-        size: 150,
-      },
-      {
-        accessorKey: "call_date",
-        header: "Call Date",
-        size: 100,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.call_date
-              ? dayjs(row.original.call_date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "call_mode_name",
-        header: "Mode of Call",
-        size: 100,
-      },
-      {
-        accessorKey: "followup_date",
-        header: "Follow up Dates",
-        size: 120,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.followup_date
-              ? dayjs(row.original.followup_date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        size: 110,
-        Cell: ({ row }) => (
-          <Badge
-            size="sm"
-            bg={row.original.status === "CLOSE" ? "#dc3545" : "#105476"}
-          >
-            {row.original.status || "ACTIVE"}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "remark",
-        header: "Remark",
-        size: 120,
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 80,
-        Cell: ({ row }) => (
-          <Menu
-            withinPortal
-            position="bottom-end"
-            shadow="sm"
-            opened={openedMenuRowId === row.original.id}
-            onChange={(opened) =>
-              setOpenedMenuRowId(opened ? row.original.id : null)
-            }
-          >
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
+              <Group gap="sm">
+                <IconFileText size={16} style={{ color: "#105476" }} />
+                <Text
+                  size="sm"
+                  c={row.status === "CLOSE" ? "dimmed" : ""}
+                  style={{ fontFamily: DEFAULT_ERP_LIST_THEME.fontSans }}
+                >
+                  Create Enquiry
+                </Text>
+              </Group>
+            </UnstyledButton>
+          </Box>
+          {!fromDashboardRef.current && (
+            <>
+              <Menu.Divider />
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
-                    // Preserve current filter state when navigating to create enquiry
                     const currentFilterState = {
                       filters: {
                         customer: appliedFilters.customer,
@@ -1391,811 +1440,820 @@ function CallEntry() {
                         city: appliedFilters.city,
                         area: appliedFilters.area,
                       },
-                      displayValues: {
-                        customer: customerDisplayValue,
-                      },
+                      displayValues: { customer: customerDisplayValue },
                       filtersApplied,
                       fromDate,
                       toDate,
                       fromDashboard: fromDashboardRef.current,
                     };
                     useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                    navigate("/enquiry-create", {
-                      state: {
-                        actionType: "createEnquiry",
-                        customer_code: row.original.customer_code,
-                        customer_code_read: row.original.customer_code,
-                        customer_name: row.original.customer_name,
-                        call_entry_id: row.original.id,
-                        preserveFilters: currentFilterState,
-                      },
+                    navigate(`/call-entry-create/${row.id}`, {
+                      state: { ...row, actionType: "edit", preserveFilters: currentFilterState },
                     });
                   }}
-                  disabled={row.original.status === "CLOSE"}
+                  disabled={row.status === "CLOSE"}
                   style={{
-                    cursor:
-                      row.original.status === "CLOSE"
-                        ? "not-allowed"
-                        : "pointer",
-                    opacity: row.original.status === "CLOSE" ? 0.5 : 1,
+                    cursor: row.status === "CLOSE" ? "not-allowed" : "pointer",
+                    opacity: row.status === "CLOSE" ? 0.5 : 1,
                   }}
                 >
-                  <Group gap={"sm"}>
-                    <IconFileText size={16} style={{ color: "#105476" }} />
+                  <Group gap="sm">
+                    <IconEdit size={16} style={{ color: "#105476" }} />
                     <Text
                       size="sm"
-                      c={row.original.status === "CLOSE" ? "dimmed" : ""}
-                      style={{ fontFamily: "Inter, sans-serif" }}
+                      c={row.status === "CLOSE" ? "dimmed" : ""}
+                      style={{ fontFamily: DEFAULT_ERP_LIST_THEME.fontSans }}
                     >
-                      Create Enquiry
+                      Edit
                     </Text>
                   </Group>
                 </UnstyledButton>
               </Box>
-              {!fromDashboardRef.current && (
-                <>
-                  <Menu.Divider />
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        // Preserve current filter state when navigating to edit
-                        const currentFilterState = {
-                          filters: {
-                            customer: appliedFilters.customer,
-                            call_date: appliedFilters.call_date,
-                            call_mode: appliedFilters.call_mode,
-                            followup_date: appliedFilters.followup_date,
-                            status: appliedFilters.status,
-                            sales_person: appliedFilters.sales_person,
-                            city: appliedFilters.city,
-                            area: appliedFilters.area,
-                          },
-                          displayValues: {
-                            customer: customerDisplayValue,
-                          },
-                          filtersApplied,
-                          fromDate,
-                          toDate,
-                          fromDashboard: fromDashboardRef.current,
-                        };
-                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                        navigate(`/call-entry-create/${row.original.id}`, {
-                          state: {
-                            ...row.original,
-                            actionType: "edit",
-                            preserveFilters: currentFilterState,
-                          },
-                        });
-                      }}
-                      disabled={row.original.status === "CLOSE"}
-                      style={{
-                        cursor:
-                          row.original.status === "CLOSE"
-                            ? "not-allowed"
-                            : "pointer",
-                        opacity: row.original.status === "CLOSE" ? 0.5 : 1,
-                      }}
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text
-                          size="sm"
-                          c={row.original.status === "CLOSE" ? "dimmed" : ""}
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                  <Menu.Divider />
-                </>
-              )}
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() => handleCloseCallEntry(row.original)}
-                  disabled={row.original.status === "CLOSE"}
-                  style={{
-                    cursor:
-                      row.original.status === "CLOSE"
-                        ? "not-allowed"
-                        : "pointer",
-                    opacity: row.original.status === "CLOSE" ? 0.5 : 1,
-                  }}
+              <Menu.Divider />
+            </>
+          )}
+          <Box px={10} py={5}>
+            <UnstyledButton
+              onClick={() => handleCloseCallEntry(row)}
+              disabled={row.status === "CLOSE"}
+              style={{
+                cursor: row.status === "CLOSE" ? "not-allowed" : "pointer",
+                opacity: row.status === "CLOSE" ? 0.5 : 1,
+              }}
+            >
+              <Group gap="sm">
+                <IconX size={16} style={{ color: "#dc3545" }} />
+                <Text
+                  size="sm"
+                  c={row.status === "CLOSE" ? "dimmed" : ""}
+                  style={{ fontFamily: DEFAULT_ERP_LIST_THEME.fontSans }}
                 >
-                  <Group gap={"sm"}>
-                    <IconX size={16} style={{ color: "#dc3545" }} />
-                    <Text
-                      size="sm"
-                      c={row.original.status === "CLOSE" ? "dimmed" : ""}
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      Close Call
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              {/* <Menu.Divider />
-              <Box px={10} py={5}>
-                <UnstyledButton onClick={() => handleDelete(row.original.id)}>
-                  <Group gap={"sm"}>
-                    <IconTrash size={16} style={{ color: "red" }} />
-                    <Text size="sm" c="red">
-                      Delete
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box> */}
-            </Menu.Dropdown>
-          </Menu>
-        ),
-      },
-    ],
+                  Close Call
+                </Text>
+              </Group>
+            </UnstyledButton>
+          </Box>
+        </Menu.Dropdown>
+      </Menu>
+    ),
     [
       navigate,
-      handleDelete,
-      handleCloseCallEntry,
       appliedFilters,
       filtersApplied,
       fromDate,
       toDate,
+      customerDisplayValue,
       openedMenuRowId,
-    ]
+      handleCloseCallEntry,
+    ],
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "30px",
-          zIndex: 2,
-          borderLeft: "1px solid #F3F3F3",
-          boxShadow: "1px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#334155",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "80px",
-          zIndex: 2,
-          backgroundColor: "#F8FAFC",
-          boxShadow: "0px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#1E293B",
-          backgroundColor: "#F8FAFC",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+  const callEntryStats = useMemo(() => {
+    const rows = displayData as CallEntryTableRow[];
+    const activeOnPage = rows.filter((r) => r.status !== "CLOSE").length;
+    const closedOnPage = rows.filter((r) => r.status === "CLOSE").length;
+    return {
+      total: totalRecords,
+      onPage: rows.length,
+      activeOnPage,
+      closedOnPage,
+    };
+  }, [displayData, totalRecords]);
+
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, muted, fg, primary, headerBg, cardBg, fontSans } = erpTheme;
+
+  const visibleDataColumnCount = useMemo(() => {
+    const v = visibleColumns;
+    let n = 0;
+    if (v.sno) n++;
+    if (v.customerName) n++;
+    if (v.customerLocation) n++;
+    if (v.salesPerson) n++;
+    if (v.callEntryLocation) n++;
+    if (v.callDate) n++;
+    if (v.modeOfCall) n++;
+    if (v.followupDates) n++;
+    if (v.status) n++;
+    if (v.remark) n++;
+    return n + 1;
+  }, [visibleColumns]);
+
+  const columnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () => [
+      { id: "sno", label: "S.No", checked: visibleColumns.sno, onToggle: () => setVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
+      { id: "customerName", label: "Customer name", checked: visibleColumns.customerName, onToggle: () => setVisibleColumns((p) => ({ ...p, customerName: !p.customerName })) },
+      { id: "customerLocation", label: "Customer location", checked: visibleColumns.customerLocation, onToggle: () => setVisibleColumns((p) => ({ ...p, customerLocation: !p.customerLocation })) },
+      { id: "salesPerson", label: "Sales person", checked: visibleColumns.salesPerson, onToggle: () => setVisibleColumns((p) => ({ ...p, salesPerson: !p.salesPerson })) },
+      { id: "callEntryLocation", label: "Call entry location", checked: visibleColumns.callEntryLocation, onToggle: () => setVisibleColumns((p) => ({ ...p, callEntryLocation: !p.callEntryLocation })) },
+      { id: "callDate", label: "Call date", checked: visibleColumns.callDate, onToggle: () => setVisibleColumns((p) => ({ ...p, callDate: !p.callDate })) },
+      { id: "modeOfCall", label: "Mode of call", checked: visibleColumns.modeOfCall, onToggle: () => setVisibleColumns((p) => ({ ...p, modeOfCall: !p.modeOfCall })) },
+      { id: "followupDates", label: "Follow-up dates", checked: visibleColumns.followupDates, onToggle: () => setVisibleColumns((p) => ({ ...p, followupDates: !p.followupDates })) },
+      { id: "status", label: "Status", checked: visibleColumns.status, onToggle: () => setVisibleColumns((p) => ({ ...p, status: !p.status })) },
+      { id: "remark", label: "Remark", checked: visibleColumns.remark, onToggle: () => setVisibleColumns((p) => ({ ...p, remark: !p.remark })) },
+    ],
+    [visibleColumns],
+  );
+
+  const filterApplyBusy = callEntryLoading || filteredCallEntryLoading;
+  const isTableDataLoading = displayData.length === 0 && isLoading;
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box mb="md">
-          <Group justify="space-between" align="center" >
-            <Text
-              size="md"
-              fw={600}
-              c={"#1E293B"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              Call Entry List
-            </Text>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => {
-                        setSearchQuery("");
-                        // Clear search will trigger API via debouncedSearch useEffect
-                        // Store will be updated when debouncedSearch changes
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters
-                      ? "1px solid #105476"
-                      : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              <ActionIcon
-                variant="outline"
-                size={36}
-                color="gray"
-                onClick={() => {
-                  const currentFilterState = {
-                    filters: {
-                      customer: appliedFilters.customer,
-                      call_date: appliedFilters.call_date,
-                      call_mode: appliedFilters.call_mode,
-                      followup_date: appliedFilters.followup_date,
-                      status: appliedFilters.status,
-                      city: appliedFilters.city,
-                      area: appliedFilters.area,
-                    },
-                    displayValues: {
-                      customer: customerDisplayValue,
-                    },
-                    filtersApplied,
-                    fromDate,
-                    toDate,
-                    fromDashboard: fromDashboardRef.current,
-                  };
-                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                  navigate("/call-entry-calendar", {
-                    state: {
-                      preserveFilters: currentFilterState,
-                    },
-                  });
-                }}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    borderColor: "#737780",
-                    color: "#737780",
-                  },
-                }}
-              >
-                <IconCalendarTime size={18} />
-              </ActionIcon>
-
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-                onClick={() => {
-                  const currentFilterState = {
-                    filters: {
-                      customer: appliedFilters.customer,
-                      call_date: appliedFilters.call_date,
-                      call_mode: appliedFilters.call_mode,
-                      followup_date: appliedFilters.followup_date,
-                      status: appliedFilters.status,
-                      city: appliedFilters.city,
-                      area: appliedFilters.area,
-                    },
-                    displayValues: {
-                      customer: customerDisplayValue,
-                    },
-                    filtersApplied,
-                    fromDate,
-                    toDate,
-                    fromDashboard: fromDashboardRef.current,
-                  };
-                  useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-                  navigate("/call-entry-create", {
-                    state: {
-                      preserveFilters: currentFilterState,
-                    },
-                  });
-                }}
-              >
-                Create New
-              </Button>
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
-            }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              mb="sm"
-              style={{
-                backgroundColor: "#F8FAFC",
-                padding: "8px 8px",
-                borderRadius: "8px",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#1E293B"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filters
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
-              {/* Sales Person Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
-                  label="Sales Person"
-                  placeholder={
-                    salespersonsLoading
-                      ? "Loading salespersons..."
-                      : "Select Sales Person"
-                  }
-                  searchable
-                  clearable
-                  size="xs"
-                  data={salespersonOptions}
-                  nothingFoundMessage={
-                    salespersonsLoading
-                      ? "Loading salespersons..."
-                      : "No salespersons found"
-                  }
-                  disabled={salespersonsLoading}
-                  value={filterForm.values.sales_person}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("sales_person", value || null)
-                  }
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconPhone size={14} color={primary} />}
+                    value={callEntryStats.total}
+                    label="Total"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconList size={14} color="#2563eb" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#2563eb"
+                    value={callEntryStats.onPage}
+                    label="This page"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCircleCheck size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={callEntryStats.activeOnPage}
+                    label="Active (page)"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconX size={14} color="#dc2626" />}
+                    iconBackground="#fef2f2"
+                    iconColor="#dc2626"
+                    value={callEntryStats.closedOnPage}
+                    label="Closed (page)"
+                  />
+                </>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => setSearchQuery("")}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
                     }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Customer Name Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Customer Name"
-                  placeholder="Type customer name"
-                  apiEndpoint={URL.customer}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.customer_code),
-                    label: item.customer_name,
-                  })}
-                  value={filterForm.values.customer}
-                  displayValue={customerDisplayValue}
-                  onChange={(value, selectedData) => {
-                    filterForm.setFieldValue("customer", value || "");
-                    setCustomerDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={2}
-                />
-              </Grid.Col>
-
-              {/* Date Range Filter */}
-              <Grid.Col span={4.8}>
-                <DateRangeInput
-                  fromDate={fromDate}
-                  toDate={toDate}
-                  onFromDateChange={setFromDate}
-                  onToDateChange={setToDate}
-                  fromLabel="From Date"
-                  toLabel="To Date"
-                  size="xs"
-                  allowDeselection={true}
-                  showRangeInCalendar={false}
-                  containerStyle={{
-                    gap: "8px",
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Call Mode Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`call-mode-${filterForm.values.call_mode}-${callModeDataLoading}-${callModeOptionsData.length}`}
-                  label="Mode of Call"
-                  placeholder={
-                    callModeDataLoading
-                      ? "Loading call modes..."
-                      : "Select Mode"
-                  }
-                  searchable
-                  clearable
-                  size="xs"
-                  data={callModeOptionsData}
-                  nothingFoundMessage={
-                    callModeDataLoading
-                      ? "Loading call modes..."
-                      : "No call modes found"
-                  }
-                  disabled={callModeDataLoading}
-                  {...filterForm.getInputProps("call_mode")}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Follow-up Date Filter */}
-              <Grid.Col span={2.4}>
-                <SingleDateInput
-                  key={`followup-date-${filterForm.values.followup_date}`}
-                  label="Follow-up Date"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  {...filterForm.getInputProps("followup_date")}
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={14} />}
-                  leftSectionPointerEvents="none"
-                  radius="md"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                />
-              </Grid.Col>
-
-              {/* Status Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`status-${filterForm.values.status}-${followUpActionDataLoading}-${followUpActionOptionsData.length}`}
-                  label="Status"
-                  placeholder={
-                    followUpActionDataLoading
-                      ? "Loading statuses..."
-                      : "Select Status"
-                  }
-                  searchable
-                  clearable
-                  size="xs"
-                  data={followUpActionOptionsData}
-                  nothingFoundMessage={
-                    followUpActionDataLoading
-                      ? "Loading statuses..."
-                      : "No statuses found"
-                  }
-                  disabled={followUpActionDataLoading}
-                  {...filterForm.getInputProps("status")}
-                  onFocus={(event) => {
-                    // Auto-select all text when input is focused
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Customer Location Filter */}
-              <Grid.Col span={2.4}>
-                <TextInput
-                  label="Customer Location"
-                  placeholder="Type customer location"
-                  size="xs"
-                  {...filterForm.getInputProps("city")}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Area Filter */}
-              <Grid.Col span={2.4}>
-                <TextInput
-                  label="Call Entry Location"
-                  placeholder="Type call entry location"
-                  size="xs"
-                  {...filterForm.getInputProps("area")}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="end" mt="xs" p="md" pb="md">
-              <Button
-                size="xs"
-                variant="outline"
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    color: "#105476",
-                    borderColor: "#105476",
-                    "&:hover": {
-                      backgroundColor: "#f8f9fa",
-                    },
-                  },
-                }}
-                leftSection={<IconX size={14} />}
-                onClick={clearAllFilters}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="xs"
-                variant="filled"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-                leftSection={
-                  isLoading ? <Loader size={14} /> : <IconFilter size={14} />
-                }
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {isLoading ? (
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                Loading call entries...
-              </Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable
-              key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-              table={table}
-            />
-
-            <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              p="xs"
-              wrap="nowrap"
-              pt="md"
-            >
-              {(location.state?.returnToDashboard ||
-                returnToDashboardRef.current) && (
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => {
-                    const dashboardState =
-                      location.state?.dashboardState ||
-                      dashboardStateRef.current;
-                    if (dashboardState) {
-                      navigate("/", {
-                        state: {
-                          returnToCallEntryDetailedView: true,
-                          dashboardState: dashboardState,
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={columnToggleItems}
+                    menuStyles={erpListGeistMenuDropdownStyles}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconCalendarTime size={14} />}
+                    onClick={() => {
+                      const currentFilterState = {
+                        filters: {
+                          customer: appliedFilters.customer,
+                          call_date: appliedFilters.call_date,
+                          call_mode: appliedFilters.call_mode,
+                          followup_date: appliedFilters.followup_date,
+                          status: appliedFilters.status,
+                          sales_person: appliedFilters.sales_person,
+                          city: appliedFilters.city,
+                          area: appliedFilters.area,
                         },
+                        displayValues: { customer: customerDisplayValue },
+                        filtersApplied,
+                        fromDate,
+                        toDate,
+                        fromDashboard: fromDashboardRef.current,
+                      };
+                      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      navigate("/call-entry-calendar", {
+                        state: { preserveFilters: currentFilterState },
                       });
-                    } else {
-                      navigate("/");
-                    }
-                  }}
-                  variant="outline"
-                  size="sm"
-                  color="#105476"
-                >
-                  Back to Dashboard
-                </Button>
-              )}
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <PaginationBar
-                  pageSize={pageSize}
-                  currentPage={pageIndex + 1}
-                  totalRecords={totalRecords}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setPageIndex(0);
-                  }}
-                  onPageChange={(page) => setPageIndex(page - 1)}
+                    }}
+                  >
+                    Calendar
+                  </Button>
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                    onClick={() => {
+                      const currentFilterState = {
+                        filters: {
+                          customer: appliedFilters.customer,
+                          call_date: appliedFilters.call_date,
+                          call_mode: appliedFilters.call_mode,
+                          followup_date: appliedFilters.followup_date,
+                          status: appliedFilters.status,
+                          sales_person: appliedFilters.sales_person,
+                          city: appliedFilters.city,
+                          area: appliedFilters.area,
+                        },
+                        displayValues: { customer: customerDisplayValue },
+                        filtersApplied,
+                        fromDate,
+                        toDate,
+                        fromDashboard: fromDashboardRef.current,
+                      };
+                      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      navigate("/call-entry-create", {
+                        state: { preserveFilters: currentFilterState },
+                      });
+                    }}
+                  >
+                    Create new
+                  </Button>
+                </>
+              ),
+            }}
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Date range, customer, mode, status, and locations",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={filterApplyBusy || isRefreshingData}
+                  applyDisabled={filterApplyBusy || isRefreshingData}
                 />
-              </Box>
-            </Group>
-          </>
-        )}
-      </Card>
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                      <Select
+                        key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
+                        label="Sales person"
+                        placeholder={salespersonsLoading ? "Loading…" : "All"}
+                        searchable
+                        clearable
+                        size="xs"
+                        data={salespersonOptions}
+                        nothingFoundMessage={salespersonsLoading ? "Loading…" : "None found"}
+                        disabled={salespersonsLoading}
+                        value={filterForm.values.sales_person}
+                        onChange={(value) => filterForm.setFieldValue("sales_person", value || null)}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={CALL_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Box style={{ display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}>
+                      <SearchableSelect
+                        size="xs"
+                        label="Customer name"
+                        placeholder="Type customer name"
+                        apiEndpoint={URL.customer}
+                        searchFields={["customer_name", "customer_code"]}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.customer_code),
+                          label: String(item.customer_name),
+                        })}
+                        value={filterForm.values.customer}
+                        displayValue={customerDisplayValue}
+                        onChange={(value, selectedData) => {
+                          filterForm.setFieldValue("customer", value || "");
+                          setCustomerDisplayValue(selectedData?.label || null);
+                        }}
+                        minSearchLength={2}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={CALL_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, md: 8 }}>
+                    <DateRangeInput
+                      fromDate={fromDate}
+                      toDate={toDate}
+                      onFromDateChange={setFromDate}
+                      onToDateChange={setToDate}
+                      fromLabel="From date"
+                      toLabel="To date"
+                      size="xs"
+                      allowDeselection={true}
+                      showRangeInCalendar={false}
+                      compactToolbar
+                      containerStyle={{ gap: 8 }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Select
+                      key={`call-mode-${filterForm.values.call_mode}-${callModeDataLoading}-${callModeOptionsData.length}`}
+                      label="Mode of call"
+                      placeholder={callModeDataLoading ? "Loading…" : "All"}
+                      searchable
+                      clearable
+                      size="xs"
+                      data={callModeOptionsData}
+                      nothingFoundMessage={callModeDataLoading ? "Loading…" : "None found"}
+                      disabled={callModeDataLoading}
+                      {...filterForm.getInputProps("call_mode")}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={CALL_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <SingleDateInput
+                      key={`followup-date-${filterForm.values.followup_date}`}
+                      label="Follow-up date"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      {...filterForm.getInputProps("followup_date")}
+                      valueFormat="YYYY-MM-DD"
+                      leftSection={<IconCalendar size={14} />}
+                      leftSectionPointerEvents="none"
+                      radius="md"
+                      nextIcon={<IconChevronRight size={16} />}
+                      previousIcon={<IconChevronLeft size={16} />}
+                      clearable
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...CALL_FILTER_UNIFIED_STYLES,
+                        input: { ...CALL_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <Select
+                      key={`status-${filterForm.values.status}-${followUpActionDataLoading}-${followUpActionOptionsData.length}`}
+                      label="Status"
+                      placeholder={followUpActionDataLoading ? "Loading…" : "All"}
+                      searchable
+                      clearable
+                      size="xs"
+                      data={followUpActionOptionsData}
+                      nothingFoundMessage={followUpActionDataLoading ? "Loading…" : "None found"}
+                      disabled={followUpActionDataLoading}
+                      {...filterForm.getInputProps("status")}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={CALL_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <TextInput
+                      label="Customer location"
+                      placeholder="City / area"
+                      size="xs"
+                      {...filterForm.getInputProps("city")}
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={CALL_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                    <TextInput
+                      label="Call entry location"
+                      placeholder="Area"
+                      size="xs"
+                      {...filterForm.getInputProps("area")}
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={CALL_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                </Grid>
+              ),
+            }}
+            table={{
+              footer: (
+                <>
+                  <Group
+                    justify="space-between"
+                    align="center"
+                    wrap="wrap"
+                    gap="md"
+                    px="md"
+                    py={10}
+                    style={{ borderTop: `1px solid ${border}`, backgroundColor: cardBg }}
+                  >
+                    {(location.state?.returnToDashboard || returnToDashboardRef.current) ? (
+                      <Button
+                        leftSection={<IconArrowLeft size={16} />}
+                        onClick={() => {
+                          const dashboardState =
+                            location.state?.dashboardState || dashboardStateRef.current;
+                          if (dashboardState) {
+                            navigate("/", {
+                              state: {
+                                returnToCallEntryDetailedView: true,
+                                dashboardState,
+                              },
+                            });
+                          } else {
+                            navigate("/");
+                          }
+                        }}
+                        variant="default"
+                        size="xs"
+                        styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                      >
+                        Back to dashboard
+                      </Button>
+                    ) : (
+                      <Box />
+                    )}
+                    <Box style={{ flex: 1, minWidth: 280 }} />
+                  </Group>
+                  <ERPListPaginationFooter
+                    theme={erpTheme}
+                    totalRecords={totalRecords}
+                    pageIndex={pageIndex}
+                    pageSize={pageSize}
+                    onPageIndexChange={setPageIndex}
+                    onPageSizeChange={setPageSize}
+                    pageSizeOptions={["10", "15", "25", "50"]}
+                    selectClassNames={{
+                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                      option: ERP_LIST_GEIST_ROOT_CLASS,
+                    }}
+                  />
+                </>
+              ),
+              children: isTableDataLoading ? (
+                <ERPListTableLoading theme={erpTheme} message="Loading call entries…" />
+              ) : (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 14,
+                    backgroundColor: cardBg,
+                    fontFamily: fontSans,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {visibleColumns.sno && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          S.No
+                        </th>
+                      )}
+                      {visibleColumns.customerName && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Customer
+                        </th>
+                      )}
+                      {visibleColumns.customerLocation && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Customer location
+                        </th>
+                      )}
+                      {visibleColumns.salesPerson && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Sales person
+                        </th>
+                      )}
+                      {visibleColumns.callEntryLocation && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Call entry location
+                        </th>
+                      )}
+                      {visibleColumns.callDate && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Call date
+                        </th>
+                      )}
+                      {visibleColumns.modeOfCall && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Mode
+                        </th>
+                      )}
+                      {visibleColumns.followupDates && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Follow-up
+                        </th>
+                      )}
+                      {visibleColumns.status && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Status
+                        </th>
+                      )}
+                      {visibleColumns.remark && (
+                        <th
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontWeight: 500,
+                            fontSize: 14,
+                            color: muted,
+                            backgroundColor: headerBg,
+                            borderBottom: `1px solid ${border}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Remark
+                        </th>
+                      )}
+                      <th
+                        style={{
+                          width: 48,
+                          backgroundColor: headerBg,
+                          borderBottom: `1px solid ${border}`,
+                        }}
+                      />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayData.length === 0 ? (
+                      <tr>
+                        <td colSpan={visibleDataColumnCount} style={{ padding: 60, textAlign: "center" }}>
+                          <Stack align="center" gap="md">
+                            <Box
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                backgroundColor: "#f1f5f9",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconPhone size={24} color={muted} />
+                            </Box>
+                            <Box>
+                              <Text fw={500} c={fg} style={{ fontFamily: fontSans }}>
+                                No call entries found
+                              </Text>
+                              <Text size="sm" c={muted} mt={4} style={{ fontFamily: fontSans }}>
+                                Try adjusting your search or filters
+                              </Text>
+                            </Box>
+                          </Stack>
+                        </td>
+                      </tr>
+                    ) : (
+                      (displayData as CallEntryTableRow[]).map((row, idx) => {
+                        const sno = pageIndex * pageSize + idx + 1;
+                        return (
+                          <tr
+                            key={row.id}
+                            style={{
+                              borderBottom: `1px solid ${border}`,
+                              transition: "background 0.12s",
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc";
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "";
+                            }}
+                          >
+                            {visibleColumns.sno && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {sno}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.customerName && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {row.customer_name || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.customerLocation && (
+                              <td style={{ padding: "10px 14px", maxWidth: 180 }}>
+                                <Tooltip
+                                  label={row.address || "No address"}
+                                  maw={400}
+                                  withArrow
+                                  multiline
+                                  styles={{ tooltip: { fontFamily: fontSans, fontSize: 12, whiteSpace: "normal" } }}
+                                >
+                                  <Text size="sm" c={muted} style={{ cursor: "default", fontFamily: fontSans }}>
+                                    {row.city || "—"}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
+                            {visibleColumns.salesPerson && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                                  {row.created_by_name || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.callEntryLocation && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+                                  {row.area || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.callDate && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.call_date ? dayjs(row.call_date).format(dateFormat) : "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.modeOfCall && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.call_mode_name || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.followupDates && (
+                              <td style={{ padding: "10px 14px", color: muted }}>
+                                <Text size="sm" style={{ fontFamily: fontSans }}>
+                                  {row.followup_date ? dayjs(row.followup_date).format(dateFormat) : "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.status && (
+                              <td style={{ padding: "10px 14px" }}>
+                                <CallEntryStatusPill status={row.status} />
+                              </td>
+                            )}
+                            {visibleColumns.remark && (
+                              <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                                <Text size="sm" lineClamp={2} style={{ fontFamily: fontSans }}>
+                                  {row.remark != null && String(row.remark).trim() !== "" ? String(row.remark) : "—"}
+                                </Text>
+                              </td>
+                            )}
+                            <td
+                              style={{
+                                padding: "10px 8px",
+                                position: "sticky",
+                                right: 0,
+                                backgroundColor: cardBg,
+                                borderLeft: `1px solid ${border}`,
+                                boxShadow: "-4px 0 8px -4px rgba(15, 23, 42, 0.08)",
+                                zIndex: 2,
+                              }}
+                            >
+                              {renderRowActions(row)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
+
 
       {/* Close Call Entry Modal */}
       <Modal
