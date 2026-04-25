@@ -137,6 +137,47 @@ export type ErpListDataRowInteraction = {
  * Data row: bottom border on the row + hover to `headerBg` (#f8fafc) like Air Export.
  * Optional `selected` tints the row with primary (8% alpha).
  */
+/**
+ * `<table>` on {@link AirExportBookingMaster} — no root `fontFamily` (inherits Geist from shell).
+ */
+export function erpListBookingMasterTableStyle(theme: ErpListTheme): CSSProperties {
+  return {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 14,
+    backgroundColor: theme.cardBg,
+  };
+}
+
+/** Trailing header cell for row menu (~44px) — matches Air Export Booking list. */
+export function erpListBookingMasterTrailingHeaderTh(theme: ErpListTheme): CSSProperties {
+  return {
+    width: 44,
+    backgroundColor: theme.headerBg,
+    borderBottom: `1px solid ${theme.border}`,
+  };
+}
+
+export const ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG = "#f1f5f9";
+
+/** Default body `<td>` padding — Air Export Booking data cells. */
+export function erpListBookingMasterBodyTd(): CSSProperties {
+  return { padding: "10px 14px" };
+}
+
+/** Muted date column — Air Export Booking `Date` column. */
+export function erpListBookingMasterDateTd(theme: ErpListTheme): CSSProperties {
+  return { padding: "10px 14px", color: theme.muted };
+}
+
+/**
+ * Reference-style cell shell (MAWB, flight) — Air Export Booking mono band + 12px muted.
+ * Pair with `ERP_LIST_GEIST_MONO_CLASS` on `<td>`.
+ */
+export function erpListBookingMasterReferenceTdShell(theme: ErpListTheme): CSSProperties {
+  return { padding: "10px 14px", fontSize: 12, color: theme.muted };
+}
+
 export function erpListDataRowProps(
   theme: ErpListTheme,
   options?: { selected?: boolean },
