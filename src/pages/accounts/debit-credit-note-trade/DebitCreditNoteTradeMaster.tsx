@@ -70,7 +70,7 @@ type Filters = {
   status: "" | "POSTED" | "UNPOSTED";
 };
 
-export default function DebitCreditNoteNonTradeMaster() {
+export default function DebitCreditNoteTradeMaster() {
   const navigate = useNavigate();
   const [showFilters, setShowFilters] = useState(false);
   const [paginationPageSize, setPaginationPageSize] = useState(25);
@@ -108,23 +108,16 @@ export default function DebitCreditNoteNonTradeMaster() {
     return payload;
   }, [appliedFilters, debouncedSearch]);
 
-  const {
-    data: listData = [],
-    isLoading,
-    isFetching,
-  } = useQuery({
+  const { data: listData = [], isLoading, isFetching } = useQuery({
     queryKey: [
-      "debitCreditNoteNonTradeList",
+      "debitCreditNoteTradeList",
       paginationCurrentPage,
       paginationPageSize,
       JSON.stringify(buildFiltersPayload),
     ],
     queryFn: async (): Promise<NoteRow[]> => {
       const payload = {
-        filters: {
-          ...(Object.keys(buildFiltersPayload).length > 0 ? buildFiltersPayload : {}),
-          type: "non_trade",
-        },
+        filters: { ...buildFiltersPayload, type: "trade" },
       };
       const res = (await apiCallProtected.post(
         `${URL.debitCreditNoteFilter}?index=${index}&limit=${paginationPageSize}`,
@@ -141,11 +134,7 @@ export default function DebitCreditNoteNonTradeMaster() {
   });
 
   useEffect(() => {
-    if (
-      paginationCurrentPage !== 1 &&
-      index >= totalRecords &&
-      totalRecords > 0
-    ) {
+    if (paginationCurrentPage !== 1 && index >= totalRecords && totalRecords > 0) {
       setPaginationCurrentPage(1);
     }
   }, [index, paginationCurrentPage, totalRecords]);
@@ -229,7 +218,7 @@ export default function DebitCreditNoteNonTradeMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/debit-credit-note-non-trade/create", {
+                      navigate("/debit-credit-note-trade/create", {
                         state: { mode: "view", data: row.original },
                       })
                     }
@@ -244,7 +233,7 @@ export default function DebitCreditNoteNonTradeMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/debit-credit-note-non-trade/create", {
+                        navigate("/debit-credit-note-trade/create", {
                           state: { mode: "edit", data: row.original },
                         })
                       }
@@ -421,7 +410,7 @@ export default function DebitCreditNoteNonTradeMaster() {
             c="#444955"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
-            Debit/Credit Note for Non Trade
+            Debit/Credit Note for Trade
           </Text>
 
           <Group gap="xs" wrap="nowrap">
@@ -471,9 +460,7 @@ export default function DebitCreditNoteNonTradeMaster() {
                 root: {
                   borderRadius: "4px",
                   backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                  border: showFilters
-                    ? "1px solid #105476"
-                    : "1px solid #737780",
+                  border: showFilters ? "1px solid #105476" : "1px solid #737780",
                   color: showFilters ? "#105476" : "#737780",
                   "&:active": {
                     border: "1px solid #105476",
@@ -500,7 +487,7 @@ export default function DebitCreditNoteNonTradeMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/debit-credit-note-non-trade/create")}
+              onClick={() => navigate("/debit-credit-note-trade/create")}
             >
               Create New
             </Button>
@@ -599,21 +586,17 @@ export default function DebitCreditNoteNonTradeMaster() {
                 label="Date From"
                 placeholder="Select Date"
                 value={draftFilters.date_from}
-                onChange={(d) =>
-                  setDraftFilters((p) => ({ ...p, date_from: d }))
-                }
+                onChange={(d) => setDraftFilters((p) => ({ ...p, date_from: d }))}
                 size="xs"
               />
             </Grid.Col>
             <Grid.Col span={3}>
               <SingleDateInput
+                size="xs"
                 label="Date To"
                 placeholder="Select Date"
                 value={draftFilters.date_to}
-                onChange={(d) =>
-                  setDraftFilters((p) => ({ ...p, date_to: d }))
-                }
-                size="xs"
+                onChange={(d) => setDraftFilters((p) => ({ ...p, date_to: d }))}
               />
             </Grid.Col>
             <Grid.Col span={3}>
@@ -740,3 +723,4 @@ export default function DebitCreditNoteNonTradeMaster() {
     </Card>
   );
 }
+

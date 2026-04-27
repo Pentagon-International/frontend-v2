@@ -100,6 +100,7 @@ const Navbar = ({
       location.pathname.startsWith("/journal-voucher-reversal") ||
       location.pathname.startsWith("/subledger-enquiry") ||
       location.pathname.startsWith("/document-allocation") ||
+      location.pathname.startsWith("/debit-credit-note-trade") ||
       location.pathname.startsWith("/debit-credit-note-non-trade")
     ) {
       setIsAccountsOpen(true);
@@ -813,8 +814,21 @@ const Navbar = ({
                     />
                     <SubNavLink
                       parent="Accounts"
-                      label="Debit/Credit Note Non Trade"
+                      label="Debit/Credit Note Trade"
                       icon={IconReceiptTax}
+                      path="/debit-credit-note-trade"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Debit/Credit Note Non Trade"
+                      icon={IconReceipt}
                       path="/debit-credit-note-non-trade"
                       collapsibles={{
                         setIsSalesOpen,

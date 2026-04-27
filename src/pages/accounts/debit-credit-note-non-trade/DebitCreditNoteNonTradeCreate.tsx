@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Box,
@@ -35,6 +35,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate } from "react-router-dom";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
+import { commonSearchAPI } from "../../../service/searchApi";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -56,12 +57,49 @@ const fetchStateMaster = async () => {
   }
 };
 
+// Fetch effective SAC for charge + service: POST { items: [{ charge_id, service_id }] }
+const fetchGetEffectiveSac = async (
+  items: { charge_id: number; service_id: number }[],
+): Promise<
+  Array<{ charge_id: number; service_id: number; sac_code?: string | null }>
+> => {
+  try {
+    const response = await postAPICall(
+      URL.gstChargeMappingGetEffectiveSac,
+      { items },
+      API_HEADER,
+    );
+    return (
+      (
+        response as {
+          data?: Array<{
+            charge_id: number;
+            service_id: number;
+            sac_code?: string | null;
+          }>;
+        }
+      )?.data ?? []
+    );
+  } catch (e) {
+    console.error("Failed to fetch effective SAC", e);
+    return [];
+  }
+};
+
 // daybook is loaded via SearchableSelect (no preload)
 
 // customers are loaded via SearchableSelect (no preload)
 
+const CRN_OPTIONS = ["Cost", "Revenue", "Neutral"];
+
 type LineItem = {
   id: string;
+  // Trade-only fields (kept optional to allow Non-Trade to reuse same structure)
+  shipment_no?: string;
+  service_id?: number | null;
+  charge_id?: number | null;
+  charge_name?: string;
+  crn?: string;
   account_id: string; // chart of accounts id (dropdown background value)
   account_code: string;
   account_name: string;
@@ -92,6 +130,11 @@ function formatChartOfAccountsLabel(
 
 const newLineItem = (n: number): LineItem => ({
   id: `line-${Date.now()}-${n}`,
+  shipment_no: "",
+  service_id: null,
+  charge_id: null,
+  charge_name: "",
+  crn: "",
   account_id: "",
   account_code: "",
   account_name: "",
@@ -109,9 +152,20 @@ const newLineItem = (n: number): LineItem => ({
   note: "",
 });
 
-export default function DebitCreditNoteNonTradeCreate() {
+export function DebitCreditNoteCreateBase({
+  payloadType,
+  showTradeFields,
+}: {
+  payloadType: "non_trade" | "trade";
+  showTradeFields: boolean;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
+  console.log("[DCN] render", {
+    payloadType,
+    showTradeFields,
+    locationState: location.state,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
   const [loadingText, setLoadingText] = useState<string>("");
@@ -155,6 +209,78 @@ export default function DebitCreditNoteNonTradeCreate() {
       supporting_documents: [] as SupportingDocument[],
     },
   });
+
+  // Cache resolved service_id for a shipment_no so we don't re-fetch repeatedly.
+  const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+
+  const getServiceIdByShipmentNoAsync = async (
+    shipmentNoRaw: string | null | undefined,
+  ): Promise<number | null> => {
+    const shipmentNo = String(shipmentNoRaw ?? "").trim();
+    if (!shipmentNo) return null;
+    if (shipmentNo in shipmentServiceIdCacheRef.current) {
+      return shipmentServiceIdCacheRef.current[shipmentNo];
+    }
+    try {
+      const results = await commonSearchAPI({
+        endpoint: URL.filterJobCreate,
+        query: shipmentNo,
+      });
+      const rows = Array.isArray(results)
+        ? (results as Array<Record<string, unknown>>)
+        : [];
+      const match = rows.find(
+        (r) => String(r?.shipment_id ?? "").trim() === shipmentNo,
+      );
+      const serviceIdRaw =
+        (
+          match as
+            | {
+                service_id?: unknown;
+                serviceId?: unknown;
+                job?: { service_id?: unknown };
+              }
+            | undefined
+        )?.service_id ??
+        (match as { serviceId?: unknown } | undefined)?.serviceId ??
+        (match as { job?: { service_id?: unknown } } | undefined)?.job
+          ?.service_id ??
+        null;
+      const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
+      shipmentServiceIdCacheRef.current[shipmentNo] =
+        serviceId != null && Number.isFinite(serviceId) ? serviceId : null;
+      return shipmentServiceIdCacheRef.current[shipmentNo];
+    } catch {
+      shipmentServiceIdCacheRef.current[shipmentNo] = null;
+      return null;
+    }
+  };
+
+  const fetchSacForLine = async (
+    lineIndex: number,
+    chargeId: number | null,
+    shipmentNo: string,
+    serviceIdOverride?: number | null,
+  ) => {
+    if (!showTradeFields) return;
+    if (chargeId == null || !shipmentNo) return;
+    const serviceId =
+      serviceIdOverride != null
+        ? serviceIdOverride
+        : await getServiceIdByShipmentNoAsync(shipmentNo);
+    if (serviceId == null) return;
+    const data = await fetchGetEffectiveSac([
+      { charge_id: chargeId, service_id: serviceId },
+    ]);
+    const item = data.find(
+      (x) => x.charge_id === chargeId && x.service_id === serviceId,
+    );
+    const sac = String(item?.sac_code ?? "").trim();
+    if (!sac) return;
+    form.setFieldValue(`lines.${lineIndex}.sac_code`, sac);
+  };
+
+  // (Trade-only SAC auto fetch effect is placed after isReadOnly is defined)
 
   const setLineById = (id: string, patch: Partial<LineItem>) => {
     const idx = form.values.lines.findIndex((l) => l.id === id);
@@ -285,7 +411,10 @@ export default function DebitCreditNoteNonTradeCreate() {
           ? [...form.values.lines, ...generatedLines]
           : [newLineItem(0)],
       );
-      ToastNotification({ type: "success", message: "GST calculated successfully" });
+      ToastNotification({
+        type: "success",
+        message: "GST calculated successfully",
+      });
     } catch (e) {
       console.error("Failed to calculate GST breakup", e);
       ToastNotification({ type: "error", message: "Failed to calculate GST" });
@@ -297,14 +426,35 @@ export default function DebitCreditNoteNonTradeCreate() {
 
   // Edit/View flow: prefill from list page row data
   useEffect(() => {
-    const state = (location.state ?? null) as {
+    const stateAny = (location.state ?? null) as unknown;
+    const stateObj = (stateAny ?? null) as {
       mode?: "view" | "edit";
       data?: unknown;
+      row?: unknown;
+      record?: unknown;
+      item?: unknown;
     } | null;
-    if (!state?.data) return;
-    applyCreateResponseToForm(state.data);
+
+    // Some list pages pass `{ data: row }`, others pass `row` directly.
+    const candidate =
+      stateObj?.data ??
+      stateObj?.row ??
+      stateObj?.record ??
+      stateObj?.item ??
+      stateAny;
+
+    if (!candidate) return;
+
+    console.log("[DCN] edit prefill: location.state =", location.state);
+    console.log("[DCN] edit prefill: candidate =", candidate);
+
+    applyCreateResponseToForm(candidate);
+    // Log after state updates flush using latest values
+    setTimeout(() => {
+      console.log("[DCN] after prefill: lines =", form.getValues().lines);
+    }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+  }, [location.key]);
 
   const { data: currencyData = [] } = useQuery({
     queryKey: ["currencyMaster"],
@@ -466,6 +616,7 @@ export default function DebitCreditNoteNonTradeCreate() {
       statusOverride ?? (currentStatus === "POSTED" ? "POSTED" : "UNPOSTED");
 
     const debitCreditNote = {
+      type: payloadType,
       daybook_id: form.values.daybookId ? Number(form.values.daybookId) : null,
       document_type: form.values.documentType,
       party_code: form.values.partyAccount,
@@ -485,6 +636,13 @@ export default function DebitCreditNoteNonTradeCreate() {
       gst_id: form.values.gstId,
       dr_cr: (form.values.lines[0]?.dr_cr as "Dr" | "Cr" | undefined) ?? "Dr",
       debit_credit_note_tem: form.values.lines.map((l) => ({
+        ...(showTradeFields
+          ? {
+              shipment_no: String(l.shipment_no ?? ""),
+              charge_id: l.charge_id ?? null,
+              crn: String(l.crn ?? ""),
+            }
+          : {}),
         account_code: l.account_code,
         subledger: l.subledger,
         code: l.cost_center_code,
@@ -518,14 +676,55 @@ export default function DebitCreditNoteNonTradeCreate() {
   };
 
   const applyCreateResponseToForm = (raw: unknown) => {
-    const root = raw as { data?: unknown };
-    const rootData = root?.data;
-    const note =
-      (rootData as { data?: unknown } | undefined)?.data ?? rootData ?? raw;
-    const header = note as Record<string, unknown>;
-    const details = ((header as { details?: unknown }).details ?? []) as Array<
-      Record<string, unknown>
-    >;
+    console.log("[DCN] applyCreateResponseToForm: raw =", raw);
+    // Supports:
+    // - axios response: { data: { ...note } } or { data: { data: { ...note } } }
+    // - router state: { mode, data: { ...note } }
+    // - direct row: { ...note }
+    const unwrap = (x: unknown): unknown => {
+      if (!x || typeof x !== "object") return x;
+      const obj = x as Record<string, unknown>;
+      if ("mode" in obj && "data" in obj) return obj.data;
+      if ("data" in obj) {
+        const d = obj.data;
+        if (d && typeof d === "object") {
+          const inner = d as Record<string, unknown>;
+          if ("data" in inner) return inner.data;
+        }
+        return d;
+      }
+      return x;
+    };
+
+    const header = unwrap(raw) as Record<string, unknown>;
+    const linesFromDetails = (header as { details?: unknown }).details;
+    const linesFromTem = (header as { debit_credit_note_tem?: unknown })
+      .debit_credit_note_tem;
+    const details = (
+      Array.isArray(linesFromDetails)
+        ? linesFromDetails
+        : Array.isArray(linesFromTem)
+          ? linesFromTem
+          : []
+    ) as Array<Record<string, unknown>>;
+
+    console.log(
+      "[DCN] applyCreateResponseToForm: header keys =",
+      Object.keys(header ?? {}),
+    );
+    console.log("[DCN] applyCreateResponseToForm: lines source counts =", {
+      details: Array.isArray(linesFromDetails) ? linesFromDetails.length : null,
+      debit_credit_note_tem: Array.isArray(linesFromTem)
+        ? linesFromTem.length
+        : null,
+      chosen: details.length,
+    });
+    if (details.length) {
+      console.log(
+        "[DCN] applyCreateResponseToForm: first line =",
+        details[0],
+      );
+    }
 
     if (header?.id != null) setSaveResponse(header);
 
@@ -538,11 +737,30 @@ export default function DebitCreditNoteNonTradeCreate() {
       form.setFieldValue("partyAccount", String(header.party_code));
     if (header?.party_name != null)
       form.setFieldValue("partyName", String(header.party_name));
-    const partyAddress = (header as { party_address?: unknown }).party_address;
+    const partyAddress =
+      (header as { party_address?: unknown }).party_address ??
+      (header as { address?: unknown }).address ??
+      null;
     if (partyAddress != null)
       form.setFieldValue("address", String(partyAddress ?? ""));
     if (header?.state_id != null)
       form.setFieldValue("stateId", String(header.state_id));
+    // currency in edit/view flows
+    if ((header as { currency_id?: unknown }).currency_id != null) {
+      form.setFieldValue(
+        "currencyId",
+        String((header as { currency_id?: unknown }).currency_id),
+      );
+    }
+    const headerCurrencyCodeRaw =
+      (header as { currency_code?: unknown }).currency_code ??
+      (header as { currency?: unknown }).currency ??
+      null;
+    const headerCurrencyCode =
+      headerCurrencyCodeRaw != null ? String(headerCurrencyCodeRaw).trim() : "";
+    if (headerCurrencyCode) {
+      form.setFieldValue("currencyCode", headerCurrencyCode);
+    }
     if (header?.roe != null) form.setFieldValue("roe", Number(header.roe));
     if (header?.document_date != null)
       form.setFieldValue(
@@ -561,15 +779,37 @@ export default function DebitCreditNoteNonTradeCreate() {
 
     // Details -> lines
     if (Array.isArray(details) && details.length) {
+      const fallbackCurrencyCode =
+        headerCurrencyCode || String(form.values.currencyCode ?? "INR");
       const mapped: LineItem[] = details.map((d, i) => ({
         id: `line-${Date.now()}-${i}`,
+        shipment_no: String(d.shipment_no ?? ""),
+        service_id:
+          (d as { service_id?: unknown }).service_id != null &&
+          Number.isFinite(Number((d as { service_id?: unknown }).service_id))
+            ? Number((d as { service_id?: unknown }).service_id)
+            : null,
+        charge_id:
+          d.charge_id != null && Number.isFinite(Number(d.charge_id))
+            ? Number(d.charge_id)
+            : null,
+        charge_name: String(
+          (d as { charge_name?: unknown }).charge_name ??
+            (d as { chargeName?: unknown }).chargeName ??
+            "",
+        ),
+        crn: String(
+          (d as { crn?: unknown; CRN?: unknown }).crn ??
+            (d as { CRN?: unknown }).CRN ??
+            "",
+        ),
         account_id: "",
         account_code: String(d.account_code ?? ""),
         account_name: String(d.account_name ?? ""),
         subledger: String(d.subledger ?? ""),
         cost_center_code: String(d.code ?? ""),
         cost_center_key: String(d.key ?? ""),
-        currency: String(d.currency_code ?? form.values.currencyCode ?? "INR"),
+        currency: String(d.currency_code ?? fallbackCurrencyCode ?? "INR"),
         roe: d.roe != null ? Number(d.roe) : "",
         amount: d.amount != null ? Number(d.amount) : "",
         amount_in_inr: d.amount_in_inr != null ? Number(d.amount_in_inr) : "",
@@ -579,7 +819,16 @@ export default function DebitCreditNoteNonTradeCreate() {
         narration: String(d.narration ?? ""),
         note: String(d.note ?? ""),
       }));
+      console.log("[DCN] applyCreateResponseToForm: mapped lines =", mapped);
+      console.log(
+        "[DCN] applyCreateResponseToForm: setting lines length =",
+        mapped.length,
+      );
       form.setFieldValue("lines", mapped);
+    } else {
+      console.log(
+        "[DCN] applyCreateResponseToForm: no line items found in payload (details/debit_credit_note_tem empty)",
+      );
     }
   };
 
@@ -588,7 +837,11 @@ export default function DebitCreditNoteNonTradeCreate() {
     setIsSubmitting(true);
     setLoadingText("Creating credit/debit note...");
     try {
-      const res = await apiCallProtected.post(URL.debitCreditNote, fd, FORM_DATA_HEADERS);
+      const res = await apiCallProtected.post(
+        URL.debitCreditNote,
+        fd,
+        FORM_DATA_HEADERS,
+      );
       applyCreateResponseToForm(res);
       ToastNotification({ type: "success", message: "Created successfully" });
     } catch (err) {
@@ -608,7 +861,11 @@ export default function DebitCreditNoteNonTradeCreate() {
     setIsSubmitting(true);
     setLoadingText("Updating credit/debit note...");
     try {
-      await putAPICall(URL.debitCreditNote, fd as unknown as FormData, FORM_DATA_HEADERS);
+      await putAPICall(
+        URL.debitCreditNote,
+        fd as unknown as FormData,
+        FORM_DATA_HEADERS,
+      );
       ToastNotification({ type: "success", message: "Updated successfully" });
       // Refresh UI values if backend computed anything
       // Note: putAPICall returns axios response; we can ignore if not needed.
@@ -622,10 +879,82 @@ export default function DebitCreditNoteNonTradeCreate() {
   const statusUpper = String(
     (saveResponse as { status?: unknown } | null)?.status ?? "",
   ).toUpperCase();
-  const navState = (location.state ?? null) as { mode?: "view" | "edit" } | null;
+  const navState = (location.state ?? null) as {
+    mode?: "view" | "edit";
+  } | null;
   const isViewMode = navState?.mode === "view";
   const isPosted = isEditMode && statusUpper === "POSTED";
   const isReadOnly = isViewMode || isPosted;
+  const pageLabel = showTradeFields ? "Trade" : "Non Trade";
+
+  useEffect(() => {
+    console.log("[DCN] lines changed:", {
+      length: form.values.lines.length,
+      first: form.values.lines[0],
+    });
+  }, [form.values.lines]);
+
+  // If currency is INR, default header/line ROE to 1 (do not override user-entered values).
+  useEffect(() => {
+    if (isReadOnly) return;
+    const code = String(form.values.currencyCode ?? "")
+      .trim()
+      .toUpperCase();
+    if (code !== "INR") return;
+
+    if (form.values.roe === "") {
+      form.setFieldValue("roe", 1);
+    }
+
+    const nextLines = form.values.lines.map((l) =>
+      l.roe === "" ? { ...l, roe: 1 } : l,
+    );
+    const changed = nextLines.some(
+      (l, i) => l.roe !== form.values.lines[i]?.roe,
+    );
+    if (changed) form.setFieldValue("lines", nextLines);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.currencyCode, isReadOnly]);
+
+  // Trade only: auto-fetch SAC once shipment_no + charge_id are selected.
+  const tradeSacKey = showTradeFields
+    ? form.values.lines
+        .map(
+          (l) =>
+            `${String(l.shipment_no ?? "").trim()}|${l.charge_id ?? ""}|${String(l.sac_code ?? "").trim()}`,
+        )
+        .join(",")
+    : "";
+  useEffect(() => {
+    if (!showTradeFields) return;
+    if (isReadOnly) return;
+    form.values.lines.forEach((l, idx) => {
+      const shipmentNo = String(l.shipment_no ?? "").trim();
+      const chargeId = l.charge_id != null ? Number(l.charge_id) : null;
+      const hasSac = String(l.sac_code ?? "").trim() !== "";
+      if (!shipmentNo || chargeId == null || hasSac) return;
+      void fetchSacForLine(idx, chargeId, shipmentNo);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeSacKey, showTradeFields, isReadOnly]);
+
+  // If header currency code defaults (e.g. INR) but id isn't selected,
+  // auto-select the matching currency id so payload doesn't send null.
+  useEffect(() => {
+    if (isReadOnly) return;
+    if (form.values.currencyId) return;
+    const code = String(form.values.currencyCode ?? "").trim();
+    if (!code) return;
+    const match = currencyOptions.find((o) => o.label === code);
+    if (!match) return;
+    form.setFieldValue("currencyId", match.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currencyOptions,
+    form.values.currencyCode,
+    form.values.currencyId,
+    isReadOnly,
+  ]);
 
   const handlePost = async () => {
     if (saveResponse?.id == null) return;
@@ -783,8 +1112,8 @@ export default function DebitCreditNoteNonTradeCreate() {
           <Group gap="sm" wrap="nowrap">
             <Text size="xl" fw={600} c="#105476">
               {isEditMode
-                ? "Edit Debit / Credit Note (Non Trade)"
-                : "Create Debit / Credit Note (Non Trade)"}
+                ? `Edit Debit / Credit Note (${pageLabel})`
+                : `Create Debit / Credit Note (${pageLabel})`}
             </Text>
           </Group>
           {isEditMode && (
@@ -792,10 +1121,14 @@ export default function DebitCreditNoteNonTradeCreate() {
               <Text size="sm" fw={600} c="#105476">
                 Status:
               </Text>
-              <Badge size="sm" variant="light" color={isPosted ? "green" : "gray"}>
+              <Badge
+                size="sm"
+                variant="light"
+                color={isPosted ? "green" : "gray"}
+              >
                 {isPosted ? "POSTED" : "UNPOSTED"}
               </Badge>
-              {isPosted && form.values.documentNo ? (
+              {form.values.documentNo ? (
                 <>
                   <Text size="sm" fw={600} c="#105476">
                     Document No:
@@ -1012,11 +1345,11 @@ export default function DebitCreditNoteNonTradeCreate() {
 
         {/* Cost Center section (similar role to SupplierInvoiceCreate Charges section) */}
         {/* <Card shadow="sm" padding="lg" radius="md" withBorder> */}
-          <Group justify="space-between" align="center" mb="sm">
+        <Group justify="space-between" align="center" mb="sm">
           <Text size="sm" fw={600} c="#105476">
             Cost Center
           </Text>
-          <Button variant="outline" onClick={calculateGst} disabled={isReadOnly}>
+          <Button variant="outline" color="#105476" onClick={calculateGst}>
             Calculate GST
           </Button>
           {/* <Button variant="outline" leftSection={<IconPlus size={16} />} onClick={addLine}>
@@ -1025,38 +1358,64 @@ export default function DebitCreditNoteNonTradeCreate() {
         </Group>
         {/* <Divider mb="sm" /> */}
 
-        <Grid gutter={6} columns={14}>
+        <Grid gutter={6} columns={showTradeFields ? 18 : 14}>
           {/* <Grid.Col span={0.3}>
               <Text size="xs" fw={600} c="#105476">
                 SNo
               </Text>
             </Grid.Col> */}
-          <Grid.Col span={2}>
+          {showTradeFields && (
+            <Grid.Col span={1.5}>
+              <Text size="xs" fw={600} c="#105476">
+                Shipment No
+              </Text>
+            </Grid.Col>
+          )}
+          {showTradeFields && (
+            <Grid.Col span={1.3}>
+              <Text size="xs" fw={600} c="#105476">
+                Charge
+              </Text>
+            </Grid.Col>
+          )}
+          {showTradeFields && (
+            <Grid.Col span={0.9}>
+              <Text size="xs" fw={600} c="#105476">
+                CRN
+              </Text>
+            </Grid.Col>
+          )}
+          <Grid.Col span={showTradeFields ? 1.9 : 2}>
             <Text size="xs" fw={600} c="#105476">
               Account
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={showTradeFields ? 0.9 : 1}>
             <Text size="xs" fw={600} c="#105476">
               Subledger
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={0.9}>
             <Text size="xs" fw={600} c="#105476">
               Code
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={0.9}>
             <Text size="xs" fw={600} c="#105476">
               Key
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={showTradeFields ? 0.9 : 1}>
+            <Text size="xs" fw={600} c="#105476">
+              Currency
+            </Text>
+          </Grid.Col>
+          <Grid.Col span={0.7}>
             <Text size="xs" fw={600} c="#105476">
               ROE
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={showTradeFields ? 0.9 : 1}>
             <Text size="xs" fw={600} c="#105476">
               Amount
             </Text>
@@ -1071,12 +1430,12 @@ export default function DebitCreditNoteNonTradeCreate() {
               Amount in {form.values.currencyCode || "INR"}
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={0.7}>
             <Text size="xs" fw={600} c="#105476">
               Dr/Cr
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={showTradeFields ? 0.9 : 1}>
             <Text size="xs" fw={600} c="#105476">
               SAC Code
             </Text>
@@ -1091,19 +1450,131 @@ export default function DebitCreditNoteNonTradeCreate() {
               Note
             </Text>
           </Grid.Col>
-          <Grid.Col span={1}>
+          <Grid.Col span={showTradeFields ? 0.8 : 0.6}>
             <Text size="xs" fw={600} c="#105476">
               Action
             </Text>
           </Grid.Col>
 
           {form.values.lines.map((l, idx) => (
-            <Grid.Col key={l.id} span={14} p={0} mt={6}>
-              <Grid gutter={6} align="end" columns={14}>
+            <Grid.Col key={l.id} span={showTradeFields ? 18 : 14} p={0} mt={6}>
+              <Grid gutter={6} align="end" columns={showTradeFields ? 18 : 14}>
                 {/* <Grid.Col span={1}>
                     <Text size="sm">{idx + 1}</Text>
                   </Grid.Col> */}
-                <Grid.Col span={2}>
+                {showTradeFields && (
+                  <Grid.Col span={1.5}>
+                    <SearchableSelect
+                      apiEndpoint={URL.filterJobCreate}
+                      placeholder="Shipment no"
+                      value={String(l.shipment_no ?? "").trim() || null}
+                      displayValue={String(l.shipment_no ?? "").trim() || null}
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      searchFields={["shipment_id"]}
+                      displayFormat={(item: Record<string, unknown>) => {
+                        const shipmentId = String(
+                          item.shipment_id ?? "",
+                        ).trim();
+                        return { value: shipmentId, label: shipmentId };
+                      }}
+                      returnOriginalData
+                      onChange={(val, _selected, original) => {
+                        const shipmentNo = String(val ?? "").trim();
+                        const serviceIdRaw =
+                          (
+                            original as {
+                              service_id?: unknown;
+                              serviceId?: unknown;
+                            } | null
+                          )?.service_id ??
+                          (original as { serviceId?: unknown } | null)
+                            ?.serviceId ??
+                          null;
+                        const serviceId =
+                          serviceIdRaw != null &&
+                          Number.isFinite(Number(serviceIdRaw))
+                            ? Number(serviceIdRaw)
+                            : null;
+                        setLineById(l.id, {
+                          shipment_no: shipmentNo,
+                          service_id: serviceId,
+                        });
+                        const chargeId =
+                          l.charge_id != null ? Number(l.charge_id) : null;
+                        if (shipmentNo && chargeId != null) {
+                          void fetchSacForLine(
+                            idx,
+                            chargeId,
+                            shipmentNo,
+                            serviceId,
+                          );
+                        }
+                      }}
+                      size="xs"
+                      disabled={isReadOnly}
+                    />
+                  </Grid.Col>
+                )}
+                {showTradeFields && (
+                  <Grid.Col span={1.3}>
+                    <SearchableSelect
+                      apiEndpoint={URL.chargeMaster}
+                      placeholder="Charge"
+                      value={
+                        l.charge_id != null ? String(Number(l.charge_id)) : null
+                      }
+                      displayValue={String(l.charge_name ?? "").trim() || null}
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      searchFields={["charge_code", "charge_name", "id"]}
+                      displayFormat={(item: Record<string, unknown>) => {
+                        const id = String(item.id ?? "").trim();
+                        const name = String(item.charge_name ?? "").trim();
+                        return { value: id, label: name };
+                      }}
+                      onChange={(val, selected) => {
+                        const chargeId =
+                          val && Number.isFinite(Number(val))
+                            ? Number(val)
+                            : null;
+                        setLineById(l.id, {
+                          charge_id: chargeId,
+                          charge_name: selected?.label ?? "",
+                        });
+                        const shipmentNo = String(l.shipment_no ?? "").trim();
+                        const serviceId =
+                          l.service_id != null &&
+                          Number.isFinite(Number(l.service_id))
+                            ? Number(l.service_id)
+                            : null;
+                        if (shipmentNo && chargeId != null) {
+                          void fetchSacForLine(
+                            idx,
+                            chargeId,
+                            shipmentNo,
+                            serviceId,
+                          );
+                        }
+                      }}
+                      size="xs"
+                      disabled={isReadOnly}
+                    />
+                  </Grid.Col>
+                )}
+                {showTradeFields && (
+                  <Grid.Col span={0.9}>
+                    <Dropdown
+                      data={CRN_OPTIONS}
+                      value={String(l.crn ?? "") || null}
+                      onChange={(v) => setLineById(l.id, { crn: v ?? "" })}
+                      size="xs"
+                      clearable
+                      disabled={isReadOnly}
+                    />
+                  </Grid.Col>
+                )}
+                <Grid.Col span={showTradeFields ? 1.9 : 2}>
                   <SearchableSelect
                     apiEndpoint={URL.chartOfAccounts}
                     placeholder="Account"
@@ -1135,28 +1606,40 @@ export default function DebitCreditNoteNonTradeCreate() {
                       const name = String(
                         orig?.account_name ?? selected?.label ?? "",
                       );
-                      const glName = String((orig as { gl_name?: string })?.gl_name ?? "");
+                      const glName = String(
+                        (orig as { gl_name?: string })?.gl_name ?? "",
+                      );
                       const subledgerCode = String(orig?.sl_code ?? "");
                       setLineById(l.id, {
                         account_id: accountId,
                         account_code: code,
-                        account_name: formatChartOfAccountsLabel(glName, code, name),
+                        account_name: formatChartOfAccountsLabel(
+                          glName,
+                          code,
+                          name,
+                        ),
                         subledger: subledgerCode || l.subledger,
                       });
                     }}
                     displayFormat={(item) => ({
                       value: String(item.id ?? ""),
                       label: formatChartOfAccountsLabel(
-                        String((item as { gl_name?: string })?.gl_name ?? "").trim(),
-                        String(item.gl_account_code ?? item.account_code ?? "").trim(),
-                        String(item.account_name ?? item.name ?? item.id ?? "").trim(),
+                        String(
+                          (item as { gl_name?: string })?.gl_name ?? "",
+                        ).trim(),
+                        String(
+                          item.gl_account_code ?? item.account_code ?? "",
+                        ).trim(),
+                        String(
+                          item.account_name ?? item.name ?? item.id ?? "",
+                        ).trim(),
                       ),
                     })}
                     size="xs"
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={showTradeFields ? 0.9 : 1}>
                   <FormTextInput
                     value={l.subledger}
                     onChange={(e) =>
@@ -1167,7 +1650,7 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={0.9}>
                   <FormTextInput
                     value={l.cost_center_code}
                     onChange={(e) =>
@@ -1179,7 +1662,7 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={0.9}>
                   <FormTextInput
                     value={l.cost_center_key}
                     onChange={(e) =>
@@ -1191,7 +1674,21 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={showTradeFields ? 0.9 : 1}>
+                  <Dropdown
+                    searchable
+                    data={currencyOptions.map((o) => o.label)}
+                    value={l.currency || null}
+                    onChange={(label) =>
+                      setLineById(l.id, { currency: label ?? "" })
+                    }
+                    size="xs"
+                    clearable
+                    placeholder="Currency"
+                    disabled={isReadOnly}
+                  />
+                </Grid.Col>
+                <Grid.Col span={0.7}>
                   <FormTextInput
                     type="number"
                     value={l.roe === "" ? "" : String(l.roe)}
@@ -1208,7 +1705,7 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={showTradeFields ? 0.9 : 1}>
                   <FormTextInput
                     type="number"
                     value={l.amount === "" ? "" : String(l.amount)}
@@ -1262,7 +1759,7 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={0.7}>
                   <Dropdown
                     data={["Dr", "Cr"]}
                     value={l.dr_cr || null}
@@ -1310,19 +1807,25 @@ export default function DebitCreditNoteNonTradeCreate() {
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
-                  <Group gap={6} justify="flex-end" wrap="nowrap">
+                <Grid.Col span={0.6}>
+                  <Group gap={6} justify="flex-start" wrap="nowrap">
                     {!isReadOnly && idx === form.values.lines.length - 1 && (
                       <Button
                         type="button"
                         radius="sm"
-                        px={10}
                         size="xs"
                         variant="light"
                         color="#105476"
                         onClick={addLine}
+                        styles={{
+                          root: {
+                            width: 34,
+                            paddingInline: 0,
+                            paddingBlock: 6,
+                          },
+                        }}
                       >
-                        <IconPlus size={14} />
+                        <IconPlus size={16} />
                       </Button>
                     )}
                     {!isReadOnly && form.values.lines.length > 1 && (
@@ -1331,10 +1834,16 @@ export default function DebitCreditNoteNonTradeCreate() {
                         variant="light"
                         color="red"
                         size="xs"
-                        px={10}
                         onClick={() => removeLine(l.id)}
+                        styles={{
+                          root: {
+                            width: 34,
+                            paddingInline: 0,
+                            paddingBlock: 6,
+                          },
+                        }}
                       >
-                        <IconTrash size={14} />
+                        <IconTrash size={16} />
                       </Button>
                     )}
                   </Group>
@@ -1349,12 +1858,18 @@ export default function DebitCreditNoteNonTradeCreate() {
       </Stack>
       {/* </Box> */}
 
-      <Group justify="space-between" mt="md">
+      <Group justify="space-between" mt="lg">
         <Button
           variant="outline"
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
-          onClick={() => navigate("/debit-credit-note-non-trade")}
+          onClick={() =>
+            navigate(
+              showTradeFields
+                ? "/debit-credit-note-trade"
+                : "/debit-credit-note-non-trade",
+            )
+          }
         >
           Back
         </Button>
@@ -1396,5 +1911,14 @@ export default function DebitCreditNoteNonTradeCreate() {
         </Group>
       </Group>
     </Box>
+  );
+}
+
+export default function DebitCreditNoteNonTradeCreate() {
+  return (
+    <DebitCreditNoteCreateBase
+      payloadType="non_trade"
+      showTradeFields={false}
+    />
   );
 }

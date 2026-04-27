@@ -152,6 +152,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/document-allocation")) {
       setActiveNav("Desk");
       setActiveSubNav("Document Allocation");
+    } else if (path.startsWith("/debit-credit-note-trade")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Debit/Credit Note Trade");
     } else if (path.startsWith("/debit-credit-note-non-trade")) {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");

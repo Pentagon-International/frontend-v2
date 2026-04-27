@@ -716,8 +716,13 @@ export default function SupplierInvoiceCreate({
         const match = arr.find(
           (x) => String(x?.shipment_id ?? "").trim() === shipmentNo,
         );
-        const serviceId =
-          match?.service_id != null ? Number(match.service_id) : null;
+        const serviceIdRaw =
+          (match as { service_id?: unknown; serviceId?: unknown; job?: { service_id?: unknown } } | undefined)
+            ?.service_id ??
+          (match as { serviceId?: unknown } | undefined)?.serviceId ??
+          (match as { job?: { service_id?: unknown } } | undefined)?.job?.service_id ??
+          null;
+        const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
 
         shipmentServiceIdCacheRef.current[shipmentNo] =
           serviceId != null && Number.isFinite(serviceId) ? serviceId : null;

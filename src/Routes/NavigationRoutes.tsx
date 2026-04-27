@@ -181,6 +181,8 @@ import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAl
 import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
 import DebitCreditNoteNonTradeMaster from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeMaster";
 import DebitCreditNoteNonTradeCreate from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeCreate";
+import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeMaster";
+import DebitCreditNoteTradeCreate from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeCreate";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -395,6 +397,10 @@ const NavigationRoutes = () => {
         <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteNonTradeMaster />} />
           <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
+        </Route>
+        <Route path="/debit-credit-note-trade" element={<Outlet />}>
+          <Route index element={<DebitCreditNoteTradeMaster />} />
+          <Route path="create" element={<DebitCreditNoteTradeCreate />} />
         </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
