@@ -7,10 +7,15 @@ export {
 } from "./BookingMasterListTable";
 export {
   getBookingRowPW,
+  getBookingMilestoneStyleByIndex,
+  getLastMilestoneDisplayLabel,
   getLastMilestoneIndex,
   getLastMilestoneStep,
   getLastMilestoneWhen,
   getMilestoneDrawerDetail,
+  getRouteMilestonesActiveIndex,
+  mapMilestoneCodeToIndex,
+  formatRouteMilestoneWhen,
   normalizeBookingStatus,
   rgbaFromHex,
   BOOKING_EXPORT_MILESTONES,

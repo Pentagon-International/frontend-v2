@@ -27,6 +27,20 @@ export type BookingMilestoneRow = {
   destination_code_read?: string | null;
   destination_code?: string | null;
   date?: string | null;
+  /** API milestone code (e.g. BOOKED, PICKED_UP) — drives table icon/accent and labels when present. */
+  last_milestone?: string | null;
+  last_milestone_date?: string | null;
+  last_milestone_time?: string | null;
+  /** Ordered steps for list/drawer when provided by `customerServiceShipmentFilter`. */
+  route_milestones?: Array<{
+    code: string;
+    label: string;
+    date?: string | null;
+    time?: string | null;
+    active?: boolean;
+    note?: string;
+    source?: unknown;
+  }>;
 };
 
 export const BOOKING_EXPORT_MILESTONES = [
@@ -86,6 +100,93 @@ function hasTruthyDate(value: string | null | undefined): boolean {
   return s.length > 0 && s !== "null";
 }
 
+function normalizeMilestoneCodeForMatch(code: string | null | undefined): string {
+  if (code == null) return "";
+  return String(code).toUpperCase().replace(/\s+/g, "_");
+}
+
+/** Match `last_milestone` to `route_milestones[]` (case / spacing safe). */
+function findRouteMilestoneByCode(
+  steps: NonNullable<BookingMilestoneRow["route_milestones"]> | undefined,
+  code: string | null | undefined,
+) {
+  if (!steps?.length || !code) return undefined;
+  const n = normalizeMilestoneCodeForMatch(code);
+  return steps.find((m) => normalizeMilestoneCodeForMatch(m.code) === n);
+}
+
+/** Map API `last_milestone` / `route_milestones[].code` to `BOOKING_EXPORT_MILESTONES` index. */
+export function mapMilestoneCodeToIndex(code: string | null | undefined): number {
+  if (!code) return 0;
+  const c = String(code).toUpperCase().replace(/\s+/g, "_");
+  const m: Record<string, number> = {
+    BOOKED: 0,
+    PICKED_UP: 1,
+    PICKEDUP: 1,
+    RECEIVED: 2,
+    DEPARTURE: 3,
+    ARRIVED: 4,
+    DELIVERED: 5,
+  };
+  return m[c] ?? 0;
+}
+
+export function getBookingMilestoneStyleByIndex(
+  i: number,
+): (typeof BOOKING_EXPORT_MILESTONES)[number] {
+  return BOOKING_EXPORT_MILESTONES[Math.min(Math.max(i, 0), BOOKING_EXPORT_MILESTONES.length - 1)];
+}
+
+/** `when` for one API route milestone (date + optional time). */
+export function formatRouteMilestoneWhen(m: { date?: string | null; time?: string | null }): string {
+  if (!hasTruthyDate(m.date)) return "—";
+  const dayPart = String(m.date).split("T")[0];
+  const d = dayjs(dayPart);
+  if (!d.isValid()) return "—";
+  if (m.time && String(m.time).trim()) {
+    const parts = String(m.time).split(":");
+    const hh = parseInt(parts[0] ?? "0", 10);
+    const mm = parseInt(parts[1] ?? "0", 10);
+    if (Number.isFinite(hh) && Number.isFinite(mm)) {
+      return d.hour(hh).minute(mm).second(0).format("DD MMM, HH:mm");
+    }
+  }
+  return d.format("DD MMM, HH:mm");
+}
+
+/** Table “Last milestone” time from `last_milestone_date` + `last_milestone_time`. */
+function formatLastMilestoneApiDateTime(row: BookingMilestoneRow): string {
+  if (!hasTruthyDate(row.last_milestone_date)) return "—";
+  const dayPart = String(row.last_milestone_date).split("T")[0];
+  const d = dayjs(dayPart);
+  if (!d.isValid()) return "—";
+  if (row.last_milestone_time && String(row.last_milestone_time).trim()) {
+    const parts = String(row.last_milestone_time).split(":");
+    const hh = parseInt(parts[0] ?? "0", 10);
+    const mm = parseInt(parts[1] ?? "0", 10);
+    if (Number.isFinite(hh) && Number.isFinite(mm)) {
+      return d.hour(hh).minute(mm).second(0).format("DD MMM, HH:mm");
+    }
+  }
+  return d.format("DD MMM, HH:mm");
+}
+
+export function getRouteMilestonesActiveIndex(
+  steps: NonNullable<BookingMilestoneRow["route_milestones"]>,
+  row: BookingMilestoneRow,
+): number {
+  const byActive = steps.findIndex((m) => m.active);
+  if (byActive >= 0) return byActive;
+  if (row.last_milestone) {
+    const n = normalizeMilestoneCodeForMatch(row.last_milestone);
+    const byCode = steps.findIndex(
+      (m) => normalizeMilestoneCodeForMatch(m.code) === n,
+    );
+    if (byCode >= 0) return byCode;
+  }
+  return Math.max(0, steps.length - 1);
+}
+
 export function normalizeBookingStatus(s: string | undefined | null): string {
   const u = (s || "").toUpperCase();
   if (u.includes("CANCEL")) return "CANCEL";
@@ -95,6 +196,10 @@ export function normalizeBookingStatus(s: string | undefined | null): string {
 }
 
 export function getLastMilestoneIndex(row: BookingMilestoneRow): number {
+  if (row.last_milestone) {
+    return mapMilestoneCodeToIndex(row.last_milestone);
+  }
+
   const st = normalizeBookingStatus(row.status);
   const raw = (row.status || "").toUpperCase();
   if (st === "CANCEL" || raw.includes("CANCEL")) return 0;
@@ -132,11 +237,30 @@ export function getLastMilestoneIndex(row: BookingMilestoneRow): number {
   return Math.min(idx, 5);
 }
 
+function getLastMilestoneLabelFromComputed(row: BookingMilestoneRow): string {
+  return getBookingMilestoneStyleByIndex(getLastMilestoneIndex(row)).label;
+}
+
+/**
+ * Primary line for “Last Milestone” cell: `route_milestones[].label` for `last_milestone` code, else
+ * label from code mapping, else computed from status/dates.
+ */
+export function getLastMilestoneDisplayLabel(row: BookingMilestoneRow): string {
+  if (row.last_milestone) {
+    const m = findRouteMilestoneByCode(row.route_milestones, row.last_milestone);
+    if (m?.label) return m.label;
+    return getBookingMilestoneStyleByIndex(mapMilestoneCodeToIndex(row.last_milestone)).label;
+  }
+  return getLastMilestoneLabelFromComputed(row);
+}
+
 export function getLastMilestoneStep(
   row: BookingMilestoneRow,
 ): (typeof BOOKING_EXPORT_MILESTONES)[number] {
-  const i = getLastMilestoneIndex(row);
-  return BOOKING_EXPORT_MILESTONES[Math.min(Math.max(i, 0), BOOKING_EXPORT_MILESTONES.length - 1)];
+  if (row.last_milestone) {
+    return getBookingMilestoneStyleByIndex(mapMilestoneCodeToIndex(row.last_milestone));
+  }
+  return getBookingMilestoneStyleByIndex(getLastMilestoneIndex(row));
 }
 
 export function getMilestoneDrawerDetail(
@@ -206,10 +330,22 @@ export function getMilestoneDrawerDetail(
   }
 }
 
-export function getLastMilestoneWhen(row: BookingMilestoneRow): string {
+function getLastMilestoneWhenFromComputed(row: BookingMilestoneRow): string {
   const i = getLastMilestoneIndex(row);
   const idx = Math.min(Math.max(i, 0), BOOKING_EXPORT_MILESTONES.length - 1);
   return getMilestoneDrawerDetail(row, idx).when;
+}
+
+/** Date/time for “Last milestone” column: API `last_milestone_date` / `time`, else route step, else legacy. */
+export function getLastMilestoneWhen(row: BookingMilestoneRow): string {
+  if (hasTruthyDate(row.last_milestone_date)) {
+    return formatLastMilestoneApiDateTime(row);
+  }
+  if (row.last_milestone && row.route_milestones?.length) {
+    const hit = findRouteMilestoneByCode(row.route_milestones, row.last_milestone);
+    if (hit) return formatRouteMilestoneWhen(hit);
+  }
+  return getLastMilestoneWhenFromComputed(row);
 }
 
 /** Pieces: sum `no_of_packages` when present, else `no_of_containers`; weight from `gross_weight`. */

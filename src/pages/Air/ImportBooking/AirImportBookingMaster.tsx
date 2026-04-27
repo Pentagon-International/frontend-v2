@@ -176,6 +176,18 @@ type ImportShipmentData = {
     no_of_unit: number;
     sell_amount_total: number | null;
   }>;
+  last_milestone?: string | null;
+  last_milestone_date?: string | null;
+  last_milestone_time?: string | null;
+  route_milestones?: Array<{
+    code: string;
+    label: string;
+    date?: string | null;
+    time?: string | null;
+    active?: boolean;
+    note?: string;
+    source?: unknown;
+  }>;
 };
 
 type FilterState = {
@@ -238,6 +250,10 @@ function airImportRowToTableModel(
       destination_code_read: r.destination_code_read,
       destination_code: r.destination_code ?? null,
       date: r.date,
+      last_milestone: r.last_milestone ?? null,
+      last_milestone_date: r.last_milestone_date ?? null,
+      last_milestone_time: r.last_milestone_time ?? null,
+      route_milestones: r.route_milestones,
     },
     shipment_code: r.shipment_code,
     enquiry_id: r.enquiry_id,
@@ -251,6 +267,17 @@ function airImportRowToTableModel(
     pieces: pw.pieces,
     weight: pw.weight,
     customer_service_name: r.customer_service_name,
+  };
+}
+
+/** Ensure filter API milestone fields are passed through to the list table and drawer. */
+function normalizeImportListMilestonesFromApi(r: ImportShipmentData): ImportShipmentData {
+  return {
+    ...r,
+    last_milestone: r.last_milestone ?? null,
+    last_milestone_date: r.last_milestone_date ?? null,
+    last_milestone_time: r.last_milestone_time ?? null,
+    route_milestones: Array.isArray(r.route_milestones) ? r.route_milestones : undefined,
   };
 }
 
@@ -405,11 +432,17 @@ function AirImportBookingMaster() {
           }
           let data: ImportShipmentData[] = [];
           if (Array.isArray(response.data)) {
-            data = response.data as ImportShipmentData[];
+            data = (response.data as ImportShipmentData[]).map(
+              normalizeImportListMilestonesFromApi,
+            );
           } else if (Array.isArray(response.results)) {
-            data = response.results as ImportShipmentData[];
+            data = (response.results as ImportShipmentData[]).map(
+              normalizeImportListMilestonesFromApi,
+            );
           } else if (Array.isArray(response.result)) {
-            data = response.result as ImportShipmentData[];
+            data = (response.result as ImportShipmentData[]).map(
+              normalizeImportListMilestonesFromApi,
+            );
           }
           return {
             data,

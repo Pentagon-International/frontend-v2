@@ -14,10 +14,15 @@ import type { ErpListTheme } from "../ERPListPage";
 import {
   BOOKING_EXPORT_MILESTONES,
   type BookingMilestoneRow,
+  formatRouteMilestoneWhen,
+  getBookingMilestoneStyleByIndex,
+  getLastMilestoneDisplayLabel,
   getLastMilestoneIndex,
   getLastMilestoneStep,
   getLastMilestoneWhen,
   getMilestoneDrawerDetail,
+  getRouteMilestonesActiveIndex,
+  mapMilestoneCodeToIndex,
   milestonePhase,
   normalizeBookingStatus,
   rgbaFromHex,
@@ -664,7 +669,7 @@ export function BookingMasterListTable<TRaw>({
                             textAlign: "left",
                           }}
                         >
-                          {lastMs.label}
+                          {getLastMilestoneDisplayLabel(booking.milestone)}
                         </Text>
                         <Text
                           size="xs"
@@ -734,17 +739,269 @@ export function BookingMasterListTable<TRaw>({
   );
 }
 
+type BookingMilestoneStepRowProps = {
+  step: (typeof BOOKING_EXPORT_MILESTONES)[number];
+  displayLabel: string;
+  detail: string;
+  when: string;
+  i: number;
+  total: number;
+  activeIdx: number;
+  fg: string;
+  muted: string;
+  primary: string;
+  border: string;
+  pageBg: string;
+  currentStageNote: string;
+};
+
+/** One timeline row: shared for API `route_milestones` and legacy heuristics. */
+function BookingMilestoneStepRow({
+  step,
+  displayLabel,
+  detail,
+  when,
+  i,
+  total,
+  activeIdx,
+  fg,
+  muted,
+  primary,
+  border,
+  pageBg,
+  currentStageNote,
+}: BookingMilestoneStepRowProps) {
+  const phase = milestonePhase(i, activeIdx);
+  const NodeIcon = step.Icon;
+  const iconSize = phase === "current" ? 18 : 16;
+
+  const connector =
+    i < total - 1 ? (
+      i < activeIdx ? (
+        <Box
+          style={{
+            width: 2,
+            height: 32,
+            marginTop: 4,
+            backgroundColor: rgbaFromHex(step.accent, 0.55),
+            borderRadius: 1,
+          }}
+        />
+      ) : i === activeIdx ? (
+        <Box
+          style={{
+            width: 2,
+            height: 32,
+            marginTop: 4,
+            borderRadius: 1,
+            background: `repeating-linear-gradient(to bottom, ${primary} 0, ${primary} 5px, transparent 5px, transparent 9px)`,
+          }}
+        />
+      ) : (
+        <Box
+          style={{
+            width: 2,
+            height: 32,
+            marginTop: 4,
+            backgroundColor: "#e2e8f0",
+            borderRadius: 1,
+          }}
+        />
+      )
+    ) : null;
+
+  const phaseLabel = phase === "completed" ? "Done" : phase === "current" ? "Active" : "Pending";
+
+  return (
+    <Group align="flex-start" wrap="nowrap" gap="md">
+      <Flex direction="column" align="center" style={{ width: 40, flexShrink: 0 }}>
+        <Box mt={2}>
+          {phase === "completed" ? (
+            <Box
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                backgroundColor: rgbaFromHex(step.accent, 0.15),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: `2px solid ${rgbaFromHex(step.accent, 0.45)}`,
+              }}
+            >
+              <NodeIcon size={iconSize} color={step.accent} stroke={2} />
+            </Box>
+          ) : phase === "current" ? (
+            <Box
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: "50%",
+                border: `3px solid ${step.accent}`,
+                backgroundColor: step.soft,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: `0 0 0 4px ${rgbaFromHex(step.accent, 0.14)}`,
+              }}
+            >
+              <NodeIcon size={iconSize} color={step.accent} stroke={2} />
+            </Box>
+          ) : (
+            <Box
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                border: "2px dashed #cbd5e1",
+                backgroundColor: "#f8fafc",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <NodeIcon size={iconSize} color="#94a3b8" stroke={1.75} />
+            </Box>
+          )}
+        </Box>
+        {connector}
+      </Flex>
+      <Stack
+        gap={6}
+        pb="md"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: phase === "upcoming" ? "4px 0 12px 0" : "10px 12px 12px 12px",
+          borderRadius: 10,
+          ...(phase === "completed"
+            ? {
+                backgroundColor: rgbaFromHex(step.accent, 0.07),
+                borderLeft: `3px solid ${step.accent}`,
+              }
+            : {}),
+          ...(phase === "current"
+            ? {
+                backgroundColor: step.soft,
+                border: `1px solid ${rgbaFromHex(step.accent, 0.35)}`,
+                boxShadow: `0 0 0 3px ${rgbaFromHex(step.accent, 0.1)}`,
+              }
+            : {}),
+        }}
+      >
+        <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
+          <Group gap={8} wrap="nowrap" align="center">
+            <Text
+              fw={phase === "current" ? 700 : phase === "completed" ? 600 : 500}
+              size="sm"
+              c={phase === "upcoming" ? muted : fg}
+              lh={1.3}
+            >
+              {displayLabel}
+            </Text>
+            <Text
+              size="xs"
+              fw={600}
+              style={{
+                flexShrink: 0,
+                padding: "2px 8px",
+                borderRadius: 9999,
+                fontSize: 10,
+                letterSpacing: "0.02em",
+                backgroundColor:
+                  phase === "completed"
+                    ? rgbaFromHex(step.accent, 0.14)
+                    : phase === "current"
+                      ? rgbaFromHex(step.accent, 0.22)
+                      : "#f1f5f9",
+                color: phase === "upcoming" ? muted : step.accent,
+              }}
+            >
+              {phaseLabel}
+            </Text>
+          </Group>
+          <Text
+            size="xs"
+            c={phase === "current" ? step.accent : muted}
+            ta="right"
+            style={{ flexShrink: 0 }}
+            fw={phase === "current" ? 600 : 400}
+          >
+            {when}
+          </Text>
+        </Group>
+        <Text size="xs" c="dimmed" lh={1.4}>
+          {detail}
+        </Text>
+        {phase === "current" ? (
+          <Box
+            mt={2}
+            p="sm"
+            style={{
+              backgroundColor: pageBg,
+              borderRadius: 8,
+              border: `1px solid ${border}`,
+            }}
+          >
+            <Text size="xs" c={muted}>
+              {currentStageNote}
+            </Text>
+          </Box>
+        ) : null}
+      </Stack>
+    </Group>
+  );
+}
+
 function BookingMilestoneDrawerBody({
   row,
   theme,
-  fontSans,
+  fontSans: _fontSans,
 }: {
   row: BookingMilestoneRow;
   theme: ErpListTheme;
   fontSans: string;
 }) {
   const { fg, muted, primary, border } = theme;
-  const bg = theme.pageBg;
+  const pageBg = theme.pageBg;
+
+  const api = row.route_milestones;
+  if (api && api.length > 0) {
+    const activeIdx = getRouteMilestonesActiveIndex(api, row);
+    return (
+      <Stack gap="md">
+        <Text fw={600} size="sm" c={fg}>
+          Route milestones
+        </Text>
+        <Stack gap={0}>
+          {api.map((rm, i) => {
+            const step = getBookingMilestoneStyleByIndex(mapMilestoneCodeToIndex(rm.code));
+            const when = formatRouteMilestoneWhen(rm);
+            const note = String(rm.note ?? "").trim();
+            return (
+              <BookingMilestoneStepRow
+                key={`${String(rm.code)}-${i}`}
+                step={step}
+                displayLabel={rm.label}
+                detail={note || "—"}
+                when={when}
+                i={i}
+                total={api.length}
+                activeIdx={activeIdx}
+                fg={fg}
+                muted={muted}
+                primary={primary}
+                border={border}
+                pageBg={pageBg}
+                currentStageNote=""
+              />
+            );
+          })}
+        </Stack>
+      </Stack>
+    );
+  }
+
   const activeIdx = getLastMilestoneIndex(row);
 
   return (
@@ -754,191 +1011,24 @@ function BookingMilestoneDrawerBody({
       </Text>
       <Stack gap={0}>
         {BOOKING_EXPORT_MILESTONES.map((step, i) => {
-          const phase = milestonePhase(i, activeIdx);
           const { detail, when } = getMilestoneDrawerDetail(row, i);
-          const NodeIcon = step.Icon;
-          const iconSize = phase === "current" ? 18 : 16;
-
-          const connector =
-            i < BOOKING_EXPORT_MILESTONES.length - 1 ? (
-              i < activeIdx ? (
-                <Box
-                  style={{
-                    width: 2,
-                    height: 32,
-                    marginTop: 4,
-                    backgroundColor: rgbaFromHex(step.accent, 0.55),
-                    borderRadius: 1,
-                  }}
-                />
-              ) : i === activeIdx ? (
-                <Box
-                  style={{
-                    width: 2,
-                    height: 32,
-                    marginTop: 4,
-                    borderRadius: 1,
-                    background: `repeating-linear-gradient(to bottom, ${primary} 0, ${primary} 5px, transparent 5px, transparent 9px)`,
-                  }}
-                />
-              ) : (
-                <Box
-                  style={{
-                    width: 2,
-                    height: 32,
-                    marginTop: 4,
-                    backgroundColor: "#e2e8f0",
-                    borderRadius: 1,
-                  }}
-                />
-              )
-            ) : null;
-
-          const phaseLabel =
-            phase === "completed" ? "Done" : phase === "current" ? "Active" : "Pending";
-
           return (
-            <Group key={step.label} align="flex-start" wrap="nowrap" gap="md">
-              <Flex direction="column" align="center" style={{ width: 40, flexShrink: 0 }}>
-                <Box mt={2}>
-                  {phase === "completed" ? (
-                    <Box
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        backgroundColor: rgbaFromHex(step.accent, 0.15),
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        border: `2px solid ${rgbaFromHex(step.accent, 0.45)}`,
-                      }}
-                    >
-                      <NodeIcon size={iconSize} color={step.accent} stroke={2} />
-                    </Box>
-                  ) : phase === "current" ? (
-                    <Box
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: "50%",
-                        border: `3px solid ${step.accent}`,
-                        backgroundColor: step.soft,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        boxShadow: `0 0 0 4px ${rgbaFromHex(step.accent, 0.14)}`,
-                      }}
-                    >
-                      <NodeIcon size={iconSize} color={step.accent} stroke={2} />
-                    </Box>
-                  ) : (
-                    <Box
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        border: "2px dashed #cbd5e1",
-                        backgroundColor: "#f8fafc",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <NodeIcon size={iconSize} color="#94a3b8" stroke={1.75} />
-                    </Box>
-                  )}
-                </Box>
-                {connector}
-              </Flex>
-              <Stack
-                gap={6}
-                pb="md"
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  padding:
-                    phase === "upcoming" ? "4px 0 12px 0" : "10px 12px 12px 12px",
-                  borderRadius: 10,
-                  ...(phase === "completed"
-                    ? {
-                        backgroundColor: rgbaFromHex(step.accent, 0.07),
-                        borderLeft: `3px solid ${step.accent}`,
-                      }
-                    : {}),
-                  ...(phase === "current"
-                    ? {
-                        backgroundColor: step.soft,
-                        border: `1px solid ${rgbaFromHex(step.accent, 0.35)}`,
-                        boxShadow: `0 0 0 3px ${rgbaFromHex(step.accent, 0.1)}`,
-                      }
-                    : {}),
-                }}
-              >
-                <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <Text
-                      fw={
-                        phase === "current" ? 700 : phase === "completed" ? 600 : 500
-                      }
-                      size="sm"
-                      c={phase === "upcoming" ? muted : fg}
-                      lh={1.3}
-                    >
-                      {step.label}
-                    </Text>
-                    <Text
-                      size="xs"
-                      fw={600}
-                      style={{
-                        flexShrink: 0,
-                        padding: "2px 8px",
-                        borderRadius: 9999,
-                        fontSize: 10,
-                        letterSpacing: "0.02em",
-                        backgroundColor:
-                          phase === "completed"
-                            ? rgbaFromHex(step.accent, 0.14)
-                            : phase === "current"
-                              ? rgbaFromHex(step.accent, 0.22)
-                              : "#f1f5f9",
-                        color: phase === "upcoming" ? muted : step.accent,
-                      }}
-                    >
-                      {phaseLabel}
-                    </Text>
-                  </Group>
-                  <Text
-                    size="xs"
-                    c={phase === "current" ? step.accent : muted}
-                    ta="right"
-                    style={{ flexShrink: 0 }}
-                    fw={phase === "current" ? 600 : 400}
-                  >
-                    {when}
-                  </Text>
-                </Group>
-                <Text size="xs" c="dimmed" lh={1.4}>
-                  {detail}
-                </Text>
-                {phase === "current" ? (
-                  <Box
-                    mt={2}
-                    p="sm"
-                    style={{
-                      backgroundColor: bg,
-                      borderRadius: 8,
-                      border: `1px solid ${border}`,
-                    }}
-                  >
-                    <Text size="xs" c={muted}>
-                      Current stage — derived from status, MAWB/booking refs, and
-                      ETD/ATD/ETA/ATA when present.
-                    </Text>
-                  </Box>
-                ) : null}
-              </Stack>
-            </Group>
+            <BookingMilestoneStepRow
+              key={step.label}
+              step={step}
+              displayLabel={step.label}
+              detail={detail}
+              when={when}
+              i={i}
+              total={BOOKING_EXPORT_MILESTONES.length}
+              activeIdx={activeIdx}
+              fg={fg}
+              muted={muted}
+              primary={primary}
+              border={border}
+              pageBg={pageBg}
+              currentStageNote=""
+            />
           );
         })}
       </Stack>
