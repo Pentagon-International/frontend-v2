@@ -538,6 +538,14 @@ export default function SupplierInvoiceCreate({
     },
   });
 
+  const getDrCrDefaultsByType = useCallback(
+    (type: "INV" | "CRN") =>
+      type === "CRN"
+        ? ({ header: "Dr", charge: "Cr" } as const)
+        : ({ header: "Cr", charge: "Dr" } as const),
+    [],
+  );
+
   const { data: currencyData = [], isLoading: isCurrencyLoading } = useQuery({
     queryKey: ["currencyMaster"],
     queryFn: fetchCurrencyMaster,
@@ -657,6 +665,15 @@ export default function SupplierInvoiceCreate({
     shipment_id?: string;
     service_id?: number;
   }[];
+  const fallbackServiceIdFromState = useMemo(() => {
+    const raw =
+      (location.state as { job?: { service_id?: number } } | null)?.job
+        ?.service_id ??
+      ((prefillFromJob as unknown as { service_id?: number } | null)
+        ?.service_id ?? null);
+    const parsed = raw != null ? Number(raw) : null;
+    return parsed != null && Number.isFinite(parsed) ? parsed : null;
+  }, [location.state, prefillFromJob]);
 
   const getServiceIdByShipmentId = useCallback(
     (shipmentId: string | null | undefined): number | null => {
@@ -678,6 +695,9 @@ export default function SupplierInvoiceCreate({
       // First: use the preloaded job list if it contains a match
       const direct = getServiceIdByShipmentId(shipmentNo);
       if (direct != null) return direct;
+
+      // Same fallback style as InvoiceCreate: use navigation/job service_id when available.
+      if (fallbackServiceIdFromState != null) return fallbackServiceIdFromState;
 
       // Next: use cache
       if (shipmentNo in shipmentServiceIdCacheRef.current) {
@@ -707,7 +727,7 @@ export default function SupplierInvoiceCreate({
         return null;
       }
     },
-    [getServiceIdByShipmentId],
+    [getServiceIdByShipmentId, fallbackServiceIdFromState],
   );
 
   const fetchSacForChargeRow = useCallback(
@@ -1173,7 +1193,7 @@ export default function SupplierInvoiceCreate({
             amount: amountNum,
             amount_in_local: null,
             tax_code: "",
-            Dr_Cr: "Dr" as const,
+            Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
           };
         })
         .filter(Boolean) as ChargeRow[];
@@ -1182,7 +1202,7 @@ export default function SupplierInvoiceCreate({
         form.setFieldValue("charges_data", mappedCharges);
       }
     },
-    [prefillFromJob, isViewMode, isEditMode, isReversal, form],
+    [prefillFromJob, isViewMode, isEditMode, isReversal, form, getDrCrDefaultsByType],
   );
 
   useEffect(() => {
@@ -1666,7 +1686,7 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
-      Dr_Cr: isReversal ? "Cr" : "Dr",
+      Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
     });
   };
 
@@ -1999,9 +2019,18 @@ export default function SupplierInvoiceCreate({
                   { value: "CRN", label: "CRN" },
                 ]}
                 value={form.values.type}
-                onChange={(v) =>
-                  form.setFieldValue("type", v === "CRN" ? "CRN" : "INV")
-                }
+                onChange={(v) => {
+                  const nextType = v === "CRN" ? "CRN" : "INV";
+                  const defaults = getDrCrDefaultsByType(nextType);
+                  form.setFieldValue("type", nextType);
+                  form.setFieldValue("Dr_Cr", defaults.header);
+                  form.values.charges_data.forEach((_, idx) => {
+                    form.setFieldValue(
+                      `charges_data.${idx}.Dr_Cr`,
+                      defaults.charge,
+                    );
+                  });
+                }}
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 styles={effectiveInputStyles}
               />
