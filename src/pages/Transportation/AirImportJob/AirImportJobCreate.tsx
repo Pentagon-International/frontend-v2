@@ -6153,7 +6153,7 @@ function AirImportJobCreate() {
                             <Table.Th>Pack</Table.Th>
                             <Table.Th>Gr. Wt.</Table.Th>
                             <Table.Th>Origin</Table.Th>
-                            <Table.Th>Dest</Table.Th>
+                            <Table.Th>Destination</Table.Th>
                             <Table.Th>Description</Table.Th>
                           </Table.Tr>
                         </Table.Thead>
@@ -6232,7 +6232,7 @@ function AirImportJobCreate() {
                             <Table.Th>Pack</Table.Th>
                             <Table.Th>Gr. Wt.</Table.Th>
                             <Table.Th>Origin</Table.Th>
-                            <Table.Th>Dest</Table.Th>
+                            <Table.Th>Destination</Table.Th>
                             <Table.Th>Item Description</Table.Th>
                             <Table.Th>Message</Table.Th>
                           </Table.Tr>
