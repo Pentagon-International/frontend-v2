@@ -71,6 +71,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
 
@@ -115,6 +116,21 @@ type ExportJobData = {
   housing_details?: Array<{
     hbl_number: string;
   }>;
+};
+
+/** `summary` on `filterJobCreate` list (filter-scoped). */
+type ExportJobListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    active?: number;
+    closed?: number;
+    cancel?: number;
+  };
+};
+
+type ExportJobListQueryResult = {
+  data: ExportJobData[];
+  summary?: ExportJobListSummary;
 };
 
 /** Air Export Booking route column: origin_code_read → origin_code → origin_name (same for destination). */
@@ -323,11 +339,11 @@ function ExportJobMaster() {
   };
 
   const {
-    data: exportJobData = [],
+    data: exportJobListResult,
     isLoading: exportJobLoading,
     isFetching: exportJobFetching,
     refetch: refetchExportJobs,
-  } = useQuery({
+  } = useQuery<ExportJobListQueryResult>({
     queryKey: [
       "oceanExportJobs",
       pagination.pageIndex,
@@ -335,31 +351,53 @@ function ExportJobMaster() {
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<ExportJobData[]> => {
+    queryFn: async (): Promise<ExportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
       setIsInitialLoad(false);
-      const response = await apiCallProtected.post(
+      const response = (await apiCallProtected.post(
         `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
         { filters: filtersPayload },
         API_HEADER
-      );
+      )) as Record<string, unknown>;
 
       const result = response as {
         status?: boolean;
         data?: ExportJobData[];
         total_count?: number;
+        summary?: unknown;
       };
       const list = Array.isArray(result?.data) ? result.data : [];
-      setTotalRecords(result?.total_count ?? list.length);
+      const listTotal = getBookingShipmentFilterListTotal(response, list, index);
+      const rawSummary = response.summary;
+      const summary: ExportJobListSummary | undefined =
+        rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+          ? (rawSummary as ExportJobListSummary)
+          : undefined;
+      const summaryTotal = summary?.total_shipments;
+      const total =
+        typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+          ? summaryTotal
+          : listTotal;
+      setTotalRecords(total);
 
-      return list;
+      return { data: list, summary };
     },
     enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnMount: true,
   });
+
+  const exportJobData = exportJobListResult?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pageSize, pagination.pageIndex]);
 
   const isLoading = exportJobFetching || exportJobLoading || isInitialLoad;
 
@@ -430,13 +468,23 @@ function ExportJobMaster() {
 
   const stats = useMemo(() => {
     const rows = exportJobData;
+    const summary = exportJobListResult?.summary;
+    if (summary) {
+      const sc = summary.status_counts ?? {};
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        active: sc.active ?? 0,
+        closed: sc.closed ?? 0,
+        cancel: sc.cancel ?? 0,
+      };
+    }
     return {
       total: totalRecords,
       active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
       closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
       cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
     };
-  }, [exportJobData, totalRecords]);
+  }, [exportJobData, exportJobListResult?.summary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -500,9 +548,7 @@ function ExportJobMaster() {
                   <Text fw={600} size="sm" c={fg} component="span">
                     {exportJobData.length}
                   </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
-                  </Text>
+
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
@@ -747,8 +793,6 @@ function ExportJobMaster() {
                         etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
                       }))
                     }
-                    clearable
-                    valueFormat="YYYY-MM-DD"
                     classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={filterFieldStyles}
                   />
@@ -765,8 +809,6 @@ function ExportJobMaster() {
                         eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
                       }))
                     }
-                    clearable
-                    valueFormat="YYYY-MM-DD"
                     classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={filterFieldStyles}
                   />

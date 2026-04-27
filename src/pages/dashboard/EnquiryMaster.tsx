@@ -30,6 +30,12 @@ import {
   IconUsers,
   IconList,
   IconFileText,
+  IconCircleCheck,
+  IconUserOff,
+  IconFileDescription,
+  IconShieldCheck,
+  IconTrendingUp,
+  IconTrendingDown,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -77,9 +83,66 @@ import {
   type EnquirySummaryVisibleColumns,
 } from "./EnquiryListNativeTables";
 import type { EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
+import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "ENQUIRY_MASTER";
 const DETAILED_LIST_KEY = "ENQUIRY_MASTER_DETAILED";
+
+/** Normalized key for matching API `summary.status_counts` (handles spaces / case). */
+function normalizeEnquiryStatusKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeEnquiryStatusCounts(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isNaN(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Match status_counts keys like `quote created` / `quote approved` (space + case tolerant). */
+function getEnquiryStatusCount(
+  map: Record<string, number> | null | undefined,
+  ...normalizedLabels: string[]
+): number {
+  if (!map) return 0;
+  for (const label of normalizedLabels) {
+    const target = normalizeEnquiryStatusKey(label);
+    for (const [k, v] of Object.entries(map)) {
+      if (normalizeEnquiryStatusKey(k) === target) return v;
+    }
+  }
+  return 0;
+}
+
+function parseEnquiryFilterResponse(data: any): {
+  rows: any[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+} {
+  const rows = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.result)
+        ? data.result
+        : [];
+  const statusCounts = normalizeEnquiryStatusCounts(data?.summary?.status_counts);
+
+  const indexRaw = data?.index;
+  const requestOffset =
+    typeof indexRaw === "number" && !Number.isNaN(indexRaw) ? indexRaw : 0;
+  const total = getBookingShipmentFilterListTotal(
+    (data ?? {}) as Record<string, unknown>,
+    rows,
+    requestOffset,
+  );
+
+  return { rows, total, statusCounts };
+}
 
 type FilterState = {
   customer_code: string | null;
@@ -676,15 +739,15 @@ function EnquiryMaster() {
           `${URL.enquiryFilter}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           { filters: filterPayload },
         );
-        const data = response as any;
-        const rows = Array.isArray(data?.data) ? data.data : [];
-        const total = data?.total || rows.length || 0;
+        const { rows, total, statusCounts } = parseEnquiryFilterResponse(
+          response as any,
+        );
         setListTotalRecords(total);
-        return { data: rows, total };
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching enquiry data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       }
     },
     enabled: false, // Always refetch explicitly (Apply, navigation restore, etc.)
@@ -709,10 +772,17 @@ function EnquiryMaster() {
           `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
           { filters: { ...filterPayload } },
         );
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const offset = (previewCurrentPage - 1) * previewPageSize;
+        const total = getBookingShipmentFilterListTotal(
+          (res ?? {}) as Record<string, unknown>,
+          rows,
+          offset,
+        );
         return {
           columns: Array.isArray(res?.columns) ? res.columns : [],
-          data: Array.isArray(res?.data) ? res.data : [],
-          total: res?.total_count || res?.total || 0,
+          data: rows,
+          total,
         };
       } catch (error: any) {
         ToastNotification({
@@ -795,6 +865,44 @@ function EnquiryMaster() {
   const tableData = summaryResult?.data || [];
   const tablePreviewData = previewResult || { columns: [], data: [], total: 0 };
 
+  const summaryListTotalRecords = summaryResult?.total ?? listTotalRecords;
+
+  /** Sub-header stats from enquiryFilter `summary.status_counts` (filter-scoped, not page rows). */
+  const enquirySummaryStats = useMemo(() => {
+    const sc = summaryResult?.statusCounts ?? null;
+    return {
+      total: summaryListTotalRecords,
+      active: getEnquiryStatusCount(sc, "active"),
+      inactive: getEnquiryStatusCount(sc, "inactive"),
+      quoteCreated: getEnquiryStatusCount(sc, "quote created"),
+      quoteApproved: getEnquiryStatusCount(sc, "quote approved"),
+      gained: getEnquiryStatusCount(sc, "gained"),
+      lost: getEnquiryStatusCount(sc, "lost"),
+    };
+  }, [summaryResult, summaryListTotalRecords]);
+
+  // Keep current page valid when total shrinks (e.g. after filter or delete)
+  useEffect(() => {
+    if (showPreviewTable) return;
+    const tr = summaryListTotalRecords;
+    const totalPages = Math.max(1, Math.ceil(tr / listPageSize));
+    if (listCurrentPage > totalPages) {
+      setListCurrentPage(totalPages);
+    }
+  }, [showPreviewTable, summaryListTotalRecords, listPageSize, listCurrentPage]);
+
+  const previewListTotalRecords = previewResult?.total ?? 0;
+
+  // Detailed list: keep current page valid when total shrinks (filters, delete, etc.)
+  useEffect(() => {
+    if (!showPreviewTable) return;
+    const tr = previewListTotalRecords;
+    const totalPages = Math.max(1, Math.ceil(tr / previewPageSize));
+    if (previewCurrentPage > totalPages) {
+      setPreviewCurrentPage(totalPages);
+    }
+  }, [showPreviewTable, previewListTotalRecords, previewPageSize, previewCurrentPage]);
+
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
   // isRefreshingData is set manually before/after explicit refetch calls
@@ -866,7 +974,10 @@ function EnquiryMaster() {
         setPreviewFiltersApplied(true); // Mark that filters were applied
         setIsRefreshingData(true);
         try {
-          await refetchPreview(); // Manually refetch detailed data
+          await Promise.all([
+            refetchPreview(),
+            refetchSummary(),
+          ]);
           setIsRefreshingData(false);
           ToastNotification({
             type: "success",
@@ -993,7 +1104,10 @@ function EnquiryMaster() {
       // Wait a bit for state updates to flush before refetching
       await new Promise((resolve) => setTimeout(resolve, 100));
       setIsRefreshingData(true);
-      await refetchPreview(); // This uses enquiryPreviewExcel with current filters/search
+      await Promise.all([
+        refetchPreview(),
+        refetchSummary(),
+      ]);
       setIsRefreshingData(false);
     } else {
       setListCurrentPage(1); // Reset to first page
@@ -1013,9 +1127,16 @@ function EnquiryMaster() {
     });
   };
 
-  const handleCancelEnquiry = async (enquiry: number) => {
-    const enquiryData = enquiry as any;
-    setCancellingEnquiryId(enquiryData.id ?? null);
+  const handleCancelEnquiry = async (row: unknown) => {
+    const enquiryData = row as any;
+    const rawId = enquiryData?.id;
+    setCancellingEnquiryId(
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string" && rawId !== ""
+          ? (Number.isFinite(Number(rawId)) ? Number(rawId) : null)
+          : null,
+    );
     try {
 
       // Build service payload to match edit flow (getEnquiryPayload in EnquiryCreate)
@@ -1620,7 +1741,7 @@ function EnquiryMaster() {
             await new Promise((resolve) => setTimeout(resolve, 0));
 
             console.log("✅ [refreshData - Detailed] Fetching preview data with restored/current state");
-            await refetchPreview();
+            await Promise.all([refetchPreview(), refetchSummary()]);
             setIsRefreshingData(false);
           } else {
             // Summary view: restore from store when we have saved state (returned from sub-page)
@@ -1822,8 +1943,8 @@ function EnquiryMaster() {
     setIsRefreshingData(true);
 
     if (debouncedSearch.trim() !== "") {
-      // Search exists - refetch preview with search merged into payload
-      refetchPreview()
+      // Search exists — keep summary stats (enquiryFilter) in sync with detailed list filters
+      Promise.all([refetchPreview(), refetchSummary()])
         .then(() => {
           setPreviewFiltersApplied(true);
           setIsRefreshingData(false);
@@ -1836,7 +1957,7 @@ function EnquiryMaster() {
       // Search cleared - refetch based on filter state
       if (previewFiltersApplied) {
         // Filters still applied - refetch with filters only (no search)
-        refetchPreview()
+        Promise.all([refetchPreview(), refetchSummary()])
           .then(() => {
             setIsRefreshingData(false);
           })
@@ -1846,7 +1967,7 @@ function EnquiryMaster() {
           });
       } else {
         // No search, no filters - refetch default preview data
-        refetchPreview()
+        Promise.all([refetchPreview(), refetchSummary()])
           .then(() => {
             setIsRefreshingData(false);
           })
@@ -1967,7 +2088,7 @@ function EnquiryMaster() {
       if (hasPreviewFilters || hasPreviewSearch) {
         setPreviewFiltersApplied(true);
       }
-      await refetchPreview();
+      await Promise.all([refetchPreview(), refetchSummary()]);
       setIsRefreshingData(false);
     };
     if (restoredState?.shouldRestore) {
@@ -2248,12 +2369,62 @@ function EnquiryMaster() {
                       Back to Dashboard
                     </Button>
                   )}
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconUsers size={14} color={primary} />}
-                    value={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
-                    label="Total"
-                  />
+                  <Group gap={6} wrap="wrap" align="center">
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconUsers size={14} color={primary} />}
+                      value={enquirySummaryStats.total}
+                      label="Total"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconCircleCheck size={14} color="#059669" />}
+                      iconBackground="#d1fae5"
+                      iconColor="#059669"
+                      value={enquirySummaryStats.active}
+                      label="Active"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconUserOff size={14} color="#64748b" />}
+                      iconBackground="#f1f5f9"
+                      iconColor="#64748b"
+                      value={enquirySummaryStats.inactive}
+                      label="Inactive"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconFileDescription size={14} color="#2563eb" />}
+                      iconBackground="#dbeafe"
+                      iconColor="#2563eb"
+                      value={enquirySummaryStats.quoteCreated}
+                      label="Quote created"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconShieldCheck size={14} color="#7c3aed" />}
+                      iconBackground="#f3e8ff"
+                      iconColor="#7c3aed"
+                      value={enquirySummaryStats.quoteApproved}
+                      label="Quote approved"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconTrendingUp size={14} color="#16a34a" />}
+                      iconBackground="#f0fdf4"
+                      iconColor="#16a34a"
+                      value={enquirySummaryStats.gained}
+                      label="Gained"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconTrendingDown size={14} color="#dc2626" />}
+                      iconBackground="#fef2f2"
+                      iconColor="#dc2626"
+                      value={enquirySummaryStats.lost}
+                      label="Lost"
+                    />
+                  </Group>
                 </>
               ),
               secondary: (
@@ -2715,7 +2886,9 @@ function EnquiryMaster() {
               footer: (
                 <ERPListPaginationFooter
                   theme={erpTheme}
-                  totalRecords={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
+                  totalRecords={
+                    showPreviewTable ? tablePreviewData?.total ?? 0 : summaryListTotalRecords
+                  }
                   pageIndex={showPreviewTable ? previewCurrentPage - 1 : listCurrentPage - 1}
                   pageSize={showPreviewTable ? previewPageSize : listPageSize}
                   onPageIndexChange={(idx) => {

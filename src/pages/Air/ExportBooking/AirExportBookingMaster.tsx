@@ -70,6 +70,7 @@ import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "AIR_EXPORT_BOOKING_MASTER";
 
@@ -934,7 +935,7 @@ function AirExportBookingMaster() {
     data: exportShipmentsResponse,
     isLoading,
     refetch: refetchExportShipments,
-  } = useQuery({
+  } = useQuery<AirExportListQueryResult>({
     queryKey: ["air-export-booking/filter/", pageIndex, pageSize, filtersApplied,
       filtersApplied ? JSON.stringify(filterForm.values) : "-", debouncedSearch, statusFilter],
     enabled: !isRestoring && searchQuery === debouncedSearch,
@@ -947,11 +948,12 @@ function AirExportBookingMaster() {
         })) as Record<string, unknown>;
 
         if (response && typeof response === "object") {
-          if (typeof response.total === "number") setTotalRecords(response.total);
           let data: ExportShipmentData[] = [];
           if (Array.isArray(response.data)) data = response.data as ExportShipmentData[];
           else if (Array.isArray(response.results)) data = response.results as ExportShipmentData[];
           else if (Array.isArray(response.result)) data = response.result as ExportShipmentData[];
+
+          const listTotal = getBookingShipmentFilterListTotal(response, data, offset);
 
           const rawSummary = response.summary;
           const summary: AirExportShipmentListSummary | undefined =
@@ -959,10 +961,19 @@ function AirExportBookingMaster() {
               ? (rawSummary as AirExportShipmentListSummary)
               : undefined;
 
-          return { data, total: (response.total as number) || 0, summary };
+          const summaryTotal = summary?.total_shipments;
+          const total =
+            typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+              ? summaryTotal
+              : listTotal;
+          setTotalRecords(total);
+
+          return { data, total, summary };
         }
+        setTotalRecords(0);
         return { data: [], total: 0, summary: undefined };
       } catch {
+        setTotalRecords(0);
         return { data: [], total: 0, summary: undefined };
       }
     },
@@ -971,6 +982,14 @@ function AirExportBookingMaster() {
     refetchOnWindowFocus: false,
     refetchOnMount: true,
   });
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
   const displayData = useMemo(() => exportShipmentsResponse?.data ?? [], [exportShipmentsResponse]);
 
@@ -1015,6 +1034,7 @@ function AirExportBookingMaster() {
         booked: summary.status_counts?.booked ?? 0,
         received: summary.status_counts?.received ?? 0,
         generated: summary.status_counts?.generated ?? 0,
+        canceled: summary.status_counts?.cancel ?? 0,
         totalPieces: summary.totals?.pcs ?? fallback.totalPieces,
         totalWeight: summary.totals?.weight_kg ?? fallback.totalWeight,
       };
@@ -1026,6 +1046,10 @@ function AirExportBookingMaster() {
       booked: rows.filter((r) => normalizeBookingStatus(r.status) === "BOOKED").length,
       received: rows.filter((r) => normalizeBookingStatus(r.status) === "RECEIVED").length,
       generated: rows.filter((r) => normalizeBookingStatus(r.status) === "GENERATED").length,
+      canceled: rows.filter((r) => {
+        const s = normalizeBookingStatus(r.status);
+        return s === "CANCEL" || s === "CANCELED" || s === "CANCELLED";
+      }).length,
       totalPieces,
       totalWeight,
     };
@@ -1416,6 +1440,14 @@ function AirExportBookingMaster() {
                   iconColor="#d97706"
                   value={stats.generated}
                   label="Generated"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleX size={14} color="#dc2626" />}
+                  iconBackground="#fee2e2"
+                  iconColor="#dc2626"
+                  value={stats.canceled}
+                  label="Canceled"
                 />
               </>
             ,

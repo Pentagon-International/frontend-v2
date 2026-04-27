@@ -24,6 +24,7 @@ import {
   IconClock,
   IconStack2,
   IconScale,
+  IconCircleX,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +63,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "AIR_IMPORT_BOOKING_MASTER";
 
@@ -188,6 +190,33 @@ type ImportShipmentData = {
     note?: string;
     source?: unknown;
   }>;
+};
+
+/** Matches `summary` on `customerServiceShipmentFilter` for air import (totals are filter-scoped). */
+type AirImportShipmentListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    booked?: number;
+    received?: number;
+    generated?: number;
+    closed?: number;
+    cancel?: number;
+    pending?: number;
+  };
+  totals?: {
+    pcs?: number;
+    weight_kg?: number;
+  };
+};
+
+type AirImportListQueryResult = {
+  data: ImportShipmentData[];
+  total: number;
+  summary?: AirImportShipmentListSummary;
+  count: number;
+  index: number;
+  limit: number;
+  total_pagination: number;
 };
 
 type FilterState = {
@@ -402,7 +431,7 @@ function AirImportBookingMaster() {
     isFetching,
     isError,
     refetch: refetchImportShipments,
-  } = useQuery({
+  } = useQuery<AirImportListQueryResult>({
     queryKey: [
       "air-import-booking/filter/",
       pageIndex,
@@ -413,7 +442,7 @@ function AirImportBookingMaster() {
       statusFilter,
     ],
     enabled: !isRestoring && searchQuery === debouncedSearch,
-    queryFn: async () => {
+    queryFn: async (): Promise<AirImportListQueryResult> => {
       try {
         const offset = pageIndex * pageSize;
         const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
@@ -427,9 +456,6 @@ function AirImportBookingMaster() {
         })) as Record<string, unknown>;
 
         if (response && typeof response === "object") {
-          if (typeof response.total === "number") {
-            setTotalRecords(response.total);
-          }
           let data: ImportShipmentData[] = [];
           if (Array.isArray(response.data)) {
             data = (response.data as ImportShipmentData[]).map(
@@ -444,18 +470,48 @@ function AirImportBookingMaster() {
               normalizeImportListMilestonesFromApi,
             );
           }
+          const listTotal = getBookingShipmentFilterListTotal(
+            response,
+            data,
+            offset,
+          );
+          const rawSummary = response.summary;
+          const summary: AirImportShipmentListSummary | undefined =
+            rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+              ? (rawSummary as AirImportShipmentListSummary)
+              : undefined;
+          const summaryTotal = summary?.total_shipments;
+          const total =
+            typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+              ? summaryTotal
+              : listTotal;
+          setTotalRecords(total);
+          const countRaw = response.count;
+          const count =
+            typeof countRaw === "number" && !Number.isNaN(countRaw)
+              ? countRaw
+              : data.length;
+          const totalPaginationRaw = response.total_pagination;
+          const totalPagination =
+            typeof totalPaginationRaw === "number" &&
+            !Number.isNaN(totalPaginationRaw)
+              ? totalPaginationRaw
+              : 0;
           return {
             data,
-            total: (response.total as number) || 0,
-            count: (response.count as number) || data.length,
+            total,
+            summary,
+            count,
             index: (response.index as number) ?? pageIndex,
             limit: (response.limit as number) ?? pageSize,
-            total_pagination: (response.total_pagination as number) || 0,
+            total_pagination: totalPagination,
           };
         }
+        setTotalRecords(0);
         return {
           data: [],
           total: 0,
+          summary: undefined,
           count: 0,
           index: pageIndex,
           limit: pageSize,
@@ -463,9 +519,11 @@ function AirImportBookingMaster() {
         };
       } catch (error) {
         console.error("❌ Error fetching air import booking:", error);
+        setTotalRecords(0);
         return {
           data: [],
           total: 0,
+          summary: undefined,
           count: 0,
           index: pageIndex,
           limit: pageSize,
@@ -479,6 +537,14 @@ function AirImportBookingMaster() {
     refetchOnMount: true,
   });
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
+
   const displayData = importShipmentsResponse?.data ?? [];
 
   const tableRowModels = useMemo(
@@ -489,24 +555,48 @@ function AirImportBookingMaster() {
 
   const importStats = useMemo(() => {
     const rows = displayData;
-    let totalWeight = 0;
-    let totalContainers = 0;
-    rows.forEach((r) => {
-      r.cargo_details?.forEach((c) => {
-        totalContainers += Number(c.no_of_containers) || 0;
-        totalWeight += parseFloat(String(c.gross_weight)) || 0;
+    const fromRows = () => {
+      let totalPieces = 0;
+      let totalWeight = 0;
+      rows.forEach((r) => {
+        const pw = getBookingRowPW(r.cargo_details);
+        totalPieces += pw.pieces;
+        totalWeight += pw.weight;
       });
-    });
+      return { totalPieces, totalWeight };
+    };
+
+    const summary = importShipmentsResponse?.summary;
+    if (summary) {
+      const fallback = fromRows();
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        booked: summary.status_counts?.booked ?? 0,
+        received: summary.status_counts?.received ?? 0,
+        generated: summary.status_counts?.generated ?? 0,
+        canceled: summary.status_counts?.cancel ?? 0,
+        totalPieces: summary.totals?.pcs ?? fallback.totalPieces,
+        totalWeight: summary.totals?.weight_kg ?? fallback.totalWeight,
+      };
+    }
+
     const st = (s: string | undefined) => (s || "").toUpperCase();
+    const { totalPieces, totalWeight } = fromRows();
     return {
       total: totalRecords,
       booked: rows.filter((r) => st(r.status) === "BOOKED").length,
       received: rows.filter((r) => st(r.status) === "RECEIVED").length,
-      pending: rows.filter((r) => st(r.status) === "GENERATED").length,
-      totalContainers,
+      generated: rows.filter((r) => st(r.status) === "GENERATED").length,
+      canceled: rows.filter(
+        (r) =>
+          st(r.status) === "CANCEL" ||
+          st(r.status) === "CANCELED" ||
+          st(r.status) === "CANCELLED",
+      ).length,
+      totalPieces,
       totalWeight,
     };
-  }, [displayData, totalRecords]);
+  }, [displayData, importShipmentsResponse?.summary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -886,8 +976,16 @@ function AirImportBookingMaster() {
                   icon={<IconClock size={14} color="#d97706" />}
                   iconBackground="#fef3c7"
                   iconColor="#d97706"
-                  value={importStats.pending}
+                  value={importStats.generated}
                   label="Generated"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleX size={14} color="#dc2626" />}
+                  iconBackground="#fee2e2"
+                  iconColor="#dc2626"
+                  value={importStats.canceled}
+                  label="Canceled"
                 />
               </>
             ,
@@ -896,10 +994,10 @@ function AirImportBookingMaster() {
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
-                    {importStats.totalContainers.toLocaleString()}
+                    {importStats.totalPieces.toLocaleString()}
                   </Text>
                   <Text size="xs" c={muted} component="span">
-                    ctn
+                    pcs
                   </Text>
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">

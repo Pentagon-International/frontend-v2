@@ -60,9 +60,11 @@ import {
   IconChevronUp,
   IconSend,
   IconFileText,
-  IconCircleCheck,
-  IconClock,
   IconCircleX,
+  IconUserOff,
+  IconFileDescription,
+  IconShieldCheck,
+  IconTrendingUp,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -77,6 +79,7 @@ import { API_HEADER } from "../../store/storeKeys";
 import { getAPICall } from "../../service/getApiCall";
 import { putAPICall } from "../../service/putApiCall";
 import useDateFormat from "../../hooks/useDateFormat";
+import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 import {
   QuotationListNativeTable,
   type QuotationRowMenuContext,
@@ -105,8 +108,8 @@ type QuotationData = {
   status?: string;
   remark?: string;
   revision?: string;
-  origin_list?: string[];
-  destination_list?: string[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
   quote_type_list?: string[];
   remark_list?: string[];
   valid_upto_list?: string[];
@@ -173,6 +176,60 @@ interface QuotationMasterProps {
 
 const LIST_KEY = "QUOTATION_MASTER";
 const APPROVAL_LIST_KEY = "QUOTATION_APPROVAL_MASTER";
+
+function normalizeQuotationListStatusKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeQuotationListStatusCounts(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isNaN(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function getQuotationListStatusCount(
+  map: Record<string, number> | null | undefined,
+  ...labels: string[]
+): number {
+  if (!map) return 0;
+  for (const label of labels) {
+    const target = normalizeQuotationListStatusKey(label);
+    for (const [k, v] of Object.entries(map)) {
+      if (normalizeQuotationListStatusKey(k) === target) return v;
+    }
+  }
+  return 0;
+}
+
+function parseQuotationFilterResponse(data: any): {
+  rows: any[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+} {
+  const rows = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.result)
+        ? data.result
+        : [];
+  const statusCounts = normalizeQuotationListStatusCounts(data?.summary?.status_counts);
+
+  const indexRaw = data?.index;
+  const requestOffset =
+    typeof indexRaw === "number" && !Number.isNaN(indexRaw) ? indexRaw : 0;
+  const total = getBookingShipmentFilterListTotal(
+    (data ?? {}) as Record<string, unknown>,
+    rows,
+    requestOffset,
+  );
+
+  return { rows, total, statusCounts };
+}
 
 function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // Use separate LIST_KEY for approval mode to maintain separate filter/search state
@@ -609,11 +666,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   }, [openedRevision]);
 
   const {
-    data: quotationResult = { data: [], total: 0 },
+    data: quotationResult = { data: [], total: 0, statusCounts: null },
     isFetching: quotationFetching,
     refetch: refetchQuotations,
   } = useQuery({
-    queryKey: ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
+    queryKey: [
+      "quotations",
+      fromDate,
+      toDate,
+      listCurrentPage,
+      listPageSize,
+      isApprovalMode,
+    ],
     queryFn: async () => {
       try {
         let requestBody: { filters: any } = { filters: {} };
@@ -631,18 +695,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           requestBody
         );
-        const result = response as any;
-        if (result && Array.isArray(result.data)) {
-          const total = result?.total || result.data.length || 0;
-          setListTotalRecords(total);
-          return { data: result.data, total };
-        }
-        setListTotalRecords(0);
-        return { data: [], total: 0 };
+        const { rows, total, statusCounts } = parseQuotationFilterResponse(
+          response as any,
+        );
+        setListTotalRecords(total);
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching quotation data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       }
     },
     enabled: false, // Don't run automatically
@@ -677,7 +738,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Separate query for filtered data - only triggers on explicit actions
   const {
-    data: filteredQuotationResult = { data: [], total: 0 },
+    data: filteredQuotationResult = { data: [], total: 0, statusCounts: null },
     isLoading: filteredQuotationLoading,
     isFetching: filteredQuotationFetching,
     refetch: refetchFilteredQuotationsRaw,
@@ -690,6 +751,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       isApprovalMode,
       listCurrentPage,
       listPageSize,
+      memoizedFilterPayload,
     ],
     queryFn: async () => {
       try {
@@ -699,7 +761,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Skip if no filters/search
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters applied, skipping API call");
-          return { data: [], total: 0 };
+          return { data: [], total: 0, statusCounts: null };
         }
 
         const requestBody = { filters: filterPayload };
@@ -718,20 +780,16 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           requestBody
         );
-        const data = response as any;
-
-        if (data && Array.isArray(data.data)) {
-          console.log("Filtered data received:", data.data.length, "records");
-          const total = data?.total || data.data.length || 0;
-          setListTotalRecords(total);
-          return { data: data.data, total };
-        }
-        setListTotalRecords(0);
-        return { data: [], total: 0 };
+        const { rows, total, statusCounts } = parseQuotationFilterResponse(
+          response as any,
+        );
+        console.log("Filtered data received:", rows.length, "records");
+        setListTotalRecords(total);
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching filtered quotation data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       } finally {
         isRefetchingRef.current = false;
       }
@@ -835,6 +893,27 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     filtersApplied,
     hasActiveFiltersOrSearch,
   ]);
+
+  const summaryListTotalRecords = useMemo(() => {
+    if (filtersApplied) {
+      return filteredQuotationResult?.total ?? listTotalRecords;
+    }
+    return quotationResult?.total ?? listTotalRecords;
+  }, [
+    filtersApplied,
+    filteredQuotationResult?.total,
+    quotationResult?.total,
+    listTotalRecords,
+  ]);
+
+  useEffect(() => {
+    const tr = summaryListTotalRecords;
+    const totalPages = Math.max(1, Math.ceil(tr / listPageSize));
+    if (listCurrentPage > totalPages) {
+      setListCurrentPage(totalPages);
+    }
+  }, [summaryListTotalRecords, listPageSize, listCurrentPage]);
+
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
   // isInitialLoading is set manually before/after explicit refetch calls
@@ -853,7 +932,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       const result = await refetchQuotations();
       if (result.data) {
         queryClient.setQueryData(
-          ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
+          [
+            "quotations",
+            fromDate,
+            toDate,
+            listCurrentPage,
+            listPageSize,
+            isApprovalMode,
+          ],
           result.data
         );
       }
@@ -867,6 +953,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     toDate,
     listCurrentPage,
     listPageSize,
+    isApprovalMode,
   ]);
 
   const paginationInitialized = useRef(false);
@@ -1592,8 +1679,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           ) {
             return item.quotation.map((q: any) => q.origin || "N/A").join("\n");
           }
-          return item.origin_list && item.origin_list.length > 0
-            ? item.origin_list.join("\n")
+          return item.origin_code_list && item.origin_code_list.length > 0
+            ? item.origin_code_list.join("\n")
             : "N/A";
         },
       },
@@ -1611,8 +1698,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               .map((q: any) => q.destination || "N/A")
               .join("\n");
           }
-          return item.destination_list && item.destination_list.length > 0
-            ? item.destination_list.join("\n")
+          return item.destination_code_list && item.destination_code_list.length > 0
+            ? item.destination_code_list.join("\n")
             : "N/A";
         },
       },
@@ -2424,18 +2511,24 @@ console.log("currentQuotation: ", currentQuotation);
     ? handleApproveQuotation
     : handleEditQuotation;
 
+  /** Toolbar stats from quotation filter API `summary.status_counts` (filter-scoped). */
   const quotationListStats = useMemo(() => {
-    let gained = 0;
-    let lost = 0;
-    let other = 0;
-    for (const row of displayData) {
-      const s = (row as QuotationData).status?.toUpperCase() ?? "";
-      if (s === "GAINED") gained += 1;
-      else if (s === "LOST") lost += 1;
-      else other += 1;
-    }
-    return { gained, lost, other };
-  }, [displayData]);
+    const source = filtersApplied ? filteredQuotationResult : quotationResult;
+    const sc = source?.statusCounts ?? null;
+    return {
+      total: summaryListTotalRecords,
+      quoteCreated: getQuotationListStatusCount(sc, "quote created"),
+      quoteApproved: getQuotationListStatusCount(sc, "quote approved"),
+      inactive: getQuotationListStatusCount(sc, "inactive"),
+      gained: getQuotationListStatusCount(sc, "gained"),
+      lost: getQuotationListStatusCount(sc, "lost"),
+    };
+  }, [
+    filtersApplied,
+    filteredQuotationResult,
+    quotationResult,
+    summaryListTotalRecords,
+  ]);
 
   const quotationTableRows: QuotationTableRow[] = useMemo(
     () =>
@@ -2556,48 +2649,66 @@ console.log("currentQuotation: ", currentQuotation);
                       Back to Dashboard
                     </Button>
                   )}
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconFileText size={14} color={primary} />}
-                    value={listTotalRecords}
-                    label="Total"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconCircleCheck size={14} color="#059669" />}
-                    iconBackground="#d1fae5"
-                    iconColor="#059669"
-                    value={quotationListStats.gained}
-                    label="Gained"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconCircleX size={14} color="#dc2626" />}
-                    iconBackground="#fee2e2"
-                    iconColor="#dc2626"
-                    value={quotationListStats.lost}
-                    label="Lost"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconClock size={14} color="#d97706" />}
-                    iconBackground="#fef3c7"
-                    iconColor="#d97706"
-                    value={quotationListStats.other}
-                    label="Other"
-                  />
+                  <Group gap={6} wrap="wrap" align="center">
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconFileText size={14} color={primary} />}
+                      value={quotationListStats.total}
+                      label="Total"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconFileDescription size={14} color="#2563eb" />}
+                      iconBackground="#dbeafe"
+                      iconColor="#2563eb"
+                      value={quotationListStats.quoteCreated}
+                      label="Quote created"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconShieldCheck size={14} color="#7c3aed" />}
+                      iconBackground="#f3e8ff"
+                      iconColor="#7c3aed"
+                      value={quotationListStats.quoteApproved}
+                      label="Quote approved"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconUserOff size={14} color="#64748b" />}
+                      iconBackground="#f1f5f9"
+                      iconColor="#64748b"
+                      value={quotationListStats.inactive}
+                      label="Inactive"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconTrendingUp size={14} color="#16a34a" />}
+                      iconBackground="#f0fdf4"
+                      iconColor="#16a34a"
+                      value={quotationListStats.gained}
+                      label="Gained"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconCircleX size={14} color="#dc2626" />}
+                      iconBackground="#fee2e2"
+                      iconColor="#dc2626"
+                      value={quotationListStats.lost}
+                      label="Lost"
+                    />
+                  </Group>
                 </>
               ),
-              secondary: (
-                <Group gap="md" wrap="wrap" align="center">
-                  <Text fw={600} size="sm" c={erpTheme.fg} style={{ fontFamily: fontSans }}>
-                    {pageTitle}
-                  </Text>
-                  <Text size="xs" c={muted} style={{ fontFamily: fontSans }}>
-                    {isApprovalMode ? "Pending approvals" : "All quotations"}
-                  </Text>
-                </Group>
-              ),
+              // secondary: (
+              //   <Group gap="md" wrap="wrap" align="center">
+              //     <Text fw={600} size="sm" c={erpTheme.fg} style={{ fontFamily: fontSans }}>
+              //       {pageTitle}
+              //     </Text>
+              //     <Text size="xs" c={muted} style={{ fontFamily: fontSans }}>
+              //       {isApprovalMode ? "Quotation Approval List" : "All quotations"}
+              //     </Text>
+              //   </Group>
+              // ),
               actions: (
                 <>
                   <TextInput
@@ -3003,7 +3114,7 @@ console.log("currentQuotation: ", currentQuotation);
               footer: (
                 <ERPListPaginationFooter
                   theme={erpTheme}
-                  totalRecords={listTotalRecords}
+                  totalRecords={summaryListTotalRecords}
                   pageIndex={listCurrentPage - 1}
                   pageSize={listPageSize}
                   onPageIndexChange={(idx) => setListCurrentPage(idx + 1)}

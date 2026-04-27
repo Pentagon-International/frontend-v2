@@ -72,6 +72,9 @@ export {
 export { ERPListTableLoading } from "./ERPListTableLoading";
 export type { ERPListTableLoadingProps } from "./ERPListTableLoading";
 
+export { ERPListTableEmpty } from "./ERPListTableEmpty";
+export type { ERPListTableEmptyProps } from "./ERPListTableEmpty";
+
 export { ERPListBulkSelectionBar } from "./ERPListBulkSelectionBar";
 export type { ERPListBulkSelectionBarProps } from "./ERPListBulkSelectionBar";
 

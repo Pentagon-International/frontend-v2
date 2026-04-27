@@ -58,6 +58,7 @@ import {
   TariffMasterListNativeTable,
   type TariffListColumn,
 } from "./TariffMasterListNativeTable";
+import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
 type Freight = {
   id: number;
@@ -154,14 +155,17 @@ export default function Freight() {
 
         // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -221,14 +225,17 @@ export default function Freight() {
 
         // Handle response with total count
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -554,6 +561,13 @@ export default function Freight() {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalRecords, pageSize, currentPage]);
+
   // Refetch data when pagination changes
   useEffect(() => {
     if (filtersApplied) {
@@ -589,14 +603,7 @@ export default function Freight() {
                     value={totalRecords}
                     label="Total"
                   />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconListNumbers size={14} color="#059669" />}
-                    iconBackground="#d1fae5"
-                    iconColor="#059669"
-                    value={filteredFreightDataForDisplay.length}
-                    label="On page"
-                  />
+
                 </>
               ),
               secondary: (

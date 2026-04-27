@@ -10,19 +10,20 @@ import {
   Badge,
   Box,
   Button,
-  Card,
   Center,
   Grid,
   Group,
-  Loader,
+  MantineProvider,
   Menu,
-  Stack,
   Text,
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  IconDotsVertical,
+  IconCircleCheck,
+  IconClock,
+  IconCreditCard,
+  IconDots,
   IconEdit,
   IconEye,
   IconFilter,
@@ -35,12 +36,31 @@ import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import {
+  Dropdown,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  SingleDateInput,
+  erpListFilterFieldCellStyle,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../../components";
+import type { ErpListTheme } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
-import { Dropdown, SingleDateInput } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +94,31 @@ type JVRecord = {
   }>;
 };
 
+/** `summary` on `journalVoucherReversalFilter` — totals are filter-scoped. */
+type JournalVoucherReversalListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    posted?: number;
+    unposted?: number;
+  };
+};
+
+type JournalVoucherReversalListQueryResult = {
+  data: JVRecord[];
+  summary?: JournalVoucherReversalListSummary;
+};
+
+type JournalVoucherReversalFilterResponse = {
+  status?: boolean;
+  message?: string;
+  index?: number;
+  limit?: number;
+  total?: number;
+  total_count?: number;
+  data?: JVRecord[];
+  summary?: JournalVoucherReversalListSummary;
+};
+
 const LIST_KEY = "JOURNAL_VOUCHER_REVERSAL_MASTER";
 
 type JVReversalFilters = {
@@ -86,19 +131,6 @@ type JVReversalFilters = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "-";
-  try {
-    return new Date(dateStr).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
 function statusColor(status?: string): string {
   if (!status) return "gray";
   switch (status.toUpperCase()) {
@@ -109,6 +141,51 @@ function statusColor(status?: string): string {
     default:
       return "gray";
   }
+}
+
+type JVReversalColumnVisibility = {
+  sno: boolean;
+  document_no: boolean;
+  journal_date: boolean;
+  account_name: boolean;
+  narration: boolean;
+  debit_total: boolean;
+  credit_total: boolean;
+  difference: boolean;
+  note: boolean;
+  status: boolean;
+};
+
+const jvReversalColumnDefault: JVReversalColumnVisibility = {
+  sno: true,
+  document_no: true,
+  journal_date: true,
+  account_name: true,
+  narration: true,
+  debit_total: true,
+  credit_total: true,
+  difference: true,
+  note: true,
+  status: true,
+};
+
+const jvReversalColumnLabels: Record<keyof JVReversalColumnVisibility, string> = {
+  sno: "S.No",
+  document_no: "Document No",
+  journal_date: "Journal Date",
+  account_name: "Account Name",
+  narration: "Narration",
+  debit_total: "Debit",
+  credit_total: "Credit",
+  difference: "Difference",
+  note: "Note",
+  status: "Status",
+};
+
+function jvReversalColumnId(col: MRT_ColumnDef<JVRecord>): string {
+  if (col.id) return col.id;
+  if ("accessorKey" in col && col.accessorKey) return String(col.accessorKey);
+  return "";
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -150,14 +227,16 @@ function JournalVoucherReversalMaster() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
 
-  // Sync search → store and reset page on debounced change
+  const [visibleColumns, setVisibleColumns] = useState<JVReversalColumnVisibility>(
+    () => ({ ...jvReversalColumnDefault }),
+  );
+
   useEffect(() => {
     if (isRestoring) return;
     setPagination((prev) =>
       prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
     );
-    setStoreSearch(LIST_KEY, search);
-  }, [debouncedSearch, isRestoring, search, setStoreSearch]);
+  }, [debouncedSearch, isRestoring]);
 
   // Restore from global store when returning from edit/view
   useEffect(() => {
@@ -197,19 +276,17 @@ function JournalVoucherReversalMaster() {
     setIsRestoring(false);
   }, [location.key]);
 
-  const currentPage = pagination.pageIndex + 1;
   const index = pagination.pageIndex * pagination.pageSize;
 
   const handlePageSizeChange = (size: number) =>
     setPagination({ pageIndex: 0, pageSize: size });
-  const handlePageChange = (page: number) =>
-    setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
     setStoreFilters(LIST_KEY, draftFilters);
     setStoreSearch(LIST_KEY, search);
+    setShowFilters(false);
   };
 
   const clearAllFilters = () => {
@@ -242,11 +319,11 @@ function JournalVoucherReversalMaster() {
   };
 
   const {
-    data = [],
+    data: journalVoucherReversalListResult,
     isLoading: isLoadingQuery,
     isFetching,
     error,
-  } = useQuery({
+  } = useQuery<JournalVoucherReversalListQueryResult>({
     queryKey: [
       "journalVoucherReversalMaster",
       pagination.pageIndex,
@@ -254,7 +331,7 @@ function JournalVoucherReversalMaster() {
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<JVRecord[]> => {
+    queryFn: async (): Promise<JournalVoucherReversalListQueryResult> => {
       try {
         const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
         const payload =
@@ -264,34 +341,52 @@ function JournalVoucherReversalMaster() {
 
         setIsInitialLoad(false);
 
-        const response = await apiCallProtected.post(
-          `${(URL as any).journalVoucherReversalFilter}?index=${index}&limit=${pagination.pageSize}`,
+        const response = (await apiCallProtected.post(
+          `${URL.journalVoucherReversalFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
-        );
+        )) as Record<string, unknown>;
 
         const raw = response as any;
         const bodyCandidate =
           raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
-        const body = bodyCandidate ?? null;
+        const body = bodyCandidate != null
+          ? (bodyCandidate as JournalVoucherReversalFilterResponse | JVRecord[])
+          : null;
 
         if (!body) {
           setTotalRecords(0);
-          return [];
+          return { data: [], summary: undefined };
         }
 
-        const list = Array.isArray(body?.data)
-          ? body.data
-          : Array.isArray(body)
-            ? body
-            : [];
-        const total = body?.total ?? body?.total_count ?? list.length;
-        setTotalRecords(Number(total));
-        return list;
-      } catch (err: any) {
-        const status = err?.response?.status;
+        const list = Array.isArray((body as JournalVoucherReversalFilterResponse).data)
+          ? ((body as JournalVoucherReversalFilterResponse).data as JVRecord[])
+          : Array.isArray(body) ? (body as JVRecord[]) : [];
+
+        const totalEnvelope =
+          body != null &&
+          typeof body === "object" &&
+          !Array.isArray(body) &&
+          ("total" in body || "index" in body)
+            ? (body as unknown as Record<string, unknown>)
+            : (raw as Record<string, unknown>);
+        const listTotal = getBookingShipmentFilterListTotal(totalEnvelope, list, index);
+        const rawSummary = raw?.summary;
+        const summary: JournalVoucherReversalListSummary | undefined =
+          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            ? (rawSummary as JournalVoucherReversalListSummary)
+            : undefined;
+        const summaryTotal = summary?.total_shipments;
+        const total =
+          typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+            ? summaryTotal
+            : listTotal;
+        setTotalRecords(total);
+        return { data: list, summary };
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 404) {
           setTotalRecords(0);
-          return [];
+          return { data: [], summary: undefined };
         }
         throw err;
       }
@@ -302,12 +397,91 @@ function JournalVoucherReversalMaster() {
     refetchOnMount: false,
   });
 
+  const data = journalVoucherReversalListResult?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
+
   const isLoading = isFetching || isLoadingQuery || isInitialLoad;
   const tableData = data ?? [];
 
+  const border = "#e2e8f0";
+  const muted = "#64748b";
+  const fg = "#0f172a";
+  const primary = "#105476";
+  const pageBg = "#F0F4F8";
+  const cardBg = "#ffffff";
+  const erpTheme: ErpListTheme = {
+    border,
+    muted,
+    fg,
+    primary,
+    headerBg: "#f8fafc",
+    pageBg,
+    cardBg,
+    fontSans: "'Geist', sans-serif",
+  };
+
+  const listStats = useMemo(() => {
+    let pageAmount = 0;
+    for (const r of tableData) {
+      const d = parseFloat(String(r.debit_total ?? 0));
+      if (!Number.isNaN(d)) pageAmount += d;
+    }
+    const summary = journalVoucherReversalListResult?.summary;
+    if (summary) {
+      const sc = summary.status_counts ?? {};
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        posted: sc.posted ?? 0,
+        unposted: sc.unposted ?? 0,
+        pageAmount,
+      };
+    }
+    let posted = 0;
+    let unposted = 0;
+    for (const r of tableData) {
+      const s = String(r.status ?? "").toUpperCase();
+      if (s === "POSTED") posted += 1;
+      else if (s === "UNPOSTED") unposted += 1;
+    }
+    return { total: totalRecords, posted, unposted, pageAmount };
+  }, [tableData, journalVoucherReversalListResult?.summary, totalRecords]);
+
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(erpTheme);
+  const formTextFilterStyles = useMemo(
+    () => ({
+      label: { ...filterFieldStyles.label, fontSize: 12, fontWeight: 500, marginBottom: 4 },
+      input: { ...filterFieldStyles.input, minHeight: 32, fontSize: 12, fontFamily: erpTheme.fontSans },
+    }),
+    [filterFieldStyles, erpTheme.fontSans],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof JVReversalColumnVisibility)[]).map(
+        (key) => ({
+          id: String(key),
+          label: jvReversalColumnLabels[key],
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
+    [visibleColumns],
+  );
+
   // ─── Columns ──────────────────────────────────────────────────────────────
 
-  const columns = useMemo<MRT_ColumnDef<JVRecord>[]>(
+  const allColumns = useMemo<MRT_ColumnDef<JVRecord>[]>(
     () => [
       {
         id: "sno",
@@ -322,7 +496,7 @@ function JournalVoucherReversalMaster() {
         header: "Document No",
         size: 150,
         Cell: ({ cell }) => (
-          <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter" }}>
+          <Text size="sm" fw={600} c={primary} style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -331,10 +505,10 @@ function JournalVoucherReversalMaster() {
         accessorKey: "journal_date",
         header: "Journal Date",
         size: 130,
-        Cell:({ row }) => (
-          <Text size="sm">
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {row.original.journal_date
-              ? dayjs(row.original?.journal_date).format(dateFormat)
+              ? dayjs(String(row.original.journal_date)).format(dateFormat)
               : "-"}
           </Text>
         ),
@@ -355,7 +529,7 @@ function JournalVoucherReversalMaster() {
           return (
             <Text
               size="sm"
-              style={{ fontFamily: "Inter", maxWidth: 170 }}
+              style={{ fontFamily: erpTheme.fontSans, maxWidth: 170 }}
               truncate
               title={val}
             >
@@ -387,8 +561,8 @@ function JournalVoucherReversalMaster() {
             <Text
               size="sm"
               fw={500}
-              c={Math.abs(num) > 0.005 ? "red" : "#105476"}
-              style={{ fontFamily: "Inter" }}
+              c={Math.abs(num) > 0.005 ? "red" : primary}
+              style={{ fontFamily: erpTheme.fontSans }}
             >
               {val || "-"}
             </Text>
@@ -405,7 +579,7 @@ function JournalVoucherReversalMaster() {
           return (
             <Text
               size="sm"
-              style={{ fontFamily: "Inter", maxWidth: 150 }}
+              style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }}
               truncate
               title={val}
             >
@@ -445,10 +619,17 @@ function JournalVoucherReversalMaster() {
           const isPosted = status === "POSTED";
           const canEdit = !isApproved && !isPosted;
           return (
-            <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+            <Menu
+              withinPortal
+              position="bottom-end"
+              shadow="md"
+              width={200}
+              styles={erpListGeistMenuDropdownStyles}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+            >
               <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
+                <ActionIcon variant="subtle" color="gray" size="sm">
+                  <IconDots size={16} />
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
@@ -465,8 +646,8 @@ function JournalVoucherReversalMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm" style={{ fontFamily: "Inter" }}>
+                        <IconEdit size={16} color={primary} />
+                        <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
                           Edit
                         </Text>
                       </Group>
@@ -486,8 +667,8 @@ function JournalVoucherReversalMaster() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter" }}>
+                      <IconEye size={16} color={primary} />
+                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
                         View
                       </Text>
                     </Group>
@@ -507,8 +688,8 @@ function JournalVoucherReversalMaster() {
                       }}
                     >
                       <Group gap="sm">
-                        <IconReceiptRefund size={16} style={{ color: "#105476" }} />
-                        <Text size="sm" style={{ fontFamily: "Inter" }}>
+                        <IconReceiptRefund size={16} color={primary} />
+                        <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
                           JV Reversal
                         </Text>
                       </Group>
@@ -521,7 +702,28 @@ function JournalVoucherReversalMaster() {
         },
       },
     ],
-    [navigate, index, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore],
+    [
+      navigate,
+      index,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+      erpTheme,
+      dateFormat,
+      primary,
+    ],
+  );
+
+  const columns = useMemo(
+    () =>
+      allColumns.filter((col) => {
+        const id = jvReversalColumnId(col);
+        if (id === "actions") return true;
+        return visibleColumns[id as keyof JVReversalColumnVisibility] !== false;
+      }),
+    [allColumns, visibleColumns],
   );
 
   // ─── Table ────────────────────────────────────────────────────────────────
@@ -529,16 +731,19 @@ function JournalVoucherReversalMaster() {
   const table = useMantineReactTable({
     columns,
     data: tableData,
-    state: { isLoading, pagination },
+    state: { pagination },
     enableColumnFilters: false,
-    enablePagination: false,
+    enablePagination: true,
     enableTopToolbar: false,
     enableBottomToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
-    initialState: { columnPinning: { right: ["actions"] } },
+    initialState: {
+      pagination: { pageSize: 10, pageIndex: 0 },
+      columnPinning: { right: ["actions"] },
+    },
     layoutMode: "grid",
     manualPagination: true,
     rowCount: totalRecords,
@@ -551,31 +756,32 @@ function JournalVoucherReversalMaster() {
       style: { width: "100%" },
     },
     mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
+      shadow: "none",
+      p: 0,
+      radius: 0,
+      withBorder: false,
       style: {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
+        minHeight: 0,
+        backgroundColor: "transparent",
       },
     },
     mantineTableBodyCellProps: ({ column }) => ({
       style: {
         padding: "8px 16px",
-        fontSize: "13px",
-        fontFamily: "Inter",
-        color: "#334155",
-        backgroundColor: "#ffffff",
+        fontSize: 14,
+        fontFamily: erpTheme.fontSans,
+        color: muted,
+        backgroundColor: cardBg,
         ...(column.id === "actions"
           ? {
               position: "sticky" as const,
               right: 0,
+              minWidth: "30px",
               zIndex: 2,
-              borderLeft: "1px solid #F3F3F3",
+              borderLeft: `1px solid ${border}`,
               boxShadow: "1px -2px 4px 0px #00000040",
             }
           : {}),
@@ -584,19 +790,20 @@ function JournalVoucherReversalMaster() {
     mantineTableHeadCellProps: ({ column }) => ({
       style: {
         padding: "8px 16px",
-        fontSize: "13px",
-        fontFamily: "Inter",
-        color: "#1E293B",
-        backgroundColor: "#F8FAFC",
+        fontSize: 14,
+        fontFamily: erpTheme.fontSans,
+        color: muted,
+        backgroundColor: erpTheme.headerBg,
         top: 0,
         zIndex: 3,
-        borderBottom: "1px solid #F3F3F3",
+        borderBottom: `1px solid ${border}`,
         ...(column.id === "actions"
           ? {
               position: "sticky" as const,
               right: 0,
               zIndex: 4,
-              backgroundColor: "#F8FAFC",
+              minWidth: "80px",
+              backgroundColor: erpTheme.headerBg,
               boxShadow: "0px -2px 4px 0px #00000040",
             }
           : {}),
@@ -614,12 +821,10 @@ function JournalVoucherReversalMaster() {
     renderEmptyRowsFallback: () => (
       <tr>
         <td colSpan={columns.length}>
-          <Center py="xl">
-            <Stack align="center" gap="sm">
-              <Text c="dimmed" style={{ fontFamily: "Inter" }}>
-                No journal voucher reversals found
-              </Text>
-            </Stack>
+          <Center py="xl" style={{ backgroundColor: cardBg }}>
+            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              No journal voucher reversals found
+            </Text>
           </Center>
         </td>
       </tr>
@@ -629,306 +834,253 @@ function JournalVoucherReversalMaster() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <Card
-      shadow="sm"
-      pt="md"
-      pb="sm"
-      px="lg"
-      radius="md"
-      withBorder
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        flex: 1,
-      }}
-    >
-      {/* ── Header ── */}
-      <Box mb="md">
-        <Group justify="space-between" align="center" wrap="nowrap">
-          <Text
-            size="md"
-            fw={600}
-            c="#1E293B"
-            style={{ fontFamily: "Inter", fontSize: "16px" }}
-          >
-            Journal Voucher Reversal
-          </Text>
-
-          <Group gap="xs" wrap="nowrap">
-            {/* Search */}
-            <TextInput
-              placeholder="Search..."
-              leftSection={<IconSearch size={16} />}
-              rightSection={
-                search ? (
-                  <ActionIcon
-                    variant="transparent"
-                    size="sm"
-                    onClick={() => setSearch("")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <IconX size={16} />
-                  </ActionIcon>
-                ) : null
-              }
-              w={248}
-              size="sm"
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-              styles={{
-                input: {
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  color: "#334155",
-                  width: "248px",
-                  height: "36px",
-                  border: "1px solid #D0D1D4",
-                  "&:focus": { border: "1px solid #105476" },
-                },
-              }}
-            />
-
-            {/* Filter toggle */}
-            <ActionIcon
-              variant={showFilters ? "filled" : "outline"}
-              size={36}
-              color={showFilters ? "#E0F5FF" : "gray"}
-              onClick={() => setShowFilters(!showFilters)}
-              styles={{
-                root: {
-                  borderRadius: "4px",
-                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                  border: showFilters
-                    ? "1px solid #105476"
-                    : "1px solid #737780",
-                  color: showFilters ? "#105476" : "#737780",
-                  "&:active": {
-                    border: "1px solid #105476",
-                    color: "#FFFFFF",
-                  },
-                },
-              }}
-            >
-              <IconFilter size={18} />
-            </ActionIcon>
-
-            {/* Keep the commented-out Create New button exactly as-is */}
-            {/* <Button
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  color: "#FFFFFF",
-                  fontSize: "13px",
-                  fontFamily: "Inter",
-                },
-              }}
-              onClick={() => navigate("/journal-voucher-reversal/create")}
-            >
-              Create New
-            </Button> */}
-          </Group>
-        </Group>
-      </Box>
-
-      {/* ── Filter Panel ── */}
-      {showFilters && (
-        <Box
-          tt="capitalize"
-          mb="sm"
-          p="sm"
-          style={{
-            borderRadius: "8px",
-            border: "1px solid #E0E0E0",
-            flexShrink: 0,
-            height: "fit-content",
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={{ ...erpListGeistRootTypography, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+      >
+        <ERPListScreen
+          theme={erpTheme}
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCreditCard size={14} color={primary} />}
+                  value={listStats.total}
+                  label="Total"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={listStats.posted}
+                  label="Posted"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={listStats.unposted}
+                  label="Unposted"
+                />
+              </>
+            ),
+            // secondary: (
+            //   <>
+            //     <Text fw={600} size="sm" c={fg} style={{ fontFamily: erpTheme.fontSans }} component="span">
+            //       Journal voucher reversal
+            //     </Text>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <IconCoin size={16} color={muted} style={{ flexShrink: 0 }} />
+            //       <Text fw={600} size="sm" c={fg} style={{ fontFamily: erpTheme.fontSans }} component="span">
+            //         {listStats.pageAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            //       </Text>
+            //       <Text size="xs" c={muted} component="span">
+            //         debit on this page
+            //       </Text>
+            //     </Group>
+            //   </>
+            // ),
+            actions: (
+              <>
+                <TextInput
+                  placeholder="Search…"
+                  leftSection={<IconSearch size={16} />}
+                  rightSection={
+                    search ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        aria-label="Clear search"
+                        onClick={() => setSearch("")}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  w={260}
+                  size="xs"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={{
+                    input: {
+                      fontFamily: erpTheme.fontSans,
+                      fontSize: 12,
+                      height: 32,
+                      borderColor: border,
+                    },
+                  }}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((s) => !s)}
+                >
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+              </>
+            ),
           }}
-        >
-          <Group
-            justify="space-between"
-            align="center"
-            mb="sm"
-            px="md"
-            style={{
-              backgroundColor: "#F8FAFC",
-              padding: "4px 8px",
-            }}
-          >
-            <Text
-              size="sm"
-              fw={600}
-              c="#1E293B"
-              style={{ fontFamily: "Inter", fontSize: "14px" }}
-            >
-              Filter
-            </Text>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setShowFilters(false)}
-              aria-label="Close filters"
-              size="sm"
-            >
-              <IconX size={18} />
-            </ActionIcon>
-          </Group>
-
-          <Grid gutter="sm" px="md" pt="xs" pb="sm">
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="Document No"
-                placeholder="Type Document No"
-                value={draftFilters.document_no}
-                onChange={(e) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    document_no: e.currentTarget.value,
-                  }))
-                }
-                size="xs"
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Refine by document no., account, journal date range, or status",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isLoading}
+                applyDisabled={isLoading}
               />
-            </Grid.Col>
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="Account Name"
-                placeholder="Type Account Name"
-                value={draftFilters.account_name}
-                onChange={(e) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    account_name: e.currentTarget.value,
-                  }))
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Document No"
+                      placeholder="Type Document No"
+                      value={draftFilters.document_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          document_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Account Name"
+                      placeholder="Type Account Name"
+                      value={draftFilters.account_name}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          account_name: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Journal Date From"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.journal_date_from}
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          journal_date_from: date,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Journal Date To"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.journal_date_to}
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          journal_date_to: date,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Status"
+                      placeholder="Select Status"
+                      data={["POSTED", "UNPOSTED"]}
+                      value={draftFilters.status}
+                      searchable
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          status: value || "",
+                        }))
+                      }
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+              </Grid>
+            ),
+          }}
+          table={{
+            footer: (
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                onPageIndexChange={(idx) =>
+                  setPagination((prev) => ({ ...prev, pageIndex: idx }))
                 }
-                size="xs"
+                onPageSizeChange={handlePageSizeChange}
+                pageSizeOptions={["10", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
               />
-            </Grid.Col>
-            <Grid.Col span={3}>
-              <SingleDateInput
-                label="Journal Date From"
-                placeholder="Select Date"
-                value={draftFilters.journal_date_from}
-                onChange={(date) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    journal_date_from: date,
-                  }))
-                }
-                size="xs"
-              />
-            </Grid.Col>
-            <Grid.Col span={3}>
-              <SingleDateInput
-                label="Journal Date To"
-                placeholder="Select Date"
-                value={draftFilters.journal_date_to}
-                onChange={(date) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    journal_date_to: date,
-                  }))
-                }
-                size="xs"
-              />
-            </Grid.Col>
-            <Grid.Col span={3}>
-              <Dropdown
-                size="xs"
-                label="Status"
-                placeholder="Select Status"
-                data={["POSTED", "UNPOSTED"]}
-                value={draftFilters.status}
-                searchable
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    status: value || "",
-                  }))
-                }
-              />
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={clearAllFilters}
-              leftSection={<IconX size={16} />}
-              styles={{
-                root: {
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  border: "1px solid #D0D1D4",
-                  color: "#1E293B",
-                },
-              }}
-            >
-              Clear Filters
-            </Button>
-            <Button
-              size="sm"
-              onClick={applyFilters}
-              loading={isLoading}
-              disabled={isLoading}
-              leftSection={<IconFilter size={16} />}
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  "&:hover": { backgroundColor: "#0d4261" },
-                },
-              }}
-            >
-              Apply Filters
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {/* ── Table ── */}
-      {isLoading ? (
-        <Center py="xl" style={{ flex: 1 }}>
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed" style={{ fontFamily: "Inter" }}>
-              Loading journal voucher reversals...
-            </Text>
-          </Stack>
-        </Center>
-      ) : error ? (
-        <Center py="xl" style={{ flex: 1 }}>
-          <Stack align="center" gap="md">
-            <Text c="dimmed" style={{ fontFamily: "Inter" }}>
-              Error loading journal voucher reversals. Please try refreshing the page.
-            </Text>
-          </Stack>
-        </Center>
-      ) : (
-        <>
-          <MantineReactTable table={table} />
-          <PaginationBar
-            pageSize={pagination.pageSize}
-            currentPage={currentPage}
-            totalRecords={totalRecords}
-            onPageSizeChange={handlePageSizeChange}
-            onPageChange={handlePageChange}
-            pageSizeOptions={["10", "25", "50"]}
-          />
-        </>
-      )}
-    </Card>
+            ),
+            children: error ? (
+              <Center py="xl" style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}>
+                <Text size="sm" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
+                  Error loading journal voucher reversals. Please try refreshing the page.
+                </Text>
+              </Center>
+            ) : isLoading ? (
+              <ERPListTableLoading theme={erpTheme} message="Loading journal voucher reversals…" />
+            ) : (
+              <MantineReactTable table={table} />
+            ),
+          }}
+        />
+      </Box>
+    </MantineProvider>
   );
 }
 

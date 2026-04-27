@@ -58,6 +58,7 @@ export interface ERPListScreenProps {
  * - `ERPListFilterActionsFooter` — Clear + Apply for filter sheets
  * - `ERPListBulkSelectionBar` — selected count + action slot
  * - `ERPListTableLoading` — centered loader in the table body
+ * - `ERPListTableEmpty` — icon + title + hint (Air Export “no data” block)
  * - `ERPListColumnToggleMenu` — column visibility menu
  * - `erpToolbarOutlineButtonStyles`, `erpToolbarPrimaryButtonStyles`, `erpToolbarSelectStyles`, …
  */

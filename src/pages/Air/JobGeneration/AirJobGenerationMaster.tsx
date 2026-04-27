@@ -479,9 +479,7 @@ function AirJobGenerationMaster() {
                   <Text fw={600} size="sm" c={fg} component="span">
                     {displayData.length}
                   </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
-                  </Text>
+
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />

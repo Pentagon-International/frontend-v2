@@ -71,6 +71,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "OCEAN_IMPORT_JOB_MASTER";
 
@@ -115,6 +116,21 @@ type ImportJobData = {
   housing_details?: Array<{
     hbl_number: string;
   }>;
+};
+
+/** `summary` on `filterJobCreate` list (filter-scoped). */
+type ImportJobListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    active?: number;
+    closed?: number;
+    cancel?: number;
+  };
+};
+
+type ImportJobListQueryResult = {
+  data: ImportJobData[];
+  summary?: ImportJobListSummary;
 };
 
 /** Booking-style route column: origin_code_read → origin_code → origin_name (same for destination). */
@@ -323,11 +339,11 @@ function ImportJobMaster() {
   };
 
   const {
-    data: importJobData = [],
+    data: importJobListResult,
     isLoading: importJobLoading,
     isFetching: importJobFetching,
     refetch: refetchImportJobs,
-  } = useQuery({
+  } = useQuery<ImportJobListQueryResult>({
     queryKey: [
       "oceanImportJobs",
       pagination.pageIndex,
@@ -335,31 +351,49 @@ function ImportJobMaster() {
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<ImportJobData[]> => {
+    queryFn: async (): Promise<ImportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
       setIsInitialLoad(false);
-      const response = await apiCallProtected.post(
+      const response = (await apiCallProtected.post(
         `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
         { filters: filtersPayload },
         API_HEADER
-      );
+      )) as Record<string, unknown>;
 
-      const result = response as unknown as {
-        status?: boolean;
-        data?: ImportJobData[];
-        total_count?: number;
-      };
-      const list = Array.isArray(result?.data) ? result.data : [];
-      setTotalRecords(result?.total_count ?? list.length);
+      const list = Array.isArray(response.data)
+        ? (response.data as ImportJobData[])
+        : [];
+      const listTotal = getBookingShipmentFilterListTotal(response, list, index);
+      const rawSummary = response.summary;
+      const summary: ImportJobListSummary | undefined =
+        rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+          ? (rawSummary as ImportJobListSummary)
+          : undefined;
+      const summaryTotal = summary?.total_shipments;
+      const total =
+        typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+          ? summaryTotal
+          : listTotal;
+      setTotalRecords(total);
 
-      return list;
+      return { data: list, summary };
     },
     enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnMount: true,
   });
+
+  const importJobData = importJobListResult?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pageSize, pagination.pageIndex]);
 
   const isLoading = importJobFetching || importJobLoading || isInitialLoad;
 
@@ -430,13 +464,23 @@ function ImportJobMaster() {
 
   const stats = useMemo(() => {
     const rows = importJobData;
+    const summary = importJobListResult?.summary;
+    if (summary) {
+      const sc = summary.status_counts ?? {};
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        active: sc.active ?? 0,
+        closed: sc.closed ?? 0,
+        cancel: sc.cancel ?? 0,
+      };
+    }
     return {
       total: totalRecords,
       active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
       closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
       cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
     };
-  }, [importJobData, totalRecords]);
+  }, [importJobData, importJobListResult?.summary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -499,9 +543,6 @@ function ImportJobMaster() {
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
                     {importJobData.length}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
                   </Text>
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">

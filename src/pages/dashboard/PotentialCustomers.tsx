@@ -126,6 +126,39 @@ type PotentialCustomersResponse = {
   data: PotentialCustomerData[];
 };
 
+/** Resolve list total for pagination (prefers `total`, then `pagination_total`, then index+page length). */
+function getPotentialCustomersListTotal(
+  response: PotentialCustomersResponse
+): number {
+  const anyRes = response as PotentialCustomersResponse & {
+    count?: number;
+  };
+  const raw: unknown =
+    anyRes.total ??
+    anyRes.pagination_total ??
+    anyRes.count;
+  let n: number;
+  if (typeof raw === "number" && !Number.isNaN(raw)) {
+    n = raw;
+  } else if (typeof raw === "string" && raw.trim() !== "") {
+    const p = Number(raw);
+    n = !Number.isNaN(p) ? p : 0;
+  } else {
+    n = 0;
+  }
+  const idx = Number(response.index);
+  const len = Array.isArray(response.data) ? response.data.length : 0;
+  if (
+    len > 0 &&
+    !Number.isNaN(idx) &&
+    idx >= 0 &&
+    n < idx + len
+  ) {
+    n = Math.max(n, idx + len);
+  }
+  return n;
+}
+
 type UserData = {
   id: number;
   user_id: string;
@@ -423,11 +456,11 @@ function PotentialCustomers() {
         )) as PotentialCustomersResponse;
 
         if (response && response.success && Array.isArray(response.data)) {
-          // Update total count for pagination
-          setTotalCount(response.total || 0);
+          setTotalCount(getPotentialCustomersListTotal(response));
           return response.data;
         }
 
+        setTotalCount(0);
         return [];
       } catch (err: unknown) {
         console.error("Error fetching potential customers:", err);
@@ -439,6 +472,7 @@ function PotentialCustomers() {
           type: "error",
           message: `Error fetching potential customers: ${errorMessage}`,
         });
+        setTotalCount(0);
         return [];
       }
     },
@@ -604,11 +638,11 @@ function PotentialCustomers() {
         )) as PotentialCustomersResponse;
 
         if (response && response.success && Array.isArray(response.data)) {
-          // Update total count for pagination
-          setTotalCount(response.total || 0);
+          setTotalCount(getPotentialCustomersListTotal(response));
           return response.data;
         }
 
+        setTotalCount(0);
         return [];
       } catch (err: unknown) {
         console.error("Error fetching filtered potential customers:", err);
@@ -620,6 +654,7 @@ function PotentialCustomers() {
           type: "error",
           message: `Error fetching filtered potential customers: ${errorMessage}`,
         });
+        setTotalCount(0);
         return [];
       }
     },
@@ -627,6 +662,14 @@ function PotentialCustomers() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
+
+  // Keep current page in range when total shrinks (filters, assign, API data)
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalCount, pageSize, currentPage]);
 
   // Trigger filtered API when debounced search changes
   useEffect(() => {
@@ -863,23 +906,20 @@ function PotentialCustomers() {
     debouncedSearch,
   ]);
 
-  const handleCreateCallEntry = useCallback(
-    (customerData: PotentialCustomerData) => {
-      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-      // Navigate to call entry create page with customer data
-      navigate("/call-entry-create", {
-        state: {
-          returnTo:"/potential-customers",
-          fromPotentialCustomer: true,
-          statusFilter: "assigned",
-          customerCode: customerData.customer_code || customerData.potential_id,
-          customerName: customerData.customer,
-          customerData: customerData,
-        },
-      });
-    },
-    [navigate]
-  );
+  const handleCreateCallEntry = useCallback((row: PotentialCustomerTableRow) => {
+    const customerData = row as unknown as PotentialCustomerData;
+    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+    navigate("/call-entry-create", {
+      state: {
+        returnTo: "/potential-customers",
+        fromPotentialCustomer: true,
+        statusFilter: "assigned",
+        customerCode: customerData.customer_code || customerData.potential_id,
+        customerName: customerData.customer,
+        customerData,
+      },
+    });
+  }, [navigate]);
 
   // File validation function
   const validateFile = (file: File): boolean => {
@@ -1453,7 +1493,7 @@ function PotentialCustomers() {
                     value={totalCount}
                     label="Total"
                   />
-                  <ERPListStatPill
+                  {/* <ERPListStatPill
                     theme={erpTheme}
                     icon={<IconListNumbers size={14} color="#105476" />}
                     iconBackground="#dbeafe"
@@ -1476,14 +1516,14 @@ function PotentialCustomers() {
                     iconColor="#d97706"
                     value={potentialPageStats.withPhone}
                     label="With phone"
-                  />
-                </>
+                  />*/}
+                </> 
               ),
-              secondary: (
-                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
-                  Potential Customers
-                </Text>
-              ),
+              // secondary: (
+              //   <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+              //     Potential Customers
+              //   </Text>
+              // ),
               actions: (
                 <>
                   <TextInput

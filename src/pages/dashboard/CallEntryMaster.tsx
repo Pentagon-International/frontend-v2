@@ -29,6 +29,7 @@ import {
   IconPhone,
   IconList,
   IconCircleCheck,
+  IconUserOff,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -179,23 +180,77 @@ type FilterState = {
 
 const LIST_KEY = "CALL_ENTRY_MASTER";
 
-type CallEntryPageResult = { items: any[]; total: number };
+type CallEntryPageResult = {
+  items: any[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+};
+
+function normalizeStatusCounts(
+  raw: unknown
+): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isNaN(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Read a count from status_counts; matches keys case-insensitively. */
+function getStatusCountFromMap(
+  map: Record<string, number> | null | undefined,
+  aliases: string[]
+): number {
+  if (!map) return 0;
+  for (const wanted of aliases) {
+    const w = wanted.toUpperCase();
+    for (const [k, v] of Object.entries(map)) {
+      if (k.toUpperCase() === w) return v;
+    }
+  }
+  return 0;
+}
 
 function parseCallEntryFilterResponse(data: any): CallEntryPageResult {
+  // filter_call_entries returns `results` (and may also send `data`); prefer `results` first
   let items: any[] = [];
-  if (data && Array.isArray(data.data)) {
-    items = data.data;
-  } else if (data && Array.isArray(data.results)) {
+  if (data && Array.isArray(data.results)) {
     items = data.results;
+  } else if (data && Array.isArray(data.data)) {
+    items = data.data;
   } else if (data && Array.isArray(data.result)) {
     items = data.result;
   }
-  const totalRaw = data?.total ?? data?.count;
-  const total =
-    typeof totalRaw === "number" && !Number.isNaN(totalRaw)
-      ? totalRaw
-      : items.length;
-  return { items, total };
+  const statusCounts = normalizeStatusCounts(data?.summary?.status_counts);
+
+  const totalRaw =
+    data?.total ??
+    data?.count ??
+    data?.total_count ??
+    data?.summary?.total ??
+    data?.summary?.total_calls;
+  let total: number;
+  if (typeof totalRaw === "number" && !Number.isNaN(totalRaw)) {
+    total = totalRaw;
+  } else if (typeof totalRaw === "string" && totalRaw.trim() !== "") {
+    const parsed = Number(totalRaw);
+    total = !Number.isNaN(parsed) ? parsed : 0;
+  } else if (statusCounts) {
+    total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  } else {
+    total = items.length;
+  }
+  // Ensure at least the current page row count (guards pathological server payloads on later pages)
+  if (items.length > 0 && total < (data?.index ?? 0) + items.length) {
+    const offset = Number(data?.index);
+    if (!Number.isNaN(offset) && offset >= 0) {
+      total = Math.max(total, offset + items.length);
+    }
+  }
+
+  return { items, total, statusCounts };
 }
 
 function CallEntry() {
@@ -302,7 +357,7 @@ function CallEntry() {
 
   // Fetch call entry data with React Query - using filter API with date range on initial mount
   const {
-    data: callEntryResult = { items: [], total: 0 },
+    data: callEntryResult = { items: [], total: 0, statusCounts: null },
     isLoading: callEntryLoading,
     refetch: refetchCallEntries,
   } = useQuery({
@@ -342,7 +397,7 @@ function CallEntry() {
         return parseCallEntryFilterResponse(data);
       } catch (error) {
         console.error("Error fetching call entry data:", error);
-        return { items: [], total: 0 };
+        return { items: [], total: 0, statusCounts: null };
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -367,7 +422,7 @@ function CallEntry() {
 
   // Separate query for filtered data - triggers on Apply Filters, Clear Filters, Search changes, Navigation back
   const {
-    data: filteredCallEntryResult = { items: [], total: 0 },
+    data: filteredCallEntryResult = { items: [], total: 0, statusCounts: null },
     isLoading: filteredCallEntryLoading,
     isFetching: filteredCallEntryFetching,
     refetch: refetchFilteredCallEntries,
@@ -387,7 +442,7 @@ function CallEntry() {
         // If no filters and no search, return empty (will use unfiltered data)
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters or search, skipping API call");
-          return { items: [], total: 0 };
+          return { items: [], total: 0, statusCounts: null };
         }
 
         const requestBody = { filters: filterPayload };
@@ -409,7 +464,7 @@ function CallEntry() {
         return parseCallEntryFilterResponse(data);
       } catch (error) {
         console.error("Error fetching filtered call entry data:", error);
-        return { items: [], total: 0 };
+        return { items: [], total: 0, statusCounts: null };
       }
     },
     // Disable query during refreshData to prevent auto-trigger from queryKey changes
@@ -1490,15 +1545,41 @@ function CallEntry() {
 
   const callEntryStats = useMemo(() => {
     const rows = displayData as CallEntryTableRow[];
-    const activeOnPage = rows.filter((r) => r.status !== "CLOSE").length;
-    const closedOnPage = rows.filter((r) => r.status === "CLOSE").length;
+    const statusSource =
+      filtersApplied || debouncedSearch.trim()
+        ? filteredCallEntryResult
+        : callEntryResult;
+    const sc = statusSource.statusCounts;
     return {
       total: totalRecords,
       onPage: rows.length,
-      activeOnPage,
-      closedOnPage,
+      // Keys match filter_call_entries `summary.status_counts` (e.g. active, inactive, close)
+      active: getStatusCountFromMap(sc, [
+        "active",
+        "ACTIVE",
+        "open",
+        "OPEN",
+      ]),
+      inactive: getStatusCountFromMap(sc, [
+        "inactive",
+        "INACTIVE",
+      ]),
+      closed: getStatusCountFromMap(sc, [
+        "close",
+        "Close",
+        "CLOSE",
+        "closed",
+        "CLOSED",
+      ]),
     };
-  }, [displayData, totalRecords]);
+  }, [
+    displayData,
+    totalRecords,
+    filtersApplied,
+    debouncedSearch,
+    filteredCallEntryResult,
+    callEntryResult,
+  ]);
 
   const erpTheme: ErpListTheme = {
     border: DEFAULT_ERP_LIST_THEME.border,
@@ -1565,27 +1646,27 @@ function CallEntry() {
                   />
                   <ERPListStatPill
                     theme={erpTheme}
-                    icon={<IconList size={14} color="#2563eb" />}
-                    iconBackground="#dbeafe"
-                    iconColor="#2563eb"
-                    value={callEntryStats.onPage}
-                    label="This page"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
                     icon={<IconCircleCheck size={14} color="#059669" />}
                     iconBackground="#d1fae5"
                     iconColor="#059669"
-                    value={callEntryStats.activeOnPage}
-                    label="Active (page)"
+                    value={callEntryStats.active}
+                    label="Active"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUserOff size={14} color="#64748b" />}
+                    iconBackground="#f1f5f9"
+                    iconColor="#64748b"
+                    value={callEntryStats.inactive}
+                    label="Inactive"
                   />
                   <ERPListStatPill
                     theme={erpTheme}
                     icon={<IconX size={14} color="#dc2626" />}
                     iconBackground="#fef2f2"
                     iconColor="#dc2626"
-                    value={callEntryStats.closedOnPage}
-                    label="Closed (page)"
+                    value={callEntryStats.closed}
+                    label="Closed"
                   />
                 </>
               ),

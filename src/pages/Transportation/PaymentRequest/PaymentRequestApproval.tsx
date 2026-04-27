@@ -9,39 +9,59 @@ import {
   Group,
   Button,
   Text,
-  Card,
   Center,
-  Stack,
   Box,
   Menu,
   ActionIcon,
   UnstyledButton,
-  Loader,
   Badge,
   Grid,
-  TextInput
+  TextInput,
+  MantineProvider,
 } from "@mantine/core";
 import {
-  IconDotsVertical,
+  IconCircleCheck,
+  IconClock,
+  IconCreditCard,
+  IconDots,
   IconEdit,
   IconEye,
   IconFileInvoice,
   IconFilter,
-  IconX,
   IconSearch,
-  IconPlus,
+  IconX,
+  IconBan,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
-import { Dropdown, SingleDateInput, ToastNotification } from "../../../components";
+import {
+  Dropdown,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  SingleDateInput,
+  erpListFilterFieldCellStyle,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../../components";
+import type { ErpListTheme } from "../../../components";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -90,6 +110,32 @@ type PaymentRequestRecord = {
   charges?: PaymentRequestCharge[];
 };
 
+/** `summary` on `filter/payment-request/` — totals are filter-scoped. */
+type PaymentRequestListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    active?: number;
+    approved?: number;
+    rejected?: number;
+  };
+};
+
+type PaymentRequestListQueryResult = {
+  data: PaymentRequestRecord[];
+  summary?: PaymentRequestListSummary;
+};
+
+type PaymentRequestFilterResponse = {
+  status?: boolean;
+  message?: string;
+  index?: number;
+  limit?: number;
+  total?: number;
+  total_count?: number;
+  data?: PaymentRequestRecord[];
+  summary?: PaymentRequestListSummary;
+};
+
 type FilterState = {
   status: string | null;
   date_from: Date | null;
@@ -99,31 +145,6 @@ type FilterState = {
   request_no: string | null;
   job_reference: string | null;
 };
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const STATUS_OPTIONS = [
-  { value: "Active", label: "Unapproved" },
-    { value: "Approved", label: "Approved" },
-  { value: "APPROVED_WITHOUT_CRJ", label: "Approved (Waiting for Payment / CRJ)" },
-  { value: "UNPOSTED", label: "Unposted" },
-    { value: "Rejected", label: "Rejected" },
-];
-
-const PAYMENT_TYPE_OPTIONS = [
-  { value: "Bank", label: "Bank" },
-  { value: "CASH", label: "Cash" },
-  { value: "PDC", label: "PDC" },
-  { value: "ONLINE TRANSFER", label: "Online Transfer" },
-  { value: "DD/PO", label: "DD/PO" },
-];
-
-const PAID_TO_TYPE_OPTIONS = [
-  { value: "supplier", label: "Supplier" },
-  { value: "agent", label: "Agent" },
-  { value: "customer", label: "Customer" },
-  { value: "staff", label: "Staff" },
-];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -138,19 +159,6 @@ function calcLocalAmount(charges?: PaymentRequestCharge[]): string {
 
 function getFirstJobNo(charges?: PaymentRequestCharge[]): string {
   return charges?.find((c) => c.job_id)?.job_id ?? "-";
-}
-
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "-";
-  try {
-    return new Date(dateStr).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
 }
 
 function statusColor(status?: string): string {
@@ -181,6 +189,62 @@ const emptyFilters = (): FilterState => ({
 
 const LIST_KEY = "PAYMENT_REQUEST_APPROVAL";
 
+type PaymentRequestColumnVisibility = {
+  sno: boolean;
+  created_by: boolean;
+  request_no: boolean;
+  local_amount: boolean;
+  payment_type: boolean;
+  not_over: boolean;
+  date: boolean;
+  paid_to_type: boolean;
+  paid_to: boolean;
+  job_no: boolean;
+  note: boolean;
+  account_note: boolean;
+  status: boolean;
+};
+
+const paymentRequestColumnDefault: PaymentRequestColumnVisibility = {
+  sno: true,
+  created_by: true,
+  request_no: true,
+  local_amount: true,
+  payment_type: true,
+  not_over: true,
+  date: true,
+  paid_to_type: true,
+  paid_to: true,
+  job_no: true,
+  note: true,
+  account_note: true,
+  status: true,
+};
+
+const paymentRequestColumnLabels: Record<keyof PaymentRequestColumnVisibility, string> = {
+  sno: "S.No",
+  created_by: "User",
+  request_no: "Request No",
+  local_amount: "Local Amount",
+  payment_type: "Type",
+  not_over: "Over",
+  date: "Date",
+  paid_to_type: "Paid To Type",
+  paid_to: "Paid To",
+  job_no: "Job Id",
+  note: "Note",
+  account_note: "Accountant Note",
+  status: "Status",
+};
+
+function paymentRequestColumnId(
+  col: MRT_ColumnDef<PaymentRequestRecord>,
+): string {
+  if (col.id) return col.id;
+  if ("accessorKey" in col && col.accessorKey) return String(col.accessorKey);
+  return "";
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function PaymentRequestApproval() {
@@ -210,6 +274,10 @@ function PaymentRequestApproval() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
+
+  const [visibleColumns, setVisibleColumns] = useState<PaymentRequestColumnVisibility>(
+    () => ({ ...paymentRequestColumnDefault }),
+  );
 
   useEffect(() => {
     if (isRestoring) return;
@@ -253,7 +321,6 @@ function PaymentRequestApproval() {
     setIsRestoring(false);
   }, [location.key]);
 
-  const currentPage = pagination.pageIndex + 1;
   const index = pagination.pageIndex * pagination.pageSize;
 
   // ─── Build filter payload ─────────────────────────────────────────────────
@@ -275,13 +342,13 @@ function PaymentRequestApproval() {
   // ─── Queries ──────────────────────────────────────────────────────────────
 
   const {
-    data: requestData = [],
+    data: paymentRequestListResult,
     isLoading: requestLoading,
     isFetching: requestFetching,
     error: requestError,
-  } = useQuery({
+  } = useQuery<PaymentRequestListQueryResult>({
     queryKey: ["paymentRequestApproval", pagination.pageIndex, pagination.pageSize, JSON.stringify(buildFilterPayload), debouncedSearch],
-    queryFn: async (): Promise<PaymentRequestRecord[]> => {
+    queryFn: async (): Promise<PaymentRequestListQueryResult> => {
       try {
         const filtersWithSearch: Record<string, unknown> = { ...buildFilterPayload };
         if (debouncedSearch?.trim()) filtersWithSearch.search = debouncedSearch.trim();
@@ -292,28 +359,59 @@ function PaymentRequestApproval() {
 
         setIsInitialLoad(false);
 
-        const response = await apiCallProtected.post(
-          `${(URL as any).paymentRequestFilter}?index=${index}&limit=${pagination.pageSize}`,
+        const response = (await apiCallProtected.post(
+          `${URL.paymentRequestFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
-        );
-        const raw = response as any;
+        )) as Record<string, unknown>;
+
+        const raw = response as Record<string, unknown> & { summary?: unknown };
         const bodyCandidate = raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
-        const body = bodyCandidate ?? null;
+        const body = bodyCandidate != null
+          ? (bodyCandidate as PaymentRequestFilterResponse | PaymentRequestRecord[])
+          : null;
         if (!body) {
           setTotalRecords(0);
-          return [];
+          return { data: [], summary: undefined };
         }
 
-        const list: PaymentRequestRecord[] = Array.isArray((body as any).data)
-          ? (body as any).data
-          : Array.isArray(body) ? body : [];
+        const list: PaymentRequestRecord[] = Array.isArray((body as PaymentRequestFilterResponse).data)
+          ? ((body as PaymentRequestFilterResponse).data as PaymentRequestRecord[])
+          : Array.isArray(body) ? (body as PaymentRequestRecord[]) : [];
 
-        const total = (body as any).total ?? (body as any).total_count ?? list.length;
-        setTotalRecords(Number(total));
-        return list;
+        const totalEnvelope =
+          body != null &&
+          typeof body === "object" &&
+          !Array.isArray(body) &&
+          ("total" in body || "index" in body)
+            ? (body as unknown as Record<string, unknown>)
+            : (raw as Record<string, unknown>);
+        const listTotal = getBookingShipmentFilterListTotal(totalEnvelope, list, index);
+
+        const rawSummary = raw?.summary;
+        const summary: PaymentRequestListSummary | undefined =
+          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            ? (rawSummary as PaymentRequestListSummary)
+            : undefined;
+
+        const summaryTotal = summary?.total_shipments;
+        const fromCounts = summary?.status_counts
+          ? (summary.status_counts.active ?? 0) +
+            (summary.status_counts.approved ?? 0) +
+            (summary.status_counts.rejected ?? 0)
+          : 0;
+        const total =
+          typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+            ? summaryTotal
+            : listTotal > 0
+              ? listTotal
+              : fromCounts > 0
+                ? fromCounts
+                : listTotal;
+        setTotalRecords(total);
+        return { data: list, summary };
       } catch {
         setTotalRecords(0);
-        return [];
+        return { data: [], summary: undefined };
       }
     },
     enabled: !isRestoring && search === debouncedSearch,
@@ -322,7 +420,90 @@ function PaymentRequestApproval() {
     refetchOnMount: false,
   });
 
+  const requestData = paymentRequestListResult?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
+
   const isLoading = requestLoading || requestFetching || isInitialLoad;
+  const tableData = requestData ?? [];
+
+  const border = "#e2e8f0";
+  const muted = "#64748b";
+  const fg = "#0f172a";
+  const primary = "#105476";
+  const pageBg = "#F0F4F8";
+  const cardBg = "#ffffff";
+  const erpTheme: ErpListTheme = {
+    border,
+    muted,
+    fg,
+    primary,
+    headerBg: "#f8fafc",
+    pageBg,
+    cardBg,
+    fontSans: "'Geist', sans-serif",
+  };
+
+  const listStats = useMemo(() => {
+    let pageAmount = 0;
+    for (const r of tableData) {
+      pageAmount += parseFloat(calcLocalAmount(r.charges)) || 0;
+    }
+    const summary = paymentRequestListResult?.summary;
+    if (summary) {
+      const sc = summary.status_counts ?? {};
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        approved: sc.approved ?? 0,
+        pending: sc.active ?? 0,
+        rejected: sc.rejected ?? 0,
+        pageAmount,
+      };
+    }
+    let approved = 0;
+    let pending = 0;
+    let rejected = 0;
+    for (const r of tableData) {
+      const s = (r.status ?? "").trim().toLowerCase();
+      if (s === "rejected") rejected += 1;
+      else if (s === "approved" || s === "approved_without_crj") approved += 1;
+      else pending += 1;
+    }
+    return { total: totalRecords, approved, pending, rejected, pageAmount };
+  }, [tableData, paymentRequestListResult?.summary, totalRecords]);
+
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(erpTheme);
+
+  const formTextFilterStyles = useMemo(
+    () => ({
+      label: { ...filterFieldStyles.label, fontSize: 12, fontWeight: 500, marginBottom: 4 },
+      input: { ...filterFieldStyles.input, minHeight: 32, fontSize: 12, fontFamily: erpTheme.fontSans },
+    }),
+    [filterFieldStyles, erpTheme.fontSans],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof PaymentRequestColumnVisibility)[]).map(
+        (key) => ({
+          id: String(key),
+          label: paymentRequestColumnLabels[key],
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
+    [visibleColumns],
+  );
 
   // ─── Filter actions ───────────────────────────────────────────────────────
 
@@ -331,7 +512,6 @@ function PaymentRequestApproval() {
   };
 
   const handlePageSizeChange = (newPageSize: number) => setPagination({ pageIndex: 0, pageSize: newPageSize });
-  const handlePageChange = (newPage: number) => setPagination((prev) => ({ ...prev, pageIndex: newPage - 1 }));
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
@@ -359,7 +539,7 @@ function PaymentRequestApproval() {
 
   // ─── Columns ──────────────────────────────────────────────────────────────
 
-  const columns = useMemo<MRT_ColumnDef<PaymentRequestRecord>[]>(
+  const allColumns = useMemo<MRT_ColumnDef<PaymentRequestRecord>[]>(
     () => [
       {
         id: "sno",
@@ -380,7 +560,7 @@ function PaymentRequestApproval() {
         header: "Request No",
         size: 150,
         Cell: ({ cell }) => (
-          <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter" }}>
+          <Text size="sm" fw={600} c={primary} style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -407,10 +587,10 @@ function PaymentRequestApproval() {
         accessorKey: "date",
         header: "Date",
         size: 100,
-        Cell:({ row }) => (
-          <Text size="sm">
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {row.original.date
-              ? dayjs(row.original?.date).format(dateFormat)
+              ? dayjs(String(row.original.date)).format(dateFormat)
               : "-"}
           </Text>
         ),
@@ -441,7 +621,7 @@ function PaymentRequestApproval() {
           const val = cell.getValue<string>();
           if (!val) return "-";
           return (
-            <Text size="sm" style={{ fontFamily: "Inter", maxWidth: 150 }} truncate title={val}>
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }} truncate title={val}>
               {val}
             </Text>
           );
@@ -455,7 +635,7 @@ function PaymentRequestApproval() {
           const val = cell.getValue<string>();
           if (!val) return "-";
           return (
-            <Text size="sm" style={{ fontFamily: "Inter", maxWidth: 150 }} truncate title={val}>
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }} truncate title={val}>
               {val}
             </Text>
           );
@@ -487,10 +667,17 @@ function PaymentRequestApproval() {
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+          <Menu
+            withinPortal
+            position="bottom-end"
+            shadow="md"
+            width={220}
+            styles={erpListGeistMenuDropdownStyles}
+            classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          >
             <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
+              <ActionIcon variant="subtle" color="gray" size="sm">
+                <IconDots size={16} />
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
@@ -506,8 +693,8 @@ function PaymentRequestApproval() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconEdit size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
+                      <IconEdit size={16} color={primary} />
+                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>Edit</Text>
                     </Group>
                   </UnstyledButton>
                 </Box>
@@ -522,8 +709,8 @@ function PaymentRequestApproval() {
                   }}
                 >
                   <Group gap="sm">
-                    <IconEye size={16} style={{ color: "#105476" }} />
-                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>View</Text>
+                    <IconEye size={16} color={primary} />
+                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>View</Text>
                   </Group>
                 </UnstyledButton>
               </Box>
@@ -540,8 +727,8 @@ function PaymentRequestApproval() {
                     }}
                   >
                     <Group gap="sm">
-                      <IconFileInvoice size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      <IconFileInvoice size={16} color={primary} />
+                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
                         Create Supplier Invoice
                       </Text>
                     </Group>
@@ -553,25 +740,49 @@ function PaymentRequestApproval() {
         ),
       },
     ],
-    [navigate, index, buildFilterPayload, search, setStoreFilters, setStoreSearch, setShouldRestore],
+    [
+      navigate,
+      index,
+      buildFilterPayload,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+      dateFormat,
+      erpTheme,
+      primary,
+    ],
+  );
+
+  const columns = useMemo(
+    () =>
+      allColumns.filter((col) => {
+        const id = paymentRequestColumnId(col);
+        if (id === "actions") return true;
+        return visibleColumns[id as keyof PaymentRequestColumnVisibility] !== false;
+      }),
+    [allColumns, visibleColumns],
   );
 
   // ─── Table ────────────────────────────────────────────────────────────────
 
   const table = useMantineReactTable({
     columns,
-    data: requestData ?? [],
-    state: {},
+    data: tableData,
+    state: { pagination },
     enableColumnFilters: false,
-    enablePagination: false,
+    enablePagination: true,
     enableTopToolbar: false,
     enableBottomToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
-    initialState: { columnPinning: { right: ["actions"] } },
+    initialState: { pagination: { pageSize: 10, pageIndex: 0 }, columnPinning: { right: ["actions"] } },
     layoutMode: "grid",
+    manualPagination: true,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -580,31 +791,32 @@ function PaymentRequestApproval() {
       style: { width: "100%" },
     },
     mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
+      shadow: "none",
+      p: 0,
+      radius: 0,
+      withBorder: false,
       style: {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
+        minHeight: 0,
+        backgroundColor: "transparent",
       },
     },
     mantineTableBodyCellProps: ({ column }) => ({
       style: {
         padding: "8px 16px",
-        fontSize: "13px",
-        fontFamily: "Inter",
-        color: "#334155",
-        backgroundColor: "#ffffff",
+        fontSize: 14,
+        fontFamily: erpTheme.fontSans,
+        color: muted,
+        backgroundColor: cardBg,
         ...(column.id === "actions"
           ? {
               position: "sticky" as const,
               right: 0,
               zIndex: 2,
-              borderLeft: "1px solid #F3F3F3",
+              minWidth: "30px",
+              borderLeft: `1px solid ${border}`,
               boxShadow: "1px -2px 4px 0px #00000040",
             }
           : {}),
@@ -613,19 +825,20 @@ function PaymentRequestApproval() {
     mantineTableHeadCellProps: ({ column }) => ({
       style: {
         padding: "8px 16px",
-        fontSize: "13px",
-        fontFamily: "Inter",
-        color: "#1E293B",
-        backgroundColor: "#F8FAFC",
+        fontSize: 14,
+        fontFamily: erpTheme.fontSans,
+        color: muted,
+        backgroundColor: erpTheme.headerBg,
         top: 0,
         zIndex: 3,
-        borderBottom: "1px solid #F3F3F3",
+        borderBottom: `1px solid ${border}`,
         ...(column.id === "actions"
           ? {
               position: "sticky" as const,
               right: 0,
               zIndex: 4,
-              backgroundColor: "#F8FAFC",
+              minWidth: "80px",
+              backgroundColor: erpTheme.headerBg,
               boxShadow: "0px -2px 4px 0px #00000040",
             }
           : {}),
@@ -643,12 +856,10 @@ function PaymentRequestApproval() {
     renderEmptyRowsFallback: () => (
       <tr>
         <td colSpan={columns.length}>
-          <Center py="xl">
-            <Stack align="center" gap="sm">
-              <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                No payment requests found
-              </Text>
-            </Stack>
+          <Center py="xl" style={{ backgroundColor: cardBg }}>
+            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              No payment requests found
+            </Text>
           </Center>
         </td>
       </tr>
@@ -658,319 +869,298 @@ function PaymentRequestApproval() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <Card
-      shadow="sm"
-      pt="md"
-      pb="sm"
-      px="lg"
-      radius="md"
-      withBorder
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1 }}
-    >
-      {/* ── Header ── */}
-      <Box mb="md">
-        <Group justify="space-between" align="center" wrap="nowrap">
-          <Text
-            size="md"
-            fw={600}
-            c="#1E293B"
-            style={{ fontFamily: "Inter", fontSize: "16px" }}
-          >
-            Payment Request Approval
-          </Text>
-
-          <Group gap="xs" wrap="nowrap">
-            <TextInput
-              placeholder="Search..."
-              leftSection={<IconSearch size={16} />}
-              rightSection={
-                search ? (
-                  <ActionIcon variant="transparent" size="sm" onClick={() => setSearch("")} style={{ cursor: "pointer" }}>
-                    <IconX size={16} />
-                  </ActionIcon>
-                ) : null
-              }
-              w={248} size="sm" value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-              styles={{
-                input: {
-                  borderRadius: "4px", fontSize: "13px", fontFamily: "Inter",
-                  color: "#334155", height: "36px", border: "1px solid #D0D1D4",
-                  "&:focus": { border: "1px solid #105476" },
-                },
-              }}
-            />
-            <ActionIcon
-              variant={showFilters ? "filled" : "outline"}
-              size={36}
-              color={showFilters ? "#E0F5FF" : "gray"}
-              onClick={() => setShowFilters((v) => !v)}
-              styles={{
-                root: {
-                  borderRadius: "4px",
-                  backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                  border: showFilters
-                    ? "1px solid #105476"
-                    : "1px solid #737780",
-                  color: showFilters ? "#105476" : "#737780",
-                  "&:active": {
-                    border: "1px solid #105476",
-                    color: "#FFFFFF",
-                  },
-                },
-              }}
-            >
-              <IconFilter size={18} />
-            </ActionIcon>
-
-            {/* Create New */}
-            {/* <Button
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  color: "#FFFFFF",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  "&:hover": { backgroundColor: "#0d4460" },
-                },
-              }}
-              onClick={() => navigate("/payment-request/create")}
-            >
-              Create New
-            </Button> */}
-          </Group>
-        </Group>
-      </Box>
-
-      {/* ── Filter Panel ── */}
-      {showFilters && (
-        <Box
-          tt="capitalize"
-          mb="sm"
-          p="sm"
-          style={{
-            borderRadius: "8px",
-            border: "1px solid #E0E0E0",
-            flexShrink: 0,
-            height: "fit-content",
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={{ ...erpListGeistRootTypography, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+      >
+        <ERPListScreen
+          theme={erpTheme}
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCreditCard size={14} color={primary} />}
+                  value={listStats.total}
+                  label="Total"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={listStats.approved}
+                  label="Approved"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={listStats.pending}
+                  label="Other"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconBan size={14} color="#b91c1c" />}
+                  iconBackground="#fee2e2"
+                  iconColor="#b91c1c"
+                  value={listStats.rejected}
+                  label="Rejected"
+                />
+              </>
+            ),
+            // secondary: (
+            //   <>
+            //     <Text fw={600} size="sm" c={fg} style={{ fontFamily: erpTheme.fontSans }} component="span">
+            //       Payment request approval
+            //     </Text>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <IconCoin size={16} color={muted} style={{ flexShrink: 0 }} />
+            //       <Text fw={600} size="sm" c={fg} style={{ fontFamily: erpTheme.fontSans }} component="span">
+            //         {listStats.pageAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            //       </Text>
+            //       <Text size="xs" c={muted} component="span">
+            //         local on this page
+            //       </Text>
+            //     </Group>
+            //   </>
+            // ),
+            actions: (
+              <>
+                <TextInput
+                  placeholder="Search…"
+                  leftSection={<IconSearch size={16} />}
+                  rightSection={
+                    search ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        aria-label="Clear search"
+                        onClick={() => setSearch("")}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  w={260}
+                  size="xs"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={{
+                    input: {
+                      fontFamily: erpTheme.fontSans,
+                      fontSize: 12,
+                      height: 32,
+                      borderColor: border,
+                    },
+                  }}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((v) => !v)}
+                >
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+              </>
+            ),
           }}
-        >
-          <Group
-            justify="space-between"
-            align="center"
-            mb="sm"
-            px="md"
-            style={{
-              backgroundColor: "#F8FAFC",
-              padding: "4px 8px",
-            }}
-          >
-            <Text
-              size="sm"
-              fw={600}
-              c="#1E293B"
-              style={{ fontFamily: "Inter", fontSize: "14px" }}
-            >
-              Filter
-            </Text>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setShowFilters(false)}
-              aria-label="Close filters"
-              size="sm"
-            >
-              <IconX size={18} />
-            </ActionIcon>
-          </Group>
-
-          <Grid gutter="sm" px="md" pt="xs" pb="sm">
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="User"
-                value={draftCreatedBy}
-                placeholder="Type User"
-                onChange={(e) => setDraftCreatedBy(e.currentTarget.value)}
-                size="xs"
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Refine by user, request no., job, payment type, paid-to, dates, or status",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isLoading}
+                applyDisabled={isLoading}
               />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="Paid To"
-                value={draftPaidTo}
-                placeholder="Type Paid To"
-                onChange={(e) => setDraftPaidTo(e.currentTarget.value)}
-                size="xs"
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="User"
+                      value={draftCreatedBy}
+                      placeholder="Type User"
+                      onChange={(e) => setDraftCreatedBy(e.currentTarget.value)}
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Paid To"
+                      value={draftPaidTo}
+                      placeholder="Type Paid To"
+                      onChange={(e) => setDraftPaidTo(e.currentTarget.value)}
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Job Id"
+                      value={draftFilters.job_reference ?? ""}
+                      placeholder="Type Job Id"
+                      onChange={(e) => updateFilter("job_reference", e.currentTarget.value || null)}
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Request Number"
+                      value={draftFilters.request_no ?? ""}
+                      placeholder="Type Request Number"
+                      onChange={(e) => updateFilter("request_no", e.currentTarget.value || null)}
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Payment Type"
+                      placeholder="Select Payment Type"
+                      data={["Bank", "Cash", "Online Transfer", "PDC", "DD/PO"]}
+                      searchable
+                      value={draftFilters.payment_type}
+                      onChange={(v) => {
+                        const mapped = v === "Cash" ? "CASH" : v === "Online Transfer" ? "ONLINE TRANSFER" : v;
+                        updateFilter("payment_type", mapped ?? null);
+                      }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Paid To Type"
+                      placeholder="Select Paid To Type"
+                      data={["customer", "agent", "supplier", "Vendor"]}
+                      searchable
+                      value={draftFilters.paid_to_type}
+                      onChange={(v) => updateFilter("paid_to_type", v ?? null)}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Date From"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.date_from}
+                      onChange={(d) => updateFilter("date_from", d)}
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Date To"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.date_to}
+                      onChange={(d) => updateFilter("date_to", d)}
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Status"
+                      placeholder="Select Status"
+                      data={[
+                        { value: "Active", label: "Active" },
+                        { value: "Approved", label: "Approved" },
+                        { value: "Rejected", label: "Rejected" },
+                      ]}
+                      value={draftFilters.status}
+                      onChange={(v) => updateFilter("status", v ?? null)}
+                      clearable
+                      searchable
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+              </Grid>
+            ),
+          }}
+          table={{
+            footer: (
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                onPageIndexChange={(idx) =>
+                  setPagination((prev) => ({ ...prev, pageIndex: idx }))
+                }
+                onPageSizeChange={handlePageSizeChange}
+                pageSizeOptions={["10", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
               />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="Job Id"
-                value={draftFilters.job_reference ?? ""}
-                placeholder="Type Job Id"
-                onChange={(e) => updateFilter("job_reference", e.currentTarget.value || null)}
-                size="xs"
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <FormTextInput
-                label="Request Number"
-                value={draftFilters.request_no ?? ""}
-                placeholder="Type Request Number"
-                onChange={(e) => updateFilter("request_no", e.currentTarget.value || null)}
-                size="xs"
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <Dropdown
-                size="xs"
-                label="Payment Type"
-                placeholder="Select Payment Type"
-                data={["Bank", "Cash", "Online Transfer", "PDC", "DD/PO"]}
-                searchable
-                value={draftFilters.payment_type}
-                onChange={(v) => {
-                  const mapped = v === "Cash" ? "CASH" : v === "Online Transfer" ? "ONLINE TRANSFER" : v;
-                  updateFilter("payment_type", mapped ?? null);
-                }}
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <Dropdown
-                size="xs"
-                label="Paid To Type"
-                placeholder="Select Paid To Type"
-                data={["customer", "agent", "supplier", "Vendor"]}
-                searchable
-                value={draftFilters.paid_to_type}
-                onChange={(v) => updateFilter("paid_to_type", v ?? null)}
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <SingleDateInput
-                label="Date From"
-                placeholder="Select Date"
-                value={draftFilters.date_from}
-                onChange={(d) => updateFilter("date_from", d)}
-                size="xs"
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <SingleDateInput
-                label="Date To"
-                placeholder="Select Date"
-                value={draftFilters.date_to}
-                onChange={(d) => updateFilter("date_to", d)}
-                size="xs"
-              />
-            </Grid.Col>
-
-            <Grid.Col span={3}>
-              <Dropdown
-                size="xs"
-                label="Status"
-                placeholder="Select Status"
-                data={[
-                  { value: "Active", label: "Active" },
-                  { value: "Approved", label: "Approved" },
-                  { value: "Rejected", label: "Rejected" },
-                ]}
-                value={draftFilters.status}
-                onChange={(v) => updateFilter("status", v ?? null)}
-                clearable
-                searchable
-              />
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={clearAllFilters}
-              leftSection={<IconX size={16} />}
-              styles={{
-                root: {
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  border: "1px solid #D0D1D4",
-                  color: "#1E293B",
-                },
-              }}
-            >
-              Clear Filters
-            </Button>
-            <Button
-              size="sm"
-              onClick={applyFilters}
-              loading={isLoading}
-              disabled={isLoading}
-              leftSection={<IconFilter size={16} />}
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  "&:hover": {
-                    backgroundColor: "#0d4261",
-                  },
-                },
-              }}
-            >
-              Apply Filters
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {/* ── Table ── */}
-      {isLoading ? (
-        <Center py="xl" style={{ flex: 1 }}>
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-              Loading payment requests...
-            </Text>
-          </Stack>
-        </Center>
-      ) : requestError ? (
-        <Center py="xl" style={{ flex: 1 }}>
-          <Stack align="center" gap="md">
-            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-              Error loading payment requests. Please try refreshing the page.
-            </Text>
-          </Stack>
-        </Center>
-      ) : (
-        <>
-          <MantineReactTable table={table} />
-          <PaginationBar
-            pageSize={pagination.pageSize}
-            currentPage={currentPage}
-            totalRecords={totalRecords}
-            onPageSizeChange={handlePageSizeChange}
-            onPageChange={handlePageChange}
-            pageSizeOptions={["1", "25", "50"]}
-          />
-        </>
-      )}
-    </Card>
+            ),
+            children: requestError ? (
+              <Center py="xl" style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}>
+                <Text size="sm" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
+                  Error loading payment requests. Please try refreshing the page.
+                </Text>
+              </Center>
+            ) : isLoading ? (
+              <ERPListTableLoading theme={erpTheme} message="Loading payment requests…" />
+            ) : (
+              <MantineReactTable table={table} />
+            ),
+          }}
+        />
+      </Box>
+    </MantineProvider>
   );
 }
 

@@ -41,8 +41,8 @@ export type QuotationTableRow = {
   customer_name?: string;
   sales_person?: string;
   reference_no?: string;
-  origin_list?: string[];
-  destination_list?: string[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
   valid_upto_list?: string[];
   reject_remark?: string;
   status?: string;
@@ -312,7 +312,12 @@ export function QuotationListNativeTable({
                 )}
                 {visible.route && (
                   <td style={erpListTdPaddingStyle()}>
-                    {erpListRouteListCell(row.origin_list, row.destination_list, { primary, fg, muted, fontSans })}
+                    {erpListRouteListCell(row.origin_code_list, row.destination_code_list, {
+                      primary,
+                      fg,
+                      muted,
+                      fontSans,
+                    })}
                   </td>
                 )}
                 {visible.reference_no && (

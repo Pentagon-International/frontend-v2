@@ -23,6 +23,12 @@ import {
   IconList,
   IconFileText,
   IconUsers,
+  IconCircleCheck,
+  IconUserOff,
+  IconFileDescription,
+  IconShieldCheck,
+  IconTrendingUp,
+  IconTrendingDown,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -100,6 +106,81 @@ type PreviewFilterState = {
   reference_no: string | null;
   // Optional fields for store compatibility (dates are already included above)
 };
+
+/** Shared with Enquiry enquirerFilter: `summary.status_counts` (spaces / case on keys). */
+function normalizeRfqListStatusKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeRfqListStatusCounts(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isNaN(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function getRfqListStatusCount(
+  map: Record<string, number> | null | undefined,
+  ...labels: string[]
+): number {
+  if (!map) return 0;
+  for (const label of labels) {
+    const target = normalizeRfqListStatusKey(label);
+    for (const [k, v] of Object.entries(map)) {
+      if (normalizeRfqListStatusKey(k) === target) return v;
+    }
+  }
+  return 0;
+}
+
+function parseRfqListFilterResponse(data: any): {
+  rows: any[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+} {
+  const rows = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.result)
+        ? data.result
+        : [];
+  const statusCounts = normalizeRfqListStatusCounts(data?.summary?.status_counts);
+
+  const totalRaw =
+    data?.total ??
+    data?.count ??
+    data?.total_count ??
+    data?.summary?.total ??
+    data?.summary?.total_calls;
+
+  let total: number;
+  if (typeof totalRaw === "number" && !Number.isNaN(totalRaw)) {
+    total = totalRaw;
+  } else if (typeof totalRaw === "string" && totalRaw.trim() !== "") {
+    const p = Number(totalRaw);
+    total = !Number.isNaN(p) ? p : 0;
+  } else if (statusCounts) {
+    total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  } else {
+    total = rows.length;
+  }
+
+  const index = Number(data?.index);
+  if (
+    rows.length > 0 &&
+    !Number.isNaN(index) &&
+    index >= 0 &&
+    total < index + rows.length
+  ) {
+    total = Math.max(total, index + rows.length);
+  }
+
+  return { rows, total, statusCounts };
+}
 
 function RFQMaster() {
   const moduleLabel = "RFQ";
@@ -684,15 +765,15 @@ function RFQMaster() {
           `${URL.enquiryFilter}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           { filters: { ...filterPayload, is_rfq: true } },
         );
-        const data = response as any;
-        const rows = Array.isArray(data?.data) ? data.data : [];
-        const total = data?.total || rows.length || 0;
+        const { rows, total, statusCounts } = parseRfqListFilterResponse(
+          response as any,
+        );
         setListTotalRecords(total);
-        return { data: rows, total };
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching enquiry data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       }
     },
     enabled: false, // Always refetch explicitly (Apply, navigation restore, etc.)
@@ -802,6 +883,30 @@ function RFQMaster() {
   // Choose which data set to show in tables (no client-side filtering of rows)
   const tableData = summaryResult?.data || [];
   const tablePreviewData = previewResult || { columns: [], data: [], total: 0 };
+
+  const summaryListTotalRecords = summaryResult?.total ?? listTotalRecords;
+
+  const rfqSummaryStats = useMemo(() => {
+    const sc = summaryResult?.statusCounts ?? null;
+    return {
+      total: summaryListTotalRecords,
+      active: getRfqListStatusCount(sc, "active"),
+      inactive: getRfqListStatusCount(sc, "inactive"),
+      quoteCreated: getRfqListStatusCount(sc, "quote created"),
+      quoteApproved: getRfqListStatusCount(sc, "quote approved"),
+      gained: getRfqListStatusCount(sc, "gained"),
+      lost: getRfqListStatusCount(sc, "lost"),
+    };
+  }, [summaryResult, summaryListTotalRecords]);
+
+  useEffect(() => {
+    if (showPreviewTable) return;
+    const tr = summaryListTotalRecords;
+    const totalPages = Math.max(1, Math.ceil(tr / listPageSize));
+    if (listCurrentPage > totalPages) {
+      setListCurrentPage(totalPages);
+    }
+  }, [showPreviewTable, summaryListTotalRecords, listPageSize, listCurrentPage]);
 
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
@@ -2265,12 +2370,71 @@ function RFQMaster() {
                       Back to Dashboard
                     </Button>
                   )}
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconUsers size={14} color={primary} />}
-                    value={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
-                    label="Total"
-                  />
+                  {showPreviewTable ? (
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconUsers size={14} color={primary} />}
+                      value={tablePreviewData?.total ?? 0}
+                      label="Total"
+                    />
+                  ) : (
+                    <Group gap={6} wrap="wrap" align="center">
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconUsers size={14} color={primary} />}
+                        value={rfqSummaryStats.total}
+                        label="Total"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconCircleCheck size={14} color="#059669" />}
+                        iconBackground="#d1fae5"
+                        iconColor="#059669"
+                        value={rfqSummaryStats.active}
+                        label="Active"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconUserOff size={14} color="#64748b" />}
+                        iconBackground="#f1f5f9"
+                        iconColor="#64748b"
+                        value={rfqSummaryStats.inactive}
+                        label="Inactive"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconFileDescription size={14} color="#2563eb" />}
+                        iconBackground="#dbeafe"
+                        iconColor="#2563eb"
+                        value={rfqSummaryStats.quoteCreated}
+                        label="Quote created"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconShieldCheck size={14} color="#7c3aed" />}
+                        iconBackground="#f3e8ff"
+                        iconColor="#7c3aed"
+                        value={rfqSummaryStats.quoteApproved}
+                        label="Quote approved"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconTrendingUp size={14} color="#16a34a" />}
+                        iconBackground="#f0fdf4"
+                        iconColor="#16a34a"
+                        value={rfqSummaryStats.gained}
+                        label="Gained"
+                      />
+                      <ERPListStatPill
+                        theme={erpTheme}
+                        icon={<IconTrendingDown size={14} color="#dc2626" />}
+                        iconBackground="#fef2f2"
+                        iconColor="#dc2626"
+                        value={rfqSummaryStats.lost}
+                        label="Lost"
+                      />
+                    </Group>
+                  )}
                 </>
               ),
               secondary: (
@@ -2721,7 +2885,9 @@ function RFQMaster() {
               footer: (
                 <ERPListPaginationFooter
                   theme={erpTheme}
-                  totalRecords={showPreviewTable ? tablePreviewData?.total ?? 0 : listTotalRecords}
+                  totalRecords={
+                    showPreviewTable ? tablePreviewData?.total ?? 0 : summaryListTotalRecords
+                  }
                   pageIndex={showPreviewTable ? previewCurrentPage - 1 : listCurrentPage - 1}
                   pageSize={showPreviewTable ? previewPageSize : listPageSize}
                   onPageIndexChange={(idx) => {

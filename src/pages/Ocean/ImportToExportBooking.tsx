@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Button,
   Group,
@@ -24,6 +24,8 @@ import {
   IconCircleCheck,
   IconClock,
   IconArrowRight,
+  IconCircleX,
+  IconScale,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -54,6 +56,7 @@ import {
 import { ERP_LIST_GEIST_MONO_CLASS } from "../../components/ERPListPage";
 import useDateFormat from "../../hooks/useDateFormat";
 import dayjs from "dayjs";
+import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 
 type ImportToExportBookingData = {
   id: number;
@@ -148,37 +151,27 @@ function routeEndpointsFromBookingRow(row: ImportToExportBookingData) {
   return { oc, dc };
 }
 
-type ImportToExportBookingsResponse = {
-  success: boolean;
-  message: string;
-  count: number;
-  index: number;
-  limit: number | null;
-  total_pagination: number;
-  total: number;
-  data: ImportToExportBookingData[];
+/** `summary` on `customerServiceShipmentFilter` (totals are filter-scoped). */
+type ImportToExportListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    booked?: number;
+    received?: number;
+    generated?: number;
+    closed?: number;
+    cancel?: number;
+    pending?: number;
+  };
+  totals?: {
+    pcs?: number;
+    weight_kg?: number;
+  };
 };
 
-const fetchOceanImportToExportBookings = async (statusFilter: string) => {
-  const payload = {
-    filters: {
-      import_to_export: true,
-      service: ["FCL", "LCL"],
-      reference: statusFilter === "completed",
-    },
-  };
-
-  const response = (await postAPICall(
-    URL.customerServiceShipmentFilter,
-    payload,
-    API_HEADER
-  )) as ImportToExportBookingsResponse;
-
-  if (response && response.success && Array.isArray(response.data)) {
-    return response.data;
-  }
-
-  return [];
+type ImportToExportListQueryResult = {
+  data: ImportToExportBookingData[];
+  total: number;
+  summary?: ImportToExportListSummary;
 };
 
 function OceanImportToExportBooking() {
@@ -192,7 +185,8 @@ function OceanImportToExportBooking() {
     useState<ImportToExportBookingData | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     booking: true,
     date: true,
@@ -204,36 +198,85 @@ function OceanImportToExportBooking() {
 
   const dateFormat = useDateFormat();
 
-  const pendingQuery = useQuery({
-    queryKey: ["ocean-import-to-export-bookings", "pending"],
-    queryFn: () => fetchOceanImportToExportBookings("pending"),
+  const { data: listResponse, isLoading, error } = useQuery<ImportToExportListQueryResult>({
+    queryKey: ["ocean-import-to-export-bookings", statusFilter, pageIndex, pageSize],
+    queryFn: async (): Promise<ImportToExportListQueryResult> => {
+      try {
+        const offset = pageIndex * pageSize;
+        const payload = {
+          filters: {
+            import_to_export: true,
+            service: ["FCL", "LCL"],
+            reference: statusFilter === "completed",
+          },
+        };
+        const response = (await postAPICall(
+          `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`,
+          payload,
+          API_HEADER,
+        )) as Record<string, unknown>;
+
+        const list: ImportToExportBookingData[] = Array.isArray(response.data)
+          ? (response.data as ImportToExportBookingData[])
+          : [];
+        const listTotal = getBookingShipmentFilterListTotal(response, list, offset);
+        const rawSummary = response.summary;
+        const summary: ImportToExportListSummary | undefined =
+          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            ? (rawSummary as ImportToExportListSummary)
+            : undefined;
+        const summaryTotal = summary?.total_shipments;
+        const total =
+          typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+            ? summaryTotal
+            : listTotal;
+        setTotalRecords(total);
+
+        return { data: list, total, summary };
+      } catch {
+        setTotalRecords(0);
+        return { data: [], total: 0, summary: undefined };
+      }
+    },
     staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
-  const completedQuery = useQuery({
-    queryKey: ["ocean-import-to-export-bookings", "completed"],
-    queryFn: () => fetchOceanImportToExportBookings("completed"),
-    staleTime: 0,
-  });
+  const displayData: ImportToExportBookingData[] = listResponse?.data ?? [];
 
-  const displayData: ImportToExportBookingData[] = useMemo(() => {
-    const raw =
-      statusFilter === "pending"
-        ? pendingQuery.data
-        : completedQuery.data;
-    return Array.isArray(raw) ? raw : [];
-  }, [statusFilter, pendingQuery.data, completedQuery.data]);
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
-  const isLoading =
-    statusFilter === "pending" ? pendingQuery.isLoading : completedQuery.isLoading;
-  const error =
-    statusFilter === "pending" ? pendingQuery.error : completedQuery.error;
-
-  const totalRecords = displayData.length;
-
-  const pendingCount = pendingQuery.data?.length ?? 0;
-  const completedCount = completedQuery.data?.length ?? 0;
-  const totalHandoffs = pendingCount + completedCount;
+  const listSummary = listResponse?.summary;
+  const stats = useMemo(() => {
+    if (listSummary) {
+      const sc = listSummary.status_counts;
+      return {
+        total: listSummary.total_shipments ?? totalRecords,
+        booked: sc?.booked ?? 0,
+        received: sc?.received ?? 0,
+        generated: sc?.generated ?? 0,
+        cancel: sc?.cancel ?? 0,
+        totalPieces: listSummary.totals?.pcs ?? 0,
+        totalWeight: listSummary.totals?.weight_kg ?? 0,
+      };
+    }
+    return {
+      total: totalRecords,
+      booked: 0,
+      received: 0,
+      generated: 0,
+      cancel: 0,
+      totalPieces: 0,
+      totalWeight: 0,
+    };
+  }, [listSummary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -250,10 +293,10 @@ function OceanImportToExportBooking() {
     [visibleColumns],
   );
 
-  const pageRows = useMemo(
-    () => displayData.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
-    [displayData, pageIndex, pageSize],
-  );
+  const handlePageSizeChange = (size: number) => {
+    setPageIndex(0);
+    setPageSize(size);
+  };
 
   const handleConfirmCreateExport = async () => {
     if (!selectedBooking) return;
@@ -684,45 +727,66 @@ function OceanImportToExportBooking() {
                   <ERPListStatPill
                     theme={theme}
                     icon={<IconPackage size={14} color={primary} />}
-                    value={totalHandoffs}
+                    value={stats.total}
                     label="Total"
-                  />
-                  <ERPListStatPill
-                    theme={theme}
-                    icon={<IconClock size={14} color="#d97706" />}
-                    iconBackground="#fef3c7"
-                    iconColor="#d97706"
-                    value={pendingCount}
-                    label="Pending"
                   />
                   <ERPListStatPill
                     theme={theme}
                     icon={<IconCircleCheck size={14} color="#059669" />}
                     iconBackground="#d1fae5"
                     iconColor="#059669"
-                    value={completedCount}
-                    label="Completed"
+                    value={stats.booked}
+                    label="Booked"
                   />
                   <ERPListStatPill
                     theme={theme}
-                    icon={<IconStack2 size={14} color="#2563eb" />}
+                    icon={<IconPackage size={14} color="#105476" />}
                     iconBackground="#dbeafe"
-                    iconColor="#2563eb"
-                    value={totalRecords}
-                    label="In tab"
+                    iconColor="#105476"
+                    value={stats.received}
+                    label="Received"
+                  />
+                  <ERPListStatPill
+                    theme={theme}
+                    icon={<IconClock size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={stats.generated}
+                    label="Generated"
+                  />
+                  <ERPListStatPill
+                    theme={theme}
+                    icon={<IconCircleX size={14} color="#dc2626" />}
+                    iconBackground="#fee2e2"
+                    iconColor="#dc2626"
+                    value={stats.cancel}
+                    label="Canceled"
                   />
                 </>
               ),
               secondary: (
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {pageRows.length}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
-                  </Text>
-                </Group>
+                <>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalPieces.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      pcs
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalWeight.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      kg
+                    </Text>
+                  </Group>
+                </>
               ),
               actions: (
                 <>
@@ -758,7 +822,7 @@ function OceanImportToExportBooking() {
                   pageIndex={pageIndex}
                   pageSize={pageSize}
                   onPageIndexChange={setPageIndex}
-                  onPageSizeChange={setPageSize}
+                  onPageSizeChange={handlePageSizeChange}
                   selectClassNames={erpListGeistSelectClassNames}
                   pageSizeOptions={["10", "25", "50"]}
                 />
@@ -802,7 +866,7 @@ function OceanImportToExportBooking() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.length === 0 ? (
+                    {displayData.length === 0 ? (
                       <tr>
                         <td
                           colSpan={Math.max(visibleDataColumnCount, 1)}
@@ -834,7 +898,7 @@ function OceanImportToExportBooking() {
                         </td>
                       </tr>
                     ) : (
-                      pageRows.map((row) => {
+                      displayData.map((row) => {
                         const rowProps = erpListDataRowProps(theme);
                         return (
                           <tr

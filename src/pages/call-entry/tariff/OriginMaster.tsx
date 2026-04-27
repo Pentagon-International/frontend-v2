@@ -62,6 +62,7 @@ import {
   TariffMasterListNativeTable,
   type TariffListColumn,
 } from "./TariffMasterListNativeTable";
+import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
 type Origin = {
   id: number;
@@ -177,7 +178,7 @@ export default function OriginMaster() {
     isLoading: isOriginLoading,
     refetch: refetchOrigin,
   } = useQuery({
-    queryKey: ["origin", currentOriginCode, pageSize],
+    queryKey: ["origin", currentOriginCode, currentPage, pageSize],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
@@ -197,14 +198,17 @@ export default function OriginMaster() {
         // Handle response - API returns { results: [...] } or { result: [...] }
         // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -226,7 +230,14 @@ export default function OriginMaster() {
     isLoading: filteredOriginLoading,
     refetch: refetchFilteredOrigin,
   } = useQuery({
-    queryKey: ["filteredOrigin", filtersApplied, appliedFilters, currentOriginCode, pageSize],
+    queryKey: [
+      "filteredOrigin",
+      filtersApplied,
+      appliedFilters,
+      currentOriginCode,
+      currentPage,
+      pageSize,
+    ],
     queryFn: async () => {
       try {
         if (!filtersApplied) return [];
@@ -259,14 +270,17 @@ export default function OriginMaster() {
 
         // Handle response with total count
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -657,6 +671,13 @@ export default function OriginMaster() {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalRecords, pageSize, currentPage]);
+
   // Refetch data when pagination changes
   useEffect(() => {
     if (filtersApplied) {
@@ -791,14 +812,6 @@ export default function OriginMaster() {
                     icon={<IconListDetails size={14} color={primary} />}
                     value={totalRecords}
                     label="Total"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconListNumbers size={14} color="#059669" />}
-                    iconBackground="#d1fae5"
-                    iconColor="#059669"
-                    value={hasSearched ? filteredOriginDataForDisplay.length : 0}
-                    label="On page"
                   />
                 </>
               ),

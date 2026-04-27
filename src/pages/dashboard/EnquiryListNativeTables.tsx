@@ -35,8 +35,8 @@ type SummaryRow = Record<string, unknown> & {
   customer_name?: string;
   sales_person?: string;
   services?: Array<{ service?: string; trade?: string; service_remark?: string }>;
-  origin_list?: string[];
-  destination_list?: string[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
   reference_no?: string;
   enquiry_received_date?: string;
   status?: string;
@@ -244,7 +244,11 @@ export function EnquirySummaryNativeTable({
                 )}
                 {visible.route && (
                   <td style={erpListTdPaddingStyle()}>
-                    {erpListRouteListCell(row.origin_list, row.destination_list, { primary, fg, muted, fontSans })}
+                    {erpListRouteListCell(
+                      row.origin_code_list,
+                      row.destination_code_list,
+                      { primary, fg, muted, fontSans },
+                    )}
                   </td>
                 )}
                 {visible.reference_no && (

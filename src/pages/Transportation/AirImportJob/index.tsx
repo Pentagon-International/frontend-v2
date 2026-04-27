@@ -39,7 +39,6 @@ import {
   ToastNotification,
   SearchableSelect,
   SingleDateInput,
-  Dropdown,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
@@ -73,6 +72,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 dayjs.extend(utc);
 
@@ -124,6 +124,21 @@ type AirImportJobData = {
   updated_at?: string;
   status?: string;
   job_id?: string;
+};
+
+/** `summary` on `filterJobCreate` (totals are filter-scoped). */
+type AirImportJobListSummary = {
+  status_counts?: {
+    active?: number;
+    closed?: number;
+    cancel?: number;
+  };
+};
+
+type AirImportJobListQueryResult = {
+  data: AirImportJobData[];
+  total: number;
+  summary?: AirImportJobListSummary;
 };
 
 /** Air Export Booking route column: origin_code_read → origin_code → origin_name (same for destination). */
@@ -258,7 +273,6 @@ function AirImportJobMaster() {
 
   const pageIndex = pagination.pageIndex;
   const pageSize = pagination.pageSize;
-  const index = pagination.pageIndex * pagination.pageSize;
 
   const handlePageSizeChange = (size: number) => {
     setPagination({ pageIndex: 0, pageSize: size });
@@ -305,11 +319,11 @@ function AirImportJobMaster() {
   };
 
   const {
-    data: importJobData = [],
+    data: importJobResponse,
     isLoading: importJobLoading,
     isFetching: importJobFetching,
     refetch: refetchImportJobs,
-  } = useQuery({
+  } = useQuery<AirImportJobListQueryResult>({
     queryKey: [
       "airImportJobs",
       pagination.pageIndex,
@@ -317,7 +331,7 @@ function AirImportJobMaster() {
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<AirImportJobData[]> => {
+    queryFn: async (): Promise<AirImportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
       const payload =
@@ -337,23 +351,40 @@ function AirImportJobMaster() {
             };
 
       setIsInitialLoad(false);
-      const response = await apiCallProtected.post(
-        `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
+      const offset = pagination.pageIndex * pagination.pageSize;
+      const response = (await apiCallProtected.post(
+        `${URL.filterJobCreate}?index=${offset}&limit=${pagination.pageSize}`,
         payload,
         API_HEADER
-      );
+      )) as Record<string, unknown>;
 
-      const result = response as { data?: AirImportJobData[]; total_count?: number };
-      const list = Array.isArray(result?.data) ? result.data : [];
-      setTotalRecords(result?.total_count ?? list.length);
+      const list = Array.isArray(response?.data) ? (response.data as AirImportJobData[]) : [];
+      const total = getBookingShipmentFilterListTotal(response, list, offset);
+      setTotalRecords(total);
 
-      return list;
+      const rawSummary = response?.summary;
+      const summary: AirImportJobListSummary | undefined =
+        rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+          ? (rawSummary as AirImportJobListSummary)
+          : undefined;
+
+      return { data: list, total, summary };
     },
     enabled: !isRestoring && search === debouncedSearch,
     staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnMount: true,
   });
+
+  const importJobData = importJobResponse?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
   const isLoading = importJobFetching || importJobLoading || isInitialLoad;
 
@@ -386,7 +417,17 @@ function AirImportJobMaster() {
     }
   };
 
+  const listSummary = importJobResponse?.summary;
   const stats = useMemo(() => {
+    const sc = listSummary?.status_counts;
+    if (sc) {
+      return {
+        total: totalRecords,
+        active: sc.active ?? 0,
+        closed: sc.closed ?? 0,
+        cancel: sc.cancel ?? 0,
+      };
+    }
     const rows = importJobData;
     return {
       total: totalRecords,
@@ -394,7 +435,7 @@ function AirImportJobMaster() {
       closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
       cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
     };
-  }, [importJobData, totalRecords]);
+  }, [importJobData, totalRecords, listSummary]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -457,9 +498,6 @@ function AirImportJobMaster() {
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
                     {importJobData.length}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
                   </Text>
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">

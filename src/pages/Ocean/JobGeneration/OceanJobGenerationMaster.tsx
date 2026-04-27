@@ -67,6 +67,7 @@ import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "OCEAN_JOB_GENERATION_MASTER";
 
@@ -95,6 +96,21 @@ type OceanJobData = {
     actual_seal_no: string;
   }>;
   shipment_details: Array<unknown>;
+};
+
+/** `summary` on `bookingFilter` list (filter-scoped totals). */
+type OceanJobListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    pending?: number;
+    generated?: number;
+    inactive?: number;
+  };
+};
+
+type OceanJobListQueryResult = {
+  data: OceanJobData[];
+  summary?: OceanJobListSummary;
 };
 
 type FilterState = {
@@ -136,18 +152,6 @@ function routeEndpointsFromJobRow(row: OceanJobData) {
     String(row.destination_name || "").trim() ||
     "";
   return { oc, dc };
-}
-
-function getStatusBadge(statusRaw: string | undefined | null) {
-  const statusUpper = (statusRaw || "").toUpperCase();
-  const label =
-    statusUpper === "CANCEL"
-      ? "Cancel"
-      : statusUpper === "CLOSED"
-        ? "Closed"
-        : "Active";
-  const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
-  return { label, color } as const;
 }
 
 function OceanJobGenerationMaster() {
@@ -290,11 +294,11 @@ function OceanJobGenerationMaster() {
   }, [appliedFilterPayload, debouncedSearch]);
 
   const {
-    data: bookingData,
+    data: bookingListResult,
     isLoading: bookingLoading,
     isFetching: bookingFetching,
     error: bookingError,
-  } = useQuery({
+  } = useQuery<OceanJobListQueryResult>({
     queryKey: [
       "ocean-job-bookings",
       pageIndex,
@@ -302,7 +306,7 @@ function OceanJobGenerationMaster() {
       JSON.stringify(appliedFilterPayload),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<OceanJobData[]> => {
+    queryFn: async (): Promise<OceanJobListQueryResult> => {
       try {
         const filtersWithSearch = buildRequestFilters();
         const urlSt = getServiceTypeFromUrl();
@@ -313,13 +317,15 @@ function OceanJobGenerationMaster() {
 
         setIsInitialLoad(false);
 
-        const response = await apiCallProtected.post(
+        const response = (await apiCallProtected.post(
           `${URL.bookingFilter}?index=${index}&limit=${pageSize}`,
           payload,
-        );
+        )) as Record<string, unknown>;
+
         const data = response as {
           total?: number;
           data?: OceanJobData[] | { data?: OceanJobData[]; total?: number };
+          summary?: unknown;
         };
 
         const nestedData =
@@ -332,13 +338,24 @@ function OceanJobGenerationMaster() {
             ? nestedData.data
             : [];
 
-        const total = data?.total ?? nestedData?.total ?? list.length;
-        setTotalRecords(Number(total));
-        return list;
+        const listTotal = getBookingShipmentFilterListTotal(response, list, index);
+        const rawSummary = response.summary;
+        const summary: OceanJobListSummary | undefined =
+          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            ? (rawSummary as OceanJobListSummary)
+            : undefined;
+        const summaryTotal = summary?.total_shipments;
+        const total =
+          typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+            ? summaryTotal
+            : listTotal;
+        setTotalRecords(total);
+
+        return { data: list, summary };
       } catch (error) {
         console.error("Error fetching ocean job list:", error);
         setTotalRecords(0);
-        return [];
+        return { data: [], summary: undefined };
       }
     },
     enabled: !isRestoring && search === debouncedSearch,
@@ -346,6 +363,16 @@ function OceanJobGenerationMaster() {
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+
+  const bookingData = bookingListResult?.data ?? [];
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
   const isLoading = bookingLoading || bookingFetching || isInitialLoad;
 
@@ -358,13 +385,24 @@ function OceanJobGenerationMaster() {
 
   const stats = useMemo(() => {
     const rows = bookingData || [];
+    const summary = bookingListResult?.summary;
+    if (summary) {
+      const sc = summary.status_counts ?? {};
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        pending: sc.pending ?? 0,
+        generated: sc.generated ?? 0,
+        inactive: sc.inactive ?? 0,
+      };
+    }
+    const st = (s: string | undefined) => (s || "").toUpperCase();
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+      pending: rows.filter((r) => st(r.status) === "PENDING").length,
+      generated: rows.filter((r) => st(r.status) === "GENERATED").length,
+      inactive: rows.filter((r) => st(r.status) === "INACTIVE").length,
     };
-  }, [bookingData, totalRecords]);
+  }, [bookingData, bookingListResult?.summary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -480,27 +518,27 @@ function OceanJobGenerationMaster() {
                 />
                 <ERPListStatPill
                   theme={theme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={stats.pending}
+                  label="Pending"
+                />
+                <ERPListStatPill
+                  theme={theme}
                   icon={<IconCircleCheck size={14} color="#059669" />}
                   iconBackground="#d1fae5"
                   iconColor="#059669"
-                  value={stats.active}
-                  label="Active"
+                  value={stats.generated}
+                  label="Generated"
                 />
                 <ERPListStatPill
                   theme={theme}
-                  icon={<IconClock size={14} color="#2563eb" />}
-                  iconBackground="#dbeafe"
-                  iconColor="#2563eb"
-                  value={stats.closed}
-                  label="Closed"
-                />
-                <ERPListStatPill
-                  theme={theme}
-                  icon={<IconX size={14} color="#dc2626" />}
-                  iconBackground="#fee2e2"
-                  iconColor="#dc2626"
-                  value={stats.cancel}
-                  label="Cancel"
+                  icon={<IconStack2 size={14} color="#6b7280" />}
+                  iconBackground="#f3f4f6"
+                  iconColor="#6b7280"
+                  value={stats.inactive}
+                  label="Inactive"
                 />
               </>
             ),
@@ -510,9 +548,6 @@ function OceanJobGenerationMaster() {
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
                     {displayData.length}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
                   </Text>
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">

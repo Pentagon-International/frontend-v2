@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Button,
   Group,
@@ -23,6 +23,7 @@ import {
   IconStack2,
   IconCircleCheck,
   IconClock,
+  IconX,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +54,7 @@ import {
 import { ERP_LIST_GEIST_MONO_CLASS } from "../../components/ERPListPage";
 import useDateFormat from "../../hooks/useDateFormat";
 import dayjs from "dayjs";
+import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 
 type ImportToExportBookingData = {
   id: number;
@@ -132,37 +134,19 @@ type VisibleColumnsState = {
   customer_service: boolean;
 };
 
-type ImportToExportBookingsResponse = {
-  success: boolean;
-  message: string;
-  count: number;
-  index: number;
-  limit: number | null;
-  total_pagination: number;
-  total: number;
-  data: ImportToExportBookingData[];
+/** `summary` on `customerServiceShipmentFilter` (totals are filter-scoped). */
+type ImportToExportListSummary = {
+  status_counts?: {
+    active?: number;
+    closed?: number;
+    cancel?: number;
+  };
 };
 
-const fetchImportToExportBookings = async (statusFilter: string) => {
-  const payload = {
-    filters: {
-      import_to_export: true,
-      service: "AIR",
-      reference: statusFilter === "completed",
-    },
-  };
-
-  const response = (await postAPICall(
-    URL.customerServiceShipmentFilter,
-    payload,
-    API_HEADER
-  )) as ImportToExportBookingsResponse;
-
-  if (response && response.success && Array.isArray(response.data)) {
-    return response.data;
-  }
-
-  return [];
+type ImportToExportListQueryResult = {
+  data: ImportToExportBookingData[];
+  total: number;
+  summary?: ImportToExportListSummary;
 };
 
 function AirImportToExportBooking() {
@@ -176,7 +160,8 @@ function AirImportToExportBooking() {
     useState<ImportToExportBookingData | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     booking: true,
     date: true,
@@ -189,36 +174,77 @@ function AirImportToExportBooking() {
 
   const dateFormat = useDateFormat();
 
-  const pendingQuery = useQuery({
-    queryKey: ["import-to-export-bookings", "pending"],
-    queryFn: () => fetchImportToExportBookings("pending"),
+  const { data: listResponse, isLoading, error } = useQuery<ImportToExportListQueryResult>({
+    queryKey: ["import-to-export-bookings", statusFilter, pageIndex, pageSize],
+    queryFn: async (): Promise<ImportToExportListQueryResult> => {
+      try {
+        const offset = pageIndex * pageSize;
+        const payload = {
+          filters: {
+            import_to_export: true,
+            service: "AIR",
+            reference: statusFilter === "completed",
+          },
+        };
+
+        const response = (await postAPICall(
+          `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`,
+          payload,
+          API_HEADER
+        )) as Record<string, unknown>;
+
+        const list: ImportToExportBookingData[] = Array.isArray(response.data)
+          ? (response.data as ImportToExportBookingData[])
+          : [];
+
+        const total = getBookingShipmentFilterListTotal(response, list, offset);
+        setTotalRecords(total);
+
+        const rawSummary = response?.summary;
+        const summary: ImportToExportListSummary | undefined =
+          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            ? (rawSummary as ImportToExportListSummary)
+            : undefined;
+
+        return { data: list, total, summary };
+      } catch {
+        setTotalRecords(0);
+        return { data: [], total: 0, summary: undefined };
+      }
+    },
     staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
-  const completedQuery = useQuery({
-    queryKey: ["import-to-export-bookings", "completed"],
-    queryFn: () => fetchImportToExportBookings("completed"),
-    staleTime: 0,
-  });
+  const displayData: ImportToExportBookingData[] = listResponse?.data ?? [];
 
-  const displayData: ImportToExportBookingData[] = useMemo(() => {
-    const raw =
-      statusFilter === "pending"
-        ? pendingQuery.data
-        : completedQuery.data;
-    return Array.isArray(raw) ? raw : [];
-  }, [statusFilter, pendingQuery.data, completedQuery.data]);
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
 
-  const isLoading =
-    statusFilter === "pending" ? pendingQuery.isLoading : completedQuery.isLoading;
-  const error =
-    statusFilter === "pending" ? pendingQuery.error : completedQuery.error;
-
-  const totalRecords = displayData.length;
-
-  const pendingCount = pendingQuery.data?.length ?? 0;
-  const completedCount = completedQuery.data?.length ?? 0;
-  const totalHandoffs = pendingCount + completedCount;
+  const listSummary = listResponse?.summary;
+  const stats = useMemo(() => {
+    const sc = listSummary?.status_counts;
+    if (sc) {
+      return {
+        total: totalRecords,
+        active: sc.active ?? 0,
+        closed: sc.closed ?? 0,
+        cancel: sc.cancel ?? 0,
+      };
+    }
+    return {
+      total: totalRecords,
+      active: 0,
+      closed: 0,
+      cancel: 0,
+    };
+  }, [listSummary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
@@ -235,10 +261,10 @@ function AirImportToExportBooking() {
     [visibleColumns],
   );
 
-  const pageRows = useMemo(
-    () => displayData.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
-    [displayData, pageIndex, pageSize],
-  );
+  const handlePageSizeChange = (size: number) => {
+    setPageIndex(0);
+    setPageSize(size);
+  };
 
   const handleConfirmCreateExport = async () => {
     if (!selectedBooking) return;
@@ -669,32 +695,32 @@ function AirImportToExportBooking() {
                   <ERPListStatPill
                     theme={theme}
                     icon={<IconPackage size={14} color={primary} />}
-                    value={totalHandoffs}
+                    value={stats.total}
                     label="Total"
-                  />
-                  <ERPListStatPill
-                    theme={theme}
-                    icon={<IconClock size={14} color="#d97706" />}
-                    iconBackground="#fef3c7"
-                    iconColor="#d97706"
-                    value={pendingCount}
-                    label="Pending"
                   />
                   <ERPListStatPill
                     theme={theme}
                     icon={<IconCircleCheck size={14} color="#059669" />}
                     iconBackground="#d1fae5"
                     iconColor="#059669"
-                    value={completedCount}
-                    label="Completed"
+                    value={stats.active}
+                    label="Active"
                   />
                   <ERPListStatPill
                     theme={theme}
-                    icon={<IconStack2 size={14} color="#2563eb" />}
+                    icon={<IconClock size={14} color="#2563eb" />}
                     iconBackground="#dbeafe"
                     iconColor="#2563eb"
-                    value={totalRecords}
-                    label="In tab"
+                    value={stats.closed}
+                    label="Closed"
+                  />
+                  <ERPListStatPill
+                    theme={theme}
+                    icon={<IconX size={14} color="#dc2626" />}
+                    iconBackground="#fee2e2"
+                    iconColor="#dc2626"
+                    value={stats.cancel}
+                    label="Cancel"
                   />
                 </>
               ),
@@ -702,11 +728,9 @@ function AirImportToExportBooking() {
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
-                    {pageRows.length}
+                    {displayData.length}
                   </Text>
-                  <Text size="xs" c={muted} component="span">
-                    on page
-                  </Text>
+
                 </Group>
               ),
               actions: (
@@ -743,7 +767,7 @@ function AirImportToExportBooking() {
                   pageIndex={pageIndex}
                   pageSize={pageSize}
                   onPageIndexChange={setPageIndex}
-                  onPageSizeChange={setPageSize}
+                  onPageSizeChange={handlePageSizeChange}
                   selectClassNames={erpListGeistSelectClassNames}
                   pageSizeOptions={["10", "25", "50"]}
                 />
@@ -790,7 +814,7 @@ function AirImportToExportBooking() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.length === 0 ? (
+                    {displayData.length === 0 ? (
                       <tr>
                         <td
                           colSpan={Math.max(visibleDataColumnCount, 1)}
@@ -822,7 +846,7 @@ function AirImportToExportBooking() {
                         </td>
                       </tr>
                     ) : (
-                      pageRows.map((row) => {
+                      displayData.map((row) => {
                         const rowProps = erpListDataRowProps(theme);
                         return (
                           <tr
