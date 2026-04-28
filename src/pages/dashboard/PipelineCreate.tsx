@@ -878,20 +878,29 @@ function PipelineCreate() {
             <Box key={`existing-${index}`} mt="sm">
               <Grid>
                 <Grid.Col span={1}>
-                  <TextInput
+                  <Select
                     placeholder="Service"
+                    data={["AIR", "FCL", "LCL"]}
                     value={profilingForm.values.profiles[index]?.service || ""}
-                    readOnly
+                    onChange={(value) => {
+                      profilingForm.setFieldValue(
+                        `profiles.${index}.service`,
+                        value && value.trim() ? value : ""
+                      );
+                      profilingForm.clearFieldError(`profiles.${index}.service`);
+                    }}
+                    disabled={viewMode}
+                    required
+                    error={
+                      profilingForm.errors[`profiles.${index}.service`] as string
+                    }
                     styles={{
                       input: {
                         fontSize: "13px",
                         fontFamily: "Inter",
                         height: "36px",
-                        backgroundColor: "#f8f9fa",
-                        cursor: "not-allowed",
                       },
                     }}
-                    // size="xs"
                   />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
@@ -932,7 +941,7 @@ function PipelineCreate() {
                       );
                     }}
                     minSearchLength={2}
-                    disabled
+                    disabled={viewMode}
                     required
                     error={
                       profilingForm.errors[
@@ -981,7 +990,7 @@ function PipelineCreate() {
                       );
                     }}
                     minSearchLength={2}
-                    disabled
+                    disabled={viewMode}
                     required
                     error={
                       profilingForm.errors[
@@ -1014,7 +1023,7 @@ function PipelineCreate() {
                         `profiles.${index}.frequency_id`
                       );
                     }}
-                    disabled
+                    disabled={viewMode}
                     required
                     error={
                       profilingForm.errors[
