@@ -1,46 +1,64 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
   Box,
   Button,
-  Card,
   Group,
   Menu,
   Text,
+  Tooltip,
   UnstyledButton,
   Grid,
-  Loader,
   Select,
-  Center,
-  Stack,
+  TextInput,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconDotsVertical,
   IconEdit,
   IconPlus,
   IconFilter,
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
+  IconListDetails,
+  IconListNumbers,
+  IconSearch,
+  IconTruck,
   IconX,
   IconEye,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
+import {
+  ToastNotification,
+  SearchableSelect,
+  SingleDateInput,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistMantineTheme,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+} from "../../../components";
+import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
-import { DateInput } from "@mantine/dates";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import useDateFormat from "../../../hooks/useDateFormat";
+import {
+  TariffMasterListNativeTable,
+  type TariffListColumn,
+} from "./TariffMasterListNativeTable";
+import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
 type Freight = {
   id: number;
@@ -137,14 +155,17 @@ export default function Freight() {
 
         // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -204,14 +225,17 @@ export default function Freight() {
 
         // Handle response with total count
         if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
+          const rows = data.data;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
+          const rows = data.result;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
+          const rows = data.results;
+          setTotalRecords(getTariffFilterListTotal(data, rows));
+          return rows;
         }
         setTotalRecords(0);
         return [];
@@ -283,6 +307,153 @@ export default function Freight() {
     }
     return isFreightLoading;
   }, [isFreightLoading, filteredFreightLoading, filtersApplied]);
+
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, fg, fontSans, primary, muted } = erpTheme;
+
+  const renderFreightActions = useCallback(
+    (row: Freight) => (
+      <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+        <Menu.Target>
+          <ActionIcon variant="subtle" color="gray" aria-label="Row actions">
+            <IconDotsVertical size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Box px={10} py={5}>
+            <UnstyledButton
+              onClick={() =>
+                navigate("/tariff/freight/create", {
+                  state: { ...row, actionType: "view" },
+                })
+              }
+            >
+              <Group gap="sm">
+                <IconEye size={16} style={{ color: primary }} />
+                <Text size="sm">View</Text>
+              </Group>
+            </UnstyledButton>
+          </Box>
+          {user?.is_staff ? (
+            <>
+              <Menu.Divider />
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() =>
+                    navigate("/tariff/freight/create", {
+                      state: { ...row, actionType: "edit" },
+                    })
+                  }
+                >
+                  <Group gap="sm">
+                    <IconEdit size={16} style={{ color: primary }} />
+                    <Text size="sm">Edit</Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </>
+          ) : null}
+        </Menu.Dropdown>
+      </Menu>
+    ),
+    [navigate, user?.is_staff, primary]
+  );
+
+  const freightListColumns = useMemo<TariffListColumn<Freight>[]>(
+    () => [
+      {
+        id: "origin",
+        header: "Origin",
+        cellMaxWidth: 200,
+        cell: (r) => {
+          const v = r.origin_name ?? "—";
+          return (
+            <Tooltip
+              label={v}
+              withArrow
+              styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+            >
+              <Text
+                component="span"
+                fw={600}
+                size="sm"
+                c={primary}
+                lineClamp={1}
+                style={{ fontFamily: fontSans, cursor: "default" }}
+              >
+                {v}
+              </Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "destination",
+        header: "Destination",
+        cellMaxWidth: 200,
+        cell: (r) => {
+          const v = r.destination_name ?? "—";
+          return (
+            <Tooltip
+              label={v}
+              withArrow
+              styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+            >
+              <Text
+                component="span"
+                fw={500}
+                size="sm"
+                c={fg}
+                lineClamp={1}
+                style={{ fontFamily: fontSans, cursor: "default" }}
+              >
+                {v}
+              </Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "service",
+        header: "Service",
+        cell: (r) => (
+          <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+            {r.service ?? "—"}
+          </Text>
+        ),
+      },
+      {
+        id: "valid_from",
+        header: "Valid From",
+        cellTone: "muted",
+        cell: (r) => (
+          <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+            {r.valid_from ? dayjs(r.valid_from).format(dateFormat) : "—"}
+          </Text>
+        ),
+      },
+      {
+        id: "valid_to",
+        header: "Valid To",
+        cellTone: "muted",
+        cell: (r) => (
+          <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+            {r.valid_to ? dayjs(r.valid_to).format(dateFormat) : "—"}
+          </Text>
+        ),
+      },
+    ],
+    [dateFormat, fg, fontSans, muted, primary]
+  );
 
   const applyFilters = async () => {
     try {
@@ -384,232 +555,18 @@ export default function Freight() {
     });
   };
 
-  const columns = useMemo<MRT_ColumnDef<Freight>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 150,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 150,
-      },
-      {
-        accessorKey: "service",
-        header: "Service",
-        size: 100,
-      },
-      {
-        accessorKey: "valid_from",
-        header: "Valid From",
-        size: 100,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.valid_from
-              ? dayjs(row.original.valid_from).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "valid_to",
-        header: "Valid To",
-        size: 100,
-        Cell:({ row }) => (
-                  <Text size="sm">
-                    {row.original.valid_to
-                      ? dayjs(row.original.valid_to).format(dateFormat)
-                      : "-"}
-                  </Text>
-                ),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() =>
-                    navigate("/tariff/freight/create", {
-                      state: {
-                        ...row.original,
-                        actionType: "view",
-                      },
-                    })
-                  }
-                >
-                  <Group gap={"sm"}>
-                    <IconEye size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">View</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              {user?.is_staff && (
-                <>
-                  <Menu.Divider />
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/tariff/freight/create", {
-                          state: {
-                            ...row.original,
-                            actionType: "edit",
-                          },
-                        })
-                      }
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm">Edit</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                </>
-              )}
-            </Menu.Dropdown>
-          </Menu>
-        ),
-        size: 80,
-      },
-    ],
-    [navigate, user?.is_staff]
-  );
-
-  const table = useMantineReactTable({
-    columns,
-    data: filteredFreightDataForDisplay as Freight[],
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      pagination: { pageSize: pageSize, pageIndex: currentPage - 1 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#FBFBFB",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
-
-  // Handle page change
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
-  };
-
   // Handle page size change
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     setCurrentPage(1); // Reset to first page when changing page size
   };
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalRecords, pageSize, currentPage]);
 
   // Refetch data when pagination changes
   useEffect(() => {
@@ -623,369 +580,267 @@ export default function Freight() {
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="md"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c={"#444955"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              List of Freights
-            </Text>
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          style={{
+            ...erpListGeistRootTypography,
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconListDetails size={14} color={primary} />}
+                    value={totalRecords}
+                    label="Total"
+                  />
 
-            <Group gap="xs" wrap="nowrap">
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters
-                      ? "1px solid #105476"
-                      : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              {user?.is_staff && (
-                <Button
-                  leftSection={<IconPlus size={16} />}
-                  size="sm"
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      color: "#FFFFFF",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontStyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
-                  onClick={() => navigate("/tariff/freight/create")}
-                >
-                  Create New
-                </Button>
-              )}
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="sm"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
-            }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              mb="sm"
-              px="md"
-              style={{
-                backgroundColor: "#FAFAFA",
-                padding: "4px 8px",
-                borderRadius: "8px 8px 0 0",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#000000"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="sm" px="md" pt="xs" pb="sm">
-              {/* Origin Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Origin"
-                  placeholder="Type Origin Code"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={filterForm.values.origin}
-                  displayValue={originDisplayValue}
-                  onChange={(value, selectedData) => {
-                    filterForm.setFieldValue("origin", value || null);
-                    setOriginDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={3}
-                  className="filter-searchable-select"
-                />
-              </Grid.Col>
-
-              {/* Destination Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Destination"
-                  placeholder="Type Destination Code"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={filterForm.values.destination}
-                  displayValue={destinationDisplayValue}
-                  onChange={(value, selectedData) => {
-                    filterForm.setFieldValue("destination", value || null);
-                    setDestinationDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={3}
-                  className="filter-searchable-select"
-                />
-              </Grid.Col>
-
-              {/* Service Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`service-${filterForm.values.service}`}
-                  label="Service"
-                  placeholder="Select Service"
-                  searchable
-                  clearable
-                  size="xs"
-                  data={serviceOptions}
-                  value={filterForm.values.service}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("service", value || null)
-                  }
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
+                </>
+              ),
+              secondary: (
+                <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                  List of Freights
+                </Text>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search freights"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      localSearchTerm ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          aria-label="Clear search"
+                          onClick={() => setLocalSearchTerm("")}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
                     }
+                    w={260}
+                    size="xs"
+                    value={localSearchTerm}
+                    onChange={(e) => setLocalSearchTerm(e.currentTarget.value)}
+                    disabled={isLoading}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  {user?.is_staff ? (
+                    <Button
+                      size="xs"
+                      leftSection={<IconPlus size={14} />}
+                      styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                      onClick={() => navigate("/tariff/freight/create")}
+                    >
+                      Create New
+                    </Button>
+                  ) : null}
+                </>
+              ),
+            }}
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Refine by origin, destination, service, or validity dates",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={() => {
+                    void clearAllFilters();
                   }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
+                  onApply={() => {
+                    void applyFilters();
                   }}
+                  applyLoading={isLoading}
+                  applyDisabled={isLoading}
                 />
-              </Grid.Col>
-
-              {/* Valid From Date Filter */}
-              <Grid.Col span={2.4}>
-                <SingleDateInput
-                  key={`valid-from-${filterForm.values.valid_from}`}
-                  label="Valid From"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  {...filterForm.getInputProps("valid_from")}
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      dropdownZIndex={1000}
+                      size="xs"
+                      label="Origin"
+                      placeholder="Type Origin Code"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_name", "port_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.origin}
+                      displayValue={originDisplayValue}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("origin", value || null);
+                        setOriginDisplayValue(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      className="filter-searchable-select"
+                    />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      dropdownZIndex={1000}
+                      size="xs"
+                      label="Destination"
+                      placeholder="Type Destination Code"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_name", "port_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.destination}
+                      displayValue={destinationDisplayValue}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("destination", value || null);
+                        setDestinationDisplayValue(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      className="filter-searchable-select"
+                    />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                    <Select
+                      key={`service-${filterForm.values.service}`}
+                      label="Service"
+                      placeholder="Select Service"
+                      searchable
+                      clearable
+                      size="xs"
+                      data={serviceOptions}
+                      value={filterForm.values.service}
+                      onChange={(value) =>
+                        filterForm.setFieldValue("service", value || null)
+                      }
+                      onFocus={(event) => {
+                        const input = event.target as HTMLInputElement;
+                        if (input && input.value) {
+                          input.select();
+                        }
+                      }}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                    />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      key={`valid-from-${filterForm.values.valid_from}`}
+                      label="Valid From"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.valid_from}
+                      onChange={(v) => filterForm.setFieldValue("valid_from", v)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                    />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      key={`valid-to-${filterForm.values.valid_to}`}
+                      label="Valid To"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.valid_to}
+                      onChange={(v) => filterForm.setFieldValue("valid_to", v)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                    />
+                    </Box>
+                  </Grid.Col>
+                </Grid>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={totalRecords}
+                  pageIndex={currentPage - 1}
+                  pageSize={pageSize}
+                  onPageIndexChange={(idx) => setCurrentPage(idx + 1)}
+                  onPageSizeChange={handlePageSizeChange}
+                  pageSizeOptions={["10", "25", "50"]}
+                  selectClassNames={erpListGeistSelectClassNames}
                 />
-              </Grid.Col>
-
-              {/* Valid To Date Filter */}
-              <Grid.Col span={2.4}>
-                <SingleDateInput
-                  key={`valid-to-${filterForm.values.valid_to}`}
-                  label="Valid To"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  {...filterForm.getInputProps("valid_to")}
+              ),
+              children: isLoading ? (
+                <ERPListTableLoading
+                  theme={erpTheme}
+                  message="Loading freight data…"
                 />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                leftSection={<IconX size={16} />}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#444955",
-                  },
-                }}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-                leftSection={<IconFilter size={16} />}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {isLoading ? (
-          <Center py="xl" style={{ flex: 1 }}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading freight data...</Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable
-              key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${filteredFreightDataForDisplay.length}`}
-              table={table}
-            />
-            {/* Pagination Bar */}
-            <PaginationBar
-              pageSize={pageSize}
-              currentPage={currentPage}
-              totalRecords={totalRecords}
-              onPageSizeChange={handlePageSizeChange}
-              onPageChange={handlePageChange}
-              pageSizeOptions={["10", "25", "50"]}
-            />
-            {/* Custom Pagination Bar */}
-            {/* <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              pt="sm"
-              pl="sm"
-              pr="xl"
-              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              wrap="nowrap"
-              mt="sm"
-            >
-              <Group gap="sm" align="center" wrap="nowrap">
-                <Text size="sm" c="dimmed">
-                  Rows per page
-                </Text>
-                <Select
-                  size="xs"
-                  data={["10", "25", "50"]}
-                  value={String(pageSize)}
-                  onChange={(val) => {
-                    if (!val) return;
-                    handlePageSizeChange(Number(val));
+              ) : (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
                   }}
-                  w={110}
-                  styles={{ input: { fontSize: 12, height: 30 } }}
-                />
-                <Text size="sm" c="dimmed">
-                  {(() => {
-                    const total = totalRecords || 0;
-                    if (total === 0) return "0–0 of 0";
-                    const start = (currentPage - 1) * pageSize + 1;
-                    const end = Math.min(currentPage * pageSize, total);
-                    return `${start}–${end} of ${total}`;
-                  })()}
-                </Text>
-              </Group>
-
-              <Group gap="xs" align="center" wrap="nowrap">
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
                 >
-                  <IconChevronLeft size={16} />
-                </ActionIcon>
-                <Text size="sm" ta="center" style={{ width: 26 }}>
-                  {currentPage}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of {Math.max(1, Math.ceil(totalRecords / pageSize))}
-                </Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    const totalPages = Math.max(
-                      1,
-                      Math.ceil(totalRecords / pageSize)
-                    );
-                    handlePageChange(Math.min(totalPages, currentPage + 1));
-                  }}
-                  disabled={currentPage >= Math.ceil(totalRecords / pageSize)}
-                >
-                  <IconChevronRight size={16} />
-                </ActionIcon>
-              </Group>
-            </Group> */}
-          </>
-        )}
-
-        <Outlet />
-      </Card>
+                  <TariffMasterListNativeTable
+                    theme={erpTheme}
+                    rows={filteredFreightDataForDisplay}
+                    getRowKey={(row) => String(row.id)}
+                    getSno={(_row, index) =>
+                      (currentPage - 1) * pageSize + index + 1
+                    }
+                    columns={freightListColumns}
+                    isEmpty={filteredFreightDataForDisplay.length === 0}
+                    emptyIcon={<IconTruck size={24} color={erpTheme.muted} />}
+                    emptyTitle="No freight records"
+                    renderActions={renderFreightActions}
+                  />
+                </Box>
+              ),
+            }}
+          />
+          <Outlet />
+        </Box>
+      </MantineProvider>
     </>
   );
 }

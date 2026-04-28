@@ -50,7 +50,7 @@ export const SubNavLink = ({
             height: 24,
             borderRadius: 4,
             backgroundColor: "transparent",
-            color: isActive ? "#105476" : "#444955",
+            color: isActive ? "#60A5FA" : "#4A6880",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

@@ -244,7 +244,7 @@ const STYLES = `
   .hbl-app {
     --bg: #f0f1f5; --surface: #ffffff; --surface2: #f4f5f8;
     --border: #e3e6ed; --border2: #c8cdd9; --text: #111827; --muted: #6b7280;
-    --accent: #2563eb; --accent2: #1d4ed8; --green: #059669; --yellow: #d97706;
+    --accent: #105476; --accent2: #1d4ed8; --green: #059669; --yellow: #d97706;
     --red: #dc2626; --cyan: #0891b2; --hbl: #7c3aed; --mbl: #0891b2;
     --mono: 'JetBrains Mono', monospace; --sans: 'Syne', sans-serif;
   }

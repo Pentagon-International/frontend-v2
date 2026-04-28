@@ -20,6 +20,10 @@ export interface SingleDateInputProps {
   maxDate?: Date;
   error?: string;
   withAsterisk?: boolean;
+  /** Forwarded to Mantine `DateInput` (e.g. `dropdown` for portaled calendar). */
+  classNames?: Record<string, string>;
+  /** Shallow-merge over default date field styles (e.g. `fontFamily`). */
+  styles?: Record<string, React.CSSProperties & Record<string, unknown>>;
 }
 
 const SingleDateInput: React.FC<SingleDateInputProps> = ({
@@ -35,6 +39,8 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   maxDate,
   error,
   withAsterisk,
+  classNames,
+  styles: stylesOverride,
 }) => {
   const dateFormat = useDateFormat();
 
@@ -147,7 +153,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
     <DateInput
       key={`single-date-${dateFormat}`}
       label={label}
-      placeholder={dateFormat}
+      placeholder={placeholder ?? dateFormat}
       value={value}
       onChange={handleDateChange}
       valueFormat={dateFormat}
@@ -165,6 +171,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       maxDate={maxDate}
       error={error}
       withAsterisk={withAsterisk}
+      classNames={classNames}
       getDayProps={(date) => {
         const isSelected = isDateSelected(date, value);
         return {
@@ -276,7 +283,15 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
           },
         };
       }}
-      styles={getDateStyles()}
+      styles={(() => {
+        const base = getDateStyles();
+        return {
+          ...base,
+          ...stylesOverride,
+          input: { ...base.input, ...stylesOverride?.input },
+          label: { ...base.label, ...stylesOverride?.label },
+        };
+      })()}
     />
   );
 };

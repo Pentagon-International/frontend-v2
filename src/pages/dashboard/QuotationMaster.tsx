@@ -5,20 +5,31 @@ import {
   DownloadComponent,
   DateRangeInput,
   SingleDateInput,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_TWO_FIFTHS,
+  erpToolbarOutlineButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
 } from "../../components";
-import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { URL } from "../../api/serverUrls";
 import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
-import {
   Badge,
-  Menu,
   ActionIcon,
   Box,
-  UnstyledButton,
   Group,
   Button,
   Text,
@@ -30,33 +41,32 @@ import {
   Loader,
   Grid,
   Select,
-  Tooltip,
   Alert,
   Collapse,
   Table,
   Textarea,
+  MantineProvider,
 } from "@mantine/core";
 import {
-  IconDotsVertical,
   IconEye,
   IconEdit,
-  IconFilterOff,
   IconSearch,
   IconDownload,
   IconX,
   IconFilter,
-  IconCalendar,
-  IconChevronRight,
-  IconChevronLeft,
   IconArrowLeft,
   IconExternalLink,
   IconChevronDown,
   IconChevronUp,
   IconSend,
-  IconBook,
+  IconFileText,
+  IconCircleX,
+  IconUserOff,
+  IconFileDescription,
+  IconShieldCheck,
+  IconTrendingUp,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { DateInput } from "@mantine/dates";
 import dayjs from "dayjs";
 import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
@@ -69,6 +79,13 @@ import { API_HEADER } from "../../store/storeKeys";
 import { getAPICall } from "../../service/getApiCall";
 import { putAPICall } from "../../service/putApiCall";
 import useDateFormat from "../../hooks/useDateFormat";
+import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
+import {
+  QuotationListNativeTable,
+  type QuotationRowMenuContext,
+  type QuotationTableRow,
+  type QuotationVisibleColumns,
+} from "./QuotationListNativeTable";
 
 type QuotationData = {
   id: number;
@@ -91,8 +108,8 @@ type QuotationData = {
   status?: string;
   remark?: string;
   revision?: string;
-  origin_list?: string[];
-  destination_list?: string[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
   quote_type_list?: string[];
   remark_list?: string[];
   valid_upto_list?: string[];
@@ -159,6 +176,60 @@ interface QuotationMasterProps {
 
 const LIST_KEY = "QUOTATION_MASTER";
 const APPROVAL_LIST_KEY = "QUOTATION_APPROVAL_MASTER";
+
+function normalizeQuotationListStatusKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeQuotationListStatusCounts(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isNaN(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function getQuotationListStatusCount(
+  map: Record<string, number> | null | undefined,
+  ...labels: string[]
+): number {
+  if (!map) return 0;
+  for (const label of labels) {
+    const target = normalizeQuotationListStatusKey(label);
+    for (const [k, v] of Object.entries(map)) {
+      if (normalizeQuotationListStatusKey(k) === target) return v;
+    }
+  }
+  return 0;
+}
+
+function parseQuotationFilterResponse(data: any): {
+  rows: any[];
+  total: number;
+  statusCounts: Record<string, number> | null;
+} {
+  const rows = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.result)
+        ? data.result
+        : [];
+  const statusCounts = normalizeQuotationListStatusCounts(data?.summary?.status_counts);
+
+  const indexRaw = data?.index;
+  const requestOffset =
+    typeof indexRaw === "number" && !Number.isNaN(indexRaw) ? indexRaw : 0;
+  const total = getBookingShipmentFilterListTotal(
+    (data ?? {}) as Record<string, unknown>,
+    rows,
+    requestOffset,
+  );
+
+  return { rows, total, statusCounts };
+}
 
 function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // Use separate LIST_KEY for approval mode to maintain separate filter/search state
@@ -266,6 +337,23 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [listTotalRecords, setListTotalRecords] = useState(0);
+
+  /** Column visibility for ERP list toolbar (actions column always shown). */
+  const [quotationVisibleColumns, setQuotationVisibleColumns] = useState<
+    QuotationVisibleColumns
+  >({
+    sno: true,
+    enquiry_id: true,
+    customer_name: true,
+    sales_person: true,
+    created_at: true,
+    route: true,
+    reference_no: true,
+    valid_upto_list: true,
+    revision: true,
+    reject_remark: true,
+    status: true,
+  });
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -578,11 +666,20 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   }, [openedRevision]);
 
   const {
-    data: quotationResult = { data: [], total: 0 },
+    data: quotationResult = { data: [], total: 0, statusCounts: null },
     isFetching: quotationFetching,
     refetch: refetchQuotations,
   } = useQuery({
-    queryKey: ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
+    queryKey: [
+      "quotations",
+      fromDate,
+      toDate,
+      listCurrentPage,
+      listPageSize,
+      isApprovalMode,
+    ],
+    /** Keeps prior page totals/rows while the next page loads — avoids total→0 and clamp resetting to page 1. */
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       try {
         let requestBody: { filters: any } = { filters: {} };
@@ -600,18 +697,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           requestBody
         );
-        const result = response as any;
-        if (result && Array.isArray(result.data)) {
-          const total = result?.total || result.data.length || 0;
-          setListTotalRecords(total);
-          return { data: result.data, total };
-        }
-        setListTotalRecords(0);
-        return { data: [], total: 0 };
+        const { rows, total, statusCounts } = parseQuotationFilterResponse(
+          response as any,
+        );
+        setListTotalRecords(total);
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching quotation data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       }
     },
     enabled: false, // Don't run automatically
@@ -646,7 +740,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Separate query for filtered data - only triggers on explicit actions
   const {
-    data: filteredQuotationResult = { data: [], total: 0 },
+    data: filteredQuotationResult = { data: [], total: 0, statusCounts: null },
     isLoading: filteredQuotationLoading,
     isFetching: filteredQuotationFetching,
     refetch: refetchFilteredQuotationsRaw,
@@ -659,6 +753,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       isApprovalMode,
       listCurrentPage,
       listPageSize,
+      memoizedFilterPayload,
     ],
     queryFn: async () => {
       try {
@@ -668,7 +763,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Skip if no filters/search
         if (Object.keys(filterPayload).length === 0) {
           console.log("No filters applied, skipping API call");
-          return { data: [], total: 0 };
+          return { data: [], total: 0, statusCounts: null };
         }
 
         const requestBody = { filters: filterPayload };
@@ -687,20 +782,16 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
           requestBody
         );
-        const data = response as any;
-
-        if (data && Array.isArray(data.data)) {
-          console.log("Filtered data received:", data.data.length, "records");
-          const total = data?.total || data.data.length || 0;
-          setListTotalRecords(total);
-          return { data: data.data, total };
-        }
-        setListTotalRecords(0);
-        return { data: [], total: 0 };
+        const { rows, total, statusCounts } = parseQuotationFilterResponse(
+          response as any,
+        );
+        console.log("Filtered data received:", rows.length, "records");
+        setListTotalRecords(total);
+        return { data: rows, total, statusCounts };
       } catch (error) {
         console.error("Error fetching filtered quotation data:", error);
         setListTotalRecords(0);
-        return { data: [], total: 0 };
+        return { data: [], total: 0, statusCounts: null };
       } finally {
         isRefetchingRef.current = false;
       }
@@ -804,6 +895,39 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     filtersApplied,
     hasActiveFiltersOrSearch,
   ]);
+
+  const summaryListTotalRecords = useMemo(() => {
+    if (filtersApplied) {
+      return filteredQuotationResult?.total ?? listTotalRecords;
+    }
+    return quotationResult?.total ?? listTotalRecords;
+  }, [
+    filtersApplied,
+    filteredQuotationResult?.total,
+    quotationResult?.total,
+    listTotalRecords,
+  ]);
+
+  useEffect(() => {
+    const listFetching = filtersApplied
+      ? filteredQuotationFetching
+      : quotationFetching;
+    /** While fetching the next/prev page, totals can briefly go stale — never clamp page during that window. */
+    if (listFetching) return;
+    const tr = summaryListTotalRecords;
+    const totalPages = Math.max(1, Math.ceil(tr / listPageSize));
+    if (listCurrentPage > totalPages) {
+      setListCurrentPage(totalPages);
+    }
+  }, [
+    summaryListTotalRecords,
+    listPageSize,
+    listCurrentPage,
+    filtersApplied,
+    filteredQuotationFetching,
+    quotationFetching,
+  ]);
+
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
   // isInitialLoading is set manually before/after explicit refetch calls
@@ -822,7 +946,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       const result = await refetchQuotations();
       if (result.data) {
         queryClient.setQueryData(
-          ["quotations", fromDate, toDate, listCurrentPage, listPageSize],
+          [
+            "quotations",
+            fromDate,
+            toDate,
+            listCurrentPage,
+            listPageSize,
+            isApprovalMode,
+          ],
           result.data
         );
       }
@@ -836,6 +967,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     toDate,
     listCurrentPage,
     listPageSize,
+    isApprovalMode,
   ]);
 
   const paginationInitialized = useRef(false);
@@ -1561,8 +1693,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           ) {
             return item.quotation.map((q: any) => q.origin || "N/A").join("\n");
           }
-          return item.origin_list && item.origin_list.length > 0
-            ? item.origin_list.join("\n")
+          return item.origin_code_list && item.origin_code_list.length > 0
+            ? item.origin_code_list.join("\n")
             : "N/A";
         },
       },
@@ -1580,8 +1712,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               .map((q: any) => q.destination || "N/A")
               .join("\n");
           }
-          return item.destination_list && item.destination_list.length > 0
-            ? item.destination_list.join("\n")
+          return item.destination_code_list && item.destination_code_list.length > 0
+            ? item.destination_code_list.join("\n")
             : "N/A";
         },
       },
@@ -2393,434 +2525,78 @@ console.log("currentQuotation: ", currentQuotation);
     ? handleApproveQuotation
     : handleEditQuotation;
 
-  const columns = useMemo<MRT_ColumnDef<QuotationData>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        id: "enquiry_id",
-        accessorKey: "enquiry_id",
-        header: "Enquiry ID",
-      },
-      {
-        id: "customer_name",
-        accessorKey: "customer_name",
-        header: "Customer Name",
-      },
-      {
-        id: "sales_person",
-        accessorKey: "sales_person",
-        header: "Sales Person",
-      },
-      {
-        id: "created_at",
-        accessorKey: "created_at",
-        header: "Quote Date",
-        Cell: ({ row }) => {
-          const quotations = (row.original as any)?.quotation;
-          const quoteCreatedAt =
-            Array.isArray(quotations) && quotations.length > 0
-              ? quotations[0]?.created_at
-              : null;
-          return quoteCreatedAt
-            ? dayjs(quoteCreatedAt).format(dateFormat)
-            : "-";
-        },
-      },
-      {
-        id: "origin_list",
-        accessorKey: "origin_list",
-        header: "Origin",
-        Cell: ({ cell }) => {
-          const originList = cell.getValue<string[]>();
-          if (
-            !originList ||
-            !Array.isArray(originList) ||
-            originList.length === 0
-          ) {
-            return "-";
-          }
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {originList.map((origin, index) => (
-                <div key={index}>{origin}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        id: "destination_list",
-        accessorKey: "destination_list",
-        header: "Destination",
-        Cell: ({ cell }) => {
-          const destinationList = cell.getValue<string[]>();
-          if (
-            !destinationList ||
-            !Array.isArray(destinationList) ||
-            destinationList.length === 0
-          ) {
-            return "-";
-          }
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {destinationList.map((destination, index) => (
-                <div key={index}>{destination}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        id: "reference_no",
-        accessorKey: "reference_no",
-        header: "Reference No",
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string>();
-          return value || "-";
-        },
-      },
-      {
-        id: "valid_upto_list",
-        accessorKey: "valid_upto_list",
-        header: "Valid Upto",
-        Cell: ({ cell }) => {
-          const validUptoList = cell.getValue<string[]>();
-          if (
-            !validUptoList ||
-            !Array.isArray(validUptoList) ||
-            validUptoList.length === 0
-          ) {
-            return "-";
-          }
-          return (
-            <div style={{ lineHeight: "1.4" }}>
-              {validUptoList.map((date, index) => (
-                <div key={index}>{dayjs(date).format(dateFormat)}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        id: "revision",
-        accessorKey: "revision",
-        header: "Revision",
-        Cell: ({ row }) => {
-          const quotations = (row.original as QuotationData)?.quotation;
-          if (!quotations) {
-            return null;
-          }
-          return (
-            <Stack gap="xs">
-              {quotations.map((quote, index) => {
-                if (quote.revision === 0)
-                  return (
-                    <Text key={index} px={8}>
-                      -
-                    </Text>
-                  );
-                return (
-                  <Badge
-                    key={index}
-                    style={{ cursor: "pointer" }}
-                    onClick={() => fetchRevision(quote.quotation_service_id)}
-                    color="#105476"
-                    size="sm"
-                  >
-                    {quote.revision}
-                  </Badge>
-                );
-              })}
-            </Stack>
-          );
-        },
-      },
-      {
-        id: "reject_remark",
-        accessorKey: "reject_remark",
-        header: "Remark",
-        Cell: ({ cell }) => {
-          const reject_remark = cell.getValue<string>();
-          if (reject_remark == "" || !reject_remark) {
-            return "-";
-          }
+  /** Toolbar stats from quotation filter API `summary.status_counts` (filter-scoped). */
+  const quotationListStats = useMemo(() => {
+    const source = filtersApplied ? filteredQuotationResult : quotationResult;
+    const sc = source?.statusCounts ?? null;
+    return {
+      total: summaryListTotalRecords,
+      quoteCreated: getQuotationListStatusCount(sc, "quote created"),
+      quoteApproved: getQuotationListStatusCount(sc, "quote approved"),
+      inactive: getQuotationListStatusCount(sc, "inactive"),
+      gained: getQuotationListStatusCount(sc, "gained"),
+      lost: getQuotationListStatusCount(sc, "lost"),
+    };
+  }, [
+    filtersApplied,
+    filteredQuotationResult,
+    quotationResult,
+    summaryListTotalRecords,
+  ]);
 
-          // Join all remarks with line breaks for display
-          const fullRemarkText = reject_remark || "";
-          const displayText =
-            fullRemarkText.trim().length > 10
-              ? fullRemarkText.substring(0, 10) + "..."
-              : fullRemarkText;
+  const quotationTableRows: QuotationTableRow[] = useMemo(
+    () =>
+      displayData.map((row: QuotationData, index: number) => ({
+        ...row,
+        sno: (listCurrentPage - 1) * listPageSize + index + 1,
+      })),
+    [displayData, listCurrentPage, listPageSize]
+  );
 
-          return (
-            <Tooltip
-              label={fullRemarkText}
-              multiline
-              w={300}
-              position="top"
-              withArrow
-            >
-              <Text
-                size="sm"
-                style={{
-                  cursor: "pointer",
-                  lineHeight: "1.4",
-                  whiteSpace: "pre-line",
-                }}
-              >
-                {displayText}
-              </Text>
-            </Tooltip>
-          );
-        },
-      },
-
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        Cell: ({ row }) => {
-          const status = (row.original as QuotationData).status;
-          if (!status) {
-            return (
-              <Badge color="gray" size="sm">
-                Pending
-              </Badge>
-            );
-          }
-          return (
-            <Badge
-              color={
-                status === "GAINED"
-                  ? "green"
-                  : status === "LOST"
-                    ? "red"
-                    : status === "QUOTE APPROVED" || status === "Quote Approved"
-                      ? "blue"
-                      : "cyan"
-              }
-              size="sm"
-            >
-              {status.toUpperCase()}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Action",
-        Cell: ({ row }) => {
-          const [menuOpened, setMenuOpened] = useState(false);
-          const rowData = row.original as QuotationData;
-          const showCreateBooking = canCreateBookingFromRow(rowData);
-          return (
-            <Menu
-              withinPortal
-              position="bottom-end"
-              shadow="sm"
-              radius={"md"}
-              opened={menuOpened}
-              onChange={setMenuOpened}
-            >
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setMenuOpened(false);
-                      showQuotationPreview(row.original);
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Preview</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-                {/* Hide Edit Quote option if opened from Dashboard (but show Approve Quotation in approval mode) */}
-                {(isApprovalMode || !location.state?.returnToDashboard) && (
-                  <>
-                    <Menu.Divider />
-                    <Box px={10} py={5}>
-                      <UnstyledButton
-                        onClick={() => {
-                          setMenuOpened(false);
-                          handlePrimaryAction(row.original);
-                        }}
-                      >
-                        <Group gap={"sm"}>
-                          <PrimaryActionIcon
-                            size={16}
-                            style={{ color: "#105476" }}
-                          />
-                          <Text size="sm">{primaryActionLabel}</Text>
-                        </Group>
-                      </UnstyledButton>
-                    </Box>
-                  </>
-                )}
-                {showCreateBooking && (
-                  <>
-                    <Menu.Divider />
-                    <Box px={10} py={5}>
-                      <UnstyledButton
-                        onClick={() => {
-                          setMenuOpened(false);
-                          handleCreateBookingFromRow(rowData);
-                        }}
-                      >
-                        <Group gap={"sm"}>
-                          <IconBook
-                            size={16}
-                            style={{ color: "#105476" }}
-                          />
-                          <Text size="sm">Create Booking</Text>
-                        </Group>
-                      </UnstyledButton>
-                    </Box>
-                  </>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [
-      navigate,
-      filters,
-      filtersApplied,
-      fromDate,
-      toDate,
-      showQuotationPreview,
-      handlePrimaryAction,
+  const rowMenuCtx: QuotationRowMenuContext = useMemo(
+    () => ({
+      location,
+      isApprovalMode,
+      returnToDashboardRef,
       primaryActionLabel,
       PrimaryActionIcon,
-      isApprovalMode,
+      showQuotationPreview: (row) =>
+        showQuotationPreview(row as QuotationData),
+      handlePrimaryAction: (row) => handlePrimaryAction(row as QuotationData),
+      canCreateBookingFromRow: (row) =>
+        canCreateBookingFromRow(row as QuotationData),
+      handleCreateBookingFromRow: (row) =>
+        handleCreateBookingFromRow(row as QuotationData),
+    }),
+    [
       location,
-      buildFilterPayload,
-      filteredQuotationResult,
+      isApprovalMode,
+      returnToDashboardRef,
+      primaryActionLabel,
+      PrimaryActionIcon,
+      showQuotationPreview,
+      handlePrimaryAction,
       canCreateBookingFromRow,
       handleCreateBookingFromRow,
     ]
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    // Use table's built-in loading state - shows loader while keeping previous rows visible
-    state: {
-      isLoading: isLoading || isFetching,
-      showProgressBars: isFetching,
-    },
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "30px",
-          zIndex: 2,
-          borderLeft: "1px solid #F3F3F3",
-          boxShadow: "1px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "80px",
-          zIndex: 2,
-          backgroundColor: "#FBFBFB",
-          boxShadow: "0px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-    // pagination will be controlled by a custom bar below the table
-  });
+  const quotationColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () => [
+      { id: "sno", label: "S.No", checked: quotationVisibleColumns.sno !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
+      { id: "enquiry_id", label: "Enquiry ID", checked: quotationVisibleColumns.enquiry_id !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, enquiry_id: !p.enquiry_id })) },
+      { id: "customer_name", label: "Customer Name", checked: quotationVisibleColumns.customer_name !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
+      { id: "sales_person", label: "Sales Person", checked: quotationVisibleColumns.sales_person !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
+      { id: "created_at", label: "Quote Date", checked: quotationVisibleColumns.created_at !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, created_at: !p.created_at })) },
+      { id: "route", label: "Route", checked: quotationVisibleColumns.route !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, route: !p.route })) },
+      { id: "reference_no", label: "Reference No", checked: quotationVisibleColumns.reference_no !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
+      { id: "valid_upto_list", label: "Valid Upto", checked: quotationVisibleColumns.valid_upto_list !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, valid_upto_list: !p.valid_upto_list })) },
+      { id: "revision", label: "Revision", checked: quotationVisibleColumns.revision !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, revision: !p.revision })) },
+      { id: "reject_remark", label: "Remark", checked: quotationVisibleColumns.reject_remark !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reject_remark: !p.reject_remark })) },
+      { id: "status", label: "Status", checked: quotationVisibleColumns.status !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })) },
+    ],
+    [quotationVisibleColumns]
+  );
 
   // Reset pagination when filters or search change to prevent empty table rendering
   useEffect(() => {
@@ -2828,6 +2604,18 @@ console.log("currentQuotation: ", currentQuotation);
       setListCurrentPage(1);
     }
   }, [filtersApplied]);
+
+  const erpTheme: ErpListTheme = {
+    border: DEFAULT_ERP_LIST_THEME.border,
+    muted: DEFAULT_ERP_LIST_THEME.muted,
+    fg: DEFAULT_ERP_LIST_THEME.fg,
+    primary: DEFAULT_ERP_LIST_THEME.primary,
+    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
+  const { border, muted, primary, fontSans } = erpTheme;
 
   if (isApprovalMode && !isManagerOrAdmin) {
     return (
@@ -2846,645 +2634,583 @@ console.log("currentQuotation: ", currentQuotation);
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          <Group justify="space-between" align="center" mb="md">
-            <Text
-              size="md"
-              fw={600}
-              c={"#444955"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              {pageTitle}
-            </Text>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  {(location.state?.returnToDashboard || returnToDashboardRef.current) && (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconArrowLeft size={14} />}
+                      styles={erpToolbarOutlineButtonStyles(erpTheme)}
                       onClick={() => {
-                        // Clear search and update filtersApplied if no other filters exist
-                        // Clear search - this will trigger the search change useEffect
-                        // which will update store and trigger API
-                        setSearchQuery("");
-                        // Clear search from store immediately
-                        clearStoreSearch(currentListKey);
-                        // Reset search ref to current debouncedSearch value
-                        // This ensures the useEffect will detect the change when debouncedSearch becomes ""
-                        prevSearchRef.current = debouncedSearch;
-                        // Check if other filters exist to determine filtersApplied state
-                        const hasOtherFilters =
-                          filters.customer_code ||
-                          filters.sales_person ||
-                          filters.origin_code ||
-                          filters.destination_code ||
-                          filters.valid_upto ||
-                          (filters.quote_type &&
-                            filters.quote_type !== "all") ||
-                          (filters.status && filters.status !== "all") ||
-                          filters.remark ||
-                          filters.revision ||
-                          filters.enquiry_id ||
-                          (fromDate && toDate) ||
-                          isApprovalMode;
-                        if (!hasOtherFilters) {
-                          setFiltersApplied(false);
+                        const dashboardState =
+                          location.state?.dashboardState || dashboardStateRef.current;
+                        if (dashboardState) {
+                          navigate("/", {
+                            state: { returnToEnquiryDetailedView: true, dashboardState },
+                          });
+                        } else {
+                          navigate("/");
                         }
-                        // Note: The search change useEffect will handle API trigger after debounce
-                        // and will save the empty search to store
                       }}
-                      style={{ cursor: "pointer" }}
                     >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#333740",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters
-                      ? "1px solid #105476"
-                      : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-
-              {user?.is_staff && (
-                <DownloadComponent
-                  columns={downloadColumns}
-                  fileName="quotation_data"
-                  fileExtension="xlsx"
-                  buttonText="Download"
-                  fetchData={fetchDownloadData}
-                  expandQuotations={false}
-                />
-              )}
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+                      Back to Dashboard
+                    </Button>
+                  )}
+                  <Group gap={6} wrap="wrap" align="center">
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconFileText size={14} color={primary} />}
+                      value={quotationListStats.total}
+                      label="Total"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconFileDescription size={14} color="#2563eb" />}
+                      iconBackground="#dbeafe"
+                      iconColor="#2563eb"
+                      value={quotationListStats.quoteCreated}
+                      label="Quote created"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconShieldCheck size={14} color="#7c3aed" />}
+                      iconBackground="#f3e8ff"
+                      iconColor="#7c3aed"
+                      value={quotationListStats.quoteApproved}
+                      label="Quote approved"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconUserOff size={14} color="#64748b" />}
+                      iconBackground="#f1f5f9"
+                      iconColor="#64748b"
+                      value={quotationListStats.inactive}
+                      label="Inactive"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconTrendingUp size={14} color="#16a34a" />}
+                      iconBackground="#f0fdf4"
+                      iconColor="#16a34a"
+                      value={quotationListStats.gained}
+                      label="Gained"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconCircleX size={14} color="#dc2626" />}
+                      iconBackground="#fee2e2"
+                      iconColor="#dc2626"
+                      value={quotationListStats.lost}
+                      label="Lost"
+                    />
+                  </Group>
+                </>
+              ),
+              // secondary: (
+              //   <Group gap="md" wrap="wrap" align="center">
+              //     <Text fw={600} size="sm" c={erpTheme.fg} style={{ fontFamily: fontSans }}>
+              //       {pageTitle}
+              //     </Text>
+              //     <Text size="xs" c={muted} style={{ fontFamily: fontSans }}>
+              //       {isApprovalMode ? "Quotation Approval List" : "All quotations"}
+              //     </Text>
+              //   </Group>
+              // ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            clearStoreSearch(currentListKey);
+                            prevSearchRef.current = debouncedSearch;
+                            const hasOtherFilters =
+                              filters.customer_code ||
+                              filters.sales_person ||
+                              filters.origin_code ||
+                              filters.destination_code ||
+                              filters.valid_upto ||
+                              (filters.quote_type && filters.quote_type !== "all") ||
+                              (filters.status && filters.status !== "all") ||
+                              filters.remark ||
+                              filters.revision ||
+                              filters.enquiry_id ||
+                              (fromDate && toDate) ||
+                              isApprovalMode;
+                            if (!hasOtherFilters) {
+                              setFiltersApplied(false);
+                            }
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={quotationColumnToggleItems}
+                    menuStyles={erpListGeistMenuDropdownStyles}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  />
+                  {user?.is_staff && (
+                    <DownloadComponent
+                      columns={downloadColumns}
+                      fileName="quotation_data"
+                      fileExtension="xlsx"
+                      buttonText="Download"
+                      fetchData={fetchDownloadData}
+                      expandQuotations={false}
+                    />
+                  )}
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                </>
+              ),
             }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              style={{
-                backgroundColor: "#FAFAFA",
-                padding: "8px 8px",
-                borderRadius: "8px",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#000000"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filters
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
-              {/* Customer Name Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Customer Name"
-                  placeholder="Type customer name"
-                  apiEndpoint={URL.customer}
-                  searchFields={["customer_code", "customer_name"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
-                  value={filters.customer_code}
-                  displayValue={customerDisplayValue}
-                  onChange={(value, selectedData) => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      customer_code: value || null,
-                    }));
-                    setCustomerDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={3}
-                  className="filter-searchable-select"
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: isApprovalMode
+                ? "Narrow approval queue by customer, dates, or IDs"
+                : "Refine quotations by customer, route, status, or validity",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  clearLabel="Clear filters"
+                  applyLoading={isLoading}
+                  applyDisabled={isLoading}
                 />
-              </Grid.Col>
-
-              {/* Sales Person Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`sales-person-${filters.sales_person}`}
-                  label="Sales Person"
-                  placeholder={
-                    salespersonsLoading
-                      ? "Loading salespersons..."
-                      : "Select Sales Person"
-                  }
-                  searchable
-                  clearable
-                  size="xs"
-                  data={salespersonOptions}
-                  disabled={salespersonsLoading}
-                  value={filters.sales_person}
-                  onChange={(value) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      sales_person: value || null,
-                    }))
-                  }
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Origin Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Origin"
-                  placeholder="Type origin code or name"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={filters.origin_code}
-                  displayValue={originDisplayValue}
-                  onChange={(value, selectedData) => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      origin_code: value || null,
-                    }));
-                    setOriginDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={3}
-                  className="filter-searchable-select"
-                />
-              </Grid.Col>
-
-              {/* Destination Filter */}
-              <Grid.Col span={2.4}>
-                <SearchableSelect
-                  size="xs"
-                  label="Destination"
-                  placeholder="Type destination code or name"
-                  apiEndpoint={URL.portMaster}
-                  searchFields={["port_code", "port_name"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
-                  value={filters.destination_code}
-                  displayValue={destinationDisplayValue}
-                  onChange={(value, selectedData) => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      destination_code: value || null,
-                    }));
-                    setDestinationDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={3}
-                  className="filter-searchable-select"
-                />
-              </Grid.Col>
-
-              {/* Quote Date Filter */}
-              <Grid.Col span={2.4}>
-                <SingleDateInput
-                  key={`quote-date-${filters.valid_upto}`}
-                  label="Quote Date"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  value={filters.valid_upto}
-                  onChange={(date) =>
-                    setFilters((prev) => ({ ...prev, valid_upto: date }))
-                  }
-                  valueFormat="YYYY-MM-DD"
-                  leftSection={<IconCalendar size={14} />}
-                  leftSectionPointerEvents="none"
-                  radius="md"
-                  nextIcon={<IconChevronRight size={16} />}
-                  previousIcon={<IconChevronLeft size={16} />}
-                  clearable
-                />
-              </Grid.Col>
-
-              {/* Date Range Filter */}
-              <Grid.Col span={4.8}>
-                <DateRangeInput
-                  fromDate={fromDate}
-                  toDate={toDate}
-                  onFromDateChange={setFromDate}
-                  onToDateChange={setToDate}
-                  fromLabel="From Date"
-                  toLabel="To Date"
-                  size="xs"
-                  allowDeselection={true}
-                  showRangeInCalendar={false}
-                />
-              </Grid.Col>
-
-              {/* Quote Type Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`quote-type-${filters.quote_type}`}
-                  label="Quote Type"
-                  placeholder="Select Quote Type"
-                  searchable
-                  clearable
-                  size="xs"
-                  data={[
-                    { value: "Standard", label: "Standard" },
-                    { value: "All Inclusive", label: "All Inclusive" },
-                    { value: "Lumpsum", label: "Lumpsum" },
-                    { value: "all", label: "All" },
-                  ]}
-                  value={filters.quote_type}
-                  onChange={(value) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      quote_type: value || null,
-                    }))
-                  }
-                  onFocus={(event) => {
-                    // Auto-select all text when input is focused
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Approval Status Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  key={`approval-status-${filters.status}`}
-                  label="Approval Status"
-                  placeholder="Select Status"
-                  searchable
-                  clearable
-                  size="xs"
-                  data={[
-                    { value: "GAINED", label: "Gained" },
-                    { value: "LOST", label: "Lost" },
-                    { value: "QUOTE CREATED", label: "Quote Created" },
-                    { value: "all", label: "All" },
-                  ]}
-                  value={filters.status}
-                  onChange={(value) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      status: value || null,
-                    }))
-                  }
-                  onFocus={(event) => {
-                    // Auto-select all text when input is focused
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Enquiry ID Filter */}
-              <Grid.Col span={2.4}>
-                <TextInput
-                  label="Enquiry ID"
-                  placeholder="Enter Enquiry ID"
-                  size="xs"
-                  value={filters.enquiry_id || ""}
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      enquiry_id: e.currentTarget.value || null,
-                    }))
-                  }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Remark Filter */}
-              <Grid.Col span={2.4}>
-                <TextInput
-                  label="Remark"
-                  placeholder="Search Remark"
-                  size="xs"
-                  value={filters.remark || ""}
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      remark: e.currentTarget.value,
-                    }))
-                  }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={2.4}>
-                <TextInput
-                  label="Revision"
-                  placeholder="Search Revision"
-                  size="xs"
-                  value={filters.revision || ""}
-                  onChange={(e) => {
-                    const val = e.currentTarget.value;
-                    if (/^\d*$/.test(val)) {
-                      setFilters((prev) => ({
-                        ...prev,
-                        revision: val,
-                      }));
-                    }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="end" mt="sm" p="sm" pb="md">
-              <Button
-                size="sm"
-                variant="outline"
-                color="#105476"
-                leftSection={<IconFilterOff size={16} />}
-                onClick={clearAllFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    borderColor: "#105476",
-                    color: "#105476",
-                    "&:hover": {
-                      backgroundColor: "#E0F5FF",
-                    },
-                  },
-                }}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="sm"
-                variant="filled"
-                color="#105476"
-                leftSection={
-                  isLoading ? <Loader size={16} /> : <IconFilter size={16} />
-                }
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "semibold",
-                    "&:hover": {
-                      backgroundColor: "#105476",
-                    },
-                  },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {tableLoading || isFetching ? (
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">
-                {isInitialLoading ? "Fetching data..." : "Loading data..."}
-              </Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            <Box
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                minHeight: 0,
-                position: "relative",
-              }}
-            >
-              <MantineReactTable table={table} />
-              {/* Loader overlay for approval mode when approving */}
-              {isApprovalMode && isApprovingQuotation && (
-                <Box
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 1000,
-                    borderRadius: "8px",
-                  }}
-                >
-                  <Stack align="center" gap="md">
-                    <Loader size="lg" color="#105476" />
-                    <Text c="dimmed" fw={500}>
-                      Approving quotation...
-                    </Text>
-                  </Stack>
-                </Box>
-              )}
-            </Box>
-
-            <Group
-              w="100%"
-              justify="space-between"
-              align="center"
-              p="xs"
-              wrap="nowrap"
-              pt="md"
-            >
-              {(location.state?.returnToDashboard ||
-                returnToDashboardRef.current) && (
-                <Button
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => {
-                    const dashboardState =
-                      location.state?.dashboardState ||
-                      dashboardStateRef.current;
-                    if (dashboardState) {
-                      navigate("/", {
-                        state: {
-                          returnToEnquiryDetailedView: true,
-                          dashboardState: dashboardState,
-                        },
-                      });
-                    } else {
-                      navigate("/");
-                    }
-                  }}
-                  variant="outline"
-                  size="sm"
-                  color="#105476"
-                >
-                  Back to Dashboard
-                </Button>
-              )}
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <PaginationBar
+              ),
+              children: (
+                <>
+                            <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                              {/* Customer Name Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <SearchableSelect
+                                  size="xs"
+                                  label="Customer Name"
+                                  placeholder="Type customer name"
+                                  apiEndpoint={URL.customer}
+                                  searchFields={["customer_code", "customer_name"]}
+                                  displayFormat={(item: any) => ({
+                                    value: String(item.customer_code),
+                                    label: String(item.customer_name),
+                                  })}
+                                  value={filters.customer_code}
+                                  displayValue={customerDisplayValue}
+                                  onChange={(value, selectedData) => {
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      customer_code: value || null,
+                                    }));
+                                    setCustomerDisplayValue(selectedData?.label || null);
+                                  }}
+                                  minSearchLength={3}
+                                  dropdownZIndex={1000}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                  className="filter-searchable-select"
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Sales Person Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <Select
+                                  key={`sales-person-${filters.sales_person}`}
+                                  label="Sales Person"
+                                  placeholder={
+                                    salespersonsLoading
+                                      ? "Loading salespersons..."
+                                      : "Select Sales Person"
+                                  }
+                                  searchable
+                                  clearable
+                                  size="xs"
+                                  data={salespersonOptions}
+                                  disabled={salespersonsLoading}
+                                  value={filters.sales_person}
+                                  onChange={(value) =>
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      sales_person: value || null,
+                                    }))
+                                  }
+                                  onFocus={(event) => {
+                                    const input = event.target as HTMLInputElement;
+                                    if (input && input.value) {
+                                      input.select();
+                                    }
+                                  }}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Origin Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <SearchableSelect
+                                  size="xs"
+                                  label="Origin"
+                                  placeholder="Type origin code or name"
+                                  apiEndpoint={URL.portMaster}
+                                  searchFields={["port_code", "port_name"]}
+                                  displayFormat={(item: any) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={filters.origin_code}
+                                  displayValue={originDisplayValue}
+                                  onChange={(value, selectedData) => {
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      origin_code: value || null,
+                                    }));
+                                    setOriginDisplayValue(selectedData?.label || null);
+                                  }}
+                                  minSearchLength={3}
+                                  dropdownZIndex={1000}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                  className="filter-searchable-select"
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Destination Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <SearchableSelect
+                                  size="xs"
+                                  label="Destination"
+                                  placeholder="Type destination code or name"
+                                  apiEndpoint={URL.portMaster}
+                                  searchFields={["port_code", "port_name"]}
+                                  displayFormat={(item: any) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={filters.destination_code}
+                                  displayValue={destinationDisplayValue}
+                                  onChange={(value, selectedData) => {
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      destination_code: value || null,
+                                    }));
+                                    setDestinationDisplayValue(selectedData?.label || null);
+                                  }}
+                                  minSearchLength={3}
+                                  dropdownZIndex={1000}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                  className="filter-searchable-select"
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Quote Date Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <SingleDateInput
+                                  key={`quote-date-${filters.valid_upto}`}
+                                  label="Quote Date"
+                                  placeholder="YYYY-MM-DD"
+                                  size="xs"
+                                  value={filters.valid_upto}
+                                  onChange={(date) =>
+                                    setFilters((prev) => ({ ...prev, valid_upto: date }))
+                                  }
+                                  allowDeselection
+                                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Date Range Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_TWO_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <DateRangeInput
+                                  fromDate={fromDate}
+                                  toDate={toDate}
+                                  onFromDateChange={setFromDate}
+                                  onToDateChange={setToDate}
+                                  fromLabel="From Date"
+                                  toLabel="To Date"
+                                  size="xs"
+                                  allowDeselection={true}
+                                  showRangeInCalendar={false}
+                                  filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                  dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Quote Type Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <Select
+                                  key={`quote-type-${filters.quote_type}`}
+                                  label="Quote Type"
+                                  placeholder="Select Quote Type"
+                                  searchable
+                                  clearable
+                                  size="xs"
+                                  data={[
+                                    { value: "Standard", label: "Standard" },
+                                    { value: "All Inclusive", label: "All Inclusive" },
+                                    { value: "Lumpsum", label: "Lumpsum" },
+                                    { value: "all", label: "All" },
+                                  ]}
+                                  value={filters.quote_type}
+                                  onChange={(value) =>
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      quote_type: value || null,
+                                    }))
+                                  }
+                                  onFocus={(event) => {
+                                    // Auto-select all text when input is focused
+                                    const input = event.target as HTMLInputElement;
+                                    if (input && input.value) {
+                                      input.select();
+                                    }
+                                  }}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Approval Status Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <Select
+                                  key={`approval-status-${filters.status}`}
+                                  label="Approval Status"
+                                  placeholder="Select Status"
+                                  searchable
+                                  clearable
+                                  size="xs"
+                                  data={[
+                                    { value: "GAINED", label: "Gained" },
+                                    { value: "LOST", label: "Lost" },
+                                    { value: "QUOTE CREATED", label: "Quote Created" },
+                                    { value: "all", label: "All" },
+                                  ]}
+                                  value={filters.status}
+                                  onChange={(value) =>
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      status: value || null,
+                                    }))
+                                  }
+                                  onFocus={(event) => {
+                                    // Auto-select all text when input is focused
+                                    const input = event.target as HTMLInputElement;
+                                    if (input && input.value) {
+                                      input.select();
+                                    }
+                                  }}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Enquiry ID Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <TextInput
+                                  label="Enquiry ID"
+                                  placeholder="Enter Enquiry ID"
+                                  size="xs"
+                                  value={filters.enquiry_id || ""}
+                                  onChange={(e) =>
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      enquiry_id: e.currentTarget.value || null,
+                                    }))
+                                  }
+                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                
+                              {/* Remark Filter */}
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <TextInput
+                                  label="Remark"
+                                  placeholder="Search Remark"
+                                  size="xs"
+                                  value={filters.remark || ""}
+                                  onChange={(e) =>
+                                    setFilters((prev) => ({
+                                      ...prev,
+                                      remark: e.currentTarget.value,
+                                    }))
+                                  }
+                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                                <Box style={erpListFilterFieldCellStyle}>
+                                <TextInput
+                                  label="Revision"
+                                  placeholder="Search Revision"
+                                  size="xs"
+                                  value={filters.revision || ""}
+                                  onChange={(e) => {
+                                    const val = e.currentTarget.value;
+                                    if (/^\d*$/.test(val)) {
+                                      setFilters((prev) => ({
+                                        ...prev,
+                                        revision: val,
+                                      }));
+                                    }
+                                  }}
+                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                                />
+                                </Box>
+                              </Grid.Col>
+                            </Grid>
+                </>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={summaryListTotalRecords}
+                  pageIndex={listCurrentPage - 1}
                   pageSize={listPageSize}
-                  currentPage={listCurrentPage}
-                  totalRecords={listTotalRecords}
+                  onPageIndexChange={(idx) => setListCurrentPage(idx + 1)}
                   onPageSizeChange={(size) => {
                     setListPageSize(size);
                     setListCurrentPage(1);
                   }}
-                  onPageChange={setListCurrentPage}
+                  pageSizeOptions={["10", "15", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
+                  }}
                 />
-              </Box>
-            </Group>
-          </>
-        )}
-
-        {/* PDF Preview Modal */}
-        <Modal
+              ),
+              children:
+                tableLoading || isFetching ? (
+                  <ERPListTableLoading
+                    theme={erpTheme}
+                    message={
+                      isInitialLoading ? "Fetching quotations…" : "Loading quotations…"
+                    }
+                  />
+                ) : (
+                  <Box
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      minHeight: 0,
+                      position: "relative",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflow: "auto",
+                        WebkitOverflowScrolling: "touch",
+                      }}
+                    >
+                      <QuotationListNativeTable
+                        theme={erpTheme}
+                        rows={quotationTableRows}
+                        visible={quotationVisibleColumns}
+                        dateFormat={dateFormat}
+                        isEmpty={quotationTableRows.length === 0}
+                        onFetchRevision={fetchRevision}
+                        rowMenuCtx={rowMenuCtx}
+                      />
+                    </Box>
+                    {isApprovalMode && isApprovingQuotation && (
+                      <Box
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: "rgba(255, 255, 255, 0.8)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          zIndex: 1000,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Stack align="center" gap="md">
+                          <Loader size="lg" color="#105476" />
+                          <Text c="dimmed" fw={500}>
+                            Approving quotation...
+                          </Text>
+                        </Stack>
+                      </Box>
+                    )}
+                  </Box>
+                ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
+      {/* PDF Preview Modal */}
+      <Modal
           opened={previewOpen}
           onClose={handleClosePreview}
           title={
@@ -4095,7 +3821,6 @@ console.log("currentQuotation: ", currentQuotation);
             <Text>No Data</Text>
           )}
         </Modal>
-      </Card>
     </>
   );
 }

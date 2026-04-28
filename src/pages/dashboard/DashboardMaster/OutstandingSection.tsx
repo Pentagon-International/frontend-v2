@@ -1,8 +1,16 @@
-import { Box, Text, Group, Select } from "@mantine/core";
+import { Box, Text, Group } from "@mantine/core";
 import OutstandingBarChart from "./OutstandingBarChart";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelBody,
+  dashboardPanelTitleStyle,
+  dashboardViewAllStyle,
+} from "./dashboardPanelStyles";
 
 interface OutstandingSectionProps {
   drillLevel: 0 | 1 | 2;
+  handleBack: () => void | Promise<void>;
   selectedMetric: "outstanding" | "overdue";
   companySummary: any[];
   locationData: any[];
@@ -24,14 +32,12 @@ interface OutstandingSectionProps {
   } | null;
   isLoadingOutstandingChart: boolean;
   handleOutstandingViewAll: () => void;
-  handleBack: () => void;
   handlePieClick: (payload: any) => void;
-  outstandingPeriod: string;
-  setOutstandingPeriod: (value: string) => void;
 }
 
 const OutstandingSection = ({
   drillLevel,
+  handleBack,
   selectedMetric,
   companySummary,
   locationData,
@@ -43,51 +49,45 @@ const OutstandingSection = ({
   hoverTotals,
   isLoadingOutstandingChart,
   handleOutstandingViewAll,
-  handleBack,
   handlePieClick,
-  outstandingPeriod,
-  setOutstandingPeriod,
 }: OutstandingSectionProps) => {
   return (
-    <Box
-      style={{
-        // border: "1px solid #F7F7F7",
-        // borderRadius: "8px",
-        // padding: "16px",
-        // height: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* <Group justify="space-between" align="center" mb="md"> */}
-        {/* <Text
-          size="lg"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Outstanding vs Overdue
-        </Text> */}
-        {/* <Select
-          placeholder="Select Period"
-          value={outstandingPeriod}
-          onChange={(value) => setOutstandingPeriod(value || "last_30_days")}
-          w={150}
-          size="xs"
-          data={[
-            { value: "last_30_days", label: "Last 30 days" },
-            { value: "last_60_days", label: "Last 60 days" },
-            { value: "last_90_days", label: "Last 90 days" },
-            { value: "last_6_months", label: "Last 6 Months" },
-            { value: "last_year", label: "Last Year" },
-          ]}
-          styles={{
-            input: { fontSize: "12px" },
-          }}
-        /> */}
-      {/* </Group> */}
+    <Box style={dashboardPanelShell}>
+      <Box style={dashboardPanelHeaderBand}>
+        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
+          <Box style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <Text style={dashboardPanelTitleStyle}>
+              Outstanding vs Overdue
+            </Text>
+          </Box>
+          <Group gap="md" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {drillLevel > 0 && (
+              <Text
+                size="sm"
+                c="#64748B"
+                fw={500}
+                style={{
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                onClick={() => void handleBack()}
+              >
+                ← Back
+              </Text>
+            )}
+            <Text
+              size="sm"
+              c="#105476"
+              style={dashboardViewAllStyle}
+              onClick={handleOutstandingViewAll}
+            >
+              View All
+            </Text>
+          </Group>
+        </Group>
+      </Box>
 
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <Box style={dashboardPanelBody}>
         <OutstandingBarChart
           drillLevel={drillLevel}
           selectedMetric={selectedMetric}
@@ -100,8 +100,6 @@ const OutstandingSection = ({
           contextTotals={contextTotals}
           hoverTotals={hoverTotals}
           isLoadingOutstandingChart={isLoadingOutstandingChart}
-          handleOutstandingViewAll={handleOutstandingViewAll}
-          handleBack={handleBack}
           handleBarClick={handlePieClick}
         />
       </Box>

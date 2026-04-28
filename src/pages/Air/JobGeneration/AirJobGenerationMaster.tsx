@@ -1,53 +1,70 @@
-import { useMemo, useState, useEffect } from "react";
-import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  MRT_PaginationState,
-  useMantineReactTable,
-} from "mantine-react-table";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Group,
   Button,
   Text,
-  Card,
-  Center,
   Stack,
   Grid,
   Menu,
   ActionIcon,
   Box,
-  UnstyledButton,
   TextInput,
   Loader,
+  MantineProvider,
 } from "@mantine/core";
 import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
   IconFilter,
-  IconFilterOff,
   IconPlus,
   IconDotsVertical,
   IconEdit,
   IconEye,
   IconSearch,
   IconX,
+  IconBriefcase,
+  IconCircleCheck,
+  IconClock,
+  IconStack2,
+  IconPlane,
+  IconArrowRight,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "@mantine/form";
 import {
   SearchableSelect,
-  ToastNotification,
   Dropdown,
   SingleDateInput,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  erpListFilterUnifiedMantineStyles,
+  DEFAULT_ERP_LIST_THEME,
+  erpListGeistMantineTheme,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistRootTypography,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistSelectClassNames,
+  erpListThStyle,
+  erpListDataRowProps,
+  erpListBookingMasterTableStyle,
+  erpListBookingMasterTrailingHeaderTh,
+  ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+  erpListBookingMasterBodyTd,
+  erpListBookingMasterDateTd,
+  erpListBookingMasterReferenceTdShell,
+  erpListRowActionMenuTdStyle,
+  ERPListJobStatusPill,
+  ERP_LIST_GEIST_MONO_CLASS,
 } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import dayjs from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { useDebouncedValue } from "@mantine/hooks";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 
@@ -97,15 +114,53 @@ type FilterState = {
   etd: Date | null;
 };
 
+type VisibleColumnsState = {
+  sno: boolean;
+  flight_no: boolean;
+  carrier_name: boolean;
+  route: boolean;
+  eta: boolean;
+  etd: boolean;
+  cut_off_date: boolean;
+  schedule: boolean;
+};
+
+/** Same endpoint resolution as Air Export Booking route column (code read → code → name). */
+function routeEndpointsFromJobRow(row: AirJobData) {
+  const oc =
+    String(row.origin_code_read || "").trim() ||
+    String((row as AirJobData & { origin_code?: string }).origin_code || "").trim() ||
+    String(row.origin_name || "").trim() ||
+    "";
+  const dc =
+    String(row.destination_code_read || "").trim() ||
+    String((row as AirJobData & { destination_code?: string }).destination_code || "").trim() ||
+    String(row.destination_name || "").trim() ||
+    "";
+  return { oc, dc };
+}
+
+function getStatusBadge(statusRaw: string | undefined | null) {
+  const statusUpper = (statusRaw || "").toUpperCase();
+  const label =
+    statusUpper === "CANCEL"
+      ? "Cancel"
+      : statusUpper === "CLOSED"
+        ? "Closed"
+        : "Active";
+  const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
+  return { label, color } as const;
+}
+
 function AirJobGenerationMaster() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [showFilters, setShowFilters] = useState(false);
-  const dateFormat = useDateFormat();
-  const [pagination, setPagination] = useState<MRT_PaginationState>({
-    pageIndex: 0,
-    pageSize: 25,
-  });
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
+  const { muted, fg, primary } = theme;
+
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(15);
   const [totalRecords, setTotalRecords] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -120,6 +175,17 @@ function AirJobGenerationMaster() {
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [showFilters, setShowFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
+    sno: true,
+    flight_no: true,
+    carrier_name: true,
+    route: true,
+    eta: true,
+    etd: true,
+    cut_off_date: true,
+    schedule: true,
+  });
 
   const filterForm = useForm<FilterState>({
     initialValues: {
@@ -137,23 +203,17 @@ function AirJobGenerationMaster() {
     },
   });
 
-  const buildFilterPayload = useMemo(() => {
+  const buildFilterPayload = useCallback((): Record<string, unknown> => {
     const payload: Record<string, unknown> = {};
     if (filterForm.values.service) payload.service = filterForm.values.service;
-    if (filterForm.values.origin)
-      payload.origin_code = filterForm.values.origin;
+    if (filterForm.values.origin) payload.origin_code = filterForm.values.origin;
     if (filterForm.values.destination)
       payload.destination_code = filterForm.values.destination;
-    if (filterForm.values.schedule)
-      payload.schedule = filterForm.values.schedule;
-    if (filterForm.values.flight_no)
-      payload.flight_no = filterForm.values.flight_no;
-    if (filterForm.values.carrier_name)
-      payload.carrier_name = filterForm.values.carrier_name;
+    if (filterForm.values.schedule) payload.schedule = filterForm.values.schedule;
+    if (filterForm.values.flight_no) payload.flight_no = filterForm.values.flight_no;
+    if (filterForm.values.carrier_name) payload.carrier_name = filterForm.values.carrier_name;
     if (filterForm.values.cut_off_date)
-      payload.cut_off_date = dayjs(filterForm.values.cut_off_date).format(
-        "YYYY-MM-DD"
-      );
+      payload.cut_off_date = dayjs(filterForm.values.cut_off_date).format("YYYY-MM-DD");
     if (filterForm.values.eta)
       payload.eta = dayjs(filterForm.values.eta).format("YYYY-MM-DD");
     if (filterForm.values.etd)
@@ -174,11 +234,7 @@ function AirJobGenerationMaster() {
 
     if (stored?.filters && typeof stored.filters === "object") {
       const f = stored.filters as Record<string, unknown>;
-      const {
-        origin_name: _originName,
-        destination_name: _destinationName,
-        ...apiPayload
-      } = f;
+      const { origin_name: _on, destination_name: _dn, ...apiPayload } = f;
       filterForm.setValues({
         origin: (f.origin_code as string) || null,
         origin_name: (f.origin_name as string) || null,
@@ -195,19 +251,20 @@ function AirJobGenerationMaster() {
       setAppliedFilterPayload(apiPayload);
     }
 
-    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setPageIndex(0);
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
-  const currentPage = pagination.pageIndex + 1;
-  const index = pagination.pageIndex * pagination.pageSize;
+  const index = pageIndex * pageSize;
 
-  const handlePageSizeChange = (newPageSize: number) =>
-    setPagination({ pageIndex: 0, pageSize: newPageSize });
-  const handlePageChange = (newPage: number) =>
-    setPagination((prev) => ({ ...prev, pageIndex: newPage - 1 }));
+  const buildRequestFilters = useCallback(() => {
+    const base: Record<string, unknown> = { ...appliedFilterPayload };
+    if (debouncedSearch?.trim()) base.search = debouncedSearch.trim();
+    return base;
+  }, [appliedFilterPayload, debouncedSearch]);
 
   const {
     data: bookingData,
@@ -217,16 +274,14 @@ function AirJobGenerationMaster() {
   } = useQuery({
     queryKey: [
       "air-job-bookings",
-      pagination.pageIndex,
-      pagination.pageSize,
+      pageIndex,
+      pageSize,
       JSON.stringify(appliedFilterPayload),
       debouncedSearch,
     ],
     queryFn: async (): Promise<AirJobData[]> => {
       try {
-        const filtersWithSearch: Record<string, unknown> = { ...appliedFilterPayload };
-        if (debouncedSearch?.trim()) filtersWithSearch.search = debouncedSearch.trim();
-
+        const filtersWithSearch = buildRequestFilters();
         const payload =
           Object.keys(filtersWithSearch).length > 0
             ? { filters: filtersWithSearch }
@@ -235,7 +290,7 @@ function AirJobGenerationMaster() {
         setIsInitialLoad(false);
 
         const response = await apiCallProtected.post(
-          `${URL.bookingFilter}?index=${index}&limit=${pagination.pageSize}`,
+          `${URL.bookingFilter}?index=${index}&limit=${pageSize}`,
           payload,
         );
         const data = response as {
@@ -277,10 +332,35 @@ function AirJobGenerationMaster() {
     }));
   }, [bookingData, index]);
 
+  const stats = useMemo(() => {
+    const rows = bookingData || [];
+    return {
+      total: totalRecords,
+      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
+      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
+      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+    };
+  }, [bookingData, totalRecords]);
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
+        id: String(key),
+        label: String(key).replace(/_/g, " "),
+        checked: visibleColumns[key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [key]: !prev[key],
+          })),
+      })),
+    [visibleColumns],
+  );
+
   const applyFilters = () => {
-    const payload = buildFilterPayload;
+    const payload = buildFilterPayload();
     setAppliedFilterPayload(payload);
-    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setPageIndex(0);
     setStoreFilters(LIST_KEY, {
       ...payload,
       origin_name: filterForm.values.origin_name || "",
@@ -295,612 +375,570 @@ function AirJobGenerationMaster() {
     filterForm.setFieldValue("service", "AIR");
     const defaultPayload = { service: "AIR" };
     setAppliedFilterPayload(defaultPayload);
-    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setPageIndex(0);
     clearAllStore(LIST_KEY);
     setShowFilters(false);
   };
 
-  const handleEdit = (job: AirJobData) => {
-    setStoreFilters(LIST_KEY, {
-      ...appliedFilterPayload,
-      origin_name: filterForm.values.origin_name || "",
-      destination_name: filterForm.values.destination_name || "",
-    });
-    setStoreSearch(LIST_KEY, search);
-    setShouldRestore(LIST_KEY, true);
-    navigate("/air/job-generation/edit", {
-      state: { job, mode: "edit" },
-    });
-  };
-
-  const handleView = (job: AirJobData) => {
-    setStoreFilters(LIST_KEY, {
-      ...appliedFilterPayload,
-      origin_name: filterForm.values.origin_name || "",
-      destination_name: filterForm.values.destination_name || "",
-    });
-    setStoreSearch(LIST_KEY, search);
-    setShouldRestore(LIST_KEY, true);
-    navigate("/air/job-generation/view", {
-      state: { job, mode: "view" },
-    });
-  };
-
-  const columns = useMemo<MRT_ColumnDef<AirJobData & { sno: number }>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "flight_no",
-        header: "Flight No",
-        size: 120,
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          return val || "-";
-        },
-      },
-      {
-        accessorKey: "carrier_name",
-        header: "Carrier",
-        size: 150,
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          return val || "-";
-        },
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 150,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 150,
-      },
-      {
-        accessorKey: "eta",
-        header: "ETA",
-        size: 120,
-        Cell: ({ cell }) => {
-          const date = cell.getValue<string>();
-          return date ? dayjs(date).format(dateFormat) : "-";
-        },
-      },
-      {
-        accessorKey: "etd",
-        header: "ETD",
-        size: 120,
-        Cell: ({ cell }) => {
-          const date = cell.getValue<string>();
-          return date ? dayjs(date).format(dateFormat) : "-";
-        },
-      },
-      {
-        accessorKey: "cut_off_date",
-        header: "Cutoff Date",
-        size: 120,
-        Cell: ({ cell }) => {
-          const date = cell.getValue<string>();
-          return date ? dayjs(date).format(dateFormat) : "-";
-        },
-      },
-      {
-        accessorKey: "schedule",
-        header: "Schedule",
-        size: 120,
-      },
-      {
-        id: "actions",
-        header: "Action",
-        size: 100,
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton onClick={() => handleView(row.original)}>
-                  <Group gap="sm">
-                    <IconEye size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">View</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              <Menu.Divider />
-              <Box px={10} py={5}>
-                <UnstyledButton onClick={() => handleEdit(row.original)}>
-                  <Group gap="sm">
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">Edit</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-            </Menu.Dropdown>
-          </Menu>
-        ),
-      },
+  const handleEdit = useCallback(
+    (job: AirJobData) => {
+      setStoreFilters(LIST_KEY, {
+        ...appliedFilterPayload,
+        origin_name: filterForm.values.origin_name || "",
+        destination_name: filterForm.values.destination_name || "",
+      });
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
+      navigate("/air/job-generation/edit", {
+        state: { job, mode: "edit" },
+      });
+    },
+    [
+      appliedFilterPayload,
+      filterForm.values.origin_name,
+      filterForm.values.destination_name,
+      navigate,
+      search,
+      setShouldRestore,
+      setStoreFilters,
+      setStoreSearch,
     ],
-    [dateFormat, handleEdit, handleView]
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    state: {
-      pagination,
-      isLoading,
+  const handleView = useCallback(
+    (job: AirJobData) => {
+      setStoreFilters(LIST_KEY, {
+        ...appliedFilterPayload,
+        origin_name: filterForm.values.origin_name || "",
+        destination_name: filterForm.values.destination_name || "",
+      });
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
+      navigate("/air/job-generation/view", {
+        state: { job, mode: "view" },
+      });
     },
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    manualPagination: true,
-    rowCount: totalRecords,
-    onPaginationChange: setPagination,
-    initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "30px",
-              zIndex: 2,
-              borderLeft: "1px solid #F3F3F3",
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {};
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "80px",
-              zIndex: 2,
-              backgroundColor: "#FBFBFB",
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {};
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+    [
+      appliedFilterPayload,
+      filterForm.values.origin_name,
+      filterForm.values.destination_name,
+      navigate,
+      search,
+      setShouldRestore,
+      setStoreFilters,
+      setStoreSearch,
+    ],
+  );
+
+  const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   return (
-    <Card
-      shadow="sm"
-      pt="md"
-      pb="sm"
-      px="md"
-      radius="md"
-      withBorder
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        flex: 1,
-      }}
-    >
-      <Box>
-        <Group justify="space-between" align="center" pb="sm">
-        <Text
-          size="md"
-          fw={600}
-          c="#444955"
-          style={{ fontFamily: "Inter", fontSize: "16px" }}
-        >
-          Air Job Generation List
-        </Text>
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+        <ERPListScreen
+          theme={theme}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={theme}
+                  icon={<IconPlane size={14} color={primary} />}
+                  value={stats.total}
+                  label="Total"
+                />
+                <ERPListStatPill
+                  theme={theme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={stats.active}
+                  label="Active"
+                />
+                <ERPListStatPill
+                  theme={theme}
+                  icon={<IconClock size={14} color="#2563eb" />}
+                  iconBackground="#dbeafe"
+                  iconColor="#2563eb"
+                  value={stats.closed}
+                  label="Closed"
+                />
+                <ERPListStatPill
+                  theme={theme}
+                  icon={<IconX size={14} color="#dc2626" />}
+                  iconBackground="#fee2e2"
+                  iconColor="#dc2626"
+                  value={stats.cancel}
+                  label="Cancel"
+                />
+              </>
+            ),
+            secondary: (
+              <>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {displayData.length}
+                  </Text>
 
-        <Group gap="xs" wrap="nowrap">
-          <TextInput
-            placeholder="Search..."
-            leftSection={<IconSearch size={16} />}
-            rightSection={
-              search ? (
-                <ActionIcon
-                  variant="transparent"
-                  size="sm"
-                  onClick={() => setSearch("")}
-                  style={{ cursor: "pointer" }}
+                </Group>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {totalRecords.toLocaleString()}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    total
+                  </Text>
+                </Group>
+              </>
+            ),
+            actions: (
+              <>
+                <TextInput
+                  size="xs"
+                  w={220}
+                  placeholder="Search…"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  leftSection={<IconSearch size={14} />}
+                  rightSection={
+                    search ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearch("")}
+                        aria-label="Clear search"
+                      >
+                        <IconX size={14} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={{
+                    input: {
+                      fontFamily: theme.fontSans,
+                      fontSize: 12,
+                      height: 32,
+                      minHeight: 32,
+                    },
+                  }}
+                />
+                <ERPListColumnToggleMenu
+                  theme={theme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(theme)}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((s) => !s)}
                 >
-                  <IconX size={16} />
-                </ActionIcon>
-              ) : null
-            }
-            w={248}
-            size="sm"
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            styles={{
-              input: {
-                borderRadius: "4px",
-                fontSize: "14px",
-                fontFamily: "Inter",
-                color: "#333740",
-                minWidth: "24px",
-                minHeight: "24px",
-                width: "248px",
-                height: "36px",
-                border: "1px solid #D0D1D4",
-                "&:focus": { border: "1px solid #105476" },
-              },
-            }}
-          />
-          <ActionIcon
-            variant={showFilters ? "filled" : "outline"}
-            size={36}
-            color={showFilters ? "#E0F5FF" : "gray"}
-            onClick={() => setShowFilters(!showFilters)}
-            styles={{
-              root: {
-                borderRadius: "4px",
-                backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                color: showFilters ? "#105476" : "#737780",
-                "&:active": { border: "1px solid #105476", color: "#FFFFFF" },
-              },
-            }}
-          >
-            <IconFilter size={18} />
-          </ActionIcon>
-          <Button
-            variant="filled"
-            leftSection={<IconPlus size={14} />}
-            size="sm"
-            color="#105476"
-            styles={{
-              root: {
-                backgroundColor: "#105476",
-                borderRadius: "4px",
-                color: "#FFFFFF",
-                fontSize: "14px",
-                fontFamily: "Inter",
-                fontstyle: "semibold",
-                "&:hover": {
-                  backgroundColor: "#105476",
-                },
-              },
-            }}
-            onClick={() => {
-              setStoreFilters(LIST_KEY, {
-                ...appliedFilterPayload,
-                origin_name: filterForm.values.origin_name || "",
-                destination_name: filterForm.values.destination_name || "",
-              });
-              setStoreSearch(LIST_KEY, search);
-              setShouldRestore(LIST_KEY, true);
-              navigate("/air/job-generation/create", {
-                state: { serviceType: "AIR" },
-              });
-            }}
-          >
-            Create New
-          </Button>
-        </Group>
-      </Group>
-      </Box>
-
-      {showFilters && (
-        <Box
-          tt="capitalize"
-          mb="md"
-          p="sm"
-          style={{
-            borderRadius: "8px",
-            border: "1px solid #E0E0E0",
-            flexShrink: 0,
-            height: "fit-content",
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+                <Button
+                  size="xs"
+                  leftSection={<IconPlus size={14} />}
+                  styles={erpToolbarPrimaryButtonStyles(theme)}
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, {
+                      ...appliedFilterPayload,
+                      origin_name: filterForm.values.origin_name || "",
+                      destination_name: filterForm.values.destination_name || "",
+                    });
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
+                    navigate("/air/job-generation/create", {
+                      state: { serviceType: "AIR" },
+                    });
+                  }}
+                >
+                  Create New
+                </Button>
+              </>
+            ),
           }}
-        >
-          <Group
-            justify="space-between"
-            align="center"
-            mb="sm"
-            px="md"
-            style={{
-              backgroundColor: "#FAFAFA",
-              padding: "4px 8px",
-            }}
-          >
-            <Text
-              size="sm"
-              fw={600}
-              c="#000000"
-              style={{ fontFamily: "Inter", fontSize: "14px" }}
-            >
-              Filter
-            </Text>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setShowFilters(false)}
-              aria-label="Close filters"
-              size="sm"
-            >
-              <IconX size={18} />
-            </ActionIcon>
-          </Group>
-
-          <Grid gutter="sm" px="md" pt="xs" pb="sm">
-            <Grid.Col span={2.4}>
-              <FormTextInput
-                size="xs"
-                label="Flight No"
-                placeholder="Enter flight number"
-                {...filterForm.getInputProps("flight_no")}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Refine schedules by flight, carrier, route, or dates",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={theme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isLoading}
+                applyDisabled={isLoading}
               />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <FormTextInput
-                size="xs"
-                label="Carrier"
-                placeholder="Enter carrier name"
-                {...filterForm.getInputProps("carrier_name")}
-              />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <SearchableSelect
-                size="xs"
-                label="Origin"
-                placeholder="Type origin code or name"
-                apiEndpoint={URL.portMaster}
-                searchFields={["port_code", "port_name"]}
-                additionalParams={{
-                  transport_mode: "AIR",
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <FormTextInput
+                    size="xs"
+                    label="Flight No"
+                    placeholder="Enter flight number"
+                    styles={filterFieldStyles}
+                    {...filterForm.getInputProps("flight_no")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <FormTextInput
+                    size="xs"
+                    label="Carrier"
+                    placeholder="Enter carrier name"
+                    styles={filterFieldStyles}
+                    {...filterForm.getInputProps("carrier_name")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Origin"
+                    placeholder="Type origin code or name"
+                    apiEndpoint={URL.portMaster}
+                    searchFields={["port_code", "port_name"]}
+                    additionalParams={airTransportParams}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filterForm.values.origin}
+                    displayValue={filterForm.values.origin_name}
+                    onChange={(value, selectedData) => {
+                      filterForm.setFieldValue("origin", value || null);
+                      filterForm.setFieldValue("origin_name", selectedData?.label || null);
+                    }}
+                    minSearchLength={3}
+                    dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={filterFieldStyles}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <SearchableSelect
+                    size="xs"
+                    label="Destination"
+                    placeholder="Type destination code or name"
+                    apiEndpoint={URL.portMaster}
+                    additionalParams={airTransportParams}
+                    searchFields={["port_code", "port_name"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.port_code),
+                      label: `${item.port_name} (${item.port_code})`,
+                    })}
+                    value={filterForm.values.destination}
+                    displayValue={filterForm.values.destination_name}
+                    onChange={(value, selectedData) => {
+                      filterForm.setFieldValue("destination", value || null);
+                      filterForm.setFieldValue(
+                        "destination_name",
+                        selectedData?.label || null,
+                      );
+                    }}
+                    minSearchLength={3}
+                    dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={filterFieldStyles}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Dropdown
+                    size="xs"
+                    label="Schedule"
+                    placeholder="Select schedule"
+                    searchable
+                    clearable
+                    data={[
+                      { value: "Weekly", label: "Weekly" },
+                      { value: "Monthly", label: "Monthly" },
+                      { value: "Daily", label: "Daily" },
+                      { value: "Quarterly", label: "Quarterly" },
+                    ]}
+                    {...filterForm.getInputProps("schedule")}
+                    styles={filterFieldStyles}
+                    classNames={{
+                      label: ERP_LIST_GEIST_ROOT_CLASS,
+                      input: ERP_LIST_GEIST_ROOT_CLASS,
+                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                      option: ERP_LIST_GEIST_ROOT_CLASS,
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <SingleDateInput
+                    key={`eta-${filterForm.values.eta}`}
+                    label="ETA"
+                    placeholder="YYYY-MM-DD"
+                    size="xs"
+                    value={filterForm.values.eta}
+                    onChange={(d) => filterForm.setFieldValue("eta", d)}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={filterFieldStyles}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <SingleDateInput
+                    key={`etd-${filterForm.values.etd}`}
+                    label="ETD"
+                    placeholder="YYYY-MM-DD"
+                    size="xs"
+                    value={filterForm.values.etd}
+                    onChange={(d) => filterForm.setFieldValue("etd", d)}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={filterFieldStyles}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <SingleDateInput
+                    key={`cut-off-${filterForm.values.cut_off_date}`}
+                    label="Cut Off Date"
+                    placeholder="YYYY-MM-DD"
+                    size="xs"
+                    value={filterForm.values.cut_off_date}
+                    onChange={(d) => filterForm.setFieldValue("cut_off_date", d)}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={filterFieldStyles}
+                  />
+                </Grid.Col>
+              </Grid>
+            ),
+          }}
+          table={{
+            footer: (
+              <ERPListPaginationFooter
+                theme={theme}
+                totalRecords={totalRecords}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={(s) => {
+                  setPageSize(s);
+                  setPageIndex(0);
                 }}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={filterForm.values.origin}
-                displayValue={filterForm.values.origin_name}
-                onChange={(value, selectedData) => {
-                  filterForm.setFieldValue("origin", value || null);
-                  filterForm.setFieldValue("origin_name", selectedData?.label || null);
-                }}
-                minSearchLength={3}
+                selectClassNames={erpListGeistSelectClassNames}
+                pageSizeOptions={["10", "15", "25", "50"]}
               />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <SearchableSelect
-                size="xs"
-                label="Destination"
-                placeholder="Type destination code or name"
-                apiEndpoint={URL.portMaster}
-                additionalParams={{
-                  transport_mode: "AIR",
-                }}
-                searchFields={["port_code", "port_name"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.port_code),
-                  label: `${item.port_name} (${item.port_code})`,
-                })}
-                value={filterForm.values.destination}
-                displayValue={filterForm.values.destination_name}
-                onChange={(value, selectedData) => {
-                  filterForm.setFieldValue("destination", value || null);
-                  filterForm.setFieldValue(
-                    "destination_name",
-                    selectedData?.label || null
-                  );
-                }}
-                minSearchLength={3}
-              />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <Dropdown
-                size="xs"
-                label="Schedule"
-                placeholder="Select schedule"
-                searchable
-                clearable
-                data={[
-                  { value: "Weekly", label: "Weekly" },
-                  { value: "Monthly", label: "Monthly" },
-                  { value: "Daily", label: "Daily" },
-                  { value: "Quarterly", label: "Quarterly" },
-                ]}
-                {...filterForm.getInputProps("schedule")}
-              />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <SingleDateInput
-                key={`eta-${filterForm.values.eta}`}
-                label="ETA"
-                placeholder="YYYY-MM-DD"
-                size="xs"
-                {...filterForm.getInputProps("eta")}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={14} />}
-                leftSectionPointerEvents="none"
-                radius="md"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-              />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <SingleDateInput
-                key={`etd-${filterForm.values.etd}`}
-                label="ETD"
-                placeholder="YYYY-MM-DD"
-                size="xs"
-                {...filterForm.getInputProps("etd")}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={14} />}
-                leftSectionPointerEvents="none"
-                radius="md"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-              />
-            </Grid.Col>
-            <Grid.Col span={2.4}>
-              <SingleDateInput
-                key={`cut-off-${filterForm.values.cut_off_date}`}
-                label="Cut Off Date"
-                placeholder="YYYY-MM-DD"
-                size="xs"
-                {...filterForm.getInputProps("cut_off_date")}
-                valueFormat="YYYY-MM-DD"
-                leftSection={<IconCalendar size={14} />}
-                leftSectionPointerEvents="none"
-                radius="md"
-                nextIcon={<IconChevronRight size={16} />}
-                previousIcon={<IconChevronLeft size={16} />}
-                clearable
-              />
-            </Grid.Col>
-          </Grid>
-
-          <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-            <Button
-              size="sm"
-              variant="default"
-              leftSection={<IconX size={16} />}
-              onClick={clearAllFilters}
-              styles={{
-                root: {
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  border: "1px solid #D0D1D4",
-                  color: "#444955",
-                },
-              }}
-            >
-              Clear Filters
-            </Button>
-            <Button
-              size="sm"
-              leftSection={<IconFilter size={16} />}
-              onClick={applyFilters}
-              loading={isLoading}
-              disabled={isLoading}
-              styles={{
-                root: {
-                  backgroundColor: "#105476",
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  fontFamily: "Inter",
-                  fontWeight: 600,
-                  height: "36px",
-                  "&:hover": {
-                    backgroundColor: "#0d4261",
-                  },
-                },
-              }}
-            >
-              Apply Filters
-            </Button>
-          </Group>
-        </Box>
-      )}
-
-      {isLoading ? (
-        <Center py="xl">
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed">Loading air job data...</Text>
-          </Stack>
-        </Center>
-      ) : bookingError ? (
-        <Center py="xl">
-          <Stack align="center" gap="md">
-            <Text c="dimmed">Error loading air job data. Please try refreshing the page.</Text>
-          </Stack>
-        </Center>
-      ) : (
-        <>
-          <MantineReactTable table={table} />
-          <PaginationBar
-            pageSize={pagination.pageSize}
-            currentPage={currentPage}
-            totalRecords={totalRecords}
-            onPageSizeChange={handlePageSizeChange}
-            onPageChange={handlePageChange}
-            pageSizeOptions={["10", "25", "50"]}
-          />
-        </>
-      )}
-    </Card>
+            ),
+            children: bookingError ? (
+              <Box px="md" py={48} style={{ textAlign: "center" }}>
+                <Text c="red" size="sm" style={{ fontFamily: theme.fontSans }}>
+                  Error loading air job data. Please try refreshing the page.
+                </Text>
+              </Box>
+            ) : isLoading ? (
+              <ERPListTableLoading theme={theme} message="Loading air job schedules…" />
+            ) : (
+              <Box style={{ position: "relative", flex: 1, minHeight: 0 }}>
+                {bookingFetching && displayData.length > 0 ? (
+                  <Box
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 10,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Stack align="center" gap="md">
+                      <Loader size="lg" color={primary} />
+                      <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
+                        Refreshing…
+                      </Text>
+                    </Stack>
+                  </Box>
+                ) : null}
+                <table style={erpListBookingMasterTableStyle(theme)}>
+                  <thead>
+                    <tr>
+                      {visibleColumns.sno && <th style={erpListThStyle(theme)}>S.No</th>}
+                      {visibleColumns.flight_no && (
+                        <th style={erpListThStyle(theme)}>Flight No</th>
+                      )}
+                      {visibleColumns.carrier_name && (
+                        <th style={erpListThStyle(theme)}>Carrier</th>
+                      )}
+                      {visibleColumns.route && (
+                        <th style={erpListThStyle(theme)}>Route</th>
+                      )}
+                      {visibleColumns.eta && <th style={erpListThStyle(theme)}>ETA</th>}
+                      {visibleColumns.etd && <th style={erpListThStyle(theme)}>ETD</th>}
+                      {visibleColumns.cut_off_date && (
+                        <th style={erpListThStyle(theme)}>Cutoff Date</th>
+                      )}
+                      {visibleColumns.schedule && (
+                        <th style={erpListThStyle(theme)}>Schedule</th>
+                      )}
+                      <th style={erpListThStyle(theme)}>Status</th>
+                      <th style={erpListBookingMasterTrailingHeaderTh(theme)} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayData.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={20}
+                          style={{ padding: 60, textAlign: "center" }}
+                        >
+                          <Stack align="center" gap="md">
+                            <Box
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                backgroundColor: ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconPlane size={24} color={muted} />
+                            </Box>
+                            <Box>
+                              <Text fw={500} c={fg}>
+                                No schedules found
+                              </Text>
+                              <Text size="sm" c={muted} mt={4}>
+                                Try adjusting your search or filters
+                              </Text>
+                            </Box>
+                          </Stack>
+                        </td>
+                      </tr>
+                    ) : (
+                      displayData.map((row) => {
+                        const rowProps = erpListDataRowProps(theme);
+                        const tdPad = erpListBookingMasterBodyTd();
+                        const tdDate = erpListBookingMasterDateTd(theme);
+                        const refShell = erpListBookingMasterReferenceTdShell(theme);
+                        const fmt = (d: string) =>
+                          dayjs(d).isValid() ? dayjs(d).format("DD MMM") : "—";
+                        return (
+                          <tr
+                            key={row.id}
+                            style={rowProps.style}
+                            onMouseEnter={rowProps.onMouseEnter}
+                            onMouseLeave={rowProps.onMouseLeave}
+                          >
+                            {visibleColumns.sno && (
+                              <td style={tdPad}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {row.sno}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.flight_no && (
+                              <td
+                                className={ERP_LIST_GEIST_MONO_CLASS}
+                                style={refShell}
+                              >
+                                {row.flight_no ? (
+                                  <Text size="xs" fw={500} c={fg}>
+                                    {row.flight_no}
+                                  </Text>
+                                ) : (
+                                  <Text size="sm" c={muted}>
+                                    —
+                                  </Text>
+                                )}
+                              </td>
+                            )}
+                            {visibleColumns.carrier_name && (
+                              <td style={tdPad}>
+                                <Text size="sm" c={fg}>
+                                  {row.carrier_name || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.route && (() => {
+                              const { oc, dc } = routeEndpointsFromJobRow(row);
+                              return (
+                                <td style={tdPad}>
+                                  <Group gap={6} wrap="nowrap">
+                                    <Text fw={600} size="sm" c={primary}>
+                                      {oc || "—"}
+                                    </Text>
+                                    <IconArrowRight size={12} color={muted} />
+                                    <Text fw={500} size="sm" c={fg}>
+                                      {dc || "—"}
+                                    </Text>
+                                  </Group>
+                                </td>
+                              );
+                            })()}
+                            {visibleColumns.eta && (
+                              <td style={tdDate}>
+                                {row.eta ? fmt(row.eta) : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.etd && (
+                              <td style={tdDate}>
+                                {row.etd ? fmt(row.etd) : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.cut_off_date && (
+                              <td style={tdDate}>
+                                {row.cut_off_date ? fmt(row.cut_off_date) : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.schedule && (
+                              <td style={tdPad}>
+                                <Text size="sm" c={fg}>
+                                  {row.schedule || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            <td style={tdPad}>
+                              <ERPListJobStatusPill status={row.status} />
+                            </td>
+                            <td style={erpListRowActionMenuTdStyle()}>
+                              <Menu
+                                withinPortal
+                                position="bottom-end"
+                                shadow="md"
+                                width={200}
+                                styles={erpListGeistMenuDropdownStyles}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                              >
+                                <Menu.Target>
+                                  <ActionIcon variant="subtle" color="gray" size="sm">
+                                    <IconDotsVertical size={16} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                  <Menu.Item
+                                    leftSection={<IconEye size={14} />}
+                                    onClick={() => handleView(row)}
+                                  >
+                                    View
+                                  </Menu.Item>
+                                  <Menu.Item
+                                    leftSection={<IconEdit size={14} />}
+                                    onClick={() => handleEdit(row)}
+                                  >
+                                    Edit
+                                  </Menu.Item>
+                                </Menu.Dropdown>
+                              </Menu>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </Box>
+            ),
+          }}
+        />
+      </Box>
+    </MantineProvider>
   );
 }
 
