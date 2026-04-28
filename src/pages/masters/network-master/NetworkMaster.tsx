@@ -299,7 +299,7 @@ export default function NetworkMasterList() {
           fontSize: "14px",
           fontStyle: "regular",
           fontFamily: "Inter",
-          color: "#333740",
+          color: "#334155",
           backgroundColor: "#ffffff",
           ...extraStyles,
         },
@@ -313,7 +313,7 @@ export default function NetworkMasterList() {
           right: 0,
           minWidth: "80px",
           zIndex: 2,
-          backgroundColor: "#FBFBFB",
+          backgroundColor: "#F8FAFC",
           boxShadow: "0px -2px 4px 0px #00000040",
         };
       }
@@ -324,8 +324,8 @@ export default function NetworkMasterList() {
           fontSize: "14px",
           fontFamily: "Inter",
           fontStyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
+          color: "#1E293B",
+          backgroundColor: "#F8FAFC",
           top: 0,
           zIndex: 3,
           borderBottom: "1px solid #F3F3F3",
@@ -365,7 +365,7 @@ export default function NetworkMasterList() {
           <Text
             size="md"
             fw={600}
-            c="#444955"
+            c="#1E293B"
             style={{ fontFamily: "Inter", fontSize: "16px" }}
           >
             Network Master List
@@ -397,7 +397,7 @@ export default function NetworkMasterList() {
                   fontSize: "14px",
                   fontFamily: "Inter",
                   fontStyle: "regular",
-                  color: "#333740",
+                  color: "#334155",
                   minWidth: "24px",
                   minHeight: "24px",
                   width: "248px",

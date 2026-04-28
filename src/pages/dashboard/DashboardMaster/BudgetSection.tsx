@@ -1,4 +1,3 @@
-import { Box } from "@mantine/core";
 import BudgetBarChart from "./BudgetBarChart";
 import { BudgetAggregatedData } from "../../../service/dashboard.service";
 
@@ -35,11 +34,7 @@ interface BudgetSectionProps {
 }
 
 const BudgetSection = (props: BudgetSectionProps) => {
-  return (
-    <Box mb="lg">
-      <BudgetBarChart {...props} />
-    </Box>
-  );
+  return <BudgetBarChart {...props} />;
 };
 
 export default BudgetSection;

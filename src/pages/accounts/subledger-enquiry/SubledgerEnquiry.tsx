@@ -1,24 +1,54 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect, type CSSProperties } from "react";
 import {
   Alert,
+  ActionIcon,
   Box,
   Button,
+  createTheme,
   Grid,
   Group,
-  Loader,
-  ScrollArea,
+  MantineProvider,
+  rem,
+  Stack,
   Text,
   TextInput,
 } from "@mantine/core";
-import { IconInfoCircle, IconSearch } from "@tabler/icons-react";
+import {
+  IconBook2,
+  IconCoin,
+  IconFilter,
+  IconInfoCircle,
+  IconSearch,
+  IconTable,
+  IconX,
+} from "@tabler/icons-react";
+import type { MRT_PaginationState } from "mantine-react-table";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import {
   Dropdown,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableEmpty,
+  ERPListTableLoading,
   SearchableSelect,
   SingleDateInput,
+  erpListDataRowProps,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListTableElementStyle,
+  erpListTdCellToneStyle,
+  erpListThStyle,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+  ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
+import type { ErpListTheme, ErpListBodyCellTone } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
@@ -98,14 +128,21 @@ function formatAmount(value: number | null | undefined): string {
 function formatSubledgerCell(
   key: keyof SubledgerEntryRow,
   value: unknown,
-  dateFormat: string,
+  dateFormat: unknown,
 ): string {
   if (value === null || value === undefined || value === "") return "";
   if (key === "sno") return String(value);
   if (key === "date_document" || key === "due_date") {
-    const parsed = dayjs(value as string | number | Date | null | undefined);
-    if (!parsed.isValid()) return String(value);
-    return parsed.format(dateFormat);
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      value instanceof Date
+    ) {
+      const parsed = dayjs(value);
+      if (!parsed.isValid()) return String(value);
+      return parsed.format(String(dateFormat));
+    }
+    return String(value);
   }
   if (
     key === "debit_local_amount" ||
@@ -126,29 +163,78 @@ function formatDateYYYYMMDD(date: Date | null): string {
   return `${y}-${m}-${d}`;
 }
 
-const headerGridStyles = {
-  position: "sticky" as const,
-  top: 0,
-  zIndex: 100,
-  backgroundColor: "white",
-  fontWeight: 600,
-  color: "#105476",
+/** Same Geist + density as Air Export Booking list screens. */
+const V0_FONT_SANS = "'Geist', sans-serif";
+const v0RootTypographyShell = {
+  fontFamily: V0_FONT_SANS,
+  fontSize: 14,
+  lineHeight: 1.5,
+  WebkitFontSmoothing: "antialiased" as const,
+  MozOsxFontSmoothing: "grayscale" as const,
 };
 
-const readOnlyInputStyles = {
-  input: {
-    fontSize: "13px",
-    fontFamily: "Inter",
-    height: "36px",
-    backgroundColor: "var(--mantine-color-gray-0)",
-  },
+const v0MenuStyles = {
+  dropdown: { fontFamily: V0_FONT_SANS, fontSize: 14 },
 };
+
+const SUBLEDGER_FILTER_BORDER = "#e2e8f0";
+const SUBLEDGER_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#64748b",
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: SUBLEDGER_FILTER_BORDER,
+  },
+  dropdown: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: V0_FONT_SANS,
+    fontSize: 12,
+  },
+} as const;
+
+const subledgerV0MantineTheme = createTheme({
+  fontFamily: V0_FONT_SANS,
+  fontSizes: {
+    xs: rem(12),
+    sm: rem(14),
+    md: rem(16),
+    lg: rem(18),
+    xl: rem(20),
+  },
+});
+
+const SUBLEDGER_FILTER_SELECT_CLASSNAMES = {
+  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+  option: ERP_LIST_GEIST_ROOT_CLASS,
+};
+
+type SubledgerColumnKey = (typeof ENTRY_COLUMNS)[number]["key"];
+
+const buildDefaultSubledgerColumnVisibility = (): Record<SubledgerColumnKey, boolean> =>
+  Object.fromEntries(ENTRY_COLUMNS.map((c) => [c.key, true])) as Record<
+    SubledgerColumnKey,
+    boolean
+  >;
 
 type FilterFormValues = {
   fromDate: Date | null;
   toDate: Date | null;
   accountId: string | null;
-  accountCode: string | null; // derived from selected account (gl_account_code)
+  accountCode: string | null;
   location: string | null | undefined;
 };
 
@@ -160,6 +246,47 @@ const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   location: yup.string().nullable().optional(),
 });
 
+function subledgerColumnTone(key: keyof SubledgerEntryRow): ErpListBodyCellTone {
+  if (key === "date_document" || key === "due_date") return "muted";
+  if (
+    key === "debit_local_amount" ||
+    key === "credit_local_amount" ||
+    key === "amount" ||
+    key === "closing_balance"
+  ) {
+    return "numeric";
+  }
+  return "default";
+}
+
+function subledgerThTextAlign(
+  key: keyof SubledgerEntryRow,
+): "left" | "right" {
+  return subledgerColumnTone(key) === "numeric" ? "right" : "left";
+}
+
+function subledgerTdStyle(
+  theme: ErpListTheme,
+  key: keyof SubledgerEntryRow,
+): CSSProperties {
+  const tone = subledgerColumnTone(key);
+  const base = erpListTdCellToneStyle(theme, tone);
+  if (key === "narration") {
+    return {
+      ...base,
+      maxWidth: 280,
+      whiteSpace: "normal",
+      verticalAlign: "top",
+      color: theme.fg,
+      fontSize: 14,
+    };
+  }
+  if (tone === "default") {
+    return { ...base, color: theme.fg, fontSize: 14 };
+  }
+  return base;
+}
+
 export default function SubledgerEnquiry() {
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
   const [rows, setRows] = useState<SubledgerEntryRow[]>([]);
@@ -167,8 +294,19 @@ export default function SubledgerEnquiry() {
     opening_balance: number | null;
     closing_balance: number | null;
   } | null>(null);
+  const [resultTotal, setResultTotal] = useState<number | null>(null);
   const [isFetchingRows, setIsFetchingRows] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [showFilters, setShowFilters] = useState(true);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const [visibleColumns, setVisibleColumns] = useState<Record<SubledgerColumnKey, boolean>>(
+    () => buildDefaultSubledgerColumnVisibility(),
+  );
 
   const dateFormat = useDateFormat();
   const form = useForm<FilterFormValues>({
@@ -191,6 +329,73 @@ export default function SubledgerEnquiry() {
   const asStringError = (v: unknown): string | undefined =>
     typeof v === "string" ? v : undefined;
 
+  const border = "#e2e8f0";
+  const muted = "#64748b";
+  const fg = "#0f172a";
+  const primary = "#105476";
+  const pageBg = "#F0F4F8";
+  const cardBg = "#ffffff";
+  const erpTheme: ErpListTheme = useMemo(
+    () => ({
+      border,
+      muted,
+      fg,
+      primary,
+      headerBg: "#f8fafc",
+      pageBg,
+      cardBg,
+      fontSans: V0_FONT_SANS,
+    }),
+    [],
+  );
+
+  const visibleEntryColumns = useMemo(() => {
+    const v = ENTRY_COLUMNS.filter((c) => visibleColumns[c.key] !== false);
+    return v.length > 0 ? v : ENTRY_COLUMNS;
+  }, [visibleColumns]);
+
+  const filteredRows = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      ENTRY_COLUMNS.some((col) => {
+        const v = r[col.key];
+        if (v === null || v === undefined) return false;
+        return String(v).toLowerCase().includes(q);
+      }),
+    );
+  }, [rows, debouncedSearch]);
+
+  const pagedRows = useMemo(() => {
+    const start = pagination.pageIndex * pagination.pageSize;
+    return filteredRows.slice(start, start + pagination.pageSize);
+  }, [filteredRows, pagination.pageIndex, pagination.pageSize]);
+
+  const listTotalCount = resultTotal ?? rows.length;
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pagination.pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [filteredRows.length, pagination.pageSize, pagination.pageIndex]);
+
+  const columnToggleItems = useMemo(
+    () =>
+      ENTRY_COLUMNS.map((col) => ({
+        id: col.key,
+        label: col.label,
+        checked: visibleColumns[col.key] !== false,
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [col.key]: !prev[col.key],
+          })),
+      })),
+    [visibleColumns],
+  );
+
   const locationOptions = useMemo(() => {
     const branches = (user?.branches ?? []) as Array<{
       user_branch_id?: number;
@@ -202,14 +407,12 @@ export default function SubledgerEnquiry() {
 
     if (branches.length === 0) return [];
 
-    // Active country is derived from login context.
     const activeCountryId = user?.country?.country_id;
     const activeCountryIdStr =
       activeCountryId !== null && activeCountryId !== undefined
         ? String(activeCountryId)
         : null;
 
-    // Prefer filtering by country_id present on branch objects (if available).
     const activeBranches = activeCountryIdStr
       ? branches.filter((b) => {
           const branchCountryId = b.country?.country_id;
@@ -220,7 +423,6 @@ export default function SubledgerEnquiry() {
         })
       : [];
 
-    // Fallback: if branch objects don't include country info, show only default branch.
     const effectiveBranches =
       activeBranches.length > 0
         ? activeBranches
@@ -233,7 +435,6 @@ export default function SubledgerEnquiry() {
       }))
       .filter((o) => o.value !== "" && o.label !== "");
 
-    // Keep order stable and unique by value.
     const seen = new Set<string>();
     return list.filter((o) => {
       if (seen.has(o.value)) return false;
@@ -242,7 +443,7 @@ export default function SubledgerEnquiry() {
     });
   }, [user]);
 
-  const handleSearch = form.onSubmit(async (values) => {
+  const runSubledgerEnquiry = useCallback(async (values: FilterFormValues) => {
     setFetchError("");
     setIsFetchingRows(true);
 
@@ -265,6 +466,9 @@ export default function SubledgerEnquiry() {
 
       const list = Array.isArray(response?.data) ? response.data : [];
       setRows(list);
+      setResultTotal(
+        typeof response?.total === "number" ? response.total : list.length,
+      );
       setEnquirySummary({
         opening_balance:
           typeof response?.opening_balance === "number"
@@ -275,286 +479,516 @@ export default function SubledgerEnquiry() {
             ? response.closing_balance
             : null,
       });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
     } catch {
       setRows([]);
       setEnquirySummary(null);
+      setResultTotal(null);
       setFetchError("Unable to fetch subledger data. Please try again.");
     } finally {
       setIsFetchingRows(false);
     }
-  });
+  }, []);
+
+  const handleSearch = form.onSubmit(runSubledgerEnquiry);
+
+  const applySearch = () => {
+    const validation = form.validate();
+    if (validation.hasErrors) return;
+    void runSubledgerEnquiry(form.values);
+    setShowFilters(false);
+  };
+
+  const clearAllFilters = () => {
+    form.reset();
+    setSelectedAccount(null);
+    setRows([]);
+    setEnquirySummary(null);
+    setResultTotal(null);
+    setFetchError("");
+    setSearchQuery("");
+    setPagination({ pageIndex: 0, pageSize: 25 });
+  };
 
   const openingBalanceLabel =
     enquirySummary && typeof enquirySummary.opening_balance === "number"
       ? formatAmount(enquirySummary.opening_balance)
       : null;
 
+  const closingBalanceLabel =
+    enquirySummary && typeof enquirySummary.closing_balance === "number"
+      ? formatAmount(enquirySummary.closing_balance)
+      : null;
+
+  const openingBalanceLabelDisplay = openingBalanceLabel ?? "—";
+
   return (
-    <Box p="md">
-      <Group justify="space-between" mb="md" align="flex-end">
-        <Text fw={600} size="lg" style={{ fontFamily: "Inter" }}>
-          Subledger Enquiry
-        </Text>
-      </Group>
-
-      <form onSubmit={handleSearch}>
-        <Grid gutter="md" align="flex-start">
-        <Grid.Col span={{ base: 12, md: 3 }}>
-          <SingleDateInput
-            label="From"
-            value={form.values.fromDate}
-            onChange={(d) => form.setFieldValue("fromDate", d)}
-            error={asStringError(form.errors.fromDate)}
-            withAsterisk
-          />
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, md: 3 }}>
-          <SingleDateInput
-            label="To"
-            value={form.values.toDate}
-            onChange={(d) => form.setFieldValue("toDate", d)}
-            error={asStringError(form.errors.toDate)}
-            withAsterisk
-          />
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, md: 3 }}>
-          <SearchableSelect
-            label="Account"
-            apiEndpoint={URL.chartOfAccounts}
-            value={form.values.accountId}
-            dropdownZIndex={1100}
-            placeholder="Search by account name"
-            withAsterisk
-            minSearchLength={1}
-            searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
-            displayFormat={(item: Record<string, unknown>) => {
-              const id = String(item.id ?? "").trim();
-              const glName = String(item.gl_name ?? "").trim();
-              const gl = String(item.gl_account_code ?? "").trim();
-              const name = String(item.account_name ?? "").trim();
-              return {
-                value: id,
-                label: [name, gl, glName].filter(Boolean).join(" - "),
-              };
-            }}
-            displayValue={selectedAccount?.account_name ?? ""}
-            returnOriginalData
-            onChange={(value, _selectedData, originalData) => {
-              if (!value || !originalData) {
-                form.setFieldValue("accountId", null);
-                form.setFieldValue("accountCode", null);
-                setSelectedAccount(null);
-                return;
-              }
-
-              const nextGl = originalData.gl_account_code;
-              const nextSl = originalData.sl_code;
-              const nextName = originalData.account_name;
-
-              form.setFieldValue("accountId", value);
-              form.setFieldValue(
-                "accountCode",
-                nextGl !== undefined && nextGl !== null ? String(nextGl) : null,
-              );
-              setSelectedAccount({
-                id:
-                  originalData.id !== undefined && originalData.id !== null
-                    ? Number(originalData.id)
-                    : undefined,
-                gl_account_code:
-                  nextGl !== undefined && nextGl !== null
-                    ? String(nextGl)
-                    : undefined,
-                sl_code:
-                  nextSl !== undefined && nextSl !== null
-                    ? String(nextSl)
-                    : undefined,
-                account_name:
-                  nextName !== undefined && nextName !== null
-                    ? String(nextName)
-                    : undefined,
-              });
-            }}
-            error={asStringError(form.errors.accountId)}
-          />
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, md: 2 }}>
-          <Dropdown
-            label="Location"
-            placeholder={
-              locationOptions.length > 0 ? "Select location" : "No locations"
-            }
-            data={locationOptions}
-            value={form.values.location}
-            dropdownZIndex={1100}
-            searchable={false}
-            onChange={(value) => form.setFieldValue("location", value)}
-          />
-        </Grid.Col>
-
-        <Grid.Col span={{ md: 1 }}>
-          <Box pt={30}>
-            <Button
-              leftSection={
-                isFetchingRows ? (
-                  <Loader size={14} color="white" />
-                ) : (
-                  <IconSearch size={16} />
-                )
-              }
-              type="submit"
-              fullWidth
-              size="xs"
-              style={{ height: 32 }}
-            >
-              Search
-            </Button>
-          </Box>
-        </Grid.Col>
-      </Grid>
-      </form>
-
-      {/* Keep filter inputs aligned; show GL/SL under Account in a second row */}
-      {selectedAccount && (
-        <Grid gutter="md" mt={4}>
-          <Grid.Col span={{ md: 6 }} />
-          <Grid.Col span={{ md: 3 }}>
-            <Text size="12px" style={{ fontFamily: "Inter" }}>
-              GL: {selectedGlAccountCode || "—"}{" "}
-              <span style={{ margin: "0 8px" }}>|</span>
-              SL: {selectedSlCode || "—"}
-            </Text>
-          </Grid.Col>
-          <Grid.Col span={{ md: 3 }} />
-        </Grid>
-      )}
-
-      {fetchError && (
-        <Alert
-          mt="md"
-          color="red"
-          variant="light"
-          icon={<IconInfoCircle size={16} />}
-        >
-          {fetchError}
-        </Alert>
-      )}
-
-      <Box mt={"sm"}>
-        <ScrollArea type="scroll" offsetScrollbars>
-          <Box style={{ minWidth: 1100 }}>
-            {enquirySummary !== null && (
-              <Grid
-                w="100%"
-                gutter="xs"
-                mb={4}
-                style={{ flexWrap: "nowrap" }}
-              >
-                {ENTRY_COLUMNS.map((col) => {
-                  if (col.key === "amount") {
-                    const closingSpan =
-                      ENTRY_COLUMNS.find((c) => c.key === "closing_balance")
-                        ?.span ?? 0;
-                    return (
-                      <Grid.Col
-                        key={`ob-${col.key}`}
-                        span={col.span + closingSpan}
+    <MantineProvider theme={subledgerV0MantineTheme}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={{
+          ...erpListGeistRootTypography,
+          ...v0RootTypographyShell,
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <ERPListScreen
+          theme={erpTheme}
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconTable size={14} color={primary} />}
+                  value={listTotalCount}
+                  label="Total"
+                />
+                {/* <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCoin size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={openingBalanceLabelDisplay}
+                  label="Opening"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCoin size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={closingBalanceLabel ?? "—"}
+                  label="Closing"
+                /> */}
+              </>
+            ),
+            // secondary: selectedAccount ? (
+            //   <>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <IconBook2 size={16} color={muted} style={{ flexShrink: 0 }} />
+            //       <Text
+            //         size="xs"
+            //         fw={600}
+            //         c={fg}
+            //         style={{ fontFamily: erpTheme.fontSans }}
+            //         component="span"
+            //       >
+            //         GL: {selectedGlAccountCode || "—"}
+            //       </Text>
+            //     </Group>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <Text size="xs" c={muted} component="span">
+            //         SL
+            //       </Text>
+            //       <Text
+            //         size="xs"
+            //         fw={600}
+            //         c={fg}
+            //         style={{ fontFamily: erpTheme.fontSans }}
+            //         component="span"
+            //       >
+            //         {selectedSlCode || "—"}
+            //       </Text>
+            //     </Group>
+            //   </>
+            // ) : undefined,
+            actions: (
+              <>
+                <TextInput
+                  placeholder="Search…"
+                  leftSection={<IconSearch size={16} />}
+                  rightSection={
+                    searchQuery ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        aria-label="Clear search"
+                        onClick={() => setSearchQuery("")}
+                        style={{ cursor: "pointer" }}
                       >
-                        <Box
-                          style={{
-                            border: "1px solid #d0e2f2",
-                            backgroundColor: "#f2f7ff",
-                            borderRadius: 6,
-                            padding: "6px 8px",
-                            height: 30,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Text
-                            size="12px"
-                            fw={800}
-                            c="#0b3b5b"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            Opening Bal
-                          </Text>
-                          <Text
-                            size="12px"
-                            fw={800}
-                            c="#0b3b5b"
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            {openingBalanceLabel ?? "—"}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
-                    );
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null
                   }
-                  if (col.key === "closing_balance") return null;
-                  return (
-                    <Grid.Col key={`ob-${col.key}`} span={col.span}>
-                      <Box style={{ height: 18 }} />
-                    </Grid.Col>
-                  );
-                })}
-              </Grid>
-            )}
-
-            <Grid
-              w="100%"
-              py="sm"
-              style={{ ...headerGridStyles, flexWrap: "nowrap" }}
-            >
-              {ENTRY_COLUMNS.map((col) => (
-                <Grid.Col
-                  key={col.key}
-                  span={col.span}
-                  style={{ fontSize: "13px" }}
+                  w={260}
+                  size="xs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={{
+                    input: {
+                      fontFamily: erpTheme.fontSans,
+                      fontSize: 12,
+                      height: 32,
+                      borderColor: border,
+                    },
+                  }}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={v0MenuStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => setShowFilters((s) => !s)}
                 >
-                  {col.label}
-                </Grid.Col>
-              ))}
-            </Grid>
-
-            {rows.length === 0 && !isFetchingRows ? (
-              <Text
-                size="sm"
-                c="dimmed"
-                mt="sm"
-                style={{ fontFamily: "Inter" }}
-              >
-                No entries.
-              </Text>
-            ) : (
-              rows.map((row, index) => (
-                <Grid
-                  key={`${row.sno ?? index}-${row.document_no ?? index}`}
-                  w="100%"
-                  gutter="xs"
-                  mt={index !== 0 ? "sm" : 0}
-                  style={{ flexWrap: "nowrap" }}
-                >
-                  {ENTRY_COLUMNS.map((col) => (
-                    <Grid.Col key={col.key} span={col.span}>
-                      <TextInput
-                        value={formatSubledgerCell(col.key, row[col.key], dateFormat)}
-                        readOnly
-                        placeholder="—"
-                        styles={readOnlyInputStyles}
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+              </>
+            ),
+          }}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Refine by date range, account, or location",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applySearch}
+                applyLabel="Search"
+                applyLoading={isFetchingRows}
+                applyDisabled={isFetchingRows}
+              />
+            ),
+            children: (
+              <form onSubmit={handleSearch}>
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SingleDateInput
+                        label="From"
+                        value={form.values.fromDate}
+                        onChange={(d) => form.setFieldValue("fromDate", d)}
+                        error={asStringError(form.errors.fromDate)}
+                        withAsterisk
+                        size="xs"
+                        classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={{
+                          ...SUBLEDGER_FILTER_UNIFIED_STYLES,
+                          input: { ...SUBLEDGER_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                        }}
                       />
-                    </Grid.Col>
-                  ))}
+                    </Box>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SingleDateInput
+                        label="To"
+                        value={form.values.toDate}
+                        onChange={(d) => form.setFieldValue("toDate", d)}
+                        error={asStringError(form.errors.toDate)}
+                        withAsterisk
+                        size="xs"
+                        classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={{
+                          ...SUBLEDGER_FILTER_UNIFIED_STYLES,
+                          input: { ...SUBLEDGER_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SearchableSelect
+                        label="Account"
+                        apiEndpoint={URL.chartOfAccounts}
+                        value={form.values.accountId}
+                        dropdownZIndex={1100}
+                        placeholder="Search by account name"
+                        withAsterisk
+                        minSearchLength={1}
+                        size="xs"
+                        searchFields={["gl_account_code", "account_name", "id"]}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const id = String(item.id ?? "").trim();
+                          const gl = String(item.gl_account_code ?? "").trim();
+                          const name = String(item.account_name ?? "").trim();
+                          return {
+                            value: id,
+                            label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                          };
+                        }}
+                        displayValue={selectedAccount?.account_name ?? ""}
+                        returnOriginalData
+                        onChange={(value, _selectedData, originalData) => {
+                          if (!value || !originalData) {
+                            form.setFieldValue("accountId", null);
+                            form.setFieldValue("accountCode", null);
+                            setSelectedAccount(null);
+                            return;
+                          }
+
+                          const nextGl = originalData.gl_account_code;
+                          const nextSl = originalData.sl_code;
+                          const nextName = originalData.account_name;
+
+                          form.setFieldValue("accountId", value);
+                          form.setFieldValue(
+                            "accountCode",
+                            nextGl !== undefined && nextGl !== null
+                              ? String(nextGl)
+                              : null,
+                          );
+                          setSelectedAccount({
+                            id:
+                              originalData.id !== undefined && originalData.id !== null
+                                ? Number(originalData.id)
+                                : undefined,
+                            gl_account_code:
+                              nextGl !== undefined && nextGl !== null
+                                ? String(nextGl)
+                                : undefined,
+                            sl_code:
+                              nextSl !== undefined && nextSl !== null
+                                ? String(nextSl)
+                                : undefined,
+                            account_name:
+                              nextName !== undefined && nextName !== null
+                                ? String(nextName)
+                                : undefined,
+                          });
+                        }}
+                        error={asStringError(form.errors.accountId)}
+                        classNames={{
+                          input: ERP_LIST_GEIST_ROOT_CLASS,
+                          ...erpListGeistSelectClassNames,
+                          ...SUBLEDGER_FILTER_SELECT_CLASSNAMES,
+                        }}
+                        styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <Dropdown
+                        label="Location"
+                        placeholder={
+                          locationOptions.length > 0
+                            ? "Select location"
+                            : "No locations"
+                        }
+                        data={locationOptions}
+                        value={form.values.location}
+                        dropdownZIndex={1100}
+                        searchable={false}
+                        onChange={(value) => form.setFieldValue("location", value)}
+                        size="xs"
+                        classNames={erpListGeistSelectClassNames}
+                        styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
                 </Grid>
-              ))
-            )}
-          </Box>
-        </ScrollArea>
+              </form>
+            ),
+          }}
+          table={{
+            footer:
+              !isFetchingRows && !(rows.length === 0 && enquirySummary === null) ? (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={filteredRows.length}
+                  pageIndex={pagination.pageIndex}
+                  pageSize={pagination.pageSize}
+                  onPageIndexChange={(i) => setPagination((p) => ({ ...p, pageIndex: i }))}
+                  onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
+                  selectClassNames={SUBLEDGER_FILTER_SELECT_CLASSNAMES}
+                />
+              ) : undefined,
+            children: (
+              <>
+                {fetchError && (
+                  <Alert
+                    mb="md"
+                    color="red"
+                    variant="light"
+                    icon={<IconInfoCircle size={16} />}
+                    styles={{ root: { fontFamily: erpTheme.fontSans } }}
+                  >
+                    {fetchError}
+                  </Alert>
+                )}
+                {isFetchingRows ? (
+                  <ERPListTableLoading
+                    theme={erpTheme}
+                    message="Loading subledger entries…"
+                  />
+                ) : rows.length === 0 && enquirySummary === null ? (
+                  <ERPListTableEmpty
+                    theme={erpTheme}
+                    icon={<IconTable size={24} color={muted} />}
+                    title="No subledger data yet"
+                    hint="Open filters, choose an account and date range, then run Search"
+                  />
+                ) : (
+                  <Box
+                    style={{ minWidth: 1100, paddingBottom: 8 }}
+                    className={ERP_LIST_GEIST_ROOT_CLASS}
+                  >
+                    <table
+                      style={{
+                        ...erpListTableElementStyle(erpTheme),
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: 14,
+                        backgroundColor: cardBg,
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          {visibleEntryColumns.map((col) => (
+                            <th
+                              key={col.key}
+                              style={erpListThStyle(erpTheme, {
+                                textAlign: subledgerThTextAlign(col.key),
+                              })}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={Math.max(visibleEntryColumns.length, 1)}
+                              style={{
+                                padding: 60,
+                                textAlign: "center",
+                                borderBottom: `1px solid ${border}`,
+                              }}
+                            >
+                              <Stack align="center" gap="md">
+                                <Box
+                                  style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: "50%",
+                                    backgroundColor: ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconTable size={24} color={muted} />
+                                </Box>
+                                <Box>
+                                  <Text
+                                    fw={500}
+                                    c={fg}
+                                    style={{ fontFamily: erpTheme.fontSans }}
+                                  >
+                                    No subledger entries found
+                                  </Text>
+                                  <Text
+                                    size="sm"
+                                    c={muted}
+                                    mt={4}
+                                    style={{ fontFamily: erpTheme.fontSans }}
+                                  >
+                                    Try adjusting your search or filters
+                                  </Text>
+                                </Box>
+                              </Stack>
+                            </td>
+                          </tr>
+                        ) : filteredRows.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={Math.max(visibleEntryColumns.length, 1)}
+                              style={{
+                                padding: 60,
+                                textAlign: "center",
+                                borderBottom: `1px solid ${border}`,
+                              }}
+                            >
+                              <Stack align="center" gap="md">
+                                <Text fw={500} c={fg} style={{ fontFamily: erpTheme.fontSans }}>
+                                  No entries match your search
+                                </Text>
+                                <Text size="sm" c={muted} style={{ fontFamily: erpTheme.fontSans }}>
+                                  Clear the toolbar search or try different keywords
+                                </Text>
+                              </Stack>
+                            </td>
+                          </tr>
+                        ) : (
+                          pagedRows.map((row, index) => {
+                            const rowInteraction = erpListDataRowProps(erpTheme);
+                            return (
+                              <tr
+                                key={`${row.sno ?? index}-${row.document_no ?? index}`}
+                                style={rowInteraction.style}
+                                onMouseEnter={rowInteraction.onMouseEnter}
+                                onMouseLeave={rowInteraction.onMouseLeave}
+                              >
+                                {visibleEntryColumns.map((col) => (
+                                  <td
+                                    key={col.key}
+                                    style={subledgerTdStyle(erpTheme, col.key)}
+                                  >
+                                    {formatSubledgerCell(
+                                      col.key,
+                                      row[col.key],
+                                      dateFormat,
+                                    ) || "—"}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </Box>
+                )}
+              </>
+            ),
+          }}
+        />
       </Box>
-    </Box>
+    </MantineProvider>
   );
 }

@@ -10,10 +10,15 @@ import {
   ScrollArea,
   Loader,
   UnstyledButton,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconChevronRight,
   IconSearch,
+  IconPlane,
+  IconBell,
+  IconHelp,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -31,16 +36,14 @@ import { ToastNotification } from ".";
 
 function MainSectionHeader() {
   const title = useLayoutStore((state) => state.title);
+  const activeSubNav = useLayoutStore((state) => state.activeSubNav);
   const [profileDrawerOpened, setProfileDrawerOpened] = useState(false);
   const navigate = useNavigate();
 
   const user = useAuthStore((state) => state.user);
-  // const logout = useAuthStore((state) => state.logout);
-
   const fullName = user?.full_name || "User";
-  const email = user?.email || "";
 
-  console.log("MainSectionHeader render:", { user, fullName, email });
+  console.log("MainSectionHeader render:", { user, fullName });
 
   const [searchText, setSearchText] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -367,40 +370,62 @@ function MainSectionHeader() {
     setProfileDrawerOpened(true);
   };
 
-  const handleProfileDrawerClose = () => {
-    setProfileDrawerOpened(false);
-  };
+  // const headerPrimary = "#105476";
+  const headerPrimary = "#105476";
+  const headerMuted = "#64748b";
+  const headerFg = "#0f172a";
+
+  const avatarInitials = useMemo(() => {
+    const parts = fullName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+  }, [fullName]);
 
   return (
     <>
       <Flex
         justify="space-between"
         align="center"
-        bg="white"
-        mih={30}
-        style={{ padding: "0 24px" }}
-        //   style={{ borderBottom: "1px solid #f0f0f0" }}
+        wrap="nowrap"
+        gap="md"
+        style={{
+          padding: "0 24px",
+          minHeight: "56px",
+          borderBottom: "1px solid #e2e8f0",
+          backgroundColor: "rgba(255, 255, 255, 0.97)",
+          backdropFilter: "blur(8px)",
+        }}
       >
-        <Box
-          style={{
-            borderLeft: "3px solid #14597A", // Unique accent bar
-            paddingLeft: 12,
-          }}
-        >
-          <Text
-            fw={700}
-            fz={22}
+        {/* Brand + context (v0-style left cluster) */}
+        <Group gap={12} wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Flex
+            justify="center"
+            align="center"
             style={{
-              color: "#2C3E50",
-              letterSpacing: 0.5,
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: headerPrimary,
+              flexShrink: 0,
             }}
           >
-            {title}
-          </Text>
-        </Box>
+            <IconPlane size={18} color="#fff" />
+          </Flex>
+          <Box style={{ minWidth: 0 }}>
+            <Text fw={700} size="sm" c={headerFg} lh={1.2} lineClamp={1}>
+              {title.trim() || "\u00A0"}
+            </Text>
+            {activeSubNav && activeSubNav !== title.trim() ? (
+              <Text size={10} c={headerMuted} lh={1.2} lineClamp={1}>
+                {activeSubNav}
+              </Text>
+            ) : null}
+          </Box>
+        </Group>
 
-        {/* Center section: global search */}
-        <Box style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 10px" }}>
+        {/* Center search (same global search behavior, v0-style field) */}
+        <Box style={{ flex: 1, maxWidth: 440, minWidth: 0 }}>
           <Popover
             opened={searchOpen}
             onChange={setSearchOpen}
@@ -412,12 +437,9 @@ function MainSectionHeader() {
               <TextInput
                 value={searchText}
                 onChange={(e) => setSearchText(e.currentTarget.value)}
-                placeholder="Search…"
+                placeholder="Search"
                 w="100%"
-                maw={420}
-                radius="xl"
-                size="sm"
-                leftSection={<IconSearch size={14} />}
+                leftSection={<IconSearch size={16} color={headerMuted} />}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -427,33 +449,36 @@ function MainSectionHeader() {
                 }}
                 rightSectionPointerEvents="all"
                 rightSection={
-                  <ActionIcon
-                    variant="subtle"
-                    color="blue"
-                    onClick={() => void runGlobalSearch(trimmedSearch)}
-                    disabled={!canSearch}
-                    aria-label="Global search"
-                  >
-                    {searchLoading ? <Loader size={16} /> : <IconSearch size={18} />}
-                  </ActionIcon>
+                  <Group gap={0} wrap="nowrap">
+                    {searchText ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearchText("")}
+                        aria-label="Clear search"
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    ) : null}
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      onClick={() => void runGlobalSearch(trimmedSearch)}
+                      disabled={!canSearch}
+                      aria-label="Global search"
+                    >
+                      {searchLoading ? <Loader size={16} /> : <IconSearch size={18} />}
+                    </ActionIcon>
+                  </Group>
                 }
                 styles={{
                   input: {
                     height: 36,
-                    fontSize: 13,
-                    backgroundColor: "#f8fafc",
-                    border: "1px solid #e5e7eb",
-                    transition: "box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease",
-                    boxShadow: "0 1px 2px rgba(16, 24, 40, 0.06)",
-                    outline: "none",
-                    "&:focus, &:focus-within": {
-                      borderColor: "#105476",
-                      boxShadow: "0 0 0 4px rgba(16, 84, 118, 0.12)",
-                      backgroundColor: "#ffffff",
-                    },
-                  },
-                  section: {
-                    color: "#6b7280",
+                    borderRadius: 8,
+                    border: "none",
+                    backgroundColor: "#f1f5f9",
+                    fontSize: 14,
+                    color: headerFg,
                   },
                 }}
               />
@@ -547,40 +572,45 @@ function MainSectionHeader() {
           </Popover>
         </Box>
 
-        {/* Right section: user info */}
-        <UnstyledButton onClick={handleProfileClick} px={0}>
-          <Group gap="sm" align="center" wrap="nowrap">
-            <Box style={{ lineHeight: 1 }}>
-              <Text size="sm" ta="right" c="#212629ff" fw={500}>
-                {fullName}
-              </Text>
-              <Text size="xs" c="dimmed">
-                {email}
-              </Text>
-            </Box>
-            <Flex
-              justify="center"
-              align="center"
-              fw={400}
+        {/* Right: v0-style actions + profile */}
+        <Group gap={8} align="center" wrap="nowrap" style={{ flexShrink: 0 }}>
+          {/* <Tooltip label="Notifications">
+            <ActionIcon variant="subtle" color="gray" size="md" aria-label="Notifications">
+              <IconBell size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Help">
+            <ActionIcon variant="subtle" color="gray" size="md" aria-label="Help">
+              <IconHelp size={18} />
+            </ActionIcon>
+          </Tooltip> */}
+          <UnstyledButton
+            onClick={handleProfileClick}
+            aria-label="Open profile menu"
+            style={{ lineHeight: 0 }}
+          >
+            <Box
               style={{
-                fontFamily: "Outfit",
-                width: "36px",
-                height: "36px",
-                color: "white",
-                padding: "4px",
+                width: 32,
+                height: 32,
                 borderRadius: "50%",
-                backgroundColor: "#105476",
+                backgroundColor: `${headerPrimary}1a`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              {fullName.slice(0, 1)}
-            </Flex>
-          </Group>
-        </UnstyledButton>
+              <Text size="xs" fw={600} c={headerPrimary}>
+                {avatarInitials}
+              </Text>
+            </Box>
+          </UnstyledButton>
+        </Group>
       </Flex>
 
       <ProfileDrawer
         opened={profileDrawerOpened}
-        onClose={handleProfileDrawerClose}
+        onClose={() => setProfileDrawerOpened(false)}
       />
     </>
   );

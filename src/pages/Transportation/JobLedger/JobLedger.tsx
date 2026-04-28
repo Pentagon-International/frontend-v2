@@ -426,10 +426,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
+          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
+          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
         },
       },
       {
@@ -443,10 +443,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
+          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
+          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
         },
       },
       {
@@ -460,10 +460,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
+          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
+          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
         },
       },
       {
@@ -477,10 +477,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
+          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
+          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
         },
       },
       {
@@ -494,10 +494,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "4px 14px" },
+          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#FBFBFB", padding: "6px 16px" },
+          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
         },
       },
     ],
@@ -543,7 +543,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         padding: "4px 8px",
         fontSize: "14px",
         fontFamily: "Inter",
-        color: "#333740",
+        color: "#334155",
         backgroundColor: "#ffffff",
       },
     },
@@ -558,8 +558,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         padding: "6px 12px",
         fontSize: "14px",
         fontFamily: "Inter",
-        color: "#444955",
-        backgroundColor: "#FBFBFB",
+        color: "#1E293B",
+        backgroundColor: "#F8FAFC",
         borderBottom: "1px solid #F3F3F3",
         top: 0,
         zIndex: 3,
@@ -646,7 +646,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               <Text
                 size="sm"
                 fw={600}
-                c="#000000"
+                c="#1E293B"
                 style={{ fontFamily: "Inter", fontSize: "14px" }}
               >
                 Filter
@@ -940,7 +940,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               <Text
                 size="sm"
                 fw={600}
-                c="#000000"
+                c="#1E293B"
                 style={{ fontFamily: "Inter", fontSize: "14px" }}
               >
                 Filter

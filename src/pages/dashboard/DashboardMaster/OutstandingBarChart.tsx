@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, Group, Text, Button, Box } from "@mantine/core";
+import { Box } from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 
 type MetricType = "outstanding" | "overdue";
@@ -29,8 +29,6 @@ interface OutstandingBarChartProps {
   isLoadingOutstandingChart: boolean;
 
   // Handlers
-  handleOutstandingViewAll: () => void;
-  handleBack: () => void;
   handleBarClick: (params: any) => void;
 }
 
@@ -40,8 +38,6 @@ const OutstandingBarChart = ({
   locationData,
   salespersonData,
   isLoadingOutstandingChart,
-  handleOutstandingViewAll,
-  handleBack,
   handleBarClick,
 }: OutstandingBarChartProps) => {
   // Build bar chart data based on drillLevel
@@ -113,57 +109,21 @@ const OutstandingBarChart = ({
   return (
     <Box
       style={{
-        border: "1px solid #F7F7F7",
-        borderRadius: "8px",
-        padding: "16px",
-        height: "100%",
+        flex: 1,
         display: "flex",
         flexDirection: "column",
+        minHeight: 0,
       }}
     >
-      <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
-        <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Outstanding vs Overdue
-        </Text>
-
-        <Text
-          size="sm"
-          c="#105476"
-          style={{
-            textDecoration: "underline",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
-          onClick={handleOutstandingViewAll}
-        >
-          View All
-        </Text>
-      </Group>
-
-      <Box
-        style={{
-          flex: 1,
-          padding: "8px",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
-        <BarChart
-          data={barChartData}
-          type="outstanding-overdue"
-          height={350}
-          isLoading={isLoadingOutstandingChart}
-          onBarClick={handleBarClickEvent}
-          showLegend={true}
-          legendPosition="bottom"
-        />
-      </Box>
+      <BarChart
+        data={barChartData}
+        type="outstanding-overdue"
+        height={350}
+        isLoading={isLoadingOutstandingChart}
+        onBarClick={handleBarClickEvent}
+        showLegend={true}
+        legendPosition="bottom"
+      />
     </Box>
   );
 };

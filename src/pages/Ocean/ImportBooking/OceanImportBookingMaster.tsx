@@ -1,25 +1,17 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
-import {
   ActionIcon,
   Box,
   Group,
   Button,
   Text,
-  Card,
-  Center,
-  Loader,
   Stack,
   Grid,
   Menu,
   Modal,
-  Badge,
   Tooltip,
   Select,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconFilter,
@@ -28,15 +20,41 @@ import {
   IconEdit,
   IconX,
   IconSearch,
+  IconPackage,
+  IconCircleCheck,
+  IconClock,
+  IconStack2,
+  IconScale,
+  IconCircleX,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "./../../../api/serverUrls";
 import {
-  Dropdown,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
+  BookingMasterListTable,
+  DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  getBookingRowPW,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  ERPListTableLoading,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  erpToolbarSelectStyles,
+  DEFAULT_ERP_LIST_THEME,
+  type BookingMasterTableRowModel,
+  type BookingMasterVisibleColumns,
+  type ErpListTheme,
 } from "./../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import { useForm } from "@mantine/form";
@@ -44,12 +62,44 @@ import { apiCallProtected } from "./../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "OCEAN_IMPORT_BOOKING_MASTER";
+
+const OCEAN_IMPORT_VISIBLE_COLUMNS: BookingMasterVisibleColumns = {
+  ...DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  service: true,
+};
+
+const OCEAN_IMPORT_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    fontWeight: 500,
+    color: DEFAULT_ERP_LIST_THEME.muted,
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: DEFAULT_ERP_LIST_THEME.border,
+  },
+  dropdown: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+} as const;
 
 // Type definitions
 type ImportShipmentData = {
@@ -99,10 +149,21 @@ type ImportShipmentData = {
   created_by_name?: string;
   is_direct?: boolean;
   is_coload?: boolean;
+  mawb_no?: string | null;
+  carrier_booking_no?: string | null;
+  origin_code?: string | null;
+  destination_code?: string | null;
+  atd?: string | null;
+  ata?: string | null;
+  actual_pickup_date?: string | null;
+  actual_delivery_date?: string | null;
+  events?: Array<Record<string, unknown>>;
+  sno?: number;
   cargo_details?: Array<{
     id: number;
     container_type_name: string;
     no_of_containers: number;
+    no_of_packages?: number;
     gross_weight: string;
   }>;
   routing_details?: Array<{
@@ -123,6 +184,45 @@ type ImportShipmentData = {
     no_of_unit: number;
     sell_amount_total: number | null;
   }>;
+  last_milestone?: string | null;
+  last_milestone_date?: string | null;
+  last_milestone_time?: string | null;
+  route_milestones?: Array<{
+    code: string;
+    label: string;
+    date?: string | null;
+    time?: string | null;
+    active?: boolean;
+    note?: string;
+    source?: unknown;
+  }>;
+};
+
+/** Matches `summary` on `customerServiceShipmentFilter` for ocean import (totals are filter-scoped). */
+type OceanImportShipmentListSummary = {
+  total_shipments?: number;
+  status_counts?: {
+    booked?: number;
+    received?: number;
+    generated?: number;
+    closed?: number;
+    cancel?: number;
+    pending?: number;
+  };
+  totals?: {
+    pcs?: number;
+    weight_kg?: number;
+  };
+};
+
+type OceanImportListQueryResult = {
+  data: ImportShipmentData[];
+  total: number;
+  summary?: OceanImportShipmentListSummary;
+  count: number;
+  index: number;
+  limit: number;
+  total_pagination: number;
 };
 
 type FilterState = {
@@ -148,6 +248,76 @@ type PersistedListFilters = {
   pageIndex: number;
 };
 
+function oceanImportRowToTableModel(
+  r: ImportShipmentData,
+  index: number,
+  pageIndex: number,
+  pageSize: number,
+): BookingMasterTableRowModel<ImportShipmentData> {
+  const pw = getBookingRowPW(r.cargo_details);
+  const mawb =
+    (r.mawb_no && String(r.mawb_no).trim()) ||
+    (r.carrier_booking_no && String(r.carrier_booking_no).trim()) ||
+    "";
+  const v = r.voyage_no?.trim();
+  const vessel = r.vessel_name?.trim();
+  const flight = [vessel, v].filter(Boolean).join(" · ") || r.routing_details?.[0]?.flight_no?.trim() || "";
+  return {
+    raw: r,
+    id: r.id,
+    sno: typeof r.sno === "number" ? r.sno : pageIndex * pageSize + index + 1,
+    milestone: {
+      status: r.status,
+      events: r.events ?? null,
+      actual_delivery_date: r.actual_delivery_date ?? null,
+      ata: r.ata ?? null,
+      atd: r.atd ?? null,
+      etd: r.etd ?? null,
+      eta: r.eta ?? null,
+      actual_pickup_date: r.actual_pickup_date ?? null,
+      mawb_no: r.mawb_no ?? null,
+      carrier_booking_no: r.carrier_booking_no ?? null,
+      origin_name: r.origin_name,
+      origin_code_read: r.origin_code_read,
+      origin_code: r.origin_code ?? null,
+      destination_name: r.destination_name,
+      destination_code_read: r.destination_code_read,
+      destination_code: r.destination_code ?? null,
+      date: r.date,
+      last_milestone: r.last_milestone ?? null,
+      last_milestone_date: r.last_milestone_date ?? null,
+      last_milestone_time: r.last_milestone_time ?? null,
+      route_milestones: r.route_milestones,
+    },
+    shipment_code: r.shipment_code,
+    enquiry_id: r.enquiry_id,
+    date: r.date,
+    customer_name: r.customer_name,
+    originCode: r.origin_code_read || r.origin_code || "",
+    destCode: r.destination_code_read || r.destination_code || "",
+    service: r.service,
+    status: r.status,
+    mawb,
+    flight,
+    pieces: pw.pieces,
+    weight: pw.weight,
+    customer_service_name: r.customer_service_name,
+  };
+}
+
+/** Ensure filter API milestone fields are passed through to the list table and drawer. */
+function normalizeOceanImportListMilestonesFromApi(
+  r: ImportShipmentData,
+): ImportShipmentData {
+  return {
+    ...r,
+    last_milestone: r.last_milestone ?? null,
+    last_milestone_date: r.last_milestone_date ?? null,
+    last_milestone_time: r.last_milestone_time ?? null,
+    route_milestones: Array.isArray(r.route_milestones) ? r.route_milestones : undefined,
+  };
+}
+
 function OceanImportBookingMaster() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -160,7 +330,6 @@ function OceanImportBookingMaster() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
-  const dateFormat = useDateFormat();
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
 
   const [isRestoring, setIsRestoring] = useState(true);
@@ -171,6 +340,10 @@ function OceanImportBookingMaster() {
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
   const [pageSize, setPageSize] = useState(25); // Default page size
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [visibleColumns, setVisibleColumns] = useState<BookingMasterVisibleColumns>(
+    OCEAN_IMPORT_VISIBLE_COLUMNS,
+  );
 
   // Display name states for filter fields
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
@@ -182,19 +355,6 @@ function OceanImportBookingMaster() {
   const [destinationDisplayName, setDestinationDisplayName] = useState<
     string | null
   >(null);
-
-  // Map booking status to badge label and color
-  const getStatusBadge = (statusRaw: string | undefined | null) => {
-    const statusUpper = (statusRaw || "").toUpperCase();
-    const label = statusUpper || "GENERATED";
-    let color: string = "#105476";
-    if (label === "BOOKED") color = "green";
-    else if (label === "GENERATED") color = "#105476";
-    else if (label === "RECEIVED") color = "blue";
-    else if (label === "CANCEL") color = "red";
-    else color = "gray";
-    return { label, color } as const;
-  };
 
   const [cancelConfirmRow, setCancelConfirmRow] = useState<ImportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -267,6 +427,7 @@ function OceanImportBookingMaster() {
   ): Record<string, string> => {
     const extra: Record<string, string> = {};
     if (filtersApplied) Object.assign(extra, buildFilterPayload());
+    if (statusFilter !== "all") extra.status = statusFilter;
     const trimmed = searchValue.trim();
     if (trimmed) extra.search = trimmed;
     return extra;
@@ -278,7 +439,7 @@ function OceanImportBookingMaster() {
     isFetching,
     isError,
     refetch: refetchImportShipments,
-  } = useQuery({
+  } = useQuery<OceanImportListQueryResult>({
     queryKey: [
       "ocean-import-booking/filter/",
       pageIndex,
@@ -286,9 +447,10 @@ function OceanImportBookingMaster() {
       filtersApplied,
       filtersApplied ? JSON.stringify(filterForm.values) : "-",
       debouncedSearch,
+      statusFilter,
     ],
     enabled: !isRestoring && searchQuery === debouncedSearch,
-    queryFn: async () => {
+    queryFn: async (): Promise<OceanImportListQueryResult> => {
       try {
         const offset = pageIndex * pageSize;
         const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
@@ -302,29 +464,57 @@ function OceanImportBookingMaster() {
         })) as Record<string, unknown>;
 
         if (response && typeof response === "object") {
-          if (typeof response.total === "number") {
-            setTotalRecords(response.total);
-          }
           let data: ImportShipmentData[] = [];
           if (Array.isArray(response.data)) {
-            data = response.data as ImportShipmentData[];
+            data = (response.data as ImportShipmentData[]).map(
+              normalizeOceanImportListMilestonesFromApi,
+            );
           } else if (Array.isArray(response.results)) {
-            data = response.results as ImportShipmentData[];
+            data = (response.results as ImportShipmentData[]).map(
+              normalizeOceanImportListMilestonesFromApi,
+            );
           } else if (Array.isArray(response.result)) {
-            data = response.result as ImportShipmentData[];
+            data = (response.result as ImportShipmentData[]).map(
+              normalizeOceanImportListMilestonesFromApi,
+            );
           }
+          const total = getBookingShipmentFilterListTotal(
+            response,
+            data,
+            offset,
+          );
+          setTotalRecords(total);
+          const countRaw = response.count;
+          const count =
+            typeof countRaw === "number" && !Number.isNaN(countRaw)
+              ? countRaw
+              : data.length;
+          const totalPaginationRaw = response.total_pagination;
+          const totalPagination =
+            typeof totalPaginationRaw === "number" &&
+            !Number.isNaN(totalPaginationRaw)
+              ? totalPaginationRaw
+              : 0;
+          const rawSummary = response.summary;
+          const summary: OceanImportShipmentListSummary | undefined =
+            rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+              ? (rawSummary as OceanImportShipmentListSummary)
+              : undefined;
           return {
             data,
-            total: (response.total as number) || 0,
-            count: (response.count as number) || data.length,
+            total,
+            summary,
+            count,
             index: (response.index as number) ?? pageIndex,
             limit: (response.limit as number) ?? pageSize,
-            total_pagination: (response.total_pagination as number) || 0,
+            total_pagination: totalPagination,
           };
         }
+        setTotalRecords(0);
         return {
           data: [],
           total: 0,
+          summary: undefined,
           count: 0,
           index: pageIndex,
           limit: pageSize,
@@ -332,9 +522,11 @@ function OceanImportBookingMaster() {
         };
       } catch (error) {
         console.error("❌ Error fetching ocean import booking:", error);
+        setTotalRecords(0);
         return {
           data: [],
           total: 0,
+          summary: undefined,
           count: 0,
           index: pageIndex,
           limit: pageSize,
@@ -348,7 +540,80 @@ function OceanImportBookingMaster() {
     refetchOnMount: true,
   });
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pageIndex > maxPageIndex) {
+      setPageIndex(maxPageIndex);
+    }
+  }, [totalRecords, pageSize, pageIndex]);
+
   const displayData = importShipmentsResponse?.data ?? [];
+
+  const tableRowModels = useMemo(
+    () =>
+      displayData.map((r, i) => oceanImportRowToTableModel(r, i, pageIndex, pageSize)),
+    [displayData, pageIndex, pageSize],
+  );
+
+  const oceanImportStats = useMemo(() => {
+    const rows = displayData;
+    const fromRows = () => {
+      let totalPieces = 0;
+      let totalWeight = 0;
+      rows.forEach((r) => {
+        const pw = getBookingRowPW(r.cargo_details);
+        totalPieces += pw.pieces;
+        totalWeight += pw.weight;
+      });
+      return { totalPieces, totalWeight };
+    };
+
+    const summary = importShipmentsResponse?.summary;
+    if (summary) {
+      const fallback = fromRows();
+      return {
+        total: summary.total_shipments ?? totalRecords,
+        booked: summary.status_counts?.booked ?? 0,
+        received: summary.status_counts?.received ?? 0,
+        generated: summary.status_counts?.generated ?? 0,
+        canceled: summary.status_counts?.cancel ?? 0,
+        totalPieces: summary.totals?.pcs ?? fallback.totalPieces,
+        totalWeight: summary.totals?.weight_kg ?? fallback.totalWeight,
+      };
+    }
+
+    const st = (s: string | undefined) => (s || "").toUpperCase();
+    const { totalPieces, totalWeight } = fromRows();
+    return {
+      total: totalRecords,
+      booked: rows.filter((r) => st(r.status) === "BOOKED").length,
+      received: rows.filter((r) => st(r.status) === "RECEIVED").length,
+      generated: rows.filter((r) => st(r.status) === "GENERATED").length,
+      canceled: rows.filter(
+        (r) => st(r.status) === "CANCEL" || st(r.status) === "CANCELED" || st(r.status) === "CANCELLED",
+      ).length,
+      totalPieces,
+      totalWeight,
+    };
+  }, [displayData, importShipmentsResponse?.summary, totalRecords]);
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof BookingMasterVisibleColumns)[]).map(
+        (key) => ({
+          id: String(key),
+          label: String(key),
+          checked: Boolean(visibleColumns[key]),
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
+    [visibleColumns],
+  );
 
   const [isApplyingFilters, setIsApplyingFilters] = useState(false);
 
@@ -571,18 +836,6 @@ function OceanImportBookingMaster() {
     }
   };
 
-  // Pagination handlers
-  const handlePageChange = (page: number) => {
-    // PaginationBar uses 1-based page numbers, convert to 0-based index
-    const newIndex = page - 1;
-    setPageIndex(newIndex);
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setPageIndex(0); // Reset to first page when page size changes
-  };
-
   const handleConfirmCancel = async () => {
     if (!cancelConfirmRow) return;
     setIsCancelling(true);
@@ -603,452 +856,283 @@ function OceanImportBookingMaster() {
     }
   };
 
-  const columns = useMemo<MRT_ColumnDef<ImportShipmentData>[]>(
-    () => [
-      {
-        accessorKey: "shipment_code",
-        header: "Booking ID",
-        size: 120,
-      },
-      {
-        accessorKey: "enquiry_id",
-        header: "Enquiry ID",
-        size: 150,
-        Cell: ({ cell }) => {
-          const v = cell.getValue<string | null | undefined>();
-          return v != null && String(v) !== "" ? String(v) : "-";
-        },
-      },
-      {
-        accessorKey: "date",
-        header: "Date",
-        size: 120,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.date
-              ? dayjs(row.original.date).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "service",
-        header: "Service",
-        size: 100,
-      },
-      {
-        accessorKey: "customer_name",
-        header: "Customer Name",
-        size: 150,
-      },
-      {
-        accessorKey: "origin_name",
-        header: "Origin",
-        size: 150,
-      },
-      {
-        accessorKey: "destination_name",
-        header: "Destination",
-        size: 150,
-      },
-      {
-        accessorKey: "customer_service_name",
-        header: "Customer Service",
-        size: 150,
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        size: 140,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          const { label, color } = getStatusBadge(value ?? undefined);
-          return (
-            <Badge
-              size="sm"
-              variant="light"
-              color={color}
-              styles={{
-                root: {
-                  textTransform: "none",
-                  minWidth: "fit-content",
-                  whiteSpace: "nowrap",
-                },
-              }}
+  const renderRowActions = useCallback(
+    (row: ImportShipmentData) => {
+      const statusUpper = (row.status ?? "").toUpperCase();
+      const isCancel = statusUpper === "CANCEL";
+      const canCancel = statusUpper !== "GENERATED" && !isCancel;
+      const isBooked = statusUpper === "BOOKED";
+      return (
+        <Menu shadow="md" width={140}>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray">
+              <IconDotsVertical size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Tooltip
+              label="Edit disabled because booking is cancelled"
+              disabled={!isCancel}
             >
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 80,
-        Cell: ({ row }) => {
-          const statusUpper = (row.original.status ?? "").toUpperCase();
-          const isCancel = statusUpper === "CANCEL";
-          const canCancel = statusUpper !== "GENERATED" && !isCancel;
-          const isBooked = statusUpper === "BOOKED";
-          return (
-            <Menu shadow="md" width={140}>
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Tooltip
-                  label="Edit disabled because booking is cancelled"
-                  disabled={!isCancel}
+              <Menu.Item
+                leftSection={<IconEdit size={14} />}
+                disabled={isCancel}
+                onClick={() => {
+                  if (!isCancel) {
+                    navigate(`./edit`, {
+                      state: { job: row },
+                    });
+                  }
+                }}
+              >
+                Edit
+              </Menu.Item>
+            </Tooltip>
+            {isBooked && (
+              <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => {}}>
+                Create Job
+              </Menu.Item>
+            )}
+            {canCancel && (
+              <Tooltip
+                label="This booking already has a job. If required, you can cancel the job."
+                disabled={statusUpper !== "GENERATED"}
+              >
+                <Menu.Item
+                  leftSection={<IconX size={14} />}
+                  color="red"
+                  disabled={!canCancel}
+                  onClick={() => {
+                    if (canCancel) setCancelConfirmRow(row);
+                  }}
                 >
-                  <Menu.Item
-                    leftSection={<IconEdit size={14} />}
-                    disabled={isCancel}
-                    onClick={() => {
-                      if (!isCancel) {
-                        navigate(`./edit`, {
-                          state: { job: row.original },
-                        });
-                      }
-                    }}
-                  >
-                    Edit
-                  </Menu.Item>
-                </Tooltip>
-                {isBooked && (
-                  <Menu.Item
-                    leftSection={<IconPlus size={14} />}
-                    onClick={() => {
-                      // const { id: _ignoredId, ...jobWithoutId } =
-                      //   row.original as unknown as Record<string, unknown>;
-                      // navigate("/SeaExport/import-job/create", {
-                      //   state: { job: jobWithoutId },
-                      // });
-                    }}
-                  >
-                    Create Job
-                  </Menu.Item>
-                )}
-                {canCancel && (
-                  <Tooltip
-                    label="This booking already has a job. If required, you can cancel the job."
-                    disabled={statusUpper !== "GENERATED"}
-                  >
-                    <Menu.Item
-                      leftSection={<IconX size={14} />}
-                      color="red"
-                      disabled={!canCancel}
-                      onClick={() => {
-                        if (canCancel) setCancelConfirmRow(row.original);
-                      }}
-                    >
-                      Cancel
-                    </Menu.Item>
-                  </Tooltip>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [navigate, dateFormat]
+                  Cancel
+                </Menu.Item>
+              </Tooltip>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+      );
+    },
+    [navigate],
   );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false, // Disable built-in pagination - using server-side pagination
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "30px",
-          zIndex: 2,
-          borderLeft: "1px solid #F3F3F3",
-          boxShadow: "1px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles = {};
-      if (column.id === "actions") {
-        extraStyles = {
-          position: "sticky",
-          right: 0,
-          minWidth: "80px",
-          zIndex: 2,
-          backgroundColor: "#FBFBFB",
-          boxShadow: "0px -2px 4px 0px #00000040",
-        };
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-    renderEmptyRowsFallback: () => (
-      <tr>
-        <td colSpan={columns.length}>
-          <Center py="xl">
-            <Stack align="center" gap="md">
-              <Text c="dimmed" size="lg">
-                No data to display
-              </Text>
-            </Stack>
-          </Center>
-        </td>
-      </tr>
-    ),
-  });
+  const border = DEFAULT_ERP_LIST_THEME.border;
+  const muted = DEFAULT_ERP_LIST_THEME.muted;
+  const fg = DEFAULT_ERP_LIST_THEME.fg;
+  const primary = DEFAULT_ERP_LIST_THEME.primary;
+  const bg = DEFAULT_ERP_LIST_THEME.headerBg;
+  const pageBg = DEFAULT_ERP_LIST_THEME.pageBg;
+  const cardBg = DEFAULT_ERP_LIST_THEME.cardBg;
+
+  const erpTheme: ErpListTheme = {
+    border,
+    muted,
+    fg,
+    primary,
+    headerBg: bg,
+    pageBg,
+    cardBg,
+    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+  };
 
   return (
-    <>
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
       {showMasterTable && (
-        <Card
-          shadow="sm"
-          pt="md"
-          pb="sm"
-          px="lg"
-          radius="md"
-          withBorder
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex: 1,
-          }}
-        >
-          <Box mb="md">
-            <Group justify="space-between" align="center">
-              <Text
-                size="md"
-                fw={600}
-                c={"#444955"}
-                style={{ fontFamily: "Inter", fontSize: "16px" }}
-              >
-                Ocean Import Booking Lists
-              </Text>
-
-              <Group gap="xs" wrap="nowrap">
+        <ERPListScreen
+          theme={erpTheme}
+          toolbar={{
+            leading: (
+              <>
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color={primary} />}
+                  value={oceanImportStats.total}
+                  label="Total"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleCheck size={14} color="#059669" />}
+                  iconBackground="#d1fae5"
+                  iconColor="#059669"
+                  value={oceanImportStats.booked}
+                  label="Booked"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconPackage size={14} color="#105476" />}
+                  iconBackground="#dbeafe"
+                  iconColor="#105476"
+                  value={oceanImportStats.received}
+                  label="Received"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={oceanImportStats.generated}
+                  label="Generated"
+                />
+                <ERPListStatPill
+                  theme={erpTheme}
+                  icon={<IconCircleX size={14} color="#dc2626" />}
+                  iconBackground="#fee2e2"
+                  iconColor="#dc2626"
+                  value={oceanImportStats.canceled}
+                  label="Canceled"
+                />
+              </>
+            ),
+            secondary: (
+              <>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {oceanImportStats.totalPieces.toLocaleString()}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    pcs
+                  </Text>
+                </Group>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {oceanImportStats.totalWeight.toLocaleString(undefined, {
+                      maximumFractionDigits: 1,
+                    })}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    kg
+                  </Text>
+                </Group>
+              </>
+            ),
+            actions: (
+              <>
+                <Select
+                  size="xs"
+                  w={130}
+                  value={statusFilter}
+                  onChange={(v) => {
+                    setStatusFilter(v || "all");
+                    setPageIndex(0);
+                  }}
+                  data={[
+                    { value: "all", label: "All Status" },
+                    { value: "BOOKED", label: "Booked" },
+                    { value: "RECEIVED", label: "Received" },
+                    { value: "GENERATED", label: "Generated" },
+                    { value: "CLOSED", label: "Closed" },
+                    { value: "CANCEL", label: "Cancelled" },
+                  ]}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpToolbarSelectStyles(erpTheme)}
+                />
+                <ERPListColumnToggleMenu
+                  theme={erpTheme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                />
                 <FormTextInput
                   placeholder="Search..."
-                  leftSection={<IconSearch size={16} />}
+                  leftSection={<IconSearch size={14} />}
                   rightSection={
                     searchQuery ? (
                       <ActionIcon
                         variant="transparent"
                         size="sm"
                         onClick={() => setSearchQuery("")}
-                        style={{ cursor: "pointer" }}
+                        aria-label="Clear search"
                       >
-                        <IconX size={16} />
+                        <IconX size={14} />
                       </ActionIcon>
                     ) : null
                   }
-                  w={248}
-                  size="sm"
+                  w={220}
+                  size="xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.currentTarget.value)}
                   styles={{
                     input: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      color: "#333740",
-                      minWidth: "24px",
-                      minHeight: "24px",
-                      width: "248px",
-                      height: "36px",
-                      border: "1px solid #D0D1D4",
-                      "&:focus": {
-                        border: "1px solid #105476",
-                      },
+                      height: 32,
+                      minHeight: 32,
+                      fontSize: 12,
+                      borderColor: border,
+                      fontFamily: erpTheme.fontSans,
                     },
                   }}
                 />
-
-                <ActionIcon
-                  variant={showFilters ? "filled" : "outline"}
-                  size={36}
-                  color={showFilters ? "#E0F5FF" : "gray"}
-                  onClick={() => setShowFilters(!showFilters)}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                      border: showFilters
-                        ? "1px solid #105476"
-                        : "1px solid #737780",
-                      color: showFilters ? "#105476" : "#737780",
-                    },
-                  }}
-                >
-                  <IconFilter size={18} />
-                </ActionIcon>
-
                 <Button
-                  leftSection={<IconPlus size={16} />}
-                  size="sm"
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      color: "#FFFFFF",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
+                  variant="default"
+                  size="xs"
+                  leftSection={<IconFilter size={14} />}
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  onClick={() => setShowFilters((s) => !s)}
+                >
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+                <Button
+                  size="xs"
+                  leftSection={<IconPlus size={14} />}
+                  styles={erpToolbarPrimaryButtonStyles(erpTheme)}
                   onClick={persistListAndNavigate}
                 >
                   Create New
                 </Button>
-              </Group>
-            </Group>
-          </Box>
-
-          {/* Filter Section */}
-          {showFilters && (
-            <Box
-              mb="xs"
-              style={{
-                borderRadius: "8px",
-                border: "1px solid #E0E0E0",
-                flexShrink: 0,
-                height: "fit-content",
-              }}
-            >
-              <Group
-                justify="space-between"
-                align="center"
-                mb="lg"
-                style={{
-                  backgroundColor: "#FAFAFA",
-                  padding: "8px 8px",
-                  borderRadius: "8px",
-                }}
-              >
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="#000000"
-                  style={{ fontFamily: "Inter", fontSize: "14px" }}
-                >
-                  Filters
-                </Text>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => setShowFilters(false)}
-                  aria-label="Close filters"
-                  size="sm"
-                >
-                  <IconX size={18} />
-                </ActionIcon>
-              </Group>
-
-              <Grid gutter="md" px="md">
-                <Grid.Col span={2.4}>
+              </>
+            ),
+          }}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle:
+              "Refine ocean import bookings by reference, customer, service, route, or date",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={isDataLoading}
+                applyDisabled={isDataLoading}
+              />
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <FormTextInput
                     size="xs"
                     label="Booking ID"
                     placeholder="Enter Booking ID"
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                     value={filterForm.values.booking_id ?? ""}
                     onChange={(e) =>
                       filterForm.setFieldValue(
                         "booking_id",
-                        e.currentTarget.value || null
+                        e.currentTarget.value || null,
                       )
                     }
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <FormTextInput
                     size="xs"
                     label="Enquiry ID"
                     placeholder="Enter Enquiry ID"
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                     value={filterForm.values.enquiry_id ?? ""}
                     onChange={(e) =>
                       filterForm.setFieldValue(
                         "enquiry_id",
-                        e.currentTarget.value || null
+                        e.currentTarget.value || null,
                       )
                     }
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Customer"
@@ -1067,10 +1151,12 @@ function OceanImportBookingMaster() {
                     }}
                     minSearchLength={2}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
-                  <Dropdown
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Select
                     size="xs"
                     label="Service"
                     placeholder="All"
@@ -1083,9 +1169,11 @@ function OceanImportBookingMaster() {
                     onChange={(v) =>
                       filterForm.setFieldValue("service", v ?? null)
                     }
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpToolbarSelectStyles(erpTheme)}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SingleDateInput
                     key={`date-${filterForm.values.date}`}
                     label="Date"
@@ -1093,9 +1181,10 @@ function OceanImportBookingMaster() {
                     size="xs"
                     value={filterForm.values.date}
                     onChange={(d) => filterForm.setFieldValue("date", d)}
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Origin"
@@ -1116,9 +1205,11 @@ function OceanImportBookingMaster() {
                     className="filter-searchable-select"
                     additionalParams={seaTransportParams}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.4}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                   <SearchableSelect
                     size="xs"
                     label="Destination"
@@ -1139,92 +1230,45 @@ function OceanImportBookingMaster() {
                     className="filter-searchable-select"
                     additionalParams={seaTransportParams}
                     dropdownZIndex={1000}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={OCEAN_IMPORT_FILTER_UNIFIED_STYLES}
                   />
                 </Grid.Col>
               </Grid>
-
-              <Group justify="end" mt="md" p="md" pb="md">
-                <Button
-                  size="xs"
-                  variant="outline"
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      color: "#105476",
-                      borderColor: "#105476",
-                      "&:hover": {
-                        backgroundColor: "#f8f9fa",
-                      },
-                    },
-                  }}
-                  leftSection={<IconX size={14} />}
-                  onClick={clearAllFilters}
-                >
-                  Clear Filters
-                </Button>
-                <Button
-                  size="xs"
-                  variant="filled"
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontstyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
-                  leftSection={
-                    isDataLoading ? (
-                      <Loader size={14} />
-                    ) : (
-                      <IconFilter size={14} />
-                    )
-                  }
-                  onClick={applyFilters}
-                  loading={isDataLoading}
-                  disabled={isDataLoading}
-                >
-                  Apply Filters
-                </Button>
-              </Group>
-            </Box>
-          )}
-
-          {isDataLoading ? (
-            <Center py="xl">
-              <Stack align="center" gap="md">
-                <Loader size="lg" color="#105476" />
-                <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                  Loading ocean import booking...
-                </Text>
-              </Stack>
-            </Center>
-          ) : (
-            <>
-              <MantineReactTable
-                key={`table-${filtersApplied ? "filtered" : "unfiltered"}-${displayData.length}`}
-                table={table}
-              />
-
-              {/* Pagination Bar */}
-              <PaginationBar
-                pageSize={pageSize}
-                currentPage={pageIndex + 1} // Convert 0-based to 1-based for PaginationBar
+            ),
+          }}
+          table={{
+            footer: (
+              <ERPListPaginationFooter
+                theme={erpTheme}
                 totalRecords={totalRecords}
-                onPageSizeChange={handlePageSizeChange}
-                onPageChange={handlePageChange}
-                pageSizeOptions={["10", "25", "50"]}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={["10", "15", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
               />
-            </>
-          )}
-        </Card>
+            ),
+            children: isDataLoading ? (
+              <ERPListTableLoading
+                theme={erpTheme}
+                message="Loading ocean import bookings..."
+              />
+            ) : (
+              <BookingMasterListTable
+                theme={erpTheme}
+                geistRootClass={ERP_LIST_GEIST_ROOT_CLASS}
+                monoClass="air-export-geist-mono"
+                fontSans={erpTheme.fontSans}
+                rows={tableRowModels}
+                visibleColumns={visibleColumns}
+                showServiceColumn
+                renderActions={renderRowActions}
+              />
+            ),
+          }}
+        />
       )}
       <Modal
         opened={!!cancelConfirmRow}
@@ -1245,7 +1289,8 @@ function OceanImportBookingMaster() {
         </Group>
       </Modal>
       <Outlet />
-    </>
+      </Box>
+    </MantineProvider>
   );
 }
 

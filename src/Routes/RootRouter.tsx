@@ -9,6 +9,8 @@ import {
   QuotationApprovalPublic,
 } from "../pages";
 
+const APP_BASENAME = "/";
+
 const RootRouter = () => {
   // const accessToken = useAuthStore((state) => state.auth?.token);
   // const accessToken = "Auth is set";
@@ -22,7 +24,7 @@ const RootRouter = () => {
   const accessToken = useAuthStore((state) => state.accessToken);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={APP_BASENAME}>
       <Routes>
         {/* Public routes that don't require authentication */}
         <Route

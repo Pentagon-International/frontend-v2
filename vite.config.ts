@@ -4,6 +4,8 @@ import { resolve } from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Dev/prod default: serve from site root (/)
+  base: '/',
   plugins: [react()],
   resolve: {
     alias: {

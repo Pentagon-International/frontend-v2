@@ -6,6 +6,7 @@ import {
   TextInput,
   Autocomplete,
   Group,
+  Flex,
   ActionIcon,
   Loader,
   Modal,
@@ -85,6 +86,73 @@ interface AggregatedData {
 }
 
 type MetricType = "outstanding" | "overdue";
+
+/** Air Export Booking toolbar tokens (Geist, 32px controls, #e2e8f0 / #105476) */
+const DASH_TOOLBAR_BORDER = "#e2e8f0";
+const DASH_TOOLBAR_PRIMARY = "#105476";
+const DASH_TOOLBAR_FONT = "'Geist', sans-serif";
+
+/** Segmented control track + tabs (white floating pill active, gray labels inactive). */
+const DASH_SEGMENT_TRACK_BG = "#E8EBEF";
+const DASH_SEGMENT_ACTIVE_SHADOW =
+  "0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.06)";
+
+const dashSegmentTabInactive = {
+  root: {
+    height: 32,
+    fontSize: 12,
+    fontWeight: 400,
+    color: "#64748B",
+    backgroundColor: "transparent",
+    border: "none",
+    paddingLeft: 14,
+    paddingRight: 14,
+    fontFamily: DASH_TOOLBAR_FONT,
+    borderRadius: 8,
+    "&:hover": {
+      color: "#475569",
+      backgroundColor: "rgba(255, 255, 255, 0.35)",
+    },
+  },
+  label: { fontWeight: 400 },
+} as const;
+
+const dashSegmentTabActive = {
+  root: {
+    height: 32,
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#0F172A",
+    backgroundColor: "#ffffff",
+    border: "none",
+    paddingLeft: 14,
+    paddingRight: 14,
+    fontFamily: DASH_TOOLBAR_FONT,
+    borderRadius: 8,
+    boxShadow: DASH_SEGMENT_ACTIVE_SHADOW,
+    "&:hover": {
+      color: "#0F172A",
+      backgroundColor: "#ffffff",
+    },
+  },
+  label: { fontWeight: 700 },
+} as const;
+
+const dashToolbarSearchInputStyles = {
+  input: {
+    height: 32,
+    minHeight: 32,
+    fontSize: 12,
+    borderColor: DASH_TOOLBAR_BORDER,
+    fontFamily: DASH_TOOLBAR_FONT,
+  },
+} as const;
+
+/** Page chrome behind the white toolbar — matches AirExportBookingMaster `pageBg`. */
+const DASH_PAGE_BG = "#F0F4F8";
+
+/** Matches AppShellLayout main `px`; negative margin on dashboard root cancels this so scrollbars align to the main column edge, then content uses this as padding inside scroll areas. */
+const DASH_MAIN_PAD_X = { base: 16, sm: 24 } as const;
 
 const Dashboard = () => {
   const { user } = useAuthStore();
@@ -7409,254 +7477,237 @@ const Dashboard = () => {
   const toMonthOptions = getToMonthOptions(selectedYear);
 
   return (
-    <Box p="xs" h="calc(100vh - 95px)" style={{display:"flex", flexDirection:"column"}}>
-      {/* Filter Section - Single Row */}
-
-      {/* Tabs and Search Row - Available in all drill levels */}
-      <Group
-        mb="md"
-        justify="space-between"
-        align="center"
-        wrap="nowrap"
-        style={{ alignItems: "center" }}
-      >
-        {/* Tabs with Segmented Control Style - only when common filters are visible */}
-        {!showDetailedView && (
-          <Group
-            gap={0}
+    <Box
+      mx={{ base: -16, sm: -24 }}
+      pb="xs"
+      pt={0}
+      h="calc(100vh - 95px)"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        boxSizing: "border-box",
+        backgroundColor: DASH_PAGE_BG,
+        minWidth: 0,
+      }}
+    >
+      {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
+      {!showDetailedView && (
+        <Box
+          style={{
+            backgroundColor: "#ffffff",
+            borderBottom: `1px solid ${DASH_TOOLBAR_BORDER}`,
+          }}
+        >
+          <Box
+            px={DASH_MAIN_PAD_X}
+            py={12}
             style={{
-              backgroundColor: "#f1f3f5",
-              borderRadius: "6px",
-              padding: "2px",
-              height: "32px",
-              display: "flex",
-              alignItems: "center",
+              fontFamily: DASH_TOOLBAR_FONT,
+              WebkitFontSmoothing: "antialiased",
+              MozOsxFontSmoothing: "grayscale",
             }}
           >
-            <Button
-              variant={activeTab === "overall" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("overall")}
-              size="xs"
+            <Flex
+              align="center"
+              gap={24}
+              wrap="nowrap"
               style={{
-                backgroundColor:
-                  activeTab === "overall" ? "#ffffff" : "transparent",
-                color: activeTab === "overall" ? "#000000" : "#666",
-                fontWeight: activeTab === "overall" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "overall"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
+                overflowX: "auto",
+                minHeight: 40,
+                scrollbarWidth: "thin",
+                WebkitOverflowScrolling: "touch",
               }}
             >
-              Sales
-            </Button>
-            <Button
-              variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("pipeline-Report")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
-                color: activeTab === "pipeline-Report" ? "#000000" : "#666",
-                fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "pipeline-Report"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              Pipeline Report
-            </Button>
-            <Button
-              variant={activeTab === "booking" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("booking")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "booking" ? "#ffffff" : "transparent",
-                  color: activeTab === "booking" ? "#000000" : "#666",
-                  fontWeight: activeTab === "booking" ? 600 : 400,
-                  border: "none",
-                  borderRadius: "4px",
-                  boxShadow:
-                  activeTab === "booking"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                    transition: "all 0.2s ease",
-                    fontSize: "12px",
-                    padding: "4px 12px",
-                  }}
-            >
-              Booking
-            </Button>
-            <Button
-              variant={activeTab === "customer-service" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("customer-service")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "customer-service" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service" ? "#000000" : "#666",
-                fontWeight: activeTab === "customer-service" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "customer-service"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              CS Export
-            </Button>
-            <Button
-              variant={activeTab === "customer-service-import" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("customer-service-import")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "customer-service-import" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service-import" ? "#000000" : "#666",
-                fontWeight: activeTab === "customer-service-import" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "customer-service-import"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              CS Import
-            </Button>
-          </Group>
-        )}
-
-        {/* Global Search Input and Date Filter - Always visible at dashboard base level (only hidden in detailed view) */}
-        {!showDetailedView && (
-          <Group
-            gap="md"
-            align="center"
-            wrap="nowrap"
-            style={{ alignItems: "center" }}
-          >
-            {/* Common Date Range Filter */}
-            <Box
-              style={{
-                width: "270px",
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                height: "32px",
-              }}
-            >
-              <DateRangeInput
-                fromDate={customerInteractionFromDate}
-                toDate={customerInteractionToDate}
-                onFromDateChange={setCustomerInteractionFromDate}
-                onToDateChange={setCustomerInteractionToDate}
-                fromPlaceholder="From Date"
-                toPlaceholder="To Date"
-                size="xs"
-                allowDeselection={true}
-                showRangeInCalendar={false}
-                hideLabels={true}
-                containerStyle={{ gap: "4px" }}
-              />
-            </Box>
-            {/* Global Search Input */}
-            <Group
-              style={{
-                maxWidth: "400px",
-                display: "flex",
-                alignItems: "center",
-                height: "32px",
-              }}
-              gap="xs"
-            >
-              <Autocomplete
-                placeholder="Search by Customer name or Salesperson"
-                value={searchInputValue}
-                onChange={setSearchInputValue}
-                onOptionSubmit={(value) => {
-                  setSearchInputValue(value);
-                  setGlobalSearch(value);
+              <Box
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: 4,
+                  borderRadius: 12,
+                  backgroundColor: DASH_SEGMENT_TRACK_BG,
+                  flexShrink: 0,
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && searchInputValue.trim()) {
-                    setGlobalSearch(searchInputValue.trim());
+              >
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "overall"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
                   }
-                }}
-                data={dropdownOptions}
-                size="xs"
-                style={{ width: "400px" }}
-                rightSectionWidth={60}
-                rightSection={
-                  <Group gap={4} align="center" wrap="nowrap">
-                    {/* Clear (X) icon - only when value exists and not loading dropdown */}
-                    {searchInputValue.trim() !== "" && !isDropdownLoading && (
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => {
-                          setSearchInputValue("");
-                          setGlobalSearch("");
-                          setDropdownOptions([]);
-                        }}
-                        size="sm"
-                        style={{ flexShrink: 0 }}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
-                    )}
+                  onClick={() => setActiveTab("overall")}
+                >
+                  Sales
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "pipeline-Report"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("pipeline-Report")}
+                >
+                  Pipeline Report
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "booking"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("booking")}
+                >
+                  Booking
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service")}
+                >
+                  CS Export
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service-import"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service-import")}
+                >
+                  CS Import
+                </Button>
+              </Box>
 
-                    {/* Fixed-width box for loader or search icon */}
-                    <Box
-                      style={{
-                        width: 26,
-                        height: 26,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {isDropdownLoading || isSearchLoading ? (
-                        <Loader size="xs" />
-                      ) : (
-                        <ActionIcon
-                          variant="subtle"
-                          color="blue"
-                          onClick={handleSearch}
-                          size="sm"
-                        >
-                          <IconSearch size={16} />
-                        </ActionIcon>
-                      )}
-                    </Box>
-                  </Group>
-                }
-                limit={10}
-                maxDropdownHeight={280}
+              <Box
+                style={{
+                  width: 1,
+                  height: 32,
+                  backgroundColor: DASH_TOOLBAR_BORDER,
+                  flexShrink: 0,
+                }}
               />
-            </Group>
-          </Group>
-        )}
-      </Group>
+
+              <Flex
+                align="center"
+                gap={8}
+                wrap="nowrap"
+                style={{
+                  marginLeft: "auto",
+                  flexShrink: 0,
+                }}
+              >
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <DateRangeInput
+                    fromDate={customerInteractionFromDate}
+                    toDate={customerInteractionToDate}
+                    onFromDateChange={setCustomerInteractionFromDate}
+                    onToDateChange={setCustomerInteractionToDate}
+                    fromPlaceholder="From Date"
+                    toPlaceholder="To Date"
+                    size="xs"
+                    allowDeselection={true}
+                    showRangeInCalendar={false}
+                    hideLabels={true}
+                    compactToolbar
+                    containerStyle={{ gap: 8 }}
+                  />
+                </Box>
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    width: "clamp(220px, 36vw, 420px)",
+                    minWidth: 220,
+                    maxWidth: 420,
+                  }}
+                >
+                  <Autocomplete
+                    placeholder="Search by Customer name or Salesperson"
+                    value={searchInputValue}
+                    onChange={setSearchInputValue}
+                    onOptionSubmit={(value) => {
+                      setSearchInputValue(value);
+                      setGlobalSearch(value);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && searchInputValue.trim()) {
+                        setGlobalSearch(searchInputValue.trim());
+                      }
+                    }}
+                    data={dropdownOptions}
+                    size="xs"
+                    w="100%"
+                    styles={dashToolbarSearchInputStyles}
+                    rightSectionWidth={60}
+                    rightSection={
+                      <Group gap={4} align="center" wrap="nowrap">
+                        {searchInputValue.trim() !== "" && !isDropdownLoading && (
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => {
+                              setSearchInputValue("");
+                              setGlobalSearch("");
+                              setDropdownOptions([]);
+                            }}
+                            size="sm"
+                            style={{ flexShrink: 0 }}
+                          >
+                            <IconX size={16} />
+                          </ActionIcon>
+                        )}
+                        <Box
+                          style={{
+                            width: 26,
+                            height: 26,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {isDropdownLoading || isSearchLoading ? (
+                            <Loader size="xs" />
+                          ) : (
+                            <ActionIcon
+                              variant="subtle"
+                              color={DASH_TOOLBAR_PRIMARY}
+                              onClick={handleSearch}
+                              size="sm"
+                            >
+                              <IconSearch size={16} />
+                            </ActionIcon>
+                          )}
+                        </Box>
+                      </Group>
+                    }
+                    limit={10}
+                    maxDropdownHeight={280}
+                  />
+                </Box>
+              </Flex>
+            </Flex>
+          </Box>
+        </Box>
+      )}
 
       {/* Main Dashboard Content */}
       <Tabs
@@ -7666,11 +7717,12 @@ const Dashboard = () => {
           list: {
             display: "none",
           },
-          root:{
-            flex:1,
-            display:"flex",
-            flexDirection:"column"
-          }
+          root: {
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          },
         }}
       >
         <Tabs.List style={{ display: "none" }}>
@@ -7681,213 +7733,307 @@ const Dashboard = () => {
           <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="overall" pt="sm">
+        <Tabs.Panel
+          value="overall"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {showDetailedView ? (
-            <DetailedViewTable
-              data={detailedViewData}
-              title={(() => {
-                // For budget type, use title as-is without appending drill level name
-                if (detailedViewType === "budget") {
-                  return detailedViewTitle;
-                }
-                // For other types, append drill level display name
-                if (detailedViewDrillLevel === 0) return detailedViewTitle;
-                const displayName = getDrillLevelDisplayName();
-                return displayName
-                  ? `${detailedViewTitle} - ${displayName}`
-                  : detailedViewTitle;
-              })()}
-              onClose={handleCloseDetailedView}
-              loading={isLoadingDetailedView}
-              moduleType={detailedViewType || undefined}
-              drillLevel={detailedViewDrillLevel}
-              totalRecords={
-                detailedViewType === "customerNotVisited"
-                  ? customerNotVisitedTotalRecords
-                  : detailedViewType === "lostCustomer"
-                    ? lostCustomerTotalRecords
-                    : detailedViewType === "newCustomer"
-                      ? newCustomerTotalRecords
-                      : undefined
-              }
-              onColumnClick={handleDetailedViewColumnClick}
-              onBack={handleDetailedViewBack}
-              initialSearch={detailedViewSearch}
-              onSearchChange={handleDetailedViewSearchChange}
-              showBackButton={
-                detailedViewDrillLevel > 1 ||
-                (detailedViewDrillLevel > 0 &&
-                  (detailedViewType === "lostCustomer" ||
-                    detailedViewType === "newCustomer" ||
-                    detailedViewType === "callentry" ||
-                    detailedViewType === "customerNotVisited"))
-              }
-              headerActions={
-                // Commented out - can be used in future case
-                // Period filter is now common at top level
-                undefined
-              }
-            />
+            <Box
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+              }}
+            >
+              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="xs">
+                <DetailedViewTable
+                  data={detailedViewData}
+                  title={(() => {
+                    // For budget type, use title as-is without appending drill level name
+                    if (detailedViewType === "budget") {
+                      return detailedViewTitle;
+                    }
+                    // For other types, append drill level display name
+                    if (detailedViewDrillLevel === 0) return detailedViewTitle;
+                    const displayName = getDrillLevelDisplayName();
+                    return displayName
+                      ? `${detailedViewTitle} - ${displayName}`
+                      : detailedViewTitle;
+                  })()}
+                  onClose={handleCloseDetailedView}
+                  loading={isLoadingDetailedView}
+                  moduleType={detailedViewType || undefined}
+                  drillLevel={detailedViewDrillLevel}
+                  totalRecords={
+                    detailedViewType === "customerNotVisited"
+                      ? customerNotVisitedTotalRecords
+                      : detailedViewType === "lostCustomer"
+                        ? lostCustomerTotalRecords
+                        : detailedViewType === "newCustomer"
+                          ? newCustomerTotalRecords
+                          : undefined
+                  }
+                  onColumnClick={handleDetailedViewColumnClick}
+                  onBack={handleDetailedViewBack}
+                  initialSearch={detailedViewSearch}
+                  onSearchChange={handleDetailedViewSearchChange}
+                  showBackButton={
+                    detailedViewDrillLevel > 1 ||
+                    (detailedViewDrillLevel > 0 &&
+                      (detailedViewType === "lostCustomer" ||
+                        detailedViewType === "newCustomer" ||
+                        detailedViewType === "callentry" ||
+                        detailedViewType === "customerNotVisited"))
+                  }
+                  headerActions={
+                    // Commented out - can be used in future case
+                    // Period filter is now common at top level
+                    undefined
+                  }
+                />
+              </Box>
+            </Box>
           ) : (
-            <Box>
-              {/* Section 1 & 2: Customer Interaction Status and Enquiry (side by side) */}
-              <Grid mb="lg">
-                <Grid.Col span={6}>
-                  <CustomerInteractionStatus
-                    data={customerInteractionData}
-                    loading={isLoadingCustomerInteraction}
-                    customerInteractionPeriod={customerInteractionPeriod}
-                    setCustomerInteractionPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                    onGainClick={handleGainClick}
-                    onLostClick={handleLostClick}
-                    onNotVisitedClick={handleNotVisitedClick}
-                  />
+            <Box
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "auto",
+              }}
+            >
+              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="lg">
+                <Grid gutter="lg" align="stretch" columns={12}>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CustomerInteractionStatus
+                      data={customerInteractionData}
+                      loading={isLoadingCustomerInteraction}
+                      customerInteractionPeriod={customerInteractionPeriod}
+                      setCustomerInteractionPeriod={
+                        () => {} // Commented out - can be used in future case
+                      }
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                      onGainClick={handleGainClick}
+                      onLostClick={handleLostClick}
+                      onNotVisitedClick={handleNotVisitedClick}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={6}>
-                  <EnquirySection
-                    enquiryConversionAggregatedData={
-                      enquiryConversionAggregatedData
-                    }
-                    isLoadingEnquiryConversion={isLoadingEnquiryConversion}
-                    isLoadingEnquiryChart={isLoadingEnquiryChart}
-                    enquiryView={enquiryView}
-                    setEnquiryView={setEnquiryView}
-                    handleEnquiryConversionViewAll={
-                      handleEnquiryConversionViewAll
-                    }
-                    selectedPeriod={enquiryPeriod}
-                    setSelectedPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                  />
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <EnquirySection
+                      enquiryConversionAggregatedData={
+                        enquiryConversionAggregatedData
+                      }
+                      isLoadingEnquiryConversion={isLoadingEnquiryConversion}
+                      isLoadingEnquiryChart={isLoadingEnquiryChart}
+                      enquiryView={enquiryView}
+                      setEnquiryView={setEnquiryView}
+                      handleEnquiryConversionViewAll={
+                        handleEnquiryConversionViewAll
+                      }
+                      selectedPeriod={enquiryPeriod}
+                      setSelectedPeriod={
+                        () => {} // Commented out - can be used in future case
+                      }
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <OutstandingSection
+                      drillLevel={drillLevel}
+                      handleBack={handleBack}
+                      selectedMetric={selectedMetric}
+                      companySummary={companySummary}
+                      locationData={locationData}
+                      salespersonData={salespersonData}
+                      selectedCompanyCtx={selectedCompanyCtx}
+                      selectedCompany={selectedCompany}
+                      selectedLocation={selectedLocation}
+                      contextTotals={contextTotals}
+                      hoverTotals={hoverTotals}
+                      isLoadingOutstandingChart={isLoadingOutstandingChart}
+                      handleOutstandingViewAll={handleOutstandingViewAll}
+                      handlePieClick={handlePieClick}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CallEntrySection
+                      callEntrySummary={callEntrySummary}
+                      isLoadingCallEntry={isLoadingCallEntry}
+                      handleCallEntryViewAll={handleCallEntryViewAll}
+                      selectedPeriod={callEntryPeriod}
+                      setSelectedPeriod={
+                        () => {} // Commented out - can be used in future case
+                      }
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
+                  <Box
+                    style={{
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BudgetSection
+                      budgetDrillLevel={budgetDrillLevel}
+                      budgetSelectedCompany={budgetSelectedCompany}
+                      budgetSelectedSalesperson={budgetSelectedSalesperson}
+                      budgetDateRange={budgetDateRange}
+                      budgetRawData={budgetRawData}
+                      budgetAggregatedData={budgetAggregatedData}
+                      budgetHoverTotals={budgetHoverTotals}
+                      isLoadingBudget={isLoadingBudget}
+                      budgetStartMonth={budgetStartMonth}
+                      budgetEndMonth={budgetEndMonth}
+                      budgetType={budgetType}
+                      selectedYear={selectedYear}
+                      yearOptions={yearOptions}
+                      fromMonthOptions={fromMonthOptions}
+                      toMonthOptions={toMonthOptions}
+                      setBudgetDrillLevel={setBudgetDrillLevel}
+                      setBudgetSelectedCompany={setBudgetSelectedCompany}
+                      setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
+                      setBudgetRawData={setBudgetRawData}
+                      setBudgetAggregatedData={setBudgetAggregatedData}
+                      setSearchSalesman={setSearchSalesman}
+                      setSelectedCompany={setSelectedCompany}
+                      setIsLoadingBudget={setIsLoadingBudget}
+                      setBudgetType={setBudgetType}
+                      setSelectedYear={setSelectedYear}
+                      handleBudgetViewAll={handleBudgetViewAll}
+                      handleBudgetBarClick={handleBudgetBarClick}
+                      handleBudgetTypeChange={handleBudgetTypeChange}
+                      handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
+                    />
+                  </Box>
                 </Grid.Col>
               </Grid>
-
-              {/* Section 3 & 4: Outstanding and Call Entry (side by side) */}
-              <Grid mb="lg">
-                <Grid.Col span={8}>
-                  <OutstandingSection
-                    drillLevel={drillLevel}
-                    selectedMetric={selectedMetric}
-                    companySummary={companySummary}
-                    locationData={locationData}
-                    salespersonData={salespersonData}
-                    selectedCompanyCtx={selectedCompanyCtx}
-                    selectedCompany={selectedCompany}
-                    selectedLocation={selectedLocation}
-                    contextTotals={contextTotals}
-                    hoverTotals={hoverTotals}
-                    isLoadingOutstandingChart={isLoadingOutstandingChart}
-                    handleOutstandingViewAll={handleOutstandingViewAll}
-                    handleBack={handleBack}
-                    handlePieClick={handlePieClick}
-                    outstandingPeriod={outstandingPeriod}
-                    setOutstandingPeriod={setOutstandingPeriod}
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={4}>
-                  <CallEntrySection
-                    callEntrySummary={callEntrySummary}
-                    isLoadingCallEntry={isLoadingCallEntry}
-                    handleCallEntryViewAll={handleCallEntryViewAll}
-                    selectedPeriod={callEntryPeriod}
-                    setSelectedPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                  />
-                </Grid.Col>
-              </Grid>
-
-              {/* Section 5: Budget vs Actual */}
-              <BudgetSection
-                budgetDrillLevel={budgetDrillLevel}
-                budgetSelectedCompany={budgetSelectedCompany}
-                budgetSelectedSalesperson={budgetSelectedSalesperson}
-                budgetDateRange={budgetDateRange}
-                budgetRawData={budgetRawData}
-                budgetAggregatedData={budgetAggregatedData}
-                budgetHoverTotals={budgetHoverTotals}
-                isLoadingBudget={isLoadingBudget}
-                budgetStartMonth={budgetStartMonth}
-                budgetEndMonth={budgetEndMonth}
-                budgetType={budgetType}
-                selectedYear={selectedYear}
-                yearOptions={yearOptions}
-                fromMonthOptions={fromMonthOptions}
-                toMonthOptions={toMonthOptions}
-                setBudgetDrillLevel={setBudgetDrillLevel}
-                setBudgetSelectedCompany={setBudgetSelectedCompany}
-                setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
-                setBudgetRawData={setBudgetRawData}
-                setBudgetAggregatedData={setBudgetAggregatedData}
-                setSearchSalesman={setSearchSalesman}
-                setSelectedCompany={setSelectedCompany}
-                setIsLoadingBudget={setIsLoadingBudget}
-                setBudgetType={setBudgetType}
-                setSelectedYear={setSelectedYear}
-                handleBudgetViewAll={handleBudgetViewAll}
-                handleBudgetBarClick={handleBudgetBarClick}
-                handleBudgetTypeChange={handleBudgetTypeChange}
-                handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
-              />
+              </Box>
             </Box>
           )}
         </Tabs.Panel>
 
         <Tabs.Panel value="pipeline-Report" pt="md">
-          <PipelineReport
-            key={tabsRefreshKey}
-            initialState={pipelineReportState || undefined}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <PipelineReport
+              key={tabsRefreshKey}
+              initialState={pipelineReportState || undefined}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
 
         <Tabs.Panel value="booking" pt="md">
-          <Booking
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <Booking
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceReport
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service-import" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceImportReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service-import"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceImportReport
+              key={tabsRefreshKey}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
       </Tabs>
 
@@ -7900,7 +8046,7 @@ const Dashboard = () => {
           setCurrentEmailData(null);
         }}
         title={
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#1E293B">
             {detailedViewType === "enquiry"
               ? "Send Email - Enquiry Conversion"
               : "Send Email - Outstanding Details"}
@@ -7976,7 +8122,7 @@ const Dashboard = () => {
               onClick={handleSendEmail}
               loading={sendingEmail}
               leftSection={<IconSend size={16} />}
-              color="#105476"
+              color="blue"
             >
               Send
             </Button>

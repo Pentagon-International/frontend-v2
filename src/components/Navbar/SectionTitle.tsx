@@ -1,17 +1,16 @@
-import { Text, useMantineTheme } from "@mantine/core";
+import { Text } from "@mantine/core";
 
 export const SectionTitle = ({ title }: { title: string }) => {
-  const theme = useMantineTheme();
   return (
     <Text
-      size="xs"
       px={6}
       py={4}
-      fw={400}
       style={{
-        color: "#A1A4AA",
+        color: "#3D5470",
         textTransform: "uppercase",
-        fontSize: "12px",
+        fontSize: "10.5px",
+        fontWeight: 600,
+        letterSpacing: "0.09em",
       }}
     >
       {title}

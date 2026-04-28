@@ -251,7 +251,7 @@ export const CollapsibleNav = ({
               backgroundColor:
                 label !== "Tariff"
                   ? isActive
-                    ? "#105476"
+                    ? iconColor
                     : iconBackground
                   : "transparent",
               color:
@@ -260,8 +260,8 @@ export const CollapsibleNav = ({
                     ? "#fff"
                     : iconColor
                   : isActive
-                    ? "#105476"
-                    : "#444955",
+                    ? "#E8F4FF"
+                    : "#7A9AB8",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -294,10 +294,10 @@ export const CollapsibleNav = ({
       {isSidebarCollapsed && !opened && label !== "Tariff" ? (
         <Tooltip
           label={label}
-          color="#363636"
+          color="#0F2035"
           position="right"
           arrowOffset={50}
-          style={{ padding: "5px 15px", fontWeight: 400 }}
+          style={{ padding: "5px 14px", fontWeight: 400, fontSize: "13px" }}
           arrowSize={8}
           withArrow
         >
@@ -341,10 +341,10 @@ export const CollapsibleNav = ({
               top: label === "Accounts" ? 80 : flyoutPos.top,
               left: flyoutPos.left,
               zIndex: 100,
-              background: "#fff",
-              border: "1px solid #BADDEE",
-              borderRadius: 6,
-              boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+              background: "#0F2035",
+              border: "1px solid #1A2D42",
+              borderRadius: 8,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
               minWidth: 220,
               overflow: "hidden",
             }}
