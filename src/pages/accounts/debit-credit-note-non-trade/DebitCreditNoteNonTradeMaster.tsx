@@ -291,8 +291,10 @@ export default function DebitCreditNoteNonTradeMaster() {
     manualPagination: true,
     rowCount: totalRecords,
     state: {
-      isLoading: isLoading || isFetching,
-      showProgressBars: isFetching,
+      // We show our own overlay ("Refreshing data...") so disable MRT loaders
+      // to prevent double-loader overlap on reload/back navigation.
+      isLoading: false,
+      showProgressBars: false,
     },
     initialState: {
       columnPinning: { right: ["actions"] },
@@ -689,65 +691,54 @@ export default function DebitCreditNoteNonTradeMaster() {
         </Box>
       )}
 
-      {isLoading ? (
-        <Center py="xl" style={{ flex: 1 }}>
-          <Stack align="center" gap="md">
-            <Loader size="lg" color="#105476" />
-            <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-              Loading records...
-            </Text>
-          </Stack>
-        </Center>
-      ) : (
-        <Stack style={{ flex: 1, minHeight: 0 }} gap="xs">
-          <div
-            style={{
-              position: "relative",
-              flex: 1,
-              minHeight: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {isFetching && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 10,
-                  borderRadius: "8px",
-                }}
-              >
-                <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
-                    Refreshing data...
-                  </Text>
-                </Stack>
-              </div>
-            )}
-            <MantineReactTable table={table} />
-          </div>
-          <PaginationBar
-            pageSize={paginationPageSize}
-            currentPage={paginationCurrentPage}
-            totalRecords={totalRecords}
-            onPageSizeChange={(size) => {
-              setPaginationPageSize(size);
-              setPaginationCurrentPage(1);
-            }}
-            onPageChange={setPaginationCurrentPage}
-            pageSizeOptions={["10", "25", "50"]}
-          />
-        </Stack>
-      )}
+      <Stack style={{ flex: 1, minHeight: 0 }} gap="xs">
+        <div
+          style={{
+            position: "relative",
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {(isLoading || isFetching) && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(255, 255, 255, 0.8)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                borderRadius: "8px",
+              }}
+            >
+              <Stack align="center" gap="md">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed" style={{ fontFamily: "Inter, sans-serif" }}>
+                  Refreshing data...
+                </Text>
+              </Stack>
+            </div>
+          )}
+          <MantineReactTable table={table} />
+        </div>
+        <PaginationBar
+          pageSize={paginationPageSize}
+          currentPage={paginationCurrentPage}
+          totalRecords={totalRecords}
+          onPageSizeChange={(size) => {
+            setPaginationPageSize(size);
+            setPaginationCurrentPage(1);
+          }}
+          onPageChange={setPaginationCurrentPage}
+          pageSizeOptions={["10", "25", "50"]}
+        />
+      </Stack>
     </Card>
   );
 }
