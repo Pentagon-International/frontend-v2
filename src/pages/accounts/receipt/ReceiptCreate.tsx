@@ -258,6 +258,8 @@ type ReceiptListItem = {
     subledger_id?: number;
     subledger_code?: string;
     subledger_name?: string;
+    account_name?: string;
+    account_code?: string;
     narration?: string;
     currency_code?: string;
     currency_id?: number;
@@ -702,9 +704,9 @@ export default function ReceiptCreate({
             id: p.id ?? null,
             subledger_id:
               p.subledger_id != null ? String(p.subledger_id) : null,
-            account_code: "",
+            account_code: String(p.account_code ?? "").trim(),
             customer_code: String(p.subledger_code ?? "").trim(),
-            customer_display: String(p.subledger_name ?? "").trim(),
+            customer_display: String(p.account_name ?? p.subledger_name ?? "").trim(),
             narration: String(p.narration ?? "").trim(),
             currency: (p.currency_code ?? localCurrency).toString().trim(),
             roe: parseNum(p.roe) ?? 1,
@@ -1599,6 +1601,7 @@ export default function ReceiptCreate({
         subledger_id?: number;
         subledger_code?: string;
         subledger_name?: string;
+        account_name?: string;
         account_code?: string;
         narration?: string;
         currency_code?: string;
@@ -1632,7 +1635,7 @@ export default function ReceiptCreate({
       subledger_id: p.subledger_id != null ? String(p.subledger_id) : null,
       account_code: String(p.account_code ?? "").trim(),
       customer_code: String(p.subledger_code ?? "").trim(),
-      customer_display: String(p.subledger_name ?? "").trim(),
+      customer_display: String(p.account_name ?? p.subledger_name ?? "").trim(),
       narration: String(p.narration ?? "").trim(),
       currency: String(p.currency_code ?? localCurrency).trim(),
       roe: parseNum(p.roe) ?? 1,
@@ -2248,89 +2251,100 @@ export default function ReceiptCreate({
                     return (
                       <Grid key={partyKey} w="100%" gutter="sm" mt="sm">
                         <Grid.Col span={3}>
-                          <SearchableSelect
-                            key={partyKey}
-                            placeholder="Account Name"
-                            apiEndpoint={URL.chartOfAccounts}
-                            value={row?.customer_code || null}
-                            displayValue={row?.customer_display || null}
-                            disabled={
-                              useNonEditableStyleOnly
-                                ? false
-                                : isReadOnly || reversalFormDisabled
-                            }
-                            onChange={(value, _selected, originalData) => {
-                              setLoadedDetails(null);
-                              const orig = originalData as {
-                                id?: number;
-                                gl_name?: string;
-                                gl_account_code?: string;
-                                sl_code?: string;
-                                account_name?: string;
-                              };
-                              const glName = orig?.gl_name ?? "";
-                              const name = orig?.account_name ?? "";
-                              const subledgerCode = orig?.sl_code ?? "";
-                              const glAccountCode = orig?.gl_account_code ?? "";
-                              const sid =
-                                orig?.id != null
-                                  ? orig.id
-                                  : typeof value === "string" &&
-                                      /^\d+$/.test(value)
-                                    ? Number(value)
-                                    : null;
-                              form.setFieldValue(
-                                `details.${idx}.subledger_id`,
-                                sid,
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.account_code`,
-                                glAccountCode,
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.customer_code`,
-                                subledgerCode || (value ?? ""),
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.customer_display`,
-                                formatChartOfAccountsLabel(
-                                  glName,
+                          <Box>
+                            <SearchableSelect
+                              key={partyKey}
+                              placeholder="Account Name"
+                              apiEndpoint={URL.chartOfAccounts}
+                              value={row?.customer_code || null}
+                              displayValue={row?.customer_display || null}
+                              disabled={
+                                useNonEditableStyleOnly
+                                  ? false
+                                  : isReadOnly || reversalFormDisabled
+                              }
+                              onChange={(value, _selected, originalData) => {
+                                setLoadedDetails(null);
+                                const orig = originalData as {
+                                  id?: number;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  sl_code?: string;
+                                  account_name?: string;
+                                };
+                                const name = orig?.account_name ?? "";
+                                const subledgerCode = orig?.sl_code ?? "";
+                                const glAccountCode = orig?.gl_account_code ?? "";
+                                const sid =
+                                  orig?.id != null
+                                    ? orig.id
+                                    : typeof value === "string" &&
+                                        /^\d+$/.test(value)
+                                      ? Number(value)
+                                      : null;
+                                form.setFieldValue(
+                                  `details.${idx}.subledger_id`,
+                                  sid,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.account_code`,
                                   glAccountCode,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.customer_code`,
+                                  subledgerCode || (value ?? ""),
+                                );
+                                // UI label should show only account_name (not subledger_name)
+                                form.setFieldValue(
+                                  `details.${idx}.customer_display`,
                                   name,
-                                ),
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.currency`,
+                                  localCurrency,
+                                );
+                                form.setFieldValue(`details.${idx}.roe`, 1);
+                              }}
+                              dropdownZIndex={dropdownZIndex}
+                              displayFormat={(item) => {
+                                const i = item as {
+                                  id?: number;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  account_name?: string;
+                                };
+                                const id = String(i.id ?? "").trim();
+                                const gl = String(i.gl_account_code ?? "").trim();
+                                const name = String(i.account_name ?? "").trim();
+                                const glName = String(i.gl_name ?? "").trim();
+                                return {
+                                  value: id,
+                                  label: formatChartOfAccountsLabel(glName, gl, name),
+                                };
+                              }}
+                              searchFields={[
+                                "gl_name",
+                                "gl_account_code",
+                                "account_name",
+                                "id",
+                              ]}
+                              returnOriginalData
+                              styles={partyFieldStyles}
+                            />
+
+                            {(() => {
+                              const accountCode = row?.account_code?.toString().trim();
+                              const subledgerCode = row?.customer_code?.toString().trim();
+                              if (!accountCode && !subledgerCode) return null;
+                              return (
+                                <Text size="xs" c="dimmed" mt={4}>
+                                  {accountCode ? `Account Code: ${accountCode}` : ""}
+                                  {accountCode && subledgerCode ? "  |  " : ""}
+                                  {subledgerCode ? `Subledger Code: ${subledgerCode}` : ""}
+                                </Text>
                               );
-                              form.setFieldValue(
-                                `details.${idx}.currency`,
-                                localCurrency,
-                              );
-                              form.setFieldValue(`details.${idx}.roe`, 1);
-                            }}
-                            dropdownZIndex={dropdownZIndex}
-                            displayFormat={(item) => {
-                              const i = item as {
-                                id?: number;
-                                gl_name?: string;
-                                gl_account_code?: string;
-                                account_name?: string;
-                              };
-                              const id = String(i.id ?? "").trim();
-                              const gl = String(i.gl_account_code ?? "").trim();
-                              const name = String(i.account_name ?? "").trim();
-                              const glName = String(i.gl_name ?? "").trim();
-                              return {
-                                value: id,
-                                label: formatChartOfAccountsLabel(glName, gl, name),
-                              };
-                            }}
-                            searchFields={[
-                              "gl_name",
-                              "gl_account_code",
-                              "account_name",
-                              "id",
-                            ]}
-                            returnOriginalData
-                            styles={partyFieldStyles}
-                          />
+                            })()}
+                          </Box>
                         </Grid.Col>
                         <Grid.Col span={2.5}>
                           <TextInput
