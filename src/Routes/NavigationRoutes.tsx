@@ -397,10 +397,14 @@ const NavigationRoutes = () => {
         <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteNonTradeMaster />} />
           <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
+          <Route path="edit/:id" element={<DebitCreditNoteNonTradeCreate />} />
+          <Route path="view/:id" element={<DebitCreditNoteNonTradeCreate />} />
         </Route>
         <Route path="/debit-credit-note-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteTradeMaster />} />
           <Route path="create" element={<DebitCreditNoteTradeCreate />} />
+          <Route path="edit/:id" element={<DebitCreditNoteTradeCreate />} />
+          <Route path="view/:id" element={<DebitCreditNoteTradeCreate />} />
         </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />

@@ -32,7 +32,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
@@ -161,6 +161,7 @@ export function DebitCreditNoteCreateBase({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  useParams(); // keep route `:id` segment for identification
   console.log("[DCN] render", {
     payloadType,
     showTradeFields,
@@ -169,6 +170,7 @@ export function DebitCreditNoteCreateBase({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
   const [loadingText, setLoadingText] = useState<string>("");
+  const isPrefillingRef = useRef(false);
 
   type SupportingDocument = {
     name: string;
@@ -426,32 +428,18 @@ export function DebitCreditNoteCreateBase({
 
   // Edit/View flow: prefill from list page row data
   useEffect(() => {
-    const stateAny = (location.state ?? null) as unknown;
-    const stateObj = (stateAny ?? null) as {
-      mode?: "view" | "edit";
-      data?: unknown;
-      row?: unknown;
-      record?: unknown;
-      item?: unknown;
-    } | null;
-
-    // Some list pages pass `{ data: row }`, others pass `row` directly.
-    const candidate =
-      stateObj?.data ??
-      stateObj?.row ??
-      stateObj?.record ??
-      stateObj?.item ??
-      stateAny;
-
+    const state = (location.state ?? null) as { data?: unknown } | null;
+    const candidate = state?.data ?? null;
     if (!candidate) return;
 
-    console.log("[DCN] edit prefill: location.state =", location.state);
-    console.log("[DCN] edit prefill: candidate =", candidate);
-
+    // For edit/view routes we rely on the row payload passed in location.state.
+    // The `:id` in the URL is used for identification only.
+    isPrefillingRef.current = true;
     applyCreateResponseToForm(candidate);
-    // Log after state updates flush using latest values
+    // Release lock after form state flushes, so other effects don't overwrite
+    // the mapped lines with initial defaults.
     setTimeout(() => {
-      console.log("[DCN] after prefill: lines =", form.getValues().lines);
+      isPrefillingRef.current = false;
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
@@ -596,6 +584,16 @@ export function DebitCreditNoteCreateBase({
     return Array.from(uniq);
   }, [sacCodes]);
 
+  // Ensure SAC dropdown can display prefilled values even before/if master list includes them.
+  const sacCodeOptionsForForm = useMemo(() => {
+    const uniq = new Set<string>(sacCodeOptions);
+    form.values.lines.forEach((l) => {
+      const v = String(l.sac_code ?? "").trim();
+      if (v) uniq.add(v);
+    });
+    return Array.from(uniq);
+  }, [sacCodeOptions, form.values.lines]);
+
   // daybookOptions removed (Daybook now uses SearchableSelect)
 
   const FORM_DATA_HEADERS = {
@@ -677,14 +675,10 @@ export function DebitCreditNoteCreateBase({
 
   const applyCreateResponseToForm = (raw: unknown) => {
     console.log("[DCN] applyCreateResponseToForm: raw =", raw);
-    // Supports:
-    // - axios response: { data: { ...note } } or { data: { data: { ...note } } }
-    // - router state: { mode, data: { ...note } }
-    // - direct row: { ...note }
+    // Supports axios responses that wrap the note under `data`.
     const unwrap = (x: unknown): unknown => {
       if (!x || typeof x !== "object") return x;
       const obj = x as Record<string, unknown>;
-      if ("mode" in obj && "data" in obj) return obj.data;
       if ("data" in obj) {
         const d = obj.data;
         if (d && typeof d === "object") {
@@ -697,23 +691,17 @@ export function DebitCreditNoteCreateBase({
     };
 
     const header = unwrap(raw) as Record<string, unknown>;
-    const linesFromDetails = (header as { details?: unknown }).details;
     const linesFromTem = (header as { debit_credit_note_tem?: unknown })
       .debit_credit_note_tem;
-    const details = (
-      Array.isArray(linesFromDetails)
-        ? linesFromDetails
-        : Array.isArray(linesFromTem)
-          ? linesFromTem
-          : []
-    ) as Array<Record<string, unknown>>;
+    const details = (Array.isArray(linesFromTem) ? linesFromTem : []) as Array<
+      Record<string, unknown>
+    >;
 
     console.log(
       "[DCN] applyCreateResponseToForm: header keys =",
       Object.keys(header ?? {}),
     );
     console.log("[DCN] applyCreateResponseToForm: lines source counts =", {
-      details: Array.isArray(linesFromDetails) ? linesFromDetails.length : null,
       debit_credit_note_tem: Array.isArray(linesFromTem)
         ? linesFromTem.length
         : null,
@@ -777,7 +765,7 @@ export function DebitCreditNoteCreateBase({
     if (header?.gst_id != null)
       form.setFieldValue("gstId", String(header.gst_id));
 
-    // Details -> lines
+    // debit_credit_note_tem -> lines
     if (Array.isArray(details) && details.length) {
       const fallbackCurrencyCode =
         headerCurrencyCode || String(form.values.currencyCode ?? "INR");
@@ -815,7 +803,7 @@ export function DebitCreditNoteCreateBase({
         amount_in_inr: d.amount_in_inr != null ? Number(d.amount_in_inr) : "",
         local_amount: d.local_amount != null ? Number(d.local_amount) : "",
         dr_cr: d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "",
-        sac_code: String(d.sac_code ?? ""),
+        sac_code: String(d.sac_code ?? "").trim(),
         narration: String(d.narration ?? ""),
         note: String(d.note ?? ""),
       }));
@@ -827,7 +815,7 @@ export function DebitCreditNoteCreateBase({
       form.setFieldValue("lines", mapped);
     } else {
       console.log(
-        "[DCN] applyCreateResponseToForm: no line items found in payload (details/debit_credit_note_tem empty)",
+        "[DCN] applyCreateResponseToForm: no line items found in payload (debit_credit_note_tem empty)",
       );
     }
   };
@@ -879,10 +867,7 @@ export function DebitCreditNoteCreateBase({
   const statusUpper = String(
     (saveResponse as { status?: unknown } | null)?.status ?? "",
   ).toUpperCase();
-  const navState = (location.state ?? null) as {
-    mode?: "view" | "edit";
-  } | null;
-  const isViewMode = navState?.mode === "view";
+  const isViewMode = location.pathname.includes("/view/");
   const isPosted = isEditMode && statusUpper === "POSTED";
   const isReadOnly = isViewMode || isPosted;
   const pageLabel = showTradeFields ? "Trade" : "Non Trade";
@@ -897,6 +882,7 @@ export function DebitCreditNoteCreateBase({
   // If currency is INR, default header/line ROE to 1 (do not override user-entered values).
   useEffect(() => {
     if (isReadOnly) return;
+    if (isPrefillingRef.current) return;
     const code = String(form.values.currencyCode ?? "")
       .trim()
       .toUpperCase();
@@ -1776,10 +1762,10 @@ export function DebitCreditNoteCreateBase({
                 <Grid.Col span={1}>
                   <Dropdown
                     searchable
-                    data={sacCodeOptions}
-                    value={l.sac_code || null}
+                    data={sacCodeOptionsForForm}
+                    value={String(l.sac_code ?? "").trim() || null}
                     onChange={(val) => {
-                      setLineById(l.id, { sac_code: val ?? "" });
+                      setLineById(l.id, { sac_code: String(val ?? "").trim() });
                     }}
                     size="xs"
                     clearable

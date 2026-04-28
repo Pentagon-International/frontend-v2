@@ -130,6 +130,7 @@ export default function DebitCreditNoteTradeMaster() {
       return rows;
     },
     staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 
@@ -188,14 +189,18 @@ export default function DebitCreditNoteTradeMaster() {
         size: 120,
         Cell: ({ cell }) => {
           const row = cell.row.original as NoteRow;
-          const details =
-            (row?.details as Array<Record<string, unknown>> | undefined) ?? [];
-          const v = details?.[0]?.amount;
-          if (v == null) return <Text size="sm">-</Text>;
-          const num = typeof v === "number" ? v : Number(v);
+          const lines =
+            (row?.debit_credit_note_tem as Array<Record<string, unknown>> | undefined) ??
+            [];
+          const total = (Array.isArray(lines) ? lines : []).reduce((sum, l) => {
+            const v = (l as { amount?: unknown })?.amount;
+            const n = typeof v === "number" ? v : Number(v);
+            return Number.isFinite(n) ? sum + n : sum;
+          }, 0);
+          if (!Number.isFinite(total) || total === 0) return <Text size="sm">-</Text>;
           return (
             <Text size="sm">
-              {Number.isFinite(num) ? num.toFixed(2) : String(v)}
+              {total.toFixed(2)}
             </Text>
           );
         },
@@ -218,9 +223,12 @@ export default function DebitCreditNoteTradeMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() =>
-                      navigate("/debit-credit-note-trade/create", {
-                        state: { mode: "view", data: row.original },
-                      })
+                      navigate(
+                        `/debit-credit-note-trade/view/${String(
+                          row.original?.id ?? "",
+                        )}`,
+                        { state: { data: row.original } },
+                      )
                     }
                   >
                     <Group gap="sm">
@@ -233,9 +241,12 @@ export default function DebitCreditNoteTradeMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() =>
-                        navigate("/debit-credit-note-trade/create", {
-                          state: { mode: "edit", data: row.original },
-                        })
+                        navigate(
+                          `/debit-credit-note-trade/edit/${String(
+                            row.original?.id ?? "",
+                          )}`,
+                          { state: { data: row.original } },
+                        )
                       }
                     >
                       <Group gap="sm">
