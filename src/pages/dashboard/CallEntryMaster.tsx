@@ -355,13 +355,21 @@ function CallEntry() {
 
   // Remove old state variables since React Query handles this now
 
+  /** Unfiltered list: only fetch when not using filtered/search API (avoids duplicate requests & wrong totals). */
+  const isFilteredOrSearchActive =
+    filtersApplied || Boolean(debouncedSearch.trim());
+
   // Fetch call entry data with React Query - using filter API with date range on initial mount
   const {
     data: callEntryResult = { items: [], total: 0, statusCounts: null },
     isLoading: callEntryLoading,
+    isFetching: callEntryFetching,
     refetch: refetchCallEntries,
   } = useQuery({
     queryKey: ["callEntries", pageIndex, pageSize],
+    enabled: !isFilteredOrSearchActive,
+    /** Keeps prior page totals/rows while the next page loads — avoids total→0 and clamp resetting pageIndex to 0. */
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       try {
         // Use dates from location.state if available (from Dashboard), otherwise use initial dates
@@ -435,6 +443,7 @@ function CallEntry() {
       pageIndex,
       pageSize,
     ],
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       try {
         const filterPayload = buildFilterPayload();
@@ -1121,7 +1130,7 @@ function CallEntry() {
 
   // Determine which data to display (server-paginated page from active query)
   const displayData = useMemo(() => {
-    if (filtersApplied || debouncedSearch.trim()) {
+    if (isFilteredOrSearchActive) {
       return filteredCallEntryResult.items;
     }
     console.log("Displaying unfiltered data:", callEntryResult.items);
@@ -1129,44 +1138,57 @@ function CallEntry() {
   }, [
     callEntryResult.items,
     filteredCallEntryResult.items,
-    filtersApplied,
-    debouncedSearch,
+    isFilteredOrSearchActive,
   ]);
 
   const totalRecords = useMemo(() => {
-    if (filtersApplied || debouncedSearch.trim()) {
-      return filteredCallEntryResult.total;
-    }
-    return callEntryResult.total;
+    const raw = isFilteredOrSearchActive
+      ? filteredCallEntryResult.total
+      : callEntryResult.total;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+    return 0;
   }, [
-    filtersApplied,
-    debouncedSearch,
+    isFilteredOrSearchActive,
     filteredCallEntryResult.total,
     callEntryResult.total,
   ]);
 
   useEffect(() => {
+    if (pageSize <= 0) return;
+    const listFetching = isFilteredOrSearchActive
+      ? filteredCallEntryFetching
+      : callEntryFetching;
+    /** While fetching the next/prev page, totals can briefly go stale — never clamp page during that window. */
+    if (listFetching) return;
     const totalPagesCount = Math.max(1, Math.ceil(totalRecords / pageSize));
-    if (pageIndex >= totalPagesCount) {
+    if (pageIndex > totalPagesCount - 1) {
       setPageIndex(Math.max(0, totalPagesCount - 1));
     }
-  }, [totalRecords, pageSize, pageIndex]);
+  }, [
+    totalRecords,
+    pageSize,
+    pageIndex,
+    isFilteredOrSearchActive,
+    filteredCallEntryFetching,
+    callEntryFetching,
+  ]);
 
   // Loading state - show loader until API response is received
   const isLoading = useMemo(() => {
     if (isClosingCallEntry || isRefreshingData) return true;
-    if (filtersApplied || debouncedSearch.trim()) {
+    if (isFilteredOrSearchActive) {
       return filteredCallEntryLoading || filteredCallEntryFetching;
     }
-    return callEntryLoading;
+    return callEntryLoading || callEntryFetching;
   }, [
     callEntryLoading,
+    callEntryFetching,
     filteredCallEntryLoading,
     filteredCallEntryFetching,
-    filtersApplied,
+    isFilteredOrSearchActive,
     isClosingCallEntry,
     isRefreshingData,
-    debouncedSearch,
   ]);
 
   const applyFilters = async () => {
@@ -1260,6 +1282,8 @@ function CallEntry() {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
     setSearchQuery("");
+    setDebouncedSearch(""); // keep in sync with search immediately (debounce would delay filtered vs unfiltered mode)
+    prevSearchRef.current = "";
     setPageIndex(0);
     setFiltersApplied(false); // Reset filters applied state
 
@@ -1545,10 +1569,9 @@ function CallEntry() {
 
   const callEntryStats = useMemo(() => {
     const rows = displayData as CallEntryTableRow[];
-    const statusSource =
-      filtersApplied || debouncedSearch.trim()
-        ? filteredCallEntryResult
-        : callEntryResult;
+    const statusSource = isFilteredOrSearchActive
+      ? filteredCallEntryResult
+      : callEntryResult;
     const sc = statusSource.statusCounts;
     return {
       total: totalRecords,
@@ -1575,8 +1598,7 @@ function CallEntry() {
   }, [
     displayData,
     totalRecords,
-    filtersApplied,
-    debouncedSearch,
+    isFilteredOrSearchActive,
     filteredCallEntryResult,
     callEntryResult,
   ]);

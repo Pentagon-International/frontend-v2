@@ -678,6 +678,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       listPageSize,
       isApprovalMode,
     ],
+    /** Keeps prior page totals/rows while the next page loads — avoids total→0 and clamp resetting to page 1. */
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       try {
         let requestBody: { filters: any } = { filters: {} };
@@ -907,12 +909,24 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   ]);
 
   useEffect(() => {
+    const listFetching = filtersApplied
+      ? filteredQuotationFetching
+      : quotationFetching;
+    /** While fetching the next/prev page, totals can briefly go stale — never clamp page during that window. */
+    if (listFetching) return;
     const tr = summaryListTotalRecords;
     const totalPages = Math.max(1, Math.ceil(tr / listPageSize));
     if (listCurrentPage > totalPages) {
       setListCurrentPage(totalPages);
     }
-  }, [summaryListTotalRecords, listPageSize, listCurrentPage]);
+  }, [
+    summaryListTotalRecords,
+    listPageSize,
+    listCurrentPage,
+    filtersApplied,
+    filteredQuotationFetching,
+    quotationFetching,
+  ]);
 
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
