@@ -297,7 +297,7 @@ export default function SubledgerEnquiry() {
   const [resultTotal, setResultTotal] = useState<number | null>(null);
   const [isFetchingRows, setIsFetchingRows] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -547,7 +547,7 @@ export default function SubledgerEnquiry() {
                   value={listTotalCount}
                   label="Total"
                 />
-                <ERPListStatPill
+                {/* <ERPListStatPill
                   theme={erpTheme}
                   icon={<IconCoin size={14} color="#059669" />}
                   iconBackground="#d1fae5"
@@ -562,39 +562,39 @@ export default function SubledgerEnquiry() {
                   iconColor="#d97706"
                   value={closingBalanceLabel ?? "—"}
                   label="Closing"
-                />
+                /> */}
               </>
             ),
-            secondary: selectedAccount ? (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBook2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text
-                    size="xs"
-                    fw={600}
-                    c={fg}
-                    style={{ fontFamily: erpTheme.fontSans }}
-                    component="span"
-                  >
-                    GL: {selectedGlAccountCode || "—"}
-                  </Text>
-                </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <Text size="xs" c={muted} component="span">
-                    SL
-                  </Text>
-                  <Text
-                    size="xs"
-                    fw={600}
-                    c={fg}
-                    style={{ fontFamily: erpTheme.fontSans }}
-                    component="span"
-                  >
-                    {selectedSlCode || "—"}
-                  </Text>
-                </Group>
-              </>
-            ) : undefined,
+            // secondary: selectedAccount ? (
+            //   <>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <IconBook2 size={16} color={muted} style={{ flexShrink: 0 }} />
+            //       <Text
+            //         size="xs"
+            //         fw={600}
+            //         c={fg}
+            //         style={{ fontFamily: erpTheme.fontSans }}
+            //         component="span"
+            //       >
+            //         GL: {selectedGlAccountCode || "—"}
+            //       </Text>
+            //     </Group>
+            //     <Group gap={8} wrap="nowrap" align="center">
+            //       <Text size="xs" c={muted} component="span">
+            //         SL
+            //       </Text>
+            //       <Text
+            //         size="xs"
+            //         fw={600}
+            //         c={fg}
+            //         style={{ fontFamily: erpTheme.fontSans }}
+            //         component="span"
+            //       >
+            //         {selectedSlCode || "—"}
+            //       </Text>
+            //     </Group>
+            //   </>
+            // ) : undefined,
             actions: (
               <>
                 <TextInput

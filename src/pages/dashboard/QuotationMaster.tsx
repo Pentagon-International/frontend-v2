@@ -349,10 +349,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     created_at: true,
     route: true,
     reference_no: true,
+    status: true,
     valid_upto_list: true,
     revision: true,
     reject_remark: true,
-    status: true,
   });
 
   // Search states
@@ -2590,10 +2590,10 @@ console.log("currentQuotation: ", currentQuotation);
       { id: "created_at", label: "Quote Date", checked: quotationVisibleColumns.created_at !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, created_at: !p.created_at })) },
       { id: "route", label: "Route", checked: quotationVisibleColumns.route !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, route: !p.route })) },
       { id: "reference_no", label: "Reference No", checked: quotationVisibleColumns.reference_no !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
+      { id: "status", label: "Status", checked: quotationVisibleColumns.status !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })) },
       { id: "valid_upto_list", label: "Valid Upto", checked: quotationVisibleColumns.valid_upto_list !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, valid_upto_list: !p.valid_upto_list })) },
       { id: "revision", label: "Revision", checked: quotationVisibleColumns.revision !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, revision: !p.revision })) },
       { id: "reject_remark", label: "Remark", checked: quotationVisibleColumns.reject_remark !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reject_remark: !p.reject_remark })) },
-      { id: "status", label: "Status", checked: quotationVisibleColumns.status !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })) },
     ],
     [quotationVisibleColumns]
   );

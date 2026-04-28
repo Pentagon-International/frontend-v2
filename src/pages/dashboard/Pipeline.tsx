@@ -76,6 +76,25 @@ type CustomerPipelineData = {
   total_volume: number;
 };
 
+/** Top-level `summary` from `pipeline/filter/` (filter-scoped totals across all matching rows). */
+type PipelineApiSummary = {
+  total_profit?: number;
+  total_volume?: number;
+};
+
+type PipelineQueryResult = {
+  results: CustomerPipelineData[];
+  summary: PipelineApiSummary;
+  /** Mirrors API `total_count` — total rows matching filters (all pages). */
+  totalCount: number;
+};
+
+const EMPTY_PIPELINE_QUERY: PipelineQueryResult = {
+  results: [],
+  summary: {},
+  totalCount: 0,
+};
+
 type FilterState = {
   customer: string | null;
   service: string | null;
@@ -136,17 +155,16 @@ function Pipeline() {
     search: null,
   });
 
-  // Single query using filter endpoint - always enabled, sends empty payload when no filters, filter payload when filters applied
+  // Single query: server pagination + summary totals from API (`summary.total_profit`, `summary.total_volume`, `total_count`)
   const {
-    data: pipelineData = [],
+    data: pipelineQueryResult,
     isLoading: pipelineLoading,
     isFetching: pipelineFetching,
     refetch: refetchPipeline,
   } = useQuery({
-    queryKey: ["pipeline", appliedFilters, debouncedSearch],
-    queryFn: async () => {
+    queryKey: ["pipeline", appliedFilters, debouncedSearch, listCurrentPage, listPageSize],
+    queryFn: async (): Promise<PipelineQueryResult> => {
       try {
-        // Build payload based on applied filters and search
         const payload: Record<string, unknown> = {};
 
         if (appliedFilters.customer)
@@ -161,7 +179,6 @@ function Pipeline() {
         if (appliedFilters.sales_person)
           payload.created_by = appliedFilters.sales_person;
 
-        // Ensure full, debounced search value is sent in payload
         let searchValue =
           (appliedFilters.search ?? "").toString().trim() || "";
         const debouncedTrimmed = debouncedSearch.trim();
@@ -172,41 +189,61 @@ function Pipeline() {
           payload.search = searchValue;
         }
 
-        // If payload has filters, wrap in filters object, otherwise send empty object
-        const requestBody = Object.keys(payload).length > 0 
-          ? { filters: payload } 
-          : {};
+        const requestBody: Record<string, unknown> = {
+          page: listCurrentPage,
+          page_size: listPageSize,
+        };
+        if (Object.keys(payload).length > 0) {
+          requestBody.filters = payload;
+        }
 
         const response = await apiCallProtected.post(
           URL.pipelineFilter,
           requestBody
         );
-        const responseData =
-          (response as any)?.data ||
-          (response as unknown as {
-            results: CustomerPipelineData[];
-            total_count: number;
-            page: number;
-            page_size: number;
-            total_pages: number;
-            filters_applied: Record<string, unknown>;
-            ordering: string[];
-          });
+        const raw =
+          (response as { data?: unknown }).data ?? (response as unknown);
 
-        if (responseData.results && Array.isArray(responseData.results)) {
-          return responseData.results;
-        }
-        return [];
+        const r = raw as {
+          results?: CustomerPipelineData[];
+          summary?: PipelineApiSummary;
+          total_count?: number;
+        };
+
+        const results = Array.isArray(r.results) ? r.results : [];
+        const summary = r.summary ?? {};
+        const tp = Number(summary.total_profit);
+        const tv = Number(summary.total_volume);
+
+        const totalCountRaw = r.total_count;
+        const totalCount =
+          typeof totalCountRaw === "number" && Number.isFinite(totalCountRaw)
+            ? Math.floor(totalCountRaw)
+            : results.length;
+
+        return {
+          results,
+          summary: {
+            total_profit: Number.isFinite(tp) ? tp : 0,
+            total_volume: Number.isFinite(tv) ? tv : 0,
+          },
+          totalCount,
+        };
       } catch (error) {
         console.error("Error fetching pipeline data:", error);
-        return [];
+        return { ...EMPTY_PIPELINE_QUERY };
       }
     },
-    staleTime: 0, // Always fetch fresh data on mount to show loader
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: true, // Always refetch on mount to ensure fresh data and show loader
+    refetchOnMount: true,
+    placeholderData: (previousData) => previousData,
   });
+
+  const pipelinePage =
+    pipelineQueryResult ?? EMPTY_PIPELINE_QUERY;
+  const pipelineData = pipelinePage.results;
 
   // Clear other keys in store on mount (keep only current LIST_KEY)
   useEffect(() => {
@@ -572,25 +609,40 @@ function Pipeline() {
   };
   const { border, muted, primary, fontSans, fg } = erpTheme;
 
+  /** Sub-header stats from API `summary` + `total_count` (same pattern as Air Export Booking summary pills). */
   const pipelineStats = useMemo(() => {
-    const rows = displayData;
-    let profit = 0;
-    let vol = 0;
-    let lines = 0;
-    for (const r of rows) {
-      profit += Number(r.total_profit) || 0;
-      vol += Number(r.total_volume) || 0;
-      lines += r.pipelines?.length || 0;
+    const q = pipelineQueryResult ?? EMPTY_PIPELINE_QUERY;
+    const profit = Number(q.summary.total_profit);
+    const vol = Number(q.summary.total_volume);
+    return {
+      totalRows: q.totalCount,
+      profit: Number.isFinite(profit) ? profit : 0,
+      vol: Number.isFinite(vol) ? vol : 0,
+    };
+  }, [
+    pipelineQueryResult?.totalCount,
+    pipelineQueryResult?.summary?.total_profit,
+    pipelineQueryResult?.summary?.total_volume,
+  ]);
+
+  useEffect(() => {
+    if (listPageSize <= 0) return;
+    if (pipelineFetching) return;
+    const totalRecords = pipelineQueryResult?.totalCount ?? 0;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / listPageSize));
+    if (listCurrentPage > totalPages) {
+      setListCurrentPage(totalPages);
     }
-    return { n: rows.length, profit, vol, lines };
-  }, [displayData]);
+  }, [
+    pipelineQueryResult?.totalCount,
+    listPageSize,
+    listCurrentPage,
+    pipelineFetching,
+  ]);
 
   const pipelineTableRows: PipelineListRow[] = useMemo(() => {
-    const total = displayData.length;
-    const start = (listCurrentPage - 1) * listPageSize;
-    const slice = displayData.slice(start, Math.min(start + listPageSize, total));
-    return slice.map((r, i) => ({
-      sno: start + i + 1,
+    return displayData.map((r, i) => ({
+      sno: (listCurrentPage - 1) * listPageSize + i + 1,
       customer_code: r.customer_code,
       customer_name: r.customer_name,
       created_by: r.created_by,
@@ -639,7 +691,7 @@ function Pipeline() {
                   <ERPListStatPill
                     theme={erpTheme}
                     icon={<IconUsers size={14} color={primary} />}
-                    value={pipelineStats.n}
+                    value={pipelineStats.totalRows.toLocaleString()}
                     label="Total"
                   />
                   <ERPListStatPill
@@ -659,14 +711,6 @@ function Pipeline() {
                       ? pipelineStats.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })
                       : "0"}
                     label="Total volume"
-                  />
-                  <ERPListStatPill
-                    theme={erpTheme}
-                    icon={<IconRoute size={14} color="#d97706" />}
-                    iconBackground="#fef3c7"
-                    iconColor="#d97706"
-                    value={pipelineStats.lines}
-                    label="Line items"
                   />
                 </>
               ),
@@ -935,7 +979,7 @@ function Pipeline() {
               footer: (
                 <ERPListPaginationFooter
                   theme={erpTheme}
-                  totalRecords={displayData.length}
+                  totalRecords={pipelineStats.totalRows}
                   pageIndex={listCurrentPage - 1}
                   pageSize={listPageSize}
                   onPageIndexChange={(idx) => setListCurrentPage(idx + 1)}

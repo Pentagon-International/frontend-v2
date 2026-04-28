@@ -165,7 +165,11 @@ export function EnquirySummaryNativeTable({
           {visible.route && <th style={erpListThStyle(theme)}>Route</th>}
           {visible.reference_no && <th style={erpListThStyle(theme)}>Reference No</th>}
           {visible.date && <th style={erpListThStyle(theme)}>Enquiry Date</th>}
-          {visible.status && <th style={erpListThStyle(theme)}>Status</th>}
+          {visible.status && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 140 }}>
+              Status
+            </th>
+          )}
           {visible.remark && <th style={erpListThStyle(theme)}>Remark</th>}
           <th style={erpListThActionsSpacer(theme, 44)} />
         </tr>
@@ -268,23 +272,45 @@ export function EnquirySummaryNativeTable({
                   </td>
                 )}
                 {visible.status && (
-                  <td style={erpListTdPaddingStyle()}>
-                    <Badge
-                      size="sm"
-                      variant="light"
-                      radius="xl"
-                      color={color}
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      verticalAlign: "middle",
+                      minWidth: 140,
+                    }}
+                  >
+                    <Tooltip
+                      label={label}
+                      withArrow
+                      position="top"
                       styles={{
-                        root: {
-                          textTransform: "none",
-                          minWidth: "fit-content",
-                          whiteSpace: "nowrap",
+                        tooltip: {
                           fontFamily: fontSans,
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
                         },
                       }}
                     >
-                      {label}
-                    </Badge>
+                      <Badge
+                        size="sm"
+                        variant="light"
+                        radius="xl"
+                        color={color}
+                        styles={{
+                          root: {
+                            textTransform: "none",
+                            minWidth: "fit-content",
+                            whiteSpace: "nowrap",
+                            flexWrap: "nowrap",
+                            maxWidth: "100%",
+                            fontFamily: fontSans,
+                          },
+                        }}
+                      >
+                        {label}
+                      </Badge>
+                    </Tooltip>
                   </td>
                 )}
                 {visible.remark && (
@@ -463,15 +489,37 @@ function renderPreviewCell({
     const v = row[col.key as keyof typeof row];
     const { label, color } = getStatusBadge(String(v ?? ""));
     return (
-      <Badge
-        size="sm"
-        variant="light"
-        radius="xl"
-        color={color}
-        styles={{ root: { textTransform: "none", fontFamily: fontSans } }}
+      <Tooltip
+        label={label}
+        withArrow
+        position="top"
+        styles={{
+          tooltip: {
+            fontFamily: fontSans,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          },
+        }}
       >
-        {label}
-      </Badge>
+        <Badge
+          size="sm"
+          variant="light"
+          radius="xl"
+          color={color}
+          styles={{
+            root: {
+              textTransform: "none",
+              fontFamily: fontSans,
+              whiteSpace: "nowrap",
+              flexWrap: "nowrap",
+              maxWidth: "100%",
+              minWidth: "fit-content",
+            },
+          }}
+        >
+          {label}
+        </Badge>
+      </Tooltip>
     );
   }
   if (col.kind === "route" && col.routeDestKey) {

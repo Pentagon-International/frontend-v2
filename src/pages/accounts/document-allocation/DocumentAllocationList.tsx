@@ -250,7 +250,7 @@ export default function DocumentAllocationList() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   const [draftFilters, setDraftFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...EMPTY_FILTERS });

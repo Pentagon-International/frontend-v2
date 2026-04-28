@@ -62,10 +62,11 @@ export type QuotationVisibleColumns = {
   /** One column: origin → destination (same as Air Export Booking “Route”). */
   route: boolean;
   reference_no: boolean;
+  /** Immediately after Reference No in the table. */
+  status: boolean;
   valid_upto_list: boolean;
   revision: boolean;
   reject_remark: boolean;
-  status: boolean;
 };
 
 export type QuotationRowMenuContext = {
@@ -203,10 +204,10 @@ export function QuotationListNativeTable({
       visible.created_at,
       visible.route,
       visible.reference_no,
+      visible.status,
       visible.valid_upto_list,
       visible.revision,
       visible.reject_remark,
-      visible.status,
     ].filter(Boolean).length + 1;
 
   return (
@@ -221,13 +222,21 @@ export function QuotationListNativeTable({
             <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Customer</th>
           )}
           {visible.sales_person && <th style={erpListThStyle(theme)}>Sales Person</th>}
-          {visible.created_at && <th style={erpListThStyle(theme)}>Quote Date</th>}
+          {visible.created_at && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>Quote Date</th>
+          )}
           {visible.route && <th style={erpListThStyle(theme)}>Route</th>}
           {visible.reference_no && <th style={erpListThStyle(theme)}>Reference No</th>}
-          {visible.valid_upto_list && <th style={erpListThStyle(theme)}>Valid Upto</th>}
+          {visible.status && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 140 }}>
+              Status
+            </th>
+          )}
+          {visible.valid_upto_list && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>Valid Upto</th>
+          )}
           {visible.revision && <th style={erpListThStyle(theme)}>Revision</th>}
           {visible.reject_remark && <th style={erpListThStyle(theme)}>Remark</th>}
-          {visible.status && <th style={erpListThStyle(theme)}>Status</th>}
           <th style={erpListThActionsSpacer(theme, 44)} />
         </tr>
       </thead>
@@ -306,7 +315,14 @@ export function QuotationListNativeTable({
                   </td>
                 )}
                 {visible.created_at && (
-                  <td style={{ ...erpListTdPaddingStyle(), color: muted, fontFamily: fontSans }}>
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      color: muted,
+                      fontFamily: fontSans,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {quoteCreatedAt ? dayjs(quoteCreatedAt).format(dateFormat) : "—"}
                   </td>
                 )}
@@ -327,16 +343,32 @@ export function QuotationListNativeTable({
                     </Text>
                   </td>
                 )}
+                {visible.status && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      verticalAlign: "middle",
+                      minWidth: 140,
+                    }}
+                  >
+                    <StatusBadge status={row.status} fontSans={fontSans} />
+                  </td>
+                )}
                 {visible.valid_upto_list && (
-                  <td style={erpListTdPaddingStyle()}>
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      fontFamily: fontSans,
+                      fontSize: 14,
+                      color: fg,
+                    }}
+                  >
                     {!row.valid_upto_list?.length ? (
                       "—"
                     ) : (
-                      <div style={{ lineHeight: 1.4, fontFamily: fontSans, fontSize: 14, color: fg }}>
-                        {row.valid_upto_list.map((d, i) => (
-                          <div key={i}>{dayjs(d).format(dateFormat)}</div>
-                        ))}
-                      </div>
+                      row.valid_upto_list.map((d) => dayjs(d).format(dateFormat)).join(", ")
                     )}
                   </td>
                 )}
@@ -402,11 +434,6 @@ export function QuotationListNativeTable({
                     )}
                   </td>
                 )}
-                {visible.status && (
-                  <td style={erpListTdPaddingStyle()}>
-                    <StatusBadge status={row.status} />
-                  </td>
-                )}
                 <td style={erpListRowActionMenuTdStyle()}>
                   <QuotationRowMenu
                     row={row}
@@ -424,22 +451,50 @@ export function QuotationListNativeTable({
   );
 }
 
-function StatusBadge({ status }: { status: string | undefined }) {
+const statusBadgeRootStyle = {
+  whiteSpace: "nowrap" as const,
+  flexWrap: "nowrap" as const,
+  maxWidth: "100%",
+};
+
+function StatusBadge({
+  status,
+  fontSans,
+}: {
+  status: string | undefined;
+  fontSans: string;
+}) {
+  const badgeStyles = {
+    root: {
+      ...statusBadgeRootStyle,
+      fontFamily: fontSans,
+    },
+  };
+
   if (!status) {
     return (
-      <Badge color="gray" size="sm">
+      <Badge color="gray" size="sm" styles={badgeStyles}>
         Pending
       </Badge>
     );
   }
   const s = status.toUpperCase();
   const blue = s === "QUOTE APPROVED" || status === "Quote Approved";
+  const label = status;
   return (
-    <Badge
-      color={s === "GAINED" ? "green" : s === "LOST" ? "red" : blue ? "blue" : "cyan"}
-      size="sm"
+    <Tooltip
+      label={label}
+      withArrow
+      position="top"
+      styles={{ tooltip: { fontFamily: fontSans, fontSize: 12, whiteSpace: "nowrap" } }}
     >
-      {s}
-    </Badge>
+      <Badge
+        color={s === "GAINED" ? "green" : s === "LOST" ? "red" : blue ? "blue" : "cyan"}
+        size="sm"
+        styles={badgeStyles}
+      >
+        {s}
+      </Badge>
+    </Tooltip>
   );
 }
