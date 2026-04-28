@@ -12,7 +12,6 @@ import {
   IconHelpCircle,
   IconKeyboard,
   IconMessageQuestion,
-  IconPercentage,
   IconPlaneInflight,
   IconRosetteDiscount,
   IconSettingsSpark,
@@ -51,7 +50,6 @@ import {
   IconBookOff,
   IconLink,
   IconFileUpload,
-  IconFile,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -81,7 +79,7 @@ const Navbar = ({
   const showQuotationApproval = isManagerOrAdmin && hasQuotationApprovalPermission;
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
-  const [isCustomerServiceOpen, setIsCustomerServiceOpen] = useState(false);
+  const [, setIsCustomerServiceOpen] = useState(false);
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);

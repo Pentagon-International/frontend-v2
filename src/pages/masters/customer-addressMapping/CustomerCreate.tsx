@@ -438,6 +438,7 @@ const AddressCard = memo(
     isViewMode,
     isVendorMasterRoute,
     isDubaiUser,
+    isIndiaUser,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -460,6 +461,7 @@ const AddressCard = memo(
     isViewMode: boolean;
     isVendorMasterRoute: boolean;
     isDubaiUser: boolean;
+    isIndiaUser: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -737,7 +739,7 @@ const AddressCard = memo(
             </Grid>
           </Card>
 
-          {!isDubaiUser && (
+          {isIndiaUser && (
           <Card withBorder radius="md" padding="md">
             <Box
               mb="sm"
@@ -959,6 +961,9 @@ function CustomerCreate() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const userCountry = useAuthStore((s) => s.user?.country);
+  const isIndiaUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("india");
   const isDubaiUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "AE" ||
     String(userCountry?.country_name ?? "").toLowerCase().includes("united arab emirates") ||
@@ -2860,6 +2865,7 @@ function CustomerCreate() {
                     isViewMode={isViewMode}
                     isVendorMasterRoute={isVendorMasterRoute}
                     isDubaiUser={isDubaiUser}
+                    isIndiaUser={isIndiaUser}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}

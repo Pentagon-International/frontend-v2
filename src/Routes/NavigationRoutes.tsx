@@ -188,6 +188,7 @@ import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
+import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -326,6 +327,7 @@ const NavigationRoutes = () => {
           <Route path="trial-balance" element={<TrialBalance />} />
           <Route path="aging-outstanding" element={<AgingOutstanding />} />
           <Route path="subledger-outstanding" element={<SubledgerOutstanding />} />
+          <Route path="purchase-register" element={<PurchaseRegister />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />

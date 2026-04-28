@@ -2,6 +2,7 @@ import { Box, Button, Card, Grid, Group, Select, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SingleDateInput from "../../../components/SingleDateInput";
 import Dropdown from "../../../components/Dropdown";
 import SearchableSelect from "../../../components/SearchableSelect";
@@ -107,6 +108,7 @@ function branchesForProfileCountry(
 type BranchScopeMode = "initial" | "country" | "branch";
 
 export default function AgingOutstanding() {
+  const navigate = useNavigate();
   const [printing, setPrinting] = useState(false);
   const [branchScopeMode, setBranchScopeMode] =
     useState<BranchScopeMode>("initial");
@@ -490,6 +492,9 @@ export default function AgingOutstanding() {
 
           <Grid.Col span={12}>
             <Group justify="flex-end" mt="xs">
+              <Button variant="default" onClick={() => navigate("/reports")}>
+                Back
+              </Button>
               <Button loading={printing} onClick={handlePrint}>
                 Print
               </Button>
