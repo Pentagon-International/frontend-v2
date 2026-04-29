@@ -118,6 +118,7 @@ type AddressData = {
   gst_registration_status?: string;
   composite_regular?: string;
   sez?: boolean;
+  msme?: boolean;
   pan_aadhaar_link?: boolean;
   Itr_filed?: "Yes" | "No" | "NA" | "";
   tds_threshold_flag?: boolean;
@@ -275,6 +276,7 @@ const addressValidationSchema = yup.object({
         gst_registration_status: yup.string().optional(),
         composite_regular: yup.string().optional().oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
         sez: yup.boolean().optional(),
+        msme: yup.boolean().optional(),
         latitude: yup
           .number()
           .optional()
@@ -842,22 +844,45 @@ const AddressCard = memo(
             )}
 
             <Grid.Col span={4}>
-              <Box pt={22}>
-                <Switch
-                  label="SEZ"
-                  description={
-                    addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
-                  }
-                  disabled={isViewMode}
-                  checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
-                  onChange={(e) =>
-                    addressForm.setFieldValue(
-                      `addresses_data.${index}.sez`,
-                      e.currentTarget.checked,
-                    )
-                  }
-                />
-              </Box>
+              <Select
+                label="SEZ"
+                placeholder="Select"
+                disabled={isViewMode}
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={
+                  addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
+                }
+                onChange={(value) =>
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.sez`,
+                    value === "Yes",
+                  )
+                }
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <Select
+                label="MSME"
+                placeholder="Select"
+                disabled={isViewMode}
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={
+                  addressForm.values.addresses_data[index]?.msme ? "Yes" : "No"
+                }
+                onChange={(value) =>
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.msme`,
+                    value === "Yes",
+                  )
+                }
+              />
             </Grid.Col>
 
             {isVendorMasterRoute && (
@@ -1260,6 +1285,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1300,6 +1326,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1569,6 +1596,7 @@ function CustomerCreate() {
                 gst_registration_status: addr.gst_registration_status ?? "",
                 composite_regular: addr.composite_regular ?? "",
                 sez: Boolean(addr.sez),
+                msme: Boolean((addr as AddressData).msme),
                 latitude: addr.latitude || 0,
                 longitude: addr.longitude || 0,
               };
@@ -1593,6 +1621,7 @@ function CustomerCreate() {
               gst_registration_status: "",
               composite_regular: "",
               sez: false,
+              msme: false,
               latitude: 0,
               longitude: 0,
             },
@@ -2018,6 +2047,7 @@ function CustomerCreate() {
       gst_registration_status: "",
       composite_regular: "",
       sez: false,
+      msme: false,
       latitude: 0,
       longitude: 0,
     };
@@ -2292,6 +2322,7 @@ function CustomerCreate() {
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
           sez: Boolean(addr.sez),
+          msme: Boolean((addr as AddressData).msme),
           ...(isVendorMasterRoute
             ? {
                 pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2376,6 +2407,7 @@ function CustomerCreate() {
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
             sez: Boolean(addr.sez),
+            msme: Boolean((addr as AddressData).msme),
             ...(isVendorMasterRoute
               ? {
                   pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),

@@ -84,6 +84,7 @@ export const URL = {
   customerServiceShipment: "customer-service-shipment/",
   customerServiceShipmentFilter: "customer-service-shipment/filter/",
   uploadDocument: "customer-service-shipment/upload-document/",
+  airImportBooked: "customer-service-shipment/air-import-booked/",
   eventMaster: "event-master/",
   eventMasterFilter: "filters_event_master/",
   triggerMaster: "trigger-master/filter/",
