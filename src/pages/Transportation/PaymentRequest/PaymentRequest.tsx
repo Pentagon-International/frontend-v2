@@ -174,10 +174,12 @@ type PaymentRequestFormData = {
   rejected_request_no: string;
   proforma_invoice_no_1: string;
   proforma_invoice_no_2: string;
+  proforma_invoice_date: Date | null;
   payment_type: string;
   voucher_type: string;
   cinv: boolean;
   actual_invoice_no: string;
+  actual_invoice_date: Date | null;
   account_id: string;
   account_code: string;
   currency: string;
@@ -224,7 +226,9 @@ type PaymentRequestFromApi = {
   vouchar_type?: string;
   CINV?: boolean;
   proforma_inv_no?: string;
+  proforma_inv_date?: string | null;
   actual_inv_no?: string;
+  actual_inv_date?: string | null;
   account_id?: number;
   account_code?: string;
   subledger_code?: string;
@@ -713,10 +717,12 @@ function PaymentRequest() {
       rejected_request_no: "",
       proforma_invoice_no_1: "",
       proforma_invoice_no_2: "",
+      proforma_invoice_date: null,
       payment_type: "",
       voucher_type: defaultVoucherTypeFromSource,
       cinv: false,
       actual_invoice_no: "",
+      actual_invoice_date: null,
       account_id: "",
       account_code: "",
       currency: defaultBranchCurrency,
@@ -1027,7 +1033,9 @@ function PaymentRequest() {
         vouchar_type: values.voucher_type ?? "",
         CINV: values.cinv ?? false,
         proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: values.actual_invoice_no ?? "",
+        actual_inv_date: formatDate(values.actual_invoice_date),
         account_id:
           values.account_id && Number.isFinite(Number(values.account_id))
             ? Number(values.account_id)
@@ -1199,7 +1207,9 @@ function PaymentRequest() {
         vouchar_type: values.voucher_type ?? "",
         CINV: values.cinv ?? false,
         proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: values.actual_invoice_no ?? "",
+        actual_inv_date: formatDate(values.actual_invoice_date),
         account_id:
           values.account_id && Number.isFinite(Number(values.account_id))
             ? Number(values.account_id)
@@ -1345,10 +1355,12 @@ function PaymentRequest() {
               rejected_request_no: form.values.rejected_request_no,
               proforma_invoice_no_1: d.proforma_inv_no ?? "",
               proforma_invoice_no_2: form.values.proforma_invoice_no_2,
+              proforma_invoice_date: normalizeDate(d.proforma_inv_date),
               payment_type: d.payment_type ?? "",
               voucher_type: d.vouchar_type ?? "",
               cinv: d.CINV ?? false,
               actual_invoice_no: d.actual_inv_no ?? "",
+              actual_invoice_date: normalizeDate(d.actual_inv_date),
               account_id: d.account_id != null ? String(d.account_id) : "",
               account_code: d.account_code ?? "",
               currency: d.currency_code ?? values.currency,
@@ -1455,10 +1467,12 @@ function PaymentRequest() {
       rejected_request_no: "",
       proforma_invoice_no_1: d.proforma_inv_no ?? "",
       proforma_invoice_no_2: "",
+      proforma_invoice_date: normalizeDate(d.proforma_inv_date),
       payment_type: d.payment_type ?? "",
       voucher_type: d.vouchar_type ?? "",
       cinv: d.CINV ?? false,
       actual_invoice_no: d.actual_inv_no ?? "",
+      actual_invoice_date: normalizeDate(d.actual_inv_date),
       account_id: d.account_id != null ? String(d.account_id) : "",
       account_code: d.account_code ?? "",
       currency: d.currency_code ?? defaultBranchCurrency,
@@ -2027,7 +2041,7 @@ function PaymentRequest() {
 
           <Grid columns={12} gutter="md">
             {/* ── Row 1 (3+3+3+3): Date | Payment Type | Voucher Type | CINV ── */}
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <SingleDateInput
                 label="Date"
                 placeholder="Select date"
@@ -2045,7 +2059,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <Dropdown
                 label="Payment Type"
                 placeholder="Select payment type"
@@ -2061,7 +2075,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <Dropdown
                 label="Voucher Type"
                 placeholder="Select voucher type"
@@ -2075,7 +2089,32 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
+              <TextInput
+                label="Proforma Invoice No."
+                placeholder="Enter proforma invoice no"
+                value={form.values.proforma_invoice_no_1}
+                onChange={(e) =>
+                  form.setFieldValue("proforma_invoice_no_1", e.target.value)
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
+              <SingleDateInput
+                label="Proforma Invoice Date"
+                placeholder="Select date"
+                value={normalizeDate(form.values.proforma_invoice_date)}
+                onChange={(date) =>
+                  form.setFieldValue("proforma_invoice_date", date)
+                }
+                readOnly={isReadOnly}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={2}>
               <TextInput
                 label="Actual Invoice No."
                 placeholder="Enter actual invoice no"
@@ -2088,7 +2127,15 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-
+            <Grid.Col span={2}>
+              <SingleDateInput
+                label="Actual Invoice Date"
+                placeholder="Select date"
+                value={normalizeDate(form.values.actual_invoice_date)}
+                onChange={(date) => form.setFieldValue("actual_invoice_date", date)}
+                readOnly={isReadOnly}
+              />
+            </Grid.Col>
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
             {/* <Grid.Col span={6}>
               <TextInput
@@ -2252,39 +2299,7 @@ function PaymentRequest() {
                 readOnly={isReadOnly}
               />
             </Grid.Col>
-
             <Grid.Col span={2}>
-              <Box
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "flex-end",
-                  height: "100%",
-                  paddingBottom: "6px",
-                  alignItems: "center",
-                }}
-              >
-                <Checkbox
-                  label="CINV"
-                  checked={form.values.cinv}
-                  onChange={(e) =>
-                    form.setFieldValue("cinv", e.currentTarget.checked)
-                  }
-                  disabled={isReadOnly}
-                  color="#105476"
-                  styles={{
-                    label: { fontSize: "13px", fontFamily: "Inter" },
-                  }}
-                />
-              </Box>
-            </Grid.Col>
-
-
-
-            {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
-
-
-            <Grid.Col span={3}>
               <TextInput
                 label="Paid To"
                 placeholder="Enter paid to"
@@ -2299,6 +2314,30 @@ function PaymentRequest() {
                 styles={inputStyles}
               />
             </Grid.Col>
+
+            <Grid.Col span={2}>
+              <Dropdown
+                label="CINV"
+                placeholder="Select"
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={form.values.cinv ? "Yes" : "No"}
+                onChange={(value) =>
+                  form.setFieldValue("cinv", value === "Yes")
+                }
+                readOnly={isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+
+
+            {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
+
+
+            
 
             <Grid.Col span={2}>
               <Dropdown
@@ -2347,7 +2386,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <Dropdown
                 label="TDS Section Code"
                 placeholder={
@@ -2366,7 +2405,7 @@ function PaymentRequest() {
             </Grid.Col>
 
             {/* ── Row 6 (3+3+3+3): Notes ── */}
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <Textarea
                 label="Accountant Note"
                 placeholder="Enter accountant note"
@@ -2380,7 +2419,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={3}>
+            <Grid.Col span={2}>
               <Textarea
                 label="Note"
                 placeholder="Enter note"
@@ -2452,12 +2491,16 @@ function PaymentRequest() {
             </Group>
 
           {/* ── Charges Section ── */}
-          <Box mt="xl">
+          <Box mt="md">
+            <Box>
             {/* Charges header row (sticky) */}
             <Grid
               w="100%"
               py="sm"
+              mb="sm"
+              gutter="xs"
               style={{
+                flexWrap: "nowrap",
                 position: "sticky",
                 top: 45,
                 zIndex: 100,
@@ -2524,7 +2567,8 @@ function PaymentRequest() {
                 key={index}
                 w="100%"
                 gutter="xs"
-                mt={index !== 0 ? "sm" : 0}
+                mt={index !== 0 ? "sm" : "xs"}
+                style={{ flexWrap: "nowrap" }}
               >
                 {/* SNo */}
                 <Grid.Col span={0.4}>
@@ -3098,6 +3142,7 @@ function PaymentRequest() {
               {/* remaining cols: SAC(0.8) + Tax(0.5) + Actions(0.5) = 1.8 */}
               <Grid.Col span={1.8} />
             </Grid>
+            </Box>
           </Box>
 
           {/* ── Form action buttons ── */}

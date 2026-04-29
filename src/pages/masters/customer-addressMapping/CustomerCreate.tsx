@@ -39,6 +39,18 @@ import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import useAuthStore from "../../../store/authStore";
 
+function parseYesNoBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (value == null) return false;
+  if (typeof value === "number") return value === 1;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return false;
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "y") return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "n") return false;
+  return Boolean(value);
+}
+
 // Type definitions
 type CountryData = {
   country_code: string;
@@ -117,8 +129,8 @@ type AddressData = {
   uin_no?: string;
   gst_registration_status?: string;
   composite_regular?: string;
-  sez?: boolean;
-  msme?: boolean;
+  sez?: boolean | string | number | null;
+  msme?: boolean | string | number | null;
   pan_aadhaar_link?: boolean;
   Itr_filed?: "Yes" | "No" | "NA" | "";
   tds_threshold_flag?: boolean;
@@ -1595,8 +1607,12 @@ function CustomerCreate() {
                 uin_no: addr.uin_no ?? "",
                 gst_registration_status: addr.gst_registration_status ?? "",
                 composite_regular: addr.composite_regular ?? "",
-                sez: Boolean(addr.sez),
-                msme: Boolean((addr as AddressData).msme),
+                sez: parseYesNoBoolean(addr.sez),
+                msme: parseYesNoBoolean(
+                  addr.msme ??
+                    (addr as unknown as { msme_flag?: unknown }).msme_flag ??
+                    (addr as unknown as { msme_status?: unknown }).msme_status,
+                ),
                 latitude: addr.latitude || 0,
                 longitude: addr.longitude || 0,
               };
@@ -1842,7 +1858,8 @@ function CustomerCreate() {
             uin_no: addr.uin_no ?? "",
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
-            sez: Boolean(addr.sez),
+            sez: parseYesNoBoolean(addr.sez),
+            msme: parseYesNoBoolean(addr.msme),
             latitude: addr.latitude || 0,
             longitude: addr.longitude || 0,
           };
@@ -1867,6 +1884,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           latitude: 0,
           longitude: 0,
         },
@@ -2321,8 +2339,8 @@ function CustomerCreate() {
           uin_no: addr.uin_no ?? "",
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
-          sez: Boolean(addr.sez),
-          msme: Boolean((addr as AddressData).msme),
+          sez: parseYesNoBoolean(addr.sez),
+          msme: parseYesNoBoolean(addr.msme),
           ...(isVendorMasterRoute
             ? {
                 pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2406,8 +2424,8 @@ function CustomerCreate() {
             uin_no: addr.uin_no ?? "",
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
-            sez: Boolean(addr.sez),
-            msme: Boolean((addr as AddressData).msme),
+          sez: parseYesNoBoolean(addr.sez),
+          msme: parseYesNoBoolean(addr.msme),
             ...(isVendorMasterRoute
               ? {
                   pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),

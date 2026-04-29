@@ -493,10 +493,17 @@ function CustomerMaster() {
 
         const data = response as unknown as CustomerApiResponse;
         if (data && data.success && Array.isArray(data.data)) {
+          const total = data.filters_total_count || data.total || 0;
+          const derivedTotalPages =
+            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+          const pagination_total =
+            data.pagination_total && data.pagination_total > 0
+              ? data.pagination_total
+              : derivedTotalPages;
           // Store metadata in the cache
           queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total: data.filters_total_count || data.total || 0,
-            pagination_total: data.pagination_total || 0,
+            total,
+            pagination_total,
           });
           return data.data;
         }
@@ -532,10 +539,17 @@ function CustomerMaster() {
         );
         const data = response as unknown as CustomerApiResponse;
         if (data && data.success && Array.isArray(data.data)) {
+          const total = data.filters_total_count || data.total || 0;
+          const derivedTotalPages =
+            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+          const pagination_total =
+            data.pagination_total && data.pagination_total > 0
+              ? data.pagination_total
+              : derivedTotalPages;
           // Store metadata in the cache
           queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total: data.filters_total_count || data.total || 0,
-            pagination_total: data.pagination_total || 0,
+            total,
+            pagination_total,
           });
           return data.data;
         }
@@ -636,10 +650,17 @@ function CustomerMaster() {
 
         const data = response as unknown as CustomerApiResponse;
         if (data && data.success && Array.isArray(data.data)) {
+          const total = data.filters_total_count || data.total || 0;
+          const derivedTotalPages =
+            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+          const pagination_total =
+            data.pagination_total && data.pagination_total > 0
+              ? data.pagination_total
+              : derivedTotalPages;
           // Store metadata in the cache
           queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total: data.filters_total_count || data.total || 0,
-            pagination_total: data.pagination_total || 0,
+            total,
+            pagination_total,
           });
           return data.data;
         }

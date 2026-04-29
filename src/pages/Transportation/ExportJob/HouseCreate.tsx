@@ -4117,6 +4117,99 @@ function HouseCreate() {
                     color="#105476"
                     onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
+                      const charges = Array.isArray(fullDetail.charges)
+                        ? fullDetail.charges
+                        : [];
+
+                      const chargesFromHouse = charges
+                        .filter(
+                          (e: any) =>
+                            e?.charge_id != null ||
+                            (e?.charge_name && String(e.charge_name).trim() !== ""),
+                        )
+                        .map((e: any) => ({
+                          charge_id: e?.charge_id ?? null,
+                          charge_name: e?.charge_name ?? "",
+                          segment: "",
+                          // NOTE: PRQ "Job Id" should receive shipment_id from house context
+                          job_no: String(
+                            (fullDetail as { shipment_id?: unknown })?.shipment_id ??
+                              (location.state?.job as { shipment_id?: unknown } | null)
+                                ?.shipment_id ??
+                              location.state?.job?.job_id ??
+                              location.state?.job?.id ??
+                              "",
+                          ),
+                          sub_job: String(
+                            fullDetail?.hbl_number ??
+                              fullDetail?.hbl_no ??
+                              fullDetail?.id ??
+                              "",
+                          ),
+                          cn_r: "",
+                          currency: e?.currency_code ?? e?.currency ?? "",
+                          currency_id: e?.currency_id ?? "",
+                          roe: e?.roe ?? null,
+                          unit_code: e?.unit_code ?? e?.unit ?? "",
+                          unit_id: e?.unit_id ?? "",
+                          no_of_unit: e?.no_of_unit ?? null,
+                          amount_per_unit:
+                            e?.cost_per_unit ?? e?.amount_per_unit ?? null,
+                          amount: e?.total_cost ?? e?.amount ?? null,
+                          amount_in_local:
+                            e?.cost_local_amount ??
+                            e?.local_amount ??
+                            (e?.total_cost != null && e?.roe != null
+                              ? Math.round(Number(e.total_cost) * Number(e.roe) * 100) /
+                                100
+                              : e?.total_cost ?? null),
+                          tax_code: "",
+                          tax: "false",
+                        }));
+
+                      const firstSupplier =
+                        charges.find(
+                          (e: any) =>
+                            String(e?.supplier_code ?? "").trim() !== "" ||
+                            String(e?.supplier_name ?? "").trim() !== "",
+                        ) ?? null;
+
+                      navigate("/payment-request/create", {
+                        state: {
+                          serviceType: location.state?.mblDetails?.service || "FCL",
+                          voucherType: "OCEAN EXPORTS",
+                          chargesFromEstimates:
+                            chargesFromHouse.length > 0
+                              ? chargesFromHouse
+                              : undefined,
+                          supplier:
+                            firstSupplier != null
+                              ? {
+                                  supplier_code: String(
+                                    firstSupplier?.supplier_code ?? "",
+                                  ),
+                                  supplier_name: String(
+                                    firstSupplier?.supplier_name ?? "",
+                                  ),
+                                }
+                              : null,
+                          job_reference_1: String(
+                            location.state?.job?.job_id ??
+                              location.state?.job?.id ??
+                              "",
+                          ),
+                          ...(location.state?.job && { job: location.state.job }),
+                        },
+                      });
+                    }}
+                  >
+                    Create PRQ
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
                       const prepaidCharges = (fullDetail.charges ?? []).filter(
                         (c: { pp_cc?: string }) =>
                           String(c.pp_cc ?? "").trim() === "Prepaid",
