@@ -42,6 +42,58 @@ type SummaryRow = Record<string, unknown> & {
   status?: string;
 };
 
+function ellipsisTooltipStyles(fontSans: string, whiteSpace: "nowrap" | "pre-line" | "pre-wrap") {
+  return { tooltip: { fontFamily: fontSans, fontSize: 12, maxWidth: 360, whiteSpace } as const };
+}
+
+/** Single visible line + full value in tooltip (same pattern as Customer column). */
+function TextLineClampTooltip({
+  text,
+  tooltip,
+  fg,
+  fontSans,
+  fw,
+  dimmed,
+  color,
+  maxWidth = 220,
+}: {
+  text: string;
+  tooltip: string;
+  fg: string;
+  fontSans: string;
+  fw?: number;
+  dimmed?: boolean;
+  /** Overrides `fg` / `dimmed` when set (e.g. theme muted hex). */
+  color?: string;
+  maxWidth?: number;
+}) {
+  const empty = text === "" || text === "—";
+  const content = (
+    <Text
+      fw={fw}
+      size="sm"
+      {...(color ? {} : dimmed ? { c: "dimmed" as const } : { c: fg })}
+      lineClamp={1}
+      style={{
+        cursor: empty ? undefined : "default",
+        fontFamily: fontSans,
+        minWidth: 0,
+        ...(color ? { color } : {}),
+      }}
+    >
+      {empty ? "—" : text}
+    </Text>
+  );
+  if (empty) {
+    return content;
+  }
+  return (
+    <Tooltip label={tooltip} withArrow styles={ellipsisTooltipStyles(fontSans, "pre-line")}>
+      <Box style={{ maxWidth, minWidth: 0 }}>{content}</Box>
+    </Tooltip>
+  );
+}
+
 function renderServiceCell(services: unknown, fg: string, fontSans: string): ReactNode {
   const list = services as Array<{ service?: string; trade?: string }> | undefined;
   if (!list || !Array.isArray(list) || list.length === 0) {
@@ -72,7 +124,7 @@ function renderServiceCell(services: unknown, fg: string, fontSans: string): Rea
   return (
     <Stack gap={2}>
       {unique.map((p, i) => (
-        <Text key={i} size="sm" c={fg} style={{ fontFamily: fontSans, lineHeight: 1.4 }}>
+        <Text key={i} size="sm" c={fg} style={{ fontFamily: fontSans, lineHeight: 1.4, wordBreak: "break-word" }}>
           {p}
         </Text>
       ))}
@@ -98,15 +150,9 @@ function renderRemarkCell(services: unknown, fg: string, fontSans: string): Reac
       </Text>
     );
   }
-  return (
-    <Stack gap={2}>
-      {unique.map((r, i) => (
-        <Text key={i} size="sm" c={fg} style={{ fontFamily: fontSans, lineHeight: 1.4 }}>
-          {r}
-        </Text>
-      ))}
-    </Stack>
-  );
+  const lineText = unique.join("; ");
+  const tip = unique.join("\n");
+  return <TextLineClampTooltip text={lineText} tooltip={tip} fg={fg} fontSans={fontSans} maxWidth={260} />;
 }
 
 type SummaryTableProps = {
@@ -162,8 +208,14 @@ export function EnquirySummaryNativeTable({
           {visible.customer_name && <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Customer</th>}
           {visible.sales_person && <th style={erpListThStyle(theme)}>Sales Person</th>}
           {visible.service && <th style={erpListThStyle(theme)}>Service</th>}
-          {visible.route && <th style={erpListThStyle(theme)}>Route</th>}
-          {visible.reference_no && <th style={erpListThStyle(theme)}>Reference No</th>}
+          {visible.route && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 180 }}>Route</th>
+          )}
+          {visible.reference_no && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 96, maxWidth: 120, width: "10%" }}>
+              Reference No
+            </th>
+          )}
           {visible.date && <th style={erpListThStyle(theme)}>Enquiry Date</th>}
           {visible.status && (
             <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 140 }}>
@@ -211,9 +263,14 @@ export function EnquirySummaryNativeTable({
               <tr key={String(k)} {...erpListDataRowProps(theme)}>
                 {visible.sno && (
                   <td style={erpListTdPaddingStyle()}>
-                    <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
-                      {row.sno != null ? String(row.sno) : "—"}
-                    </Text>
+                    <TextLineClampTooltip
+                      text={row.sno != null ? String(row.sno) : "—"}
+                      tooltip={row.sno != null ? String(row.sno) : ""}
+                      fg={fg}
+                      fontSans={fontSans}
+                      fw={600}
+                      maxWidth={88}
+                    />
                   </td>
                 )}
                 {visible.enquiry_id && (
@@ -225,50 +282,69 @@ export function EnquirySummaryNativeTable({
                 )}
                 {visible.customer_name && (
                   <td style={{ ...erpListTdPaddingStyle(), maxWidth: 200 }}>
-                    <Tooltip
-                      label={String(row.customer_name ?? "")}
-                      withArrow
-                      styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
-                    >
-                      <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default", fontFamily: fontSans }}>
-                        {row.customer_name ?? "—"}
-                      </Text>
-                    </Tooltip>
+                    <TextLineClampTooltip
+                      text={String(row.customer_name ?? "—")}
+                      tooltip={String(row.customer_name ?? "")}
+                      fg={fg}
+                      fontSans={fontSans}
+                      maxWidth={200}
+                    />
                   </td>
                 )}
                 {visible.sales_person && (
                   <td style={erpListTdPaddingStyle()}>
-                    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
-                      {row.sales_person || "—"}
-                    </Text>
+                    <TextLineClampTooltip
+                      text={String(row.sales_person ?? "—")}
+                      tooltip={String(row.sales_person ?? "")}
+                      fg={fg}
+                      fontSans={fontSans}
+                      maxWidth={220}
+                    />
                   </td>
                 )}
                 {visible.service && (
                   <td style={erpListTdPaddingStyle()}>{renderServiceCell(row.services, fg, fontSans)}</td>
                 )}
                 {visible.route && (
-                  <td style={erpListTdPaddingStyle()}>
-                    {erpListRouteListCell(
-                      row.origin_code_list,
-                      row.destination_code_list,
-                      { primary, fg, muted, fontSans },
-                    )}
+                  <td style={{ ...erpListTdPaddingStyle(), minWidth: 180 }}>
+                    {erpListRouteListCell(row.origin_code_list, row.destination_code_list, {
+                      primary,
+                      fg,
+                      muted,
+                      fontSans,
+                    }, { wrapContent: true })}
                   </td>
                 )}
                 {visible.reference_no && (
-                  <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
-                    <Text size="sm" style={{ fontFamily: fontSans }}>
-                      {row.reference_no || "—"}
-                    </Text>
+                  <td style={{ ...erpListTdPaddingStyle(), maxWidth: 120, width: "10%" }}>
+                    <TextLineClampTooltip
+                      text={String(row.reference_no ?? "—")}
+                      tooltip={String(row.reference_no ?? "")}
+                      fg={fg}
+                      fontSans={fontSans}
+                      color={muted}
+                      maxWidth={120}
+                    />
                   </td>
                 )}
                 {visible.date && (
-                  <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
-                    <Text size="sm" style={{ fontFamily: fontSans }}>
-                      {row.enquiry_received_date
-                        ? dayjs(row.enquiry_received_date).format(dateFormat)
-                        : "—"}
-                    </Text>
+                  <td style={erpListTdPaddingStyle()}>
+                    <TextLineClampTooltip
+                      text={
+                        row.enquiry_received_date
+                          ? dayjs(row.enquiry_received_date).format(dateFormat)
+                          : "—"
+                      }
+                      tooltip={
+                        row.enquiry_received_date
+                          ? dayjs(row.enquiry_received_date).format(dateFormat)
+                          : ""
+                      }
+                      fg={fg}
+                      fontSans={fontSans}
+                      color={muted}
+                      maxWidth={200}
+                    />
                   </td>
                 )}
                 {visible.status && (
@@ -343,6 +419,13 @@ type PreviewTableProps = {
   getStatusBadge: (s: string | undefined | null) => { label: string; color: string };
 };
 
+function previewColumnThMinWidth(col: PreviewColDef): number {
+  if (col.kind === "sno") return 70;
+  if (col.kind === "route") return 200;
+  if (col.key === "reference_no") return 96;
+  return 160;
+}
+
 /**
  * Detailed (preview) list: same table chrome as {@link AirExportBookingMaster} — no sticky columns, `10px 14px` cells, `Text` for values.
  */
@@ -358,7 +441,8 @@ export function EnquiryPreviewNativeTable({ theme, columns, data, dateFormat, ge
                 key={col.id}
                 style={{
                   ...erpListThStyle(theme),
-                  minWidth: col.kind === "sno" ? 70 : 160,
+                  minWidth: previewColumnThMinWidth(col),
+                  ...(col.key === "reference_no" ? { maxWidth: 120, width: "10%" } : {}),
                 }}
               >
                 {col.header}
@@ -399,7 +483,14 @@ export function EnquiryPreviewNativeTable({ theme, columns, data, dateFormat, ge
             data.map((row, ri) => (
               <tr key={ri} {...erpListDataRowProps(theme)}>
                 {columns.map((col) => (
-                  <td key={`${ri}-${col.id}`} style={erpListTdPaddingStyle()}>
+                  <td
+                    key={`${ri}-${col.id}`}
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      ...(col.kind === "route" ? { minWidth: 200 } : {}),
+                      ...(col.key === "reference_no" ? { maxWidth: 120, width: "10%" } : {}),
+                    }}
+                  >
                     {renderPreviewCell({
                       col,
                       row: row as Record<string, string | number | null | undefined>,
@@ -442,9 +533,14 @@ function renderPreviewCell({
 }): ReactNode {
   if (col.kind === "sno") {
     return (
-      <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
-        {row.sno != null ? String(row.sno) : "—"}
-      </Text>
+      <TextLineClampTooltip
+        text={row.sno != null ? String(row.sno) : "—"}
+        tooltip={row.sno != null ? String(row.sno) : ""}
+        fg={fg}
+        fontSans={fontSans}
+        fw={600}
+        maxWidth={56}
+      />
     );
   }
   if (col.kind === "service") {
@@ -459,30 +555,36 @@ function renderPreviewCell({
     }
     if (!serviceValue) {
       return (
-        <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+        <Text size="sm" c={fg} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
           {tradeValue}
         </Text>
       );
     }
     if (!tradeValue) {
       return (
-        <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+        <Text size="sm" c={fg} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
           {serviceValue}
         </Text>
       );
     }
     return (
-      <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+      <Text size="sm" c={fg} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
         {`${serviceValue} - ${tradeValue}`}
       </Text>
     );
   }
   if (col.kind === "enquiryDate") {
     const d = row.enquiry_date;
+    const formatted = d ? dayjs(String(d)).format(dateFormat) : "—";
     return (
-      <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
-        {d ? dayjs(String(d)).format(dateFormat) : "—"}
-      </Text>
+      <TextLineClampTooltip
+        text={formatted}
+        tooltip={formatted === "—" ? "" : formatted}
+        fg={fg}
+        fontSans={fontSans}
+        color={muted}
+        maxWidth={200}
+      />
     );
   }
   if (col.kind === "status") {
@@ -528,12 +630,12 @@ function renderPreviewCell({
     const oc = os != null && String(os).trim() !== "" ? String(os) : "—";
     const dc = ds != null && String(ds).trim() !== "" ? String(ds) : "—";
     return (
-      <Group gap={6} wrap="nowrap" align="center">
-        <Text fw={600} size="sm" c={primary} style={{ fontFamily: fontSans }}>
+      <Group gap={6} wrap="wrap" align="flex-start">
+        <Text fw={600} size="sm" c={primary} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
           {oc}
         </Text>
-        <IconArrowRight size={12} color={muted} style={{ flexShrink: 0 }} />
-        <Text fw={500} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+        <IconArrowRight size={12} color={muted} style={{ flexShrink: 0, marginTop: 4 }} />
+        <Text fw={500} size="sm" c={fg} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
           {dc}
         </Text>
       </Group>
@@ -547,9 +649,18 @@ function renderPreviewCell({
       </Text>
     );
   }
-  return (
-    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
-      {String(v)}
-    </Text>
-  );
+  const str = String(v);
+  if (col.key === "enquiry_id") {
+    return (
+      <Text size="sm" c={fg} style={{ fontFamily: fontSans, wordBreak: "break-word" }}>
+        {str}
+      </Text>
+    );
+  }
+  if (col.key === "reference_no") {
+    return (
+      <TextLineClampTooltip text={str} tooltip={str} fg={fg} fontSans={fontSans} color={muted} maxWidth={120} />
+    );
+  }
+  return <TextLineClampTooltip text={str} tooltip={str} fg={fg} fontSans={fontSans} maxWidth={240} />;
 }
