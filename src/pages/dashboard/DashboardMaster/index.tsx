@@ -77,8 +77,6 @@ import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
-import FormTextInput from "../../../components/FormTextInput";
-import SingleDateInput from "../../../components/SingleDateInput";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -161,53 +159,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const AIR_IMPORT_DSR_COLUMNS = [
-    { key: "sr_no", label: "SR. NO." },
-    { key: "date", label: "Date" },
-    { key: "sales_person", label: "Sales Person" },
-    { key: "ref_number", label: "REF NUMBER" },
-    { key: "status", label: "STATUS" },
-    { key: "customer", label: "Customer" },
-    { key: "actual_consignee", label: "Consignee" },
-    { key: "shipper", label: "Shipper" },
-    { key: "agent", label: "Agent" },
-    { key: "pol", label: "POL" },
-    { key: "pod", label: "POD" },
-    { key: "terms", label: "Terms" },
-    { key: "pqkgs", label: "Packages" },
-    { key: "gw", label: "Gross Weight" },
-    { key: "cw", label: "Chargeable Weight" },
-    { key: "hawb", label: "HAWB" },
-    { key: "mawb", label: "MAWB" },
-    { key: "etd", label: "ETD" },
-    { key: "eta", label: "ETA" },
-  ] as const;
-
-  type AirImportDsrColumnKey = (typeof AIR_IMPORT_DSR_COLUMNS)[number]["key"];
-  type AirImportDsrRow = {
-    __source?: any;
-    sr_no: string;
-    date: string;
-    sales_person: string;
-    ref_number: string;
-    line: string;
-    status: string;
-    customer: string;
-    actual_consignee: string;
-    shipper: string;
-    agent: string;
-    pol: string;
-    pod: string;
-    terms: string;
-    pqkgs: string;
-    gw: string;
-    cw: string;
-    hawb: string;
-    mawb: string;
-    etd: string;
-    eta: string;
-    [key: string]: any;
-  };
   const [loading, setLoading] = useState(false);
   const [isLoadingOutstandingChart, setIsLoadingOutstandingChart] =
     useState(false);
@@ -565,111 +516,6 @@ const Dashboard = () => {
   const [currentEmailData, setCurrentEmailData] = useState<any>(null);
   const [isRestoringFromNavigation, setIsRestoringFromNavigation] =
     useState(false);
-
-  // Air import DSR states
-  const [airImportDsrRows, setAirImportDsrRows] = useState<AirImportDsrRow[]>([]);
-  const [isLoadingAirImportDsr, setIsLoadingAirImportDsr] = useState(false);
-
-  const getAirImportDsrRowId = useCallback((row: AirImportDsrRow) => {
-    const src = row.__source ?? {};
-    return (
-      src?.booking_id ??
-      src?.job_id ??
-      src?.house_id ??
-      src?.id ??
-      src?.pk ??
-      src?.uuid ??
-      src?.job_id ??
-      src?.hawb_no ??
-      src?.mawb_no ??
-      src?.ref_number ??
-      null
-    );
-  }, []);
-
-  const fetchAirImportDsrData = useCallback(async () => {
-    try {
-      setIsLoadingAirImportDsr(true);
-
-      if (!customerInteractionFromDate || !customerInteractionToDate) {
-        toast.error("Please select date range");
-        setAirImportDsrRows([]);
-        return;
-      }
-
-      const payload = {
-        date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-        date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
-      };
-
-      const response = await apiCallProtected.post(URL.airImportBooked, payload);
-      // NOTE: apiCallProtected is configured with a response interceptor that returns `response.data` directly.
-      // New backend format: { success, message, count, ..., data: [...] }
-      const list = Array.isArray((response as any)?.data)
-        ? (response as any).data
-        : [];
-
-      const mappedRows: AirImportDsrRow[] = list.map((item: any, idx: number) => {
-        return {
-          __source: item,
-          sr_no: String(idx + 1),
-          date: item?.date ?? "",
-          sales_person: item?.sales_person ?? "",
-          ref_number: item?.ref_number ?? "",
-          line: item?.line ?? "",
-          status: item?.status ?? "",
-          customer: item?.customer ?? "",
-          actual_consignee: item?.actual_consignee ?? "",
-          shipper: item?.shipper ?? "",
-          agent: item?.agent ?? "",
-          pol: item?.pol ?? "",
-          pod: item?.pod ?? "",
-          terms: item?.terms ?? "",
-          pqkgs: item?.pqkgs ?? "",
-          gw: item?.gw ?? "",
-          cw: item?.cw ?? "",
-          hawb: item?.hawb_no ?? "",
-          mawb: item?.mawb_no ?? "",
-          etd: item?.etd ?? "",
-          eta: item?.eta ?? "",
-        };
-      });
-
-      setAirImportDsrRows(mappedRows);
-    } catch (error) {
-      console.error("Failed to load air import DSR data:", error);
-      setAirImportDsrRows([]);
-      toast.error("Failed to load Air import DSR data");
-    } finally {
-      setIsLoadingAirImportDsr(false);
-    }
-  }, [customerInteractionFromDate, customerInteractionToDate]);
-
-  const handleAirImportDsrFieldChange = useCallback(
-    (rowIndex: number, field: AirImportDsrColumnKey, value: string) => {
-      setAirImportDsrRows((prev) =>
-        prev.map((row, index) =>
-          index === rowIndex
-            ? {
-                ...row,
-                [field]: value,
-              }
-            : row
-        )
-      );
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (activeTab !== "air-import-dsr") return;
-    fetchAirImportDsrData();
-  }, [
-    activeTab,
-    fetchAirImportDsrData,
-    customerInteractionFromDate,
-    customerInteractionToDate,
-  ]);
 
   // Handle location state for pipeline report restoration
   useEffect(() => {
@@ -7744,18 +7590,6 @@ const Dashboard = () => {
                 >
                   CS Import
                 </Button>
-                <Button
-                  variant="transparent"
-                  size="xs"
-                  styles={
-                    activeTab === "air-import-dsr"
-                      ? dashSegmentTabActive
-                      : dashSegmentTabInactive
-                  }
-                  onClick={() => setActiveTab("air-import-dsr")}
-                >
-                  Air import DSR
-                </Button>
               </Box>
 
               <Box
@@ -7898,7 +7732,6 @@ const Dashboard = () => {
           <Tabs.Tab value="booking">Booking</Tabs.Tab>
           <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
           <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
-          <Tabs.Tab value="air-import-dsr">Air Import DSR</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel
@@ -8204,139 +8037,6 @@ const Dashboard = () => {
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel
-          value="air-import-dsr"
-          pt="xs"
-          style={{ display: "flex", flexDirection: "column", flex: 1 }}
-        >
-          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
-            <Stack gap="sm" style={{ height: "100%" }}>
-              {isLoadingAirImportDsr ? (
-                <Flex justify="center" py="lg">
-                  <Loader size="sm" />
-                </Flex>
-              ) : airImportDsrRows.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  No data available
-                </Text>
-              ) : (
-                <Box
-                  style={{
-                    paddingTop: 12,
-                    overflowX: "auto",
-                  }}
-                >
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                      minWidth: 1600,
-                    }}
-                  >
-                    <thead>
-                      <tr>
-                        {AIR_IMPORT_DSR_COLUMNS.map((column) => (
-                          <th
-                            key={column.key}
-                            style={{
-                              textAlign: "left",
-                              padding: "6px",
-                              fontSize: 12,
-                              borderBottom: "1px solid #e2e8f0",
-                              background: "#f8fafc",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {column.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {airImportDsrRows.map((row, rowIndex) => (
-                        <tr key={String(getAirImportDsrRowId(row) ?? rowIndex)}>
-                          {AIR_IMPORT_DSR_COLUMNS.map((column) => (
-                            <td
-                              key={`${String(
-                                getAirImportDsrRowId(row) ?? rowIndex
-                              )}-${column.key}`}
-                              style={{
-                                padding: 4,
-                                borderBottom: "1px solid #f1f5f9",
-                              }}
-                            >
-                              {column.key === "date" ||
-                              column.key === "etd" ||
-                              column.key === "eta" ? (
-                                <SingleDateInput
-                                  value={
-                                    row?.[column.key]
-                                      ? dayjs(String(row[column.key])).isValid()
-                                        ? dayjs(String(row[column.key])).toDate()
-                                        : null
-                                      : null
-                                  }
-                                  onChange={(date) =>
-                                    handleAirImportDsrFieldChange(
-                                      rowIndex,
-                                      column.key,
-                                      date
-                                        ? dayjs(date).format("YYYY-MM-DD")
-                                        : ""
-                                    )
-                                  }
-                                  size="xs"
-                                  styles={{
-                                    input: {
-                                      minWidth: 118,
-                                      fontSize: 12,
-                                      height: 30,
-                                    },
-                                  }}
-                                />
-                              ) : (
-                                <FormTextInput
-                                  value={String(row?.[column.key] ?? "")}
-                                  onChange={(event) =>
-                                    handleAirImportDsrFieldChange(
-                                      rowIndex,
-                                      column.key,
-                                      event.currentTarget.value
-                                    )
-                                  }
-                                  format="normal"
-                                  size="xs"
-                                  disabled={column.key === "sr_no"}
-                                  styles={{
-                                    input: {
-                                      minWidth: 118,
-                                      fontSize: 12,
-                                      height: 30,
-                                    },
-                                  }}
-                                />
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Box>
-              )}
-
-              <Group justify="flex-end" pt="xs">
-                <Button
-                  size="xs"
-                  color="#105476"
-                  onClick={() => toast.success("Submit (dummy)")}
-                >
-                  Submit
-                </Button>
-              </Group>
-            </Stack>
-          </Box>
-        </Tabs.Panel>
       </Tabs>
 
       {/* Send Email Modal */}

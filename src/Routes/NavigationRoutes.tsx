@@ -189,6 +189,7 @@ import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
+import AirImportDsr from "../pages/Air/AirImportDsr";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -200,6 +201,7 @@ const NavigationRoutes = () => {
         <Route index element={isStaff ? <Dashboard /> : <Dashboard />} />
         <Route path="/road" element={<Road />} />
         <Route path="/air">
+          <Route path="import-dsr" element={<AirImportDsr />} />
           <Route path="export-job">
             <Route index element={<AirExportJobMaster />} />
             <Route path="create" element={<AirExportJobCreate />} />

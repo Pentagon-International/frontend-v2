@@ -48,6 +48,7 @@ import {
   IconFileInvoice,
   IconBook2,
   IconBookOff,
+  IconList,
   IconLink,
   IconFileUpload,
 } from "@tabler/icons-react";
@@ -487,6 +488,19 @@ const Navbar = ({
                     label="Air Import Job"
                     icon={IconPlaneArrival}
                     path="/air/import-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Air import DSR"
+                    icon={IconList}
+                    path="/air/import-dsr"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
