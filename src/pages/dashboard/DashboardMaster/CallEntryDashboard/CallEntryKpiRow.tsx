@@ -1,4 +1,5 @@
 import { Box, SimpleGrid, Stack, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import type { CallEntryDashboardResponse } from "../../../../service/dashboard.service";
 
 type Props = {
@@ -14,13 +15,14 @@ type Tile = {
 
 const tileStyle = {
   background: "#FFFFFF",
-  border: "1px solid #E6EDF5",
+  border: "1px solid #E2E8F0",
   borderRadius: 8,
   padding: "8px 10px",
-  minHeight: 74,
+  minHeight: 72,
 } as const;
 
 export function CallEntryKpiRow({ data }: Props) {
+  const isMobile = useMediaQuery("(max-width: 48em)");
   const kpi = data?.kpi;
   const summary = data?.summary;
 
@@ -60,15 +62,22 @@ export function CallEntryKpiRow({ data }: Props) {
   return (
     <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="sm">
       {tiles.map((tile) => (
-        <Box key={tile.label} style={tileStyle}>
+        <Box
+          key={tile.label}
+          style={{
+            ...tileStyle,
+            minHeight: isMobile ? 66 : tileStyle.minHeight,
+            padding: isMobile ? "7px 9px" : tileStyle.padding,
+          }}
+        >
           <Stack gap={4}>
-            <Text fz={10} fw={700} c="#8FA2B7" tt="uppercase" lts="0.03em">
+            <Text fz={isMobile ? 8 : 9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.03em">
               {tile.label}
             </Text>
-            <Text fz={33} fw={700} c={tile.valueColor} style={{ lineHeight: 1 }}>
+            <Text fz={isMobile ? 24 : 30} fw={700} c={tile.valueColor} style={{ lineHeight: 1 }}>
               {tile.value}
             </Text>
-            <Text fz={10} fw={600} c="#9AAABD">
+            <Text fz={isMobile ? 8 : 9} fw={600} c="#9AAABD" lineClamp={1}>
               {tile.sub}
             </Text>
           </Stack>

@@ -2,6 +2,7 @@ import { Box, Group, Stack, Table, Text, UnstyledButton } from "@mantine/core";
 import dayjs from "dayjs";
 import { IconArrowDownLeft, IconArrowUpRight, IconX } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
+import { useMediaQuery } from "@mantine/hooks";
 import type { CallEntryActivityLogRow } from "../../../../service/dashboard.service";
 
 type Props = {
@@ -82,6 +83,7 @@ export function CallEntryActivityLogCard({
   pageSize,
   onPageChange,
 }: Props) {
+  const isMobile = useMediaQuery("(max-width: 48em)");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const [activeTab, setActiveTab] = useState<ChannelTab>("All");
   const visibleRows = useMemo(() => {
@@ -91,16 +93,16 @@ export function CallEntryActivityLogCard({
 
   return (
     <Box style={cardStyle}>
-      <Group justify="space-between" px={12} py={10} style={{ borderBottom: "1px solid #E7EEF6" }}>
+      <Group justify="space-between" px={12} py={9} style={{ borderBottom: "1px solid #E7EEF6" }}>
         <Group gap={10}>
           <Text fw={700} fz={14} c="#0B1F3A" style={{ lineHeight: 1 }}>
             Activity Log
           </Text>
-          <Text fz={12} fw={600} c="#B9C8DB" style={{ lineHeight: 1.2 }}>
+          <Text fz={11} fw={600} c="#B9C8DB" style={{ lineHeight: 1.2 }}>
             Last 24h
           </Text>
         </Group>
-        <Group gap={4}>
+        <Group gap={4} wrap="wrap" justify="flex-end">
           {channelTabs.map((tab) => {
             const active = activeTab === tab;
             return (
@@ -108,7 +110,7 @@ export function CallEntryActivityLogCard({
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 style={{
-                  padding: "4px 10px",
+                  padding: "4px 9px",
                   borderRadius: 6,
                   background: active ? "#EEF2F7" : "transparent",
                   color: active ? "#0F172A" : "#7386A1",
@@ -129,9 +131,9 @@ export function CallEntryActivityLogCard({
           highlightOnHover={false}
           withTableBorder={false}
           withColumnBorders={false}
-          horizontalSpacing={10}
-          verticalSpacing={8}
-          style={{ minWidth: 700 }}
+          horizontalSpacing={isMobile ? 8 : 10}
+          verticalSpacing={isMobile ? 7 : 8}
+          style={{ minWidth: isMobile ? 560 : 700 }}
         >
           <Table.Thead>
             <Table.Tr style={{ borderBottom: "1px solid #EAF0F6" }}>
@@ -175,9 +177,9 @@ export function CallEntryActivityLogCard({
                   <Table.Td>
                     <Box
                       style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 7,
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
                         background: iconBg,
                         display: "flex",
                         alignItems: "center",
@@ -185,20 +187,20 @@ export function CallEntryActivityLogCard({
                       }}
                     >
                       {tone === "red" ? (
-                        <IconX size={13} stroke={2} color={iconColor} />
+                        <IconX size={12} stroke={2} color={iconColor} />
                       ) : tone === "green" ? (
-                        <IconArrowDownLeft size={13} stroke={2} color={iconColor} />
+                        <IconArrowDownLeft size={12} stroke={2} color={iconColor} />
                       ) : (
-                        <IconArrowUpRight size={13} stroke={2} color={iconColor} />
+                        <IconArrowUpRight size={12} stroke={2} color={iconColor} />
                       )}
                     </Box>
                   </Table.Td>
                   <Table.Td>
                     <Stack gap={0}>
-                      <Text fw={700} fz={13} c="#0B1F3A" lineClamp={1} style={{ lineHeight: 1.1 }}>
+                      <Text fw={700} fz={isMobile ? 12 : 13} c="#0B1F3A" lineClamp={1} style={{ lineHeight: 1.1 }}>
                         {row.customer_name || row.customer_code}
                       </Text>
-                      <Text fz={12} fw={500} c="#7F93AF" lineClamp={1} style={{ lineHeight: 1.1 }}>
+                      <Text fz={isMobile ? 11 : 12} fw={500} c="#7F93AF" lineClamp={1} style={{ lineHeight: 1.1 }}>
                         {row.purpose || "-"}
                       </Text>
                     </Stack>
@@ -211,21 +213,21 @@ export function CallEntryActivityLogCard({
                         color: chip.fg,
                         borderRadius: 4,
                         padding: "3px 10px",
-                        minWidth: 130,
+                        minWidth: isMobile ? 104 : 122,
                       }}
                     >
-                      <Text fz={11} fw={700} style={{ lineHeight: 1 }}>
+                      <Text fz={isMobile ? 10 : 11} fw={700} style={{ lineHeight: 1 }}>
                         {row.outcome || "-"}
                       </Text>
                     </Box>
                   </Table.Td>
                   <Table.Td>
-                    <Text fz={12} fw={500} c="#334155">
+                    <Text fz={isMobile ? 11 : 12} fw={500} c="#334155">
                       {row.salesperson || "-"}
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Text ta="right" fz={12} fw={500} c="#8EA1B9">
+                    <Text ta="right" fz={isMobile ? 11 : 12} fw={500} c="#8EA1B9">
                       {getRowTime(row.call_date)}
                     </Text>
                   </Table.Td>

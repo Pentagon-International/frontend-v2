@@ -10,6 +10,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router-dom";
 import useAuthStore from "../../../../store/authStore";
@@ -23,6 +24,7 @@ import { CallEntryRepCard } from "./CallEntryRepCard";
 import { CallEntryHeatmapCard } from "./CallEntryHeatmapCard";
 
 const PAGE_SIZE = 5;
+const ERP_FONT_SANS = "'Geist', sans-serif";
 
 function monthStart(): Date {
   const now = new Date();
@@ -65,6 +67,7 @@ export default function CallEntryDashboardPage() {
   const [isTodayView, setIsTodayView] = useState<boolean>(
     !!(routeFromDate && routeToDate && dayjs(routeFromDate).isSame(routeToDate, "day"))
   );
+  const isMobile = useMediaQuery("(max-width: 48em)");
 
   useEffect(() => {
     setRepPage(1);
@@ -140,48 +143,83 @@ export default function CallEntryDashboardPage() {
       px={{ base: 12, sm: 16, lg: 20 }}
       py={{ base: 12, sm: 16, lg: 24 }}
       mih={520}
+      style={{ fontFamily: ERP_FONT_SANS }}
     >
-      <Stack gap="sm">
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+      <Stack gap={9}>
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap={8}>
           <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
-            <Text fz={12} fw={600} c="#7B8DA5" mb={6}>
+            <Text fz={11} fw={600} c="#7B8DA5" mb={5}>
               Pentagon Freight › Sales › Call Entry
             </Text>
-            <Text fw={700} c="#0B1F3A" lh={1.05} style={{ fontSize: "clamp(24px, 4.2vw, 36px)" }}>
-              CallEntry Dashboard
+            <Text fw={700} c="#0B1F3A" lh={1.04} style={{ fontSize: "clamp(24px, 4.35vw, 42px)" }}>
+              Call Entry Dashboard
             </Text>
-            <Text fz={12} c="#8AA0B9" fw={600} mt={2} style={{ lineHeight: 1.35 }}>
+            <Text fz={11} c="#8AA0B9" fw={600} mt={2} style={{ lineHeight: 1.35 }}>
               {isTodayView ? "Today" : dayjs(fromDate).format("DD MMM")} ·{" "}
               {data?.kpi?.total_calls || 0} calls logged · {activeRepCount} reps active
             </Text>
           </Box>
 
-          <Group align="center" gap={8} wrap="wrap" style={{ flex: "1 1 360px" }}>
+          <Group align="center" gap={8} wrap="wrap" style={{ flex: "1 1 360px", width: "100%" }}>
             <Button
               size="xs"
               variant={isTodayView ? "filled" : "default"}
               color="#0B2D59"
               radius={6}
               onClick={applyTodayFilter}
-              style={{ minWidth: 74, fontWeight: 700, flex: "1 1 74px" }}
+              style={{
+                minWidth: isMobile ? 0 : 74,
+                height: 30,
+                fontWeight: 700,
+                fontSize: 11,
+                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 74px",
+              }}
             >
               Today
             </Button>
             <Select
-              style={{ flex: "1 1 130px", minWidth: 120 }}
+              style={{
+                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
+                minWidth: isMobile ? 0 : 120,
+              }}
               size="xs"
               data={salespersonOptions}
               value={salesperson}
               onChange={(v) => setSalesperson(v || "all")}
               radius={6}
+              styles={{
+                input: {
+                  height: 30,
+                  minHeight: 30,
+                  fontSize: 11,
+                  borderColor: "#DCE6F1",
+                  color: "#4A607A",
+                  fontWeight: 500,
+                  background: "#FFFFFF",
+                },
+              }}
             />
             <Select
-              style={{ flex: "1 1 140px", minWidth: 130 }}
+              style={{
+                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 140px",
+                minWidth: isMobile ? 0 : 130,
+              }}
               size="xs"
               data={outcomeOptions}
               value={type}
               onChange={(v) => setType(v || "all")}
               radius={6}
+              styles={{
+                input: {
+                  height: 30,
+                  minHeight: 30,
+                  fontSize: 11,
+                  borderColor: "#DCE6F1",
+                  color: "#4A607A",
+                  fontWeight: 500,
+                  background: "#FFFFFF",
+                },
+              }}
             />
             <Button
               size="xs"
@@ -192,8 +230,10 @@ export default function CallEntryDashboardPage() {
               style={{
                 border: "1px solid #DCE6F1",
                 fontWeight: 700,
-                flex: "1 1 132px",
-                minWidth: 120,
+                height: 30,
+                fontSize: 11,
+                flex: isMobile ? "1 1 100%" : "1 1 132px",
+                minWidth: isMobile ? 0 : 120,
               }}
               onClick={() => navigate("/call-entry-create")}
             >
