@@ -15,17 +15,24 @@ export type PreviewColDef = {
   routeDestKey?: string;
 };
 
+/** Detailed list column order (S.No is always first via `columns` init). Route = Origin + Destination immediately after Status. */
 const desiredOrder = [
   "Customer Name",
   "Enquiry ID",
-  "Reference No",
   "Sales Person",
   "Enquiry Date",
-  "Shipment",
-  "Location",
   "Service",
+  "Status",
   "Origin",
   "Destination",
+  "Shipment",
+  "Location",
+  "Cargo Details",
+  "Reference No",
+  "Total Cost",
+  "Total Sell",
+  "Profit",
+  "Remark",
 ];
 
 const PREVIEW_KEY_MAP: Record<string, string> = {

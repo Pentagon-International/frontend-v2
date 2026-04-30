@@ -88,6 +88,9 @@ import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFi
 const LIST_KEY = "ENQUIRY_MASTER";
 const DETAILED_LIST_KEY = "ENQUIRY_MASTER_DETAILED";
 
+/** Equal width for sub-header KPI tiles (Total, Active, … Lost). */
+const ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX = 100;
+
 /** Normalized key for matching API `summary.status_counts` (handles spaces / case). */
 function normalizeEnquiryStatusKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -2323,9 +2326,9 @@ function EnquiryMaster() {
       { id: "sales", label: "Sales Person", checked: summaryVisibleColumns.sales_person, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
       { id: "service", label: "Service", checked: summaryVisibleColumns.service, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, service: !p.service })) },
       { id: "route", label: "Route", checked: summaryVisibleColumns.route, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, route: !p.route })) },
-      { id: "ref", label: "Reference No", checked: summaryVisibleColumns.reference_no, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
-      { id: "date", label: "Enquiry Date", checked: summaryVisibleColumns.date, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })) },
       { id: "status", label: "Status", checked: summaryVisibleColumns.status, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, status: !p.status })) },
+      { id: "date", label: "Enquiry Date", checked: summaryVisibleColumns.date, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })) },
+      { id: "ref", label: "Reference No", checked: summaryVisibleColumns.reference_no, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
       { id: "remark", label: "Remark", checked: summaryVisibleColumns.remark, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, remark: !p.remark })) },
     ],
     [summaryVisibleColumns],
@@ -2404,12 +2407,14 @@ function EnquiryMaster() {
                   <Group gap={6} wrap="wrap" align="center">
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconUsers size={14} color={primary} />}
                       value={enquirySummaryStats.total}
                       label="Total"
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconCircleCheck size={14} color="#059669" />}
                       iconBackground="#d1fae5"
                       iconColor="#059669"
@@ -2418,6 +2423,7 @@ function EnquiryMaster() {
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconUserOff size={14} color="#64748b" />}
                       iconBackground="#f1f5f9"
                       iconColor="#64748b"
@@ -2426,6 +2432,7 @@ function EnquiryMaster() {
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconFileDescription size={14} color="#2563eb" />}
                       iconBackground="#dbeafe"
                       iconColor="#2563eb"
@@ -2434,6 +2441,7 @@ function EnquiryMaster() {
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconShieldCheck size={14} color="#7c3aed" />}
                       iconBackground="#f3e8ff"
                       iconColor="#7c3aed"
@@ -2442,6 +2450,7 @@ function EnquiryMaster() {
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconTrendingUp size={14} color="#16a34a" />}
                       iconBackground="#f0fdf4"
                       iconColor="#16a34a"
@@ -2450,6 +2459,7 @@ function EnquiryMaster() {
                     />
                     <ERPListStatPill
                       theme={erpTheme}
+                      pillWidth={ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX}
                       icon={<IconTrendingDown size={14} color="#dc2626" />}
                       iconBackground="#fef2f2"
                       iconColor="#dc2626"

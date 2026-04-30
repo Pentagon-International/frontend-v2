@@ -23,7 +23,7 @@ export type ErpListThOptions = {
  */
 export function erpListThStyle(theme: ErpListTheme, options?: ErpListThOptions): CSSProperties {
   return {
-    padding: "10px 14px",
+    padding: "10px 10px",
     textAlign: options?.textAlign ?? "left",
     fontWeight: 500,
     fontSize: 14,
