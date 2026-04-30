@@ -283,6 +283,8 @@ function EnquiryMaster() {
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(25);
+  /** Last settled detailed-list total — footer + page clamp while fetching a new page (RQ cache miss). */
+  const detailedListTotalBaselineRef = useRef(0);
 
   const previewColumnToKeyMap: Record<string, string> = {
     "Enquiry ID": "enquiry_id",
@@ -442,7 +444,7 @@ function EnquiryMaster() {
       }
       // Build filter payload for download (use preview filters in detailed view, summary filters otherwise)
       const filterPayload = showPreviewTable
-        ? buildPreviewFilterPayload
+        ? buildPreviewListFilterPayload()
         : buildFilterPayload();
       const requestBody = { filters: { ...filterPayload } };
       const response: any = await postAPICall(
@@ -680,42 +682,44 @@ function EnquiryMaster() {
     return payload;
   }, [filters, fromDate, toDate, debouncedSearch, searchQuery]);
 
-  // Build preview filter payload function (for detailed view)
-  // Use the same canonical filter state (FilterState + from/to dates) so both views share filters
-  const buildPreviewFilterPayload = useMemo(() => {
-    const payload: any = {};
+  // Build enquiry detailed-list (`enquiryPreviewExcel`) filters from Detailed view state.
+  const buildPreviewListFilterPayload = useCallback(() => {
+    const payload: Record<string, unknown> = {};
 
-    // Add date range if both dates are selected
     if (fromDate && toDate) {
       payload.enquiry_received_date_from = dayjs(fromDate).format("YYYY-MM-DD");
       payload.enquiry_received_date_to = dayjs(toDate).format("YYYY-MM-DD");
     }
 
-    if (filters.customer_code) payload.customer_code = filters.customer_code;
-    if (filters.sales_person) payload.sales_person = filters.sales_person;
-    if (filters.origin_code) payload.origin_code = filters.origin_code;
-    if (filters.destination_code)
-      payload.destination_code = filters.destination_code;
-    if (filters.service) payload.service = filters.service;
-    if (filters.trade) payload.trade = filters.trade;
-    if (filters.enquiry_id) payload.enquiry_id = filters.enquiry_id;
-    if (filters.reference_no) payload.reference_no = filters.reference_no;
-    if (filters.status && filters.status !== "ALL") {
-      payload.status = filters.status;
+    if (previewFilters.customer_name) payload.customer_code = previewFilters.customer_name;
+    if (previewFilters.sales_person) payload.sales_person = previewFilters.sales_person;
+    if (previewFilters.origin_name) payload.origin_code = previewFilters.origin_name;
+    if (previewFilters.destination_name)
+      payload.destination_code = previewFilters.destination_name;
+    if (previewFilters.service) payload.service = previewFilters.service;
+    if (previewFilters.trade) payload.trade = previewFilters.trade;
+    if (previewFilters.enquiry_id) payload.enquiry_id = previewFilters.enquiry_id;
+    if (previewFilters.reference_no) payload.reference_no = previewFilters.reference_no;
+    if (previewFilters.terms_of_shipment)
+      payload.terms_of_shipment = previewFilters.terms_of_shipment;
+    if (previewFilters.status && previewFilters.status !== "ALL") {
+      payload.status = previewFilters.status;
     } else {
       payload.status = "";
     }
 
-    // Include search as part of the payload (search is a filter)
-    // Use debouncedSearch when typing, but fall back to searchQuery so
-    // restored values are included even before debounce completes.
     const effectiveSearch = debouncedSearch.trim() || searchQuery.trim();
     if (effectiveSearch) {
       payload.search = effectiveSearch;
     }
 
     return payload;
-  }, [filters, fromDate, toDate, debouncedSearch, searchQuery]);
+  }, [previewFilters, fromDate, toDate, debouncedSearch, searchQuery]);
+
+  const previewListFiltersQueryKeyPart = useMemo(
+    () => JSON.stringify(buildPreviewListFilterPayload()),
+    [buildPreviewListFilterPayload],
+  );
 
   // Single summary query for enquiries (enquiryFilter) - used for both initial and filtered data
   const {
@@ -763,11 +767,15 @@ function EnquiryMaster() {
     isFetching: previewFetching,
     refetch: refetchPreview,
   } = useQuery({
-    queryKey: ["enquiryPreview", previewCurrentPage, previewPageSize],
+    queryKey: [
+      "enquiryPreview",
+      previewCurrentPage,
+      previewPageSize,
+      previewListFiltersQueryKeyPart,
+    ],
     queryFn: async () => {
       try {
-        // Always build payload from current filters + dates + debounced search
-        const filterPayload = buildPreviewFilterPayload;
+        const filterPayload = buildPreviewListFilterPayload();
         const res: any = await apiCallProtected.post(
           `${URL.enquiryPreviewExcel}?index=${(previewCurrentPage - 1) * previewPageSize}&limit=${previewPageSize}`,
           { filters: { ...filterPayload } },
@@ -797,6 +805,20 @@ function EnquiryMaster() {
     gcTime: 0,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!showPreviewTable) {
+      detailedListTotalBaselineRef.current = 0;
+      return;
+    }
+    if (
+      !previewFetching &&
+      previewResult &&
+      typeof previewResult.total === "number"
+    ) {
+      detailedListTotalBaselineRef.current = previewResult.total;
+    }
+  }, [showPreviewTable, previewFetching, previewResult]);
 
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
@@ -891,17 +913,27 @@ function EnquiryMaster() {
     }
   }, [showPreviewTable, summaryListTotalRecords, listPageSize, listCurrentPage]);
 
-  const previewListTotalRecords = previewResult?.total ?? 0;
+  const previewListTotalRecords =
+    previewResult?.total ?? detailedListTotalBaselineRef.current;
 
   // Detailed list: keep current page valid when total shrinks (filters, delete, etc.)
   useEffect(() => {
     if (!showPreviewTable) return;
-    const tr = previewListTotalRecords;
+    // While paginating, RQ often has no `data` yet for the new query key → total briefly 0; clamp would reset to page 1.
+    if (previewFetching) return;
+    const tr =
+      previewResult?.total ?? detailedListTotalBaselineRef.current;
     const totalPages = Math.max(1, Math.ceil(tr / previewPageSize));
     if (previewCurrentPage > totalPages) {
       setPreviewCurrentPage(totalPages);
     }
-  }, [showPreviewTable, previewListTotalRecords, previewPageSize, previewCurrentPage]);
+  }, [
+    showPreviewTable,
+    previewFetching,
+    previewResult?.total,
+    previewPageSize,
+    previewCurrentPage,
+  ]);
 
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
@@ -2094,7 +2126,7 @@ function EnquiryMaster() {
     if (restoredState?.shouldRestore) {
       performPreviewRestore();
       useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, false);
-      hasRestoredFromStore.current = true;
+      hasRestoredPreviewFromStore.current = true;
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2887,7 +2919,7 @@ function EnquiryMaster() {
                 <ERPListPaginationFooter
                   theme={erpTheme}
                   totalRecords={
-                    showPreviewTable ? tablePreviewData?.total ?? 0 : summaryListTotalRecords
+                    showPreviewTable ? previewListTotalRecords : summaryListTotalRecords
                   }
                   pageIndex={showPreviewTable ? previewCurrentPage - 1 : listCurrentPage - 1}
                   pageSize={showPreviewTable ? previewPageSize : listPageSize}
