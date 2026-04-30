@@ -1,7 +1,10 @@
 import { Box } from "@mantine/core";
 import { DateRangeInput } from "../../../components";
 import Enquiry from "./Enquiry";
-import { EnquiryConversionAggregatedData } from "../../../service/dashboard.service";
+import {
+  EnquiryConversionAggregatedData,
+  EnquiryConversionOverviewMeta,
+} from "../../../service/dashboard.service";
 import {
   dashboardPanelShell,
   dashboardPanelHeaderBand,
@@ -12,6 +15,7 @@ import { formatEnquiryConversionOverviewSubtitle } from "./EnquiryConversion/for
 
 interface EnquirySectionProps {
   enquiryConversionAggregatedData: EnquiryConversionAggregatedData;
+  enquiryConversionOverviewMeta?: EnquiryConversionOverviewMeta | null;
   isLoadingEnquiryConversion: boolean;
   isLoadingEnquiryChart: boolean;
   /** Optional pipeline total in ₹ crore for the subtitle (when APIs expose it). */
@@ -27,6 +31,7 @@ interface EnquirySectionProps {
 
 const EnquirySection = ({
   enquiryConversionAggregatedData,
+  enquiryConversionOverviewMeta,
   isLoadingEnquiryConversion,
   isLoadingEnquiryChart,
   pipelineCr,
@@ -70,6 +75,7 @@ const EnquirySection = ({
       <Box style={dashboardPanelBody}>
         <Enquiry
           enquiryConversionAggregatedData={enquiryConversionAggregatedData}
+          enquiryConversionOverviewMeta={enquiryConversionOverviewMeta}
           isLoadingEnquiryConversion={isLoadingEnquiryConversion}
           isLoadingEnquiryChart={isLoadingEnquiryChart}
           onOpenDetailModule={onOpenEnquiryConversionModule}

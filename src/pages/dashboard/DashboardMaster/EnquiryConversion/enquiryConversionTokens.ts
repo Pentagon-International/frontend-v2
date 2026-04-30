@@ -1,9 +1,9 @@
-/** Shared palette aligned with Pentagon Sales dashboard mockups */
+/** Shared palette aligned with Pentagon Sales Overview “Enquiry Conversion” bar */
 export const enquiryConversionColors = {
-  /** Overview funnel — “New” remainder bucket (neutral gray bar). */
-  new: "#E5E7EB",
-  quoted: "#3B82F6",
-  negotiation: "#1E3A5F",
+  /** Pipeline “Active” slice (light neutral) */
+  active: "#E5E7EB",
+  /** Quoted slice (navy) */
+  quoted: "#1E3A5F",
   won: "#15803D",
   lost: "#DC2626",
   muted: "#64748B",

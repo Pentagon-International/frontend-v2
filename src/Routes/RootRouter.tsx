@@ -9,7 +9,7 @@ import {
   QuotationApprovalPublic,
 } from "../pages";
 
-const APP_BASENAME = "/";
+const APP_BASENAME = "/uat";
 
 const RootRouter = () => {
   // const accessToken = useAuthStore((state) => state.auth?.token);

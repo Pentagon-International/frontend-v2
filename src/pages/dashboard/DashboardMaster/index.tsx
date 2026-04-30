@@ -32,11 +32,12 @@ import {
   calculateCallEntryAggregatedData,
   filterCallEntryData,
   getCallEntryStatistics,
+  getCallEntryDashboardData,
+  mapCallEntryDashboardToLegacyResponse,
   calculateCallEntryDateRange,
-  getEnquiryConversionData,
   getFilteredEnquiryConversionData,
-  calculateEnquiryConversionAggregatedData,
-  calculateFilteredEnquiryConversionAggregatedData,
+  getEnquiryConversionDashboardData,
+  resolveEnquiryConversionAggregatedFromResponse,
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
   calculateFinancialYearBudgetRange,
@@ -51,12 +52,16 @@ import {
   CallEntryAggregatedData,
   CallEntryStatisticsSummary,
   CallEntryStatisticsResponse,
+  CallEntryDashboardFilters,
+  CallEntryCallHeatmap,
   CallEntrySalespersonData,
   CallEntryCustomerData,
   CallEntryDetailData,
   EnquiryConversionAggregatedData,
+  EnquiryConversionOverviewMeta,
   BudgetAggregatedData,
   extractNumericValue,
+  extractEnquiryConversionOverviewMeta,
 } from "../../../service/dashboard.service";
 import { useQuery } from "@tanstack/react-query";
 import { DetailedViewTable, DateRangeInput } from "../../../components";
@@ -401,6 +406,8 @@ const Dashboard = () => {
       activePercentage: 0,
       quotePercentage: 0,
     });
+  const [enquiryConversionOverviewMeta, setEnquiryConversionOverviewMeta] =
+    useState<EnquiryConversionOverviewMeta>({});
 
   // Section-level period states (for unified filters in section headers)
   const [customerInteractionPeriod, setCustomerInteractionPeriod] =
@@ -1447,14 +1454,14 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const response = await getCallEntryStatistics(
+      const dash = await getCallEntryDashboardData(
         addSearchToCallEntryFilters({
           company: companyName,
-        })
+        }) as CallEntryDashboardFilters
       );
 
-      setCallEntryStatisticsData(response);
-      setCallEntrySummary(response.summary);
+      setCallEntryStatisticsData(mapCallEntryDashboardToLegacyResponse(dash));
+      setCallEntrySummary(dash.summary);
     } catch (error) {
       console.error("Error fetching call entry statistics:", error);
       toast.error("Failed to fetch call entry data");
@@ -1504,19 +1511,22 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(companyName && { company: companyName }),
+      const response = await getEnquiryConversionDashboardData({
+        company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
-      const response = await getFilteredEnquiryConversionData(filterData);
-      const aggregatedData =
-        calculateFilteredEnquiryConversionAggregatedData(response);
-      setEnquiryConversionAggregatedData(aggregatedData);
+      setEnquiryConversionAggregatedData(
+        resolveEnquiryConversionAggregatedFromResponse(response)
+      );
+      setEnquiryConversionOverviewMeta(
+        extractEnquiryConversionOverviewMeta(response)
+      );
     } catch (error) {
       console.error("Error fetching enquiry conversion data:", error);
       toast.error("Failed to fetch enquiry conversion data");
+      setEnquiryConversionOverviewMeta({});
     } finally {
       setIsLoadingEnquiryConversion(false);
     }
@@ -1781,30 +1791,28 @@ const Dashboard = () => {
               company: companyName,
               period: customerInteractionPeriod,
             }),
-        // Use filtered API call with company name and date range for enquiry conversion data
-        // Updated to use date range instead of period
-        // Always use selected dates if available, otherwise fall back to getEnquiryConversionData
+        // Enquiry conversion overview — POST enquiry/enquiryconversion/ only (needs date range)
         (async () => {
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const filterData: DashboardFilters = addSearchToFilters({
-              ...(companyName && { company: companyName }),
+            return await getEnquiryConversionDashboardData({
+              company: companyName,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
             });
-            return await getFilteredEnquiryConversionData(filterData);
-          } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            return await getEnquiryConversionData();
           }
+          return null;
         })(),
-        // Call entry statistics - use selected date range
+        // Call entry overview — POST call-entry/data/
         (async () => {
-          return await getCallEntryStatistics(
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            return null;
+          }
+          return await getCallEntryDashboardData(
             addSearchToCallEntryFilters({
               company: companyName,
-            })
+            }) as CallEntryDashboardFilters
           );
         })(),
       ]);
@@ -1938,39 +1946,35 @@ const Dashboard = () => {
         setIsLoadingCustomerInteraction(false);
       }
 
-      // Process Enquiry Conversion response
+      // Process Enquiry Conversion — POST enquiry/enquiryconversion/ only
       if (enquiryConversionResponse) {
-        const hasEnquiryData =
-          (enquiryConversionResponse as any)?.data?.[0]?.Enquiry_data !==
-          undefined;
-
-        const calculatedEnquiryConversionData = hasEnquiryData
-          ? calculateEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            )
-          : calculateFilteredEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            );
-
-        setEnquiryConversionAggregatedData(calculatedEnquiryConversionData);
-        // Don't reset period here - preserve user's selected period
-        setIsLoadingEnquiryConversion(false);
-      } else if (results[3].status === "rejected") {
-        setIsLoadingEnquiryConversion(false);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(
+            enquiryConversionResponse as any
+          )
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryConversionResponse)
+        );
+      } else {
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
+      setIsLoadingEnquiryConversion(false);
 
       // Process Call Entry response
-      if (callEntryResponse) {
-        // New API response structure
-        setCallEntryStatisticsData(
-          callEntryResponse as CallEntryStatisticsResponse
-        );
-        setCallEntrySummary(
-          (callEntryResponse as CallEntryStatisticsResponse).summary
-        );
-        // Don't reset period here - let it be controlled by user selection only
+      if (results[4].status === "fulfilled") {
+        if (callEntryResponse) {
+          setCallEntryHeatmap(callEntryResponse.call_heatmap ?? null);
+          setCallEntryStatisticsData(
+            mapCallEntryDashboardToLegacyResponse(callEntryResponse)
+          );
+          setCallEntrySummary(callEntryResponse.summary);
+        }
         setIsLoadingCallEntry(false);
-      } else if (results[4].status === "rejected") {
+      } else {
         setIsLoadingCallEntry(false);
       }
     } catch (error) {
@@ -1982,6 +1986,7 @@ const Dashboard = () => {
       setIsLoadingBudget(false);
       setIsLoadingCustomerInteraction(false);
       setIsLoadingEnquiryConversion(false);
+      setEnquiryConversionOverviewMeta({});
       setIsLoadingCallEntry(false);
     } finally {
       // Only set loading to false if all operations completed
@@ -2032,22 +2037,22 @@ const Dashboard = () => {
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       if (customerInteractionFromDate && customerInteractionToDate) {
-        const enquiryFilterData: DashboardFilters = {
+        const enquiryResponse = await getEnquiryConversionDashboardData({
           company: companyNameForEnquiry,
           date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
           date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-        const enquiryResponse =
-          await getFilteredEnquiryConversionData(enquiryFilterData);
-        const aggregatedEnquiryConversion =
-          calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+        });
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryResponse)
+        );
       } else {
-        // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-        const enquiryResponse = await getEnquiryConversionData();
-        const aggregatedEnquiryConversion =
-          calculateEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
       // Don't reset period here - preserve user's selected period
 
@@ -2411,6 +2416,28 @@ const Dashboard = () => {
       setIsLoadingDetailedView(false);
     }
   };
+
+  const handleOpenCallEntryDashboard = useCallback(() => {
+    const companyName =
+      user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+    navigate("/dashboard/call-entry-dashboard", {
+      state: {
+        company: companyName,
+        fromDate: customerInteractionFromDate
+          ? dayjs(customerInteractionFromDate).toISOString()
+          : null,
+        toDate: customerInteractionToDate
+          ? dayjs(customerInteractionToDate).toISOString()
+          : null,
+      },
+    });
+  }, [
+    customerInteractionFromDate,
+    customerInteractionToDate,
+    navigate,
+    selectedCompany,
+    user?.company?.company_name,
+  ]);
 
   // Customer Not Visited handlers (similar to Budget handlers)
   const handleCustomerNotVisitedPeriodChange = useCallback(
@@ -6870,24 +6897,24 @@ const Dashboard = () => {
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const enquiryFilterData: DashboardFilters = {
+            const enquiryResponse = await getEnquiryConversionDashboardData({
               company: companyNameForEnquiry,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            };
-            const enquiryResponse =
-              await getFilteredEnquiryConversionData(enquiryFilterData);
-            const aggregatedEnquiryConversion =
-              calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+            });
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+            );
+            setEnquiryConversionOverviewMeta(
+              extractEnquiryConversionOverviewMeta(enquiryResponse)
+            );
           } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            const enquiryResponse = await getEnquiryConversionData();
-            const aggregatedEnquiryConversion =
-              calculateEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(undefined)
+            );
+            setEnquiryConversionOverviewMeta({});
           }
 
           await refreshBudgetData();
@@ -7855,6 +7882,9 @@ const Dashboard = () => {
                       enquiryConversionAggregatedData={
                         enquiryConversionAggregatedData
                       }
+                      enquiryConversionOverviewMeta={
+                        enquiryConversionOverviewMeta
+                      }
                       isLoadingEnquiryConversion={isLoadingEnquiryConversion}
                       isLoadingEnquiryChart={isLoadingEnquiryChart}
                       fromDate={customerInteractionFromDate}
@@ -7916,10 +7946,7 @@ const Dashboard = () => {
                       callEntrySummary={callEntrySummary}
                       isLoadingCallEntry={isLoadingCallEntry}
                       handleCallEntryViewAll={handleCallEntryViewAll}
-                      selectedPeriod={callEntryPeriod}
-                      setSelectedPeriod={
-                        () => {} // Commented out - can be used in future case
-                      }
+                      onOpenCallEntryDashboard={handleOpenCallEntryDashboard}
                       fromDate={customerInteractionFromDate}
                       toDate={customerInteractionToDate}
                       setFromDate={setCustomerInteractionFromDate}

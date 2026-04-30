@@ -34,35 +34,43 @@ export function ByModeValueCard({
       <Text fw={600} fz={11} tt="uppercase" ls={0.8} c="#64748B" mb={14}>
         {title}
       </Text>
-      <SegmentedFunnelBar segments={segments} height={22} showLabels={false} />
-      <Stack gap={12} mt={18}>
-        {rows.map((r) => (
-          <Group key={r.key} justify="space-between" wrap="nowrap" gap="sm">
-            <Group gap={10} wrap="nowrap">
-              <Box
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: 3,
-                  backgroundColor: r.color,
-                  flexShrink: 0,
-                }}
-              />
-              <Text size="sm" fw={600} c="#0F172A">
-                {r.label}
-              </Text>
-            </Group>
-            <Group gap={16} wrap="nowrap">
-              <Text size="sm" fw={700} c="#0F172A">
-                {r.valueLabel}
-              </Text>
-              <Text size="sm" c="#64748B" style={{ minWidth: 36 }} ta="right">
-                {r.percentLabel}
-              </Text>
-            </Group>
-          </Group>
-        ))}
-      </Stack>
+      {segments.length > 0 ? (
+        <>
+          <SegmentedFunnelBar segments={segments} height={22} showLabels={false} />
+          <Stack gap={12} mt={18}>
+            {rows.map((r) => (
+              <Group key={r.key} justify="space-between" wrap="nowrap" gap="sm">
+                <Group gap={10} wrap="nowrap">
+                  <Box
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 3,
+                      backgroundColor: r.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Text size="sm" fw={600} c="#0F172A">
+                    {r.label}
+                  </Text>
+                </Group>
+                <Group gap={16} wrap="nowrap">
+                  <Text size="sm" fw={700} c="#0F172A">
+                    {r.valueLabel}
+                  </Text>
+                  <Text size="sm" c="#64748B" style={{ minWidth: 36 }} ta="right">
+                    {r.percentLabel}
+                  </Text>
+                </Group>
+              </Group>
+            ))}
+          </Stack>
+        </>
+      ) : (
+        <Text size="sm" c="#64748B" py={16}>
+          No service breakdown for this filter.
+        </Text>
+      )}
     </Box>
   );
 }

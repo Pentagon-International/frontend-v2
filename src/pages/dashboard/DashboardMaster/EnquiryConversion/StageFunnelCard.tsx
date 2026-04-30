@@ -1,11 +1,14 @@
-import { Box, Stack, Text, Group } from "@mantine/core";
+import { Fragment } from "react";
+import { Box, Group, Stack, Text } from "@mantine/core";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 
 export type StageFunnelRow = {
   stage: string;
-  summary: string;
+  /** Shown inside the colored bar — e.g. "284 · ₹14.2 Cr" */
+  barCaption: string;
   count: number;
-  rate?: string;
+  /** Optional right-column conversion note (MoM-style / vs previous stage). */
+  conversionNote?: string;
   barPercent: number;
   barColor: string;
 };
@@ -41,57 +44,101 @@ export function StageFunnelCard({
           </Text>
         ) : null}
       </Stack>
-      <Stack gap={12}>
-        {rows.map((row) => (
-          <Box key={row.stage}>
-            <Group justify="space-between" gap="sm" mb={6} wrap="nowrap">
-              <Group gap={8} wrap="nowrap">
+      <Stack gap={14}>
+        {rows.length === 0 ? (
+          <Text size="sm" c="#64748B">
+            No funnel data for this filter.
+          </Text>
+        ) : (
+          <Fragment>
+            {rows.map((row) => (
+              <Box key={row.stage}>
+                <Group justify="space-between" gap="sm" mb={8} wrap="nowrap">
+                  <Group gap={8} wrap="nowrap">
+                    <Box
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        backgroundColor: row.barColor,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <Text size="sm" fw={600} c="#0F172A">
+                      {row.stage}
+                    </Text>
+                  </Group>
+                  <Group gap={12} wrap="nowrap">
+                    <Text size="xs" fw={700} c="#0F172A" ta="right">
+                      {row.count.toLocaleString("en-IN")}
+                    </Text>
+                    {row.conversionNote ? (
+                      <Text
+                        size="xs"
+                        c="#475569"
+                        ta="right"
+                        style={{ minWidth: 48 }}
+                      >
+                        {row.conversionNote}
+                      </Text>
+                    ) : null}
+                  </Group>
+                </Group>
                 <Box
                   style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 2,
-                    backgroundColor: row.barColor,
-                    flexShrink: 0,
+                    position: "relative",
+                    height: 26,
+                    borderRadius: 6,
+                    background: "#F1F5F9",
+                    overflow: "hidden",
                   }}
-                />
-                <Text size="sm" fw={600} c="#0F172A">
-                  {row.stage}
-                </Text>
-              </Group>
-              <Text size="xs" c="#475569" ta="right">
-                {row.summary}
-              </Text>
-            </Group>
-            <Box
-              style={{
-                height: 8,
-                borderRadius: 4,
-                background: "#F1F5F9",
-                overflow: "hidden",
-              }}
-            >
-              <Box
-                style={{
-                  height: "100%",
-                  width: `${Math.min(100, Math.max(4, row.barPercent))}%`,
-                  backgroundColor: row.barColor,
-                  borderRadius: 4,
-                }}
-              />
-            </Box>
-            <Group justify="space-between" mt={4}>
-              <Text size="xs" c="#64748B">
-                Count: {row.count}
-              </Text>
-              {row.rate ? (
-                <Text size="xs" c="#64748B">
-                  Rate: {row.rate}
-                </Text>
-              ) : null}
-            </Group>
-          </Box>
-        ))}
+                >
+                  <Box
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${Math.min(100, Math.max(6, row.barPercent))}%`,
+                      backgroundColor: row.barColor,
+                      borderRadius: 6,
+                      pointerEvents: "none",
+                    }}
+                  />
+                  <Group
+                    gap={8}
+                    wrap="nowrap"
+                    align="center"
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      height: "100%",
+                      padding: "0 10px",
+                      minWidth: 0,
+                    }}
+                  >
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c={row.barPercent < 36 ? "#0F172A" : "#fff"}
+                      style={{
+                        textShadow:
+                          row.barPercent >= 36
+                            ? "0 1px 2px rgba(0,0,0,0.22)"
+                            : "none",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {row.barCaption}
+                    </Text>
+                  </Group>
+                </Box>
+              </Box>
+            ))}
+          </Fragment>
+        )}
       </Stack>
     </Box>
   );

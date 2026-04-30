@@ -12,7 +12,8 @@ export type EnquiryRow = {
   modeColor: string;
   stageLabel: string;
   stageDotColor: string;
-  probability: number;
+  /** When null/undefined, PROB. shows — */
+  probability?: number | null;
   valueLabel: string;
 };
 
@@ -65,7 +66,16 @@ export function TopActiveEnquiriesTable({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.map((r) => (
+            {rows.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={6}>
+                  <Text size="sm" c="#64748B" py={12}>
+                    No enquiries for this filter.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            ) : (
+              rows.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td style={{ minWidth: 200 }}>
                   <Text fw={600} size="sm" c="#0F172A">
@@ -116,17 +126,23 @@ export function TopActiveEnquiriesTable({
                   </Group>
                 </Table.Td>
                 <Table.Td style={{ minWidth: 100 }}>
-                  <Group gap={8} wrap="nowrap">
-                    <Progress
-                      value={r.probability}
-                      size="sm"
-                      style={{ flex: 1, minWidth: 48 }}
-                      color="#105476"
-                    />
-                    <Text size="xs" fw={600} c="#475569">
-                      {r.probability}%
+                  {r.probability != null ? (
+                    <Group gap={8} wrap="nowrap">
+                      <Progress
+                        value={r.probability}
+                        size="sm"
+                        style={{ flex: 1, minWidth: 48 }}
+                        color="#105476"
+                      />
+                      <Text size="xs" fw={600} c="#475569">
+                        {r.probability}%
+                      </Text>
+                    </Group>
+                  ) : (
+                    <Text size="sm" c="#94A3B8">
+                      —
                     </Text>
-                  </Group>
+                  )}
                 </Table.Td>
                 <Table.Td>
                   <Text fw={700} size="sm">
@@ -134,7 +150,8 @@ export function TopActiveEnquiriesTable({
                   </Text>
                 </Table.Td>
               </Table.Tr>
-            ))}
+            ))
+            )}
           </Table.Tbody>
         </Table>
       </Box>

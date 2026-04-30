@@ -248,6 +248,20 @@ const Navbar = ({
                     setIsAccountsOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Call Entry"
+                  icon={IconKeyboard}
+                  path="/dashboard/call-entry-dashboard"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav
