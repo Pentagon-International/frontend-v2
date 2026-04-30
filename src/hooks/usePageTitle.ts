@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { useLayoutStore } from "../store/useLayoutStore";
 
 const pathTitleMap: Record<string, string> = {
+  "/dashboard/enquiry-conversion": "Dashboard",
   "/": "Dashboard",
   "/lead": "Sales",
   "/call-entry": "Sales",

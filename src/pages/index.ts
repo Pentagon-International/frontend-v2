@@ -1,5 +1,6 @@
 import Login from "./auth/Login";
 import Dashboard from "./dashboard/DashboardMaster";
+import EnquiryConversionPage from "./dashboard/DashboardMaster/EnquiryConversion/EnquiryConversionPage";
 import CallEntry from "./dashboard/CallEntryMaster";
 import CallEntryNew from "./dashboard/CallEntryNew";
 import QuotationCreate from "./dashboard/QuotationCreate";
@@ -172,6 +173,7 @@ import Invoice from "./Workflow/jobcreation/InvoiceCreation";
 export {
   Login,
   Dashboard,
+  EnquiryConversionPage,
   CallEntry,
   CallEntryNew,
   LeadList,

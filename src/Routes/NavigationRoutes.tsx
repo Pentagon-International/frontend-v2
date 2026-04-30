@@ -6,6 +6,7 @@ import {
   CallModeView,
   CustomerPanMaster,
   Dashboard,
+  EnquiryConversionPage,
   GroupCompany,
   GroupCompanyEdit,
   GroupCompanyView,
@@ -198,6 +199,10 @@ const NavigationRoutes = () => {
     <Routes>
       <Route path="/" element={<RootLayout />}>
         <Route index element={isStaff ? <Dashboard /> : <Dashboard />} />
+        <Route
+          path="/dashboard/enquiry-conversion"
+          element={<EnquiryConversionPage />}
+        />
         <Route path="/road" element={<Road />} />
         <Route path="/air">
           <Route path="export-job">

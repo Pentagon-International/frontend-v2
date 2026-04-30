@@ -100,6 +100,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Customer Service", false);
           setOpenCollapsible("Accounts", false);
+          setOpenCollapsible("Dashboard", false);
         } else if (parent === "Transportation") {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsCustomerServiceOpen?.(false);
@@ -148,6 +149,16 @@ export const SubNavLink = ({
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+        } else if (parent === "Dashboard") {
+          collapsibles?.setIsSalesOpen?.(false);
+          collapsibles?.setIsTariffOpen?.(false);
+          collapsibles?.setIsAirOpen?.(false);
+          collapsibles?.setIsSeaExportOpen?.(false);
+          collapsibles?.setIsAccountsOpen?.(false);
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Accounts", false);
         } else {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsTariffOpen?.(false);

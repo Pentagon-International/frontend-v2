@@ -236,9 +236,6 @@ const Dashboard = () => {
   const [initialEnquiryFilterType, setInitialEnquiryFilterType] = useState<
     "all" | "gain" | "lost" | "active" | "quote"
   >("all");
-  const [enquiryView, setEnquiryView] = useState<"gain-lost" | "active-quote">(
-    "gain-lost"
-  );
   const [callEntryFilterType, setCallEntryFilterType] = useState<
     "all" | "overdue" | "today" | "upcoming" | "closed"
   >("all");
@@ -7860,20 +7857,14 @@ const Dashboard = () => {
                       }
                       isLoadingEnquiryConversion={isLoadingEnquiryConversion}
                       isLoadingEnquiryChart={isLoadingEnquiryChart}
-                      enquiryView={enquiryView}
-                      setEnquiryView={setEnquiryView}
-                      handleEnquiryConversionViewAll={
-                        handleEnquiryConversionViewAll
-                      }
-                      selectedPeriod={enquiryPeriod}
-                      setSelectedPeriod={
-                        () => {} // Commented out - can be used in future case
-                      }
                       fromDate={customerInteractionFromDate}
                       toDate={customerInteractionToDate}
                       setFromDate={setCustomerInteractionFromDate}
                       setToDate={setCustomerInteractionToDate}
                       hideDateFilter={true}
+                      onOpenEnquiryConversionModule={() =>
+                        navigate("/dashboard/enquiry-conversion")
+                      }
                     />
                   </Box>
                 </Grid.Col>
