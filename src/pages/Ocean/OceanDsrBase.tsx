@@ -21,25 +21,25 @@ const TABLE_BODY: CSSProperties = {
 };
 
 const COLUMNS = [
-  { key: "sr_no", label: "SR NO", width: 70 },
-  { key: "booking_no", label: "BOOKING NO.", width: 120 },
-  { key: "nomination_date", label: "NOMINATION DATE", width: 130 },
-  { key: "sales_person", label: "SALES PERSON", width: 120 },
-  { key: "cnee", label: "CNEE", width: 130 },
-  { key: "shipper", label: "SHIPPER", width: 130 },
-  { key: "agent", label: "AGENT", width: 130 },
-  { key: "equip", label: "EQUIP", width: 90 },
-  { key: "lcl_fcl", label: "LCL/FCL", width: 90 },
-  { key: "pol", label: "POL", width: 90 },
-  { key: "pod", label: "POD", width: 90 },
-  { key: "terms", label: "TERMS", width: 100 },
-  { key: "etd", label: "ETD", width: 110 },
-  { key: "eta", label: "ETA", width: 110 },
-  { key: "vsl_name", label: "VSL NAME", width: 130 },
-  { key: "container_number", label: "CONTAINER NUMBER", width: 150 },
-  { key: "remark", label: "Remarks", width: 140 },
-  { key: "buy_rates", label: "BUY RATES", width: 100 },
-  { key: "sell_rates", label: "SELL RATES", width: 100 },
+  { key: "sr_no", label: "SR NO", width: 50 },
+  { key: "booking_no", label: "BOOKING NO.", width: 100 },
+  { key: "nomination_date", label: "NOMINATION DATE", width: 105 },
+  { key: "sales_person", label: "SALES PERSON", width: 90 },
+  { key: "cnee", label: "CNEE", width: 120 },
+  { key: "shipper", label: "SHIPPER", width: 120 },
+  { key: "agent", label: "AGENT", width: 110 },
+  { key: "equip", label: "EQUIP", width: 70 },
+  { key: "lcl_fcl", label: "LCL/FCL", width: 70 },
+  { key: "pol", label: "POL", width: 60 },
+  { key: "pod", label: "POD", width: 60 },
+  { key: "terms", label: "TERMS", width: 70 },
+  { key: "etd", label: "ETD", width: 105 },
+  { key: "eta", label: "ETA", width: 105 },
+  { key: "vsl_name", label: "VSL NAME", width: 120 },
+  { key: "container_number", label: "CONTAINER NUMBER", width: 130 },
+  { key: "remark", label: "Remarks", width: 120 },
+  { key: "buy_rates", label: "BUY RATES", width: 80 },
+  { key: "sell_rates", label: "SELL RATES", width: 80 },
 ] as const;
 
 type ColumnKey = (typeof COLUMNS)[number]["key"];
@@ -66,10 +66,11 @@ function asString(v: unknown): string {
 
 type Props = {
   title: string;
-  listEndpoint: string;
+  endpoint: string;
+  serviceType: "Import" | "Export";
 };
 
-export default function OceanDsrBase({ title, listEndpoint }: Props) {
+export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const [fromDate, setFromDate] = useState<Date | null>(() => dayjs().startOf("month").toDate());
   const [toDate, setToDate] = useState<Date | null>(() => dayjs().toDate());
   const [rows, setRows] = useState<Row[]>([]);
@@ -87,9 +88,10 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
       const size = Math.max(1, Math.trunc(Number(pageSize)) || 25);
       const currentPage = Math.max(1, Math.trunc(Number(page)) || 1);
       const offset = (currentPage - 1) * size;
-      const listUrl = `${listEndpoint}?index=${offset}&limit=${size}`;
+      const listUrl = `${endpoint}?index=${offset}&limit=${size}`;
 
       const response = await apiCallProtected.post(listUrl, {
+        service_type: serviceType,
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
       });
@@ -134,7 +136,7 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, page, pageSize, listEndpoint, title]);
+  }, [fromDate, toDate, page, pageSize, endpoint, serviceType, title]);
 
   useEffect(() => setPage(1), [fromDate, toDate]);
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
         const changed: Record<string, unknown> = {};
         if (row.etd !== original.etd) changed.etd = row.etd;
         if (row.eta !== original.eta) changed.eta = row.eta;
-        if (row.remark !== original.remark) changed.remark = row.remark;
+        if (row.remark !== original.remark) changed.remarks = row.remark;
         if (Object.keys(changed).length === 0) return;
         updates.push({
           booking_id: source["booking_id"] ?? null,
@@ -170,7 +172,10 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
         toast("No changes to submit");
         return;
       }
-      await apiCallProtected.patch(listEndpoint, { updates });
+      await apiCallProtected.patch(endpoint, {
+        service_type: serviceType,
+        updates,
+      });
       toast.success(`${title} updated`);
       void fetchData();
     } catch (error) {
@@ -179,7 +184,7 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [rows, fetchData, listEndpoint, title]);
+  }, [rows, fetchData, endpoint, serviceType, title]);
 
   return (
     <Box
@@ -217,7 +222,7 @@ export default function OceanDsrBase({ title, listEndpoint }: Props) {
             ) : rows.length === 0 ? (
               <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this date range.</Text></Flex>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 2100 }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 1760 }}>
                 <thead>
                   <tr>
                     {COLUMNS.map((column) => (
