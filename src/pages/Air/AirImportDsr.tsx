@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Loader, Text, Button } from "@mantine/core";
+import { Box, Flex, Group, Loader, Text, Button, TextInput } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
 import { apiCallProtected } from "../../api/axios";
 import { URL } from "../../api/serverUrls";
-import DateRangeInput from "../../components/DateRangeInput";
 import SingleDateInput from "../../components/SingleDateInput";
 import FormTextInput from "../../components/FormTextInput";
 import PaginationBar from "../../components/PaginationBar/PaginationBar";
+import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
+import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
+import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
+import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
+import { erpToolbarOutlineButtonStyles } from "../../components";
 
 /** Matches CallEntryMaster list URL style: `${endpoint}?index=${offset}&limit=${pageSize}` */
 function buildAirImportBookedListUrl(
@@ -19,13 +24,13 @@ function buildAirImportBookedListUrl(
 
 const DSR_PRIMARY = "#105476";
 const DSR_BORDER = "#e2e8f0";
-const DSR_CARD_BG = "#ffffff";
 const DSR_FOOTER_BG = "#f8fafc";
 
 /** Scroll area inside the bordered card (pagination lives in the card footer). */
 const AIR_IMPORT_DSR_TABLE_BODY: CSSProperties = {
   flex: 1,
   minHeight: 0,
+  maxHeight: "70vh",
   overflow: "auto",
   padding: "12px 16px",
 };
@@ -177,6 +182,15 @@ export default function AirImportDsr() {
   const [airImportDsrPage, setAirImportDsrPage] = useState(1);
   const [airImportDsrPageSize, setAirImportDsrPageSize] = useState(25);
   const [airImportDsrTotalRecords, setAirImportDsrTotalRecords] = useState(0);
+  const [search, setSearch] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
+  const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
+  const [visibleColumns] = useState<Record<AirImportDsrColumnKey, boolean>>(() =>
+    Object.fromEntries(
+      AIR_IMPORT_DSR_COLUMNS.map((column) => [column.key, true])
+    ) as Record<AirImportDsrColumnKey, boolean>
+  );
 
   const airImportDsrOriginalEditableRef = useRef<
     Map<string, Pick<AirImportDsrRow, AirImportDsrEditableKey>>
@@ -284,6 +298,15 @@ export default function AirImportDsr() {
     []
   );
 
+  const filteredRows = airImportDsrRows.filter((row) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return AIR_IMPORT_DSR_COLUMNS.some((column) => {
+      if (!visibleColumns[column.key]) return false;
+      return airImportDsrRowScalar(row, column.key).toLowerCase().includes(q);
+    });
+  });
+
   const submitAirImportDsrUpdates = useCallback(async () => {
     try {
       setIsSubmittingAirImportDsr(true);
@@ -351,71 +374,128 @@ export default function AirImportDsr() {
     }
   }, [airImportDsrRows, fetchAirImportDsrData]);
 
-  return (
-    <Box
-      mx={{ base: -16, sm: -24 }}
-      pb={0}
-      pt={0}
-      h="calc(100vh - 72px)"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        boxSizing: "border-box",
-        backgroundColor: "#F0F4F8",
-        minWidth: 0,
-      }}
-    >
-      <Box style={{ backgroundColor: "#ffffff", borderBottom: `1px solid ${DSR_BORDER}` }}>
-        <Box px={{ base: 16, sm: 24 }} py={8}>
-          <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-            <Text fw={600} size="sm" c="#0f172a">
-              Air Import DSR
-            </Text>
-            <Box style={{ width: "fit-content", maxWidth: "100%" }}>
-              <DateRangeInput
-                fromDate={fromDate}
-                toDate={toDate}
-                onFromDateChange={setFromDate}
-                onToDateChange={setToDate}
-                fromLabel="From date"
-                toLabel="To date"
-                size="xs"
-                inputWidth={170}
-                containerStyle={{ justifyContent: "flex-start", gap: 8 }}
-              />
-            </Box>
-          </Group>
-        </Box>
-      </Box>
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const summary = {
+    total: airImportDsrRows.length,
+    active: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "ACTIVE").length,
+    closed: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "CLOSED").length,
+    cancel: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "CANCEL").length,
+  };
 
-      <Box
-        px={{ base: 16, sm: 24 }}
-        pt={0}
-        pb={0}
-        style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-      >
-        <Box
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-            border: `1px solid ${DSR_BORDER}`,
-            borderRadius: 8,
-            overflow: "hidden",
-            background: DSR_CARD_BG,
-            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
-          }}
-        >
+  return (
+    <ERPListScreen
+      theme={theme}
+      toolbar={{
+        leading: (
+          <>
+            <ERPListStatPill theme={theme} icon={<IconStack2 size={14} />} value={summary.total} label="Total" />
+            <ERPListStatPill theme={theme} icon={<IconCircleCheck size={14} />} value={summary.active} label="Active" iconBackground="#d1fae5" iconColor="#059669" />
+            <ERPListStatPill theme={theme} icon={<IconClock size={14} />} value={summary.closed} label="Closed" iconBackground="#dbeafe" iconColor="#2563eb" />
+            <ERPListStatPill theme={theme} icon={<IconX size={14} />} value={summary.cancel} label="Cancel" iconBackground="#fee2e2" iconColor="#dc2626" />
+          </>
+        ),
+        actions: (
+          <>
+            <TextInput size="xs" leftSection={<IconSearch size={14} />} placeholder="Search..." value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={220} />
+            {/*
+            <Menu shadow="md" width={220} position="bottom-end">
+              <Menu.Target>
+                <Button
+                  variant="default"
+                  size="xs"
+                  leftSection={<IconSettings size={14} />}
+                  styles={erpToolbarOutlineButtonStyles(theme)}
+                >
+                  Columns
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {AIR_IMPORT_DSR_COLUMNS.map((column) => (
+                  <Menu.Item key={column.key} closeMenuOnClick={false}>
+                    <Checkbox label={column.label} checked={visibleColumns[column.key]} onChange={(e) => setVisibleColumns((prev) => ({ ...prev, [column.key]: e.currentTarget.checked }))} />
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+            */}
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconFilter size={14} />}
+              styles={erpToolbarOutlineButtonStyles(theme)}
+              onClick={() => { setDraftFromDate(fromDate); setDraftToDate(toDate); setShowFilters((s) => !s); }}
+            >
+              Filters
+            </Button>
+          </>
+        ),
+      }}
+      filters={{
+        opened: showFilters,
+        title: "Filters",
+        subtitle: "Refine DSR list by date range",
+        onClose: () => setShowFilters(false),
+        footer: (
+          <ERPListFilterActionsFooter
+            theme={theme}
+            onClear={() => { setDraftFromDate(dayjs().startOf("month").toDate()); setDraftToDate(dayjs().toDate()); }}
+            onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate); setAirImportDsrPage(1); setShowFilters(false); }}
+          />
+        ),
+        children: (
+          <Group align="end" gap="sm">
+            <SingleDateInput label="From date" value={draftFromDate} onChange={setDraftFromDate} size="xs" />
+            <SingleDateInput label="To date" value={draftToDate} onChange={setDraftToDate} size="xs" />
+          </Group>
+        ),
+      }}
+      table={{
+        footer: (
+          <Box
+            style={{
+              flexShrink: 0,
+              borderTop: `1px solid ${DSR_BORDER}`,
+              background: DSR_FOOTER_BG,
+              padding: "6px 14px",
+              marginTop: 4,
+            }}
+          >
+            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+              <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
+                <PaginationBar
+                  pageSize={airImportDsrPageSize}
+                  currentPage={airImportDsrPage}
+                  totalRecords={airImportDsrTotalRecords}
+                  onPageSizeChange={(size) => {
+                    setAirImportDsrPageSize(size);
+                    setAirImportDsrPage(1);
+                  }}
+                  onPageChange={setAirImportDsrPage}
+                />
+              </Box>
+              <Button
+                size="xs"
+                color={DSR_PRIMARY}
+                onClick={() => void submitAirImportDsrUpdates()}
+                loading={isSubmittingAirImportDsr}
+                disabled={isLoadingAirImportDsr || airImportDsrRows.length === 0}
+                style={{ flexShrink: 0, marginRight: 56 }}
+              >
+                Submit changes
+              </Button>
+            </Group>
+          </Box>
+        ),
+        children: (
           <Box style={AIR_IMPORT_DSR_TABLE_BODY}>
             {isLoadingAirImportDsr ? (
               <Flex justify="center" align="center" style={{ minHeight: 200 }}>
                 <Loader size="sm" color={DSR_PRIMARY} />
               </Flex>
-            ) : airImportDsrRows.length === 0 ? (
+            ) : filteredRows.length === 0 ? (
               <Flex justify="center" align="center" style={{ minHeight: 200 }}>
                 <Text size="sm" c="dimmed">
-                  No data available for this date range.
+                  No data available for this criteria.
                 </Text>
               </Flex>
             ) : (
@@ -429,7 +509,7 @@ export default function AirImportDsr() {
               >
                 <thead>
                   <tr>
-                    {AIR_IMPORT_DSR_COLUMNS.map((column) => (
+                    {AIR_IMPORT_DSR_COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => (
                       <th
                         key={column.key}
                         style={{
@@ -449,12 +529,12 @@ export default function AirImportDsr() {
                   </tr>
                 </thead>
                 <tbody>
-                  {airImportDsrRows.map((row, rowIndex) => {
+                  {filteredRows.map((row, rowIndex) => {
                     const identityKey =
                       getAirImportDsrIdentityKeyFromRow(row) || `row-${row.sr_no}-${rowIndex}`;
                     return (
                       <tr key={identityKey}>
-                        {AIR_IMPORT_DSR_COLUMNS.map((column) => (
+                        {AIR_IMPORT_DSR_COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => (
                           <td
                             key={`${identityKey}-${column.key}`}
                             style={{
@@ -561,44 +641,9 @@ export default function AirImportDsr() {
               </table>
             )}
           </Box>
-
-          <Box
-            style={{
-              flexShrink: 0,
-              borderTop: `1px solid ${DSR_BORDER}`,
-              background: DSR_FOOTER_BG,
-              padding: "6px 14px",
-              marginTop: 4,
-            }}
-          >
-            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
-              <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
-                <PaginationBar
-                  pageSize={airImportDsrPageSize}
-                  currentPage={airImportDsrPage}
-                  totalRecords={airImportDsrTotalRecords}
-                  onPageSizeChange={(size) => {
-                    setAirImportDsrPageSize(size);
-                    setAirImportDsrPage(1);
-                  }}
-                  onPageChange={setAirImportDsrPage}
-                />
-              </Box>
-              <Button
-                size="xs"
-                color={DSR_PRIMARY}
-                onClick={() => void submitAirImportDsrUpdates()}
-                loading={isSubmittingAirImportDsr}
-                disabled={isLoadingAirImportDsr || airImportDsrRows.length === 0}
-                style={{ flexShrink: 0, marginRight: 56 }}
-              >
-                Submit changes
-              </Button>
-            </Group>
-          </Box>
-        </Box>
-      </Box>
-    </Box>
+        ),
+      }}
+    />
   );
 }
 

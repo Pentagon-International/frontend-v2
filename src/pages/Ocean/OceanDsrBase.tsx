@@ -1,21 +1,26 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Loader, Text, Button } from "@mantine/core";
+import { Box, Flex, Group, Loader, Text, Button, TextInput } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
 import { apiCallProtected } from "../../api/axios";
-import DateRangeInput from "../../components/DateRangeInput";
 import SingleDateInput from "../../components/SingleDateInput";
 import FormTextInput from "../../components/FormTextInput";
 import PaginationBar from "../../components/PaginationBar/PaginationBar";
+import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
+import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
+import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
+import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
+import { erpToolbarOutlineButtonStyles } from "../../components";
 
 const DSR_PRIMARY = "#105476";
 const DSR_BORDER = "#e2e8f0";
-const DSR_CARD_BG = "#ffffff";
 const DSR_FOOTER_BG = "#f8fafc";
 
 const TABLE_BODY: CSSProperties = {
   flex: 1,
   minHeight: 0,
+  maxHeight: "70vh",
   overflow: "auto",
   padding: "12px 16px",
 };
@@ -79,7 +84,14 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [search, setSearch] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
+  const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
   const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
+  const [visibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
+    Object.fromEntries(COLUMNS.map((c) => [c.key, true])) as Record<ColumnKey, boolean>,
+  );
 
   const fetchData = useCallback(async () => {
     try {
@@ -147,6 +159,23 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     setRows((prev) => prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)));
   }, []);
 
+  const filteredRows = rows.filter((row) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return COLUMNS.some((column) => {
+      if (!visibleColumns[column.key]) return false;
+      return String(row[column.key] ?? "").toLowerCase().includes(q);
+    });
+  });
+
+  const summary = {
+    total: rows.length,
+    active: rows.filter((r) => String(r.__source?.status ?? "").toUpperCase() === "ACTIVE").length,
+    closed: rows.filter((r) => String(r.__source?.status ?? "").toUpperCase() === "CLOSED").length,
+    cancel: rows.filter((r) => String(r.__source?.status ?? "").toUpperCase() === "CANCEL").length,
+  };
+  const theme = DEFAULT_ERP_LIST_THEME;
+
   const submitUpdates = useCallback(async () => {
     try {
       setIsSubmitting(true);
@@ -187,45 +216,106 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   }, [rows, fetchData, endpoint, serviceType, title]);
 
   return (
-    <Box
-      mx={{ base: -16, sm: -24 }}
-      pb={0}
-      pt={0}
-      h="calc(100vh - 72px)"
-      style={{ display: "flex", flexDirection: "column", boxSizing: "border-box", backgroundColor: "#F0F4F8", minWidth: 0 }}
-    >
-      <Box style={{ backgroundColor: "#ffffff", borderBottom: `1px solid ${DSR_BORDER}` }}>
-        <Box px={{ base: 16, sm: 24 }} py={8}>
-          <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-            <Text fw={600} size="sm" c="#0f172a">{title}</Text>
-            <Box style={{ width: "fit-content", maxWidth: "100%" }}>
-              <DateRangeInput
-                fromDate={fromDate}
-                toDate={toDate}
-                onFromDateChange={setFromDate}
-                onToDateChange={setToDate}
-                fromLabel="From date"
-                toLabel="To date"
-                size="xs"
-                inputWidth={170}
-                containerStyle={{ justifyContent: "flex-start", gap: 8 }}
-              />
-            </Box>
+    <ERPListScreen
+      theme={theme}
+      toolbar={{
+        leading: (
+          <>
+            <ERPListStatPill theme={theme} icon={<IconStack2 size={14} />} value={summary.total} label="Total" />
+            <ERPListStatPill theme={theme} icon={<IconCircleCheck size={14} />} value={summary.active} label="Active" iconBackground="#d1fae5" iconColor="#059669" />
+            <ERPListStatPill theme={theme} icon={<IconClock size={14} />} value={summary.closed} label="Closed" iconBackground="#dbeafe" iconColor="#2563eb" />
+            <ERPListStatPill theme={theme} icon={<IconX size={14} />} value={summary.cancel} label="Cancel" iconBackground="#fee2e2" iconColor="#dc2626" />
+          </>
+        ),
+        actions: (
+          <>
+            <TextInput size="xs" leftSection={<IconSearch size={14} />} placeholder="Search..." value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={220} />
+            {/*
+            <Menu shadow="md" width={220} position="bottom-end">
+              <Menu.Target>
+                <Button
+                  variant="default"
+                  size="xs"
+                  leftSection={<IconSettings size={14} />}
+                  styles={erpToolbarOutlineButtonStyles(theme)}
+                >
+                  Columns
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {COLUMNS.map((column) => (
+                  <Menu.Item key={column.key} closeMenuOnClick={false}>
+                    <Checkbox label={column.label} checked={visibleColumns[column.key]} onChange={(e) => setVisibleColumns((prev) => ({ ...prev, [column.key]: e.currentTarget.checked }))} />
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+            */}
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconFilter size={14} />}
+              styles={erpToolbarOutlineButtonStyles(theme)}
+              onClick={() => { setDraftFromDate(fromDate); setDraftToDate(toDate); setShowFilters((s) => !s); }}
+            >
+              Filters
+            </Button>
+          </>
+        ),
+      }}
+      filters={{
+        opened: showFilters,
+        title: "Filters",
+        subtitle: "Refine DSR list by date range",
+        onClose: () => setShowFilters(false),
+        footer: (
+          <ERPListFilterActionsFooter
+            theme={theme}
+            onClear={() => { setDraftFromDate(dayjs().startOf("month").toDate()); setDraftToDate(dayjs().toDate()); }}
+            onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate); setPage(1); setShowFilters(false); }}
+            applyLabel="Apply Filters"
+          />
+        ),
+        children: (
+          <Group align="end" gap="sm">
+            <SingleDateInput label="From date" value={draftFromDate} onChange={setDraftFromDate} size="xs" />
+            <SingleDateInput label="To date" value={draftToDate} onChange={setDraftToDate} size="xs" />
           </Group>
-        </Box>
-      </Box>
-      <Box px={{ base: 16, sm: 24 }} pt={0} pb={0} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", border: `1px solid ${DSR_BORDER}`, borderRadius: 8, overflow: "hidden", background: DSR_CARD_BG, boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)" }}>
+        ),
+      }}
+      table={{
+        footer: (
+          <Box style={{ flexShrink: 0, borderTop: `1px solid ${DSR_BORDER}`, background: DSR_FOOTER_BG, padding: "6px 14px", marginTop: 4 }}>
+            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+              <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
+                <PaginationBar
+                  pageSize={pageSize}
+                  currentPage={page}
+                  totalRecords={totalRecords}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                  onPageChange={setPage}
+                />
+              </Box>
+              <Button size="xs" color={DSR_PRIMARY} onClick={() => void submitUpdates()} loading={isSubmitting} disabled={isLoading || rows.length === 0} style={{ flexShrink: 0, marginRight: 56 }}>
+                Submit changes
+              </Button>
+            </Group>
+          </Box>
+        ),
+        children: (
           <Box style={TABLE_BODY}>
             {isLoading ? (
               <Flex justify="center" align="center" style={{ minHeight: 200 }}><Loader size="sm" color={DSR_PRIMARY} /></Flex>
-            ) : rows.length === 0 ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this date range.</Text></Flex>
+            ) : filteredRows.length === 0 ? (
+              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this criteria.</Text></Flex>
             ) : (
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 1760 }}>
                 <thead>
                   <tr>
-                    {COLUMNS.map((column) => (
+                    {COLUMNS.filter((c) => visibleColumns[c.key]).map((column) => (
                       <th key={column.key} style={{ textAlign: "left", padding: "4px 6px", fontSize: 11, borderBottom: "1px solid #e2e8f0", background: "#f8fafc", whiteSpace: "nowrap", width: column.width, maxWidth: column.width }}>
                         {column.label}
                       </th>
@@ -233,11 +323,11 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, rowIndex) => {
+                  {filteredRows.map((row, rowIndex) => {
                     const identity = getIdentity(row.__source) || `row-${row.sr_no}-${rowIndex}`;
                     return (
                       <tr key={identity}>
-                        {COLUMNS.map((column) => (
+                        {COLUMNS.filter((c) => visibleColumns[c.key]).map((column) => (
                           <td key={`${identity}-${column.key}`} style={{ padding: "0px", borderBottom: "1px solid #f1f5f9", width: column.width, maxWidth: column.width }}>
                             {column.key === "etd" || column.key === "eta" || column.key === "nomination_date" ? (
                               <SingleDateInput
@@ -275,27 +365,8 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
               </table>
             )}
           </Box>
-          <Box style={{ flexShrink: 0, borderTop: `1px solid ${DSR_BORDER}`, background: DSR_FOOTER_BG, padding: "6px 14px", marginTop: 4 }}>
-            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
-              <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
-                <PaginationBar
-                  pageSize={pageSize}
-                  currentPage={page}
-                  totalRecords={totalRecords}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setPage(1);
-                  }}
-                  onPageChange={setPage}
-                />
-              </Box>
-              <Button size="xs" color={DSR_PRIMARY} onClick={() => void submitUpdates()} loading={isSubmitting} disabled={isLoading || rows.length === 0} style={{ flexShrink: 0, marginRight: 56 }}>
-                Submit changes
-              </Button>
-            </Group>
-          </Box>
-        </Box>
-      </Box>
-    </Box>
+        ),
+      }}
+    />
   );
 }
