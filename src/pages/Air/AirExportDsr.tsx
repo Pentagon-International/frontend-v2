@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Loader, Text, Button, TextInput } from "@mantine/core";
+import { Box, Flex, Group, Loader, Text, Button, TextInput, Menu, Checkbox } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
-import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
 import { apiCallProtected } from "../../api/axios";
 import { URL } from "../../api/serverUrls";
 import SingleDateInput from "../../components/SingleDateInput";
@@ -94,7 +94,7 @@ export default function AirExportDsr() {
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
-  const [visibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
     Object.fromEntries(COLUMNS.map((column) => [column.key, true])) as Record<ColumnKey, boolean>
   );
   const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
@@ -251,7 +251,6 @@ export default function AirExportDsr() {
         actions: (
           <>
             <TextInput size="xs" leftSection={<IconSearch size={14} />} placeholder="Search..." value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={220} />
-            {/*
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
                 <Button
@@ -271,7 +270,6 @@ export default function AirExportDsr() {
                 ))}
               </Menu.Dropdown>
             </Menu>
-            */}
             <Button
               variant="default"
               size="xs"
