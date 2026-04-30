@@ -356,7 +356,7 @@ export default function AirImportDsr() {
       mx={{ base: -16, sm: -24 }}
       pb={0}
       pt={0}
-      h="calc(100vh - 95px)"
+      h="calc(100vh - 72px)"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -390,7 +390,7 @@ export default function AirImportDsr() {
 
       <Box
         px={{ base: 16, sm: 24 }}
-        pt="xs"
+        pt={0}
         pb={0}
         style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
       >
@@ -567,10 +567,11 @@ export default function AirImportDsr() {
               flexShrink: 0,
               borderTop: `1px solid ${DSR_BORDER}`,
               background: DSR_FOOTER_BG,
-              padding: "12px 16px",
+              padding: "6px 14px",
+              marginTop: 4,
             }}
           >
-            <Group justify="space-between" align="center" wrap="wrap" gap="md">
+            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
               <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
                 <PaginationBar
                   pageSize={airImportDsrPageSize}
@@ -584,12 +585,12 @@ export default function AirImportDsr() {
                 />
               </Box>
               <Button
-                size="sm"
+                size="xs"
                 color={DSR_PRIMARY}
                 onClick={() => void submitAirImportDsrUpdates()}
                 loading={isSubmittingAirImportDsr}
                 disabled={isLoadingAirImportDsr || airImportDsrRows.length === 0}
-                style={{ flexShrink: 0 }}
+                style={{ flexShrink: 0, marginRight: 56 }}
               >
                 Submit changes
               </Button>

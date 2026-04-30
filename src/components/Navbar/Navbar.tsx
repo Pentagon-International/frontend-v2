@@ -511,6 +511,19 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Transportation"
+                    label="Air export DSR"
+                    icon={IconList}
+                    path="/air/export-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
                     label="Air Import to Export Booking"
                     icon={IconPlaneInflight}
                     path="/air/import-to-export-booking"
@@ -601,6 +614,32 @@ const Navbar = ({
                     label="Ocean Import Job"
                     icon={IconFerryFilled}
                     path="/SeaExport/import-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Ocean Import DSR"
+                    icon={IconFileAnalytics}
+                    path="/SeaExport/import-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Ocean Export DSR"
+                    icon={IconFileDescription}
+                    path="/SeaExport/export-dsr"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,

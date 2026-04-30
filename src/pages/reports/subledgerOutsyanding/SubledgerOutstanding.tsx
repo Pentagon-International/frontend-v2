@@ -394,9 +394,10 @@ export default function AgingOutstanding() {
                 const id = String(item.id ?? "").trim();
                 const gl = String(item.gl_account_code ?? "").trim();
                 const name = String(item.account_name ?? "").trim();
+                const glName = String(item.gl_name ?? "").trim();
                 return {
                   value: id,
-                  label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                  label: [name, gl, glName].filter(Boolean).join(" - "),
                 };
               }}
               displayValue={

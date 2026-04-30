@@ -24,6 +24,10 @@ const pathTitleMap: Record<string, string> = {
   "/road": "Road",
   "/air": "Air",
   "/SeaExport": "Ocean",
+  "/air/import-dsr": "Air Import DSR",
+  "/air/export-dsr": "Air Export DSR",
+  "/SeaExport/import-dsr": "Ocean Import DSR",
+  "/SeaExport/export-dsr": "Ocean Export DSR",
   "/accounts": "Accounts",
   "/supplier-invoice/reversal/create": "Supplier Invoice Reverse",
   "/supplier-invoice/reversal/edit": "Supplier Invoice Reverse",
@@ -79,19 +83,45 @@ const pathTitleMap: Record<string, string> = {
   //   '/master/company': 'Company',
 };
 
+const pathActiveNavMap: Record<string, string> = {
+  "/air/import-dsr": "Transportation",
+  "/air/export-dsr": "Transportation",
+  "/SeaExport/import-dsr": "Transportation",
+  "/SeaExport/export-dsr": "Transportation",
+};
+
+const pathActiveSubNavMap: Record<string, string> = {
+  "/air/import-dsr": "Air import DSR",
+  "/air/export-dsr": "Air export DSR",
+  "/SeaExport/import-dsr": "Ocean Import DSR",
+  "/SeaExport/export-dsr": "Ocean Export DSR",
+};
+
 export const usePageTitleSync = () => {
   const location = useLocation();
   const setTitle = useLayoutStore((state) => state.setTitle);
   const setActiveNav = useLayoutStore((state) => state.setActiveNav);
+  const setActiveSubNav = useLayoutStore((state) => state.setActiveSubNav);
 
   useEffect(() => {
     const path = location.pathname;
-    const matchedPath = Object.keys(pathTitleMap)
+    const matchedTitlePath = Object.keys(pathTitleMap)
       .filter((key) => path.startsWith(key))
       .sort((a, b) => b.length - a.length)[0];
-    const pageTitle = pathTitleMap[matchedPath] || "";
-    // console.log("Path-----",path, "----pageTitle---",pageTitle);
+    const pageTitle = pathTitleMap[matchedTitlePath] || "";
+
+    const matchedActiveNavPath = Object.keys(pathActiveNavMap)
+      .filter((key) => path.startsWith(key))
+      .sort((a, b) => b.length - a.length)[0];
+    const activeNav = pathActiveNavMap[matchedActiveNavPath] ?? pageTitle;
+
+    const matchedSubNavPath = Object.keys(pathActiveSubNavMap)
+      .filter((key) => path.startsWith(key))
+      .sort((a, b) => b.length - a.length)[0];
+    const activeSubNav = pathActiveSubNavMap[matchedSubNavPath] ?? "";
+
     setTitle(pageTitle);
-    setActiveNav(pageTitle);
-  }, [location.pathname, setTitle, setActiveNav]);
+    setActiveNav(activeNav);
+    setActiveSubNav(activeSubNav);
+  }, [location.pathname, setTitle, setActiveNav, setActiveSubNav]);
 };

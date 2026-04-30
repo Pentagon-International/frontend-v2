@@ -723,7 +723,7 @@ export default function SubledgerEnquiry() {
                       }}
                     >
                       <SearchableSelect
-                        label="Account"
+                        label="Account Name"
                         apiEndpoint={URL.chartOfAccounts}
                         value={form.values.accountId}
                         dropdownZIndex={1100}
@@ -736,9 +736,10 @@ export default function SubledgerEnquiry() {
                           const id = String(item.id ?? "").trim();
                           const gl = String(item.gl_account_code ?? "").trim();
                           const name = String(item.account_name ?? "").trim();
+                          const glName = String(item.gl_name ?? "").trim();
                           return {
                             value: id,
-                            label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                            label: [name, gl, glName].filter(Boolean).join(" - "),
                           };
                         }}
                         displayValue={selectedAccount?.account_name ?? ""}

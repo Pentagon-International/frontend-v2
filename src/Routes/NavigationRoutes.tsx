@@ -190,6 +190,9 @@ import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
 import AirImportDsr from "../pages/Air/AirImportDsr";
+import AirExportDsr from "../pages/Air/AirExportDsr";
+import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
+import OceanExportDsr from "../pages/Ocean/OceanExportDsr";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -202,6 +205,7 @@ const NavigationRoutes = () => {
         <Route path="/road" element={<Road />} />
         <Route path="/air">
           <Route path="import-dsr" element={<AirImportDsr />} />
+          <Route path="export-dsr" element={<AirExportDsr />} />
           <Route path="export-job">
             <Route index element={<AirExportJobMaster />} />
             <Route path="create" element={<AirExportJobCreate />} />
@@ -294,6 +298,8 @@ const NavigationRoutes = () => {
             path="import-to-export-booking"
             element={<OceanImportToExportBooking />}
           />
+          <Route path="import-dsr" element={<OceanImportDsr />} />
+          <Route path="export-dsr" element={<OceanExportDsr />} />
           <Route path="export-job">
             <Route index element={<ExportJobMaster />} />
             <Route path="create" element={<ExportJobCreate />} />
