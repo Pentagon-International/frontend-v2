@@ -35,99 +35,105 @@ export function ConversionByRepCard({
   return (
     <Box
       style={{
-        background: "#fff",
+        background: enquiryConversionColors.panelBg,
         border: `1px solid ${enquiryConversionColors.panelBorder}`,
-        borderRadius: 12,
-        padding: "18px 20px",
+        borderRadius: enquiryConversionColors.radius,
+        padding: "24px",
         height: "100%",
-        boxShadow:
-          "0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.06)",
+        boxShadow: enquiryConversionColors.shadow,
       }}
     >
-      <Stack gap={4} mb={16}>
-        <Text fw={600} fz={14} c={enquiryConversionColors.heading}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text size="xs" c="#64748B">
-            {subtitle}
+      <Stack gap={4} mb={20}>
+        <Group gap="sm" align="baseline">
+          <Text fw={700} fz={16} c={enquiryConversionColors.heading}>
+            {title}
           </Text>
-        ) : null}
+          {subtitle ? (
+            <Text size="xs" fw={500} c={enquiryConversionColors.subHeading}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </Group>
       </Stack>
       {rows.length === 0 ? (
-        <Text size="sm" c="#64748B" py={12}>
+        <Text size="sm" c={enquiryConversionColors.subHeading} py={12}>
           {emptyLabel}
         </Text>
       ) : (
-        <Stack gap={14}>
+        <Stack gap={16}>
           {rows.map((row, idx) => (
-            <Box key={`${row.name}-${idx}`}>
-              <Group justify="space-between" gap="md" mb={4} wrap="nowrap">
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="#0F172A"
-                  style={{ flex: "0 0 100px" }}
+            <Group key={`${row.name}-${idx}`} wrap="nowrap" gap="md" align="center">
+              <Text
+                size="sm"
+                fw={600}
+                c={enquiryConversionColors.heading}
+                style={{ flex: "0 0 100px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              >
+                {row.name}
+              </Text>
+              
+              <Box style={{ flex: 1, position: "relative", height: 16 }}>
+                <Box
+                  style={{
+                    height: "100%",
+                    borderRadius: 4,
+                    background: "#F1F5F9",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
                 >
-                  {row.name}
-                </Text>
-                <Text size="xs" c="#475569" ta="right">
-                  {row.rateLabel} · {row.winsLabel}
-                </Text>
-              </Group>
-              <Box style={{ position: "relative", height: 14 }}>
+                  <Box
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${row.barPercent}%`,
+                      backgroundColor: row.barColor,
+                      borderRadius: 4,
+                      transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+                    }}
+                  />
+                </Box>
                 {benchmarkPercent != null ? (
                   <Box
                     aria-hidden
                     style={{
                       position: "absolute",
-                      left: `clamp(0%, ${benchmarkPercent}%, calc(100% - 2px))`,
-                      top: 0,
-                      bottom: 0,
+                      left: `${benchmarkPercent}%`,
+                      top: -2,
+                      bottom: -2,
                       width: 2,
-                      background: "#CA8A04",
-                      opacity: 0.95,
-                      pointerEvents: "none",
+                      background: "#f59e0b",
+                      borderRadius: 1,
                       zIndex: 2,
+                      pointerEvents: "none",
                     }}
                   />
                 ) : null}
-                <Box
-                  style={{
-                    height: "100%",
-                    borderRadius: 6,
-                    background: "#F1F5F9",
-                    overflow: "hidden",
-                  }}
-                >
-                  <Box
-                    style={{
-                      height: "100%",
-                      width: `${Math.min(100, Math.max(6, row.barPercent))}%`,
-                      backgroundColor: row.barColor,
-                      borderRadius: 6,
-                    }}
-                  />
-                </Box>
               </Box>
-            </Box>
+
+              <Box style={{ flex: "0 0 90px", textAlign: "right" }}>
+                <Text size="xs" fw={700} c={enquiryConversionColors.heading} style={{ whiteSpace: "nowrap" }}>
+                  {row.rateLabel} · {row.winsLabel}
+                </Text>
+              </Box>
+            </Group>
           ))}
         </Stack>
       )}
+
       {pagination && pagination.totalPages > 1 ? (
-        <Group justify="center" mt={16}>
+        <Group justify="center" mt={24} pt={16} style={{ borderTop: `1px solid ${enquiryConversionColors.panelBorder}` }}>
           <Pagination
+            size="xs"
+            total={pagination.totalPages}
             value={pagination.page}
             onChange={pagination.onChange}
-            total={pagination.totalPages}
-            size="sm"
-            siblings={1}
-            boundaries={1}
             styles={{
               control: {
-                fontSize: 12,
-                minWidth: 32,
-                height: 32,
+                border: `1px solid ${enquiryConversionColors.panelBorder}`,
+                borderRadius: 6,
               },
             }}
           />

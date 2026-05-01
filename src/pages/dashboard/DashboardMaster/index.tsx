@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Box,
   Grid,
@@ -14,6 +14,7 @@ import {
   Text,
   Button,
   Textarea,
+  SimpleGrid,
 } from "@mantine/core";
 import { IconSearch, IconX, IconSend } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -28,19 +29,16 @@ import {
   getFilteredOutstandingData,
   calculateAggregatedData,
   calculateFilteredAggregatedData,
-  getCallEntryData,
   calculateCallEntryAggregatedData,
   filterCallEntryData,
   getCallEntryStatistics,
   getCallEntryDashboardData,
   mapCallEntryDashboardToLegacyResponse,
-  calculateCallEntryDateRange,
   getFilteredEnquiryConversionData,
   getEnquiryConversionDashboardData,
   resolveEnquiryConversionAggregatedFromResponse,
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
-  calculateFinancialYearBudgetRange,
   calculateFinancialYearBudgetRangeForYear,
   calculateStartMonthFromEndMonth,
   getFinancialYearOptions,
@@ -50,10 +48,10 @@ import {
   getCustomerInteractionStatusSummary,
   DashboardFilters,
   CallEntryAggregatedData,
+  CallEntryStatisticsFilters,
   CallEntryStatisticsSummary,
   CallEntryStatisticsResponse,
   CallEntryDashboardFilters,
-  CallEntryCallHeatmap,
   CallEntrySalespersonData,
   CallEntryCustomerData,
   CallEntryDetailData,
@@ -63,16 +61,8 @@ import {
   extractNumericValue,
   extractEnquiryConversionOverviewMeta,
 } from "../../../service/dashboard.service";
-import { useQuery } from "@tanstack/react-query";
 import { DetailedViewTable, DateRangeInput } from "../../../components";
 import dayjs from "dayjs";
-import Outstanding from "./Outstanding";
-import Budget from "./Budget";
-import CallEntry from "./CallEntry";
-import Enquiry from "./Enquiry";
-import NewCustomers from "./NewCustomers";
-import LostCustomer from "./LostCustomer";
-import CustomerNotVisited from "./CustomerNotVisited";
 import CustomerInteractionStatus from "./CustomerInteractionStatus";
 import CallEntrySection from "./CallEntrySection";
 import OutstandingSection from "./OutstandingSection";
@@ -153,11 +143,134 @@ const dashToolbarSearchInputStyles = {
   },
 } as const;
 
-/** Page chrome behind the white toolbar — matches AirExportBookingMaster `pageBg`. */
-const DASH_PAGE_BG = "#F0F4F8";
+/** Page chrome behind the white toolbar — matches Sales Leadership reference. */
+const DASH_PAGE_BG = "#F8F9FB";
 
 /** Matches AppShellLayout main `px`; negative margin on dashboard root cancels this so scrollbars align to the main column edge, then content uses this as padding inside scroll areas. */
 const DASH_MAIN_PAD_X = { base: 16, sm: 24 } as const;
+
+const DASH_LEADERSHIP_POS = "#22C55E";
+const DASH_LEADERSHIP_NEG = "#EF4444";
+const DASH_LEADERSHIP_BLUE = "#3B82F6";
+const DASH_LEADERSHIP_CARD_BORDER = "#E5E7EB";
+
+function dashFormatInrAdaptive(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "₹—";
+  const crores = n / 1e7;
+  const lakhs = n / 1e5;
+  if (crores >= 0.005) return `₹${crores.toFixed(2)} Cr`;
+  if (lakhs >= 0.05) return `₹${lakhs.toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+type DashLeadershipSparkKind = "greenUp" | "blueUp" | "redDown" | "redUp";
+
+function DashLeadershipSparkline({ kind }: { kind: DashLeadershipSparkKind }) {
+  const stroke =
+    kind === "greenUp"
+      ? DASH_LEADERSHIP_POS
+      : kind === "blueUp"
+        ? DASH_LEADERSHIP_BLUE
+        : DASH_LEADERSHIP_NEG;
+  const points =
+    kind === "redDown"
+      ? "0,6 16,9 32,12 48,16 64,20 80,22 100,24"
+      : kind === "redUp"
+        ? "0,20 16,18 32,16 48,14 64,12 80,9 100,7"
+        : kind === "blueUp"
+          ? "0,22 16,19 32,16 48,12 64,10 80,7 100,5"
+          : "0,24 16,20 32,16 48,12 64,9 80,6 100,4";
+  return (
+    <svg
+      width="100%"
+      height={28}
+      viewBox="0 0 100 28"
+      preserveAspectRatio="none"
+      style={{ display: "block" }}
+      aria-hidden
+    >
+      <polyline
+        fill="none"
+        stroke={stroke}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
+function DashSalesLeadershipKpiCard({
+  label,
+  value,
+  trendPrefix,
+  trendMain,
+  trendSub,
+  trendColor,
+  sparkKind,
+}: {
+  label: string;
+  value: string;
+  trendPrefix?: string;
+  trendMain?: string;
+  trendSub?: string;
+  trendColor: string;
+  sparkKind: DashLeadershipSparkKind;
+}) {
+  return (
+    <Box
+      style={{
+        backgroundColor: "#FFFFFF",
+        border: `1px solid ${DASH_LEADERSHIP_CARD_BORDER}`,
+        borderRadius: 10,
+        padding: "14px 16px",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minHeight: 120,
+      }}
+    >
+      <Group justify="space-between" align="flex-start" gap={8} wrap="nowrap">
+        <Text
+          fz={11}
+          fw={700}
+          tt="uppercase"
+          lts={0.6}
+          c="#64748B"
+          style={{ lineHeight: 1.3 }}
+        >
+          {label}
+        </Text>
+      </Group>
+      <Text fz={22} fw={800} c="#0F172A" lh={1.15}>
+        {value}
+      </Text>
+      {trendMain ? (
+        <Text fz={11} lh={1.35} style={{ whiteSpace: "nowrap" }}>
+          <Text span c={trendColor} fw={700}>
+            {trendPrefix ?? ""}
+            {trendMain}
+          </Text>
+          {trendSub ? (
+            <Text span fw={600} c="#94A3B8">
+              {" "}
+              {trendSub}
+            </Text>
+          ) : null}
+        </Text>
+      ) : (
+        <Text fz={11} fw={600} c="#94A3B8">
+          {/* Selected date range */}
+        </Text>
+      )}
+      {/* <Box mt="auto">
+        <DashLeadershipSparkline kind={sparkKind} />
+      </Box> */}
+    </Box>
+  );
+}
 
 const Dashboard = () => {
   const { user } = useAuthStore();
@@ -1678,23 +1791,24 @@ const Dashboard = () => {
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
-  // Helper function for call entry filters - uses DD-MM-YYYY format
+  // Helper — `getCallEntryStatistics` expects `CallEntryStatisticsFilters` with dates.
   const addSearchToCallEntryFilters = useCallback(
-    <T extends DashboardFilters>(filters: T): T => {
-      let updatedFilters = { ...filters };
-      if (globalSearch && globalSearch.trim()) {
-        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
+    (
+      filters: Omit<CallEntryStatisticsFilters, "date_from" | "date_to" | "search"> & {
+        search?: string;
       }
-      // Add date range filter from common date filter in DD-MM-YYYY format for call entry
-      if (customerInteractionFromDate && customerInteractionToDate) {
-        updatedFilters = {
-          ...updatedFilters,
-          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
-          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-      }
-      return updatedFilters as T;
-    },
+    ): CallEntryStatisticsFilters => ({
+      ...filters,
+      search: globalSearch?.trim() || filters.search || "",
+      date_from:
+        customerInteractionFromDate != null
+          ? dayjs(customerInteractionFromDate).format("DD-MM-YYYY")
+          : "",
+      date_to:
+        customerInteractionToDate != null
+          ? dayjs(customerInteractionToDate).format("DD-MM-YYYY")
+          : "",
+    }),
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
@@ -1967,7 +2081,6 @@ const Dashboard = () => {
       // Process Call Entry response
       if (results[4].status === "fulfilled") {
         if (callEntryResponse) {
-          setCallEntryHeatmap(callEntryResponse.call_heatmap ?? null);
           setCallEntryStatisticsData(
             mapCallEntryDashboardToLegacyResponse(callEntryResponse)
           );
@@ -6349,17 +6462,38 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(1);
         } else if (detailedViewDrillLevel === 1) {
-          // Go back to initial View All state
-          const response = await getCustomerNotVisitedData({
-            period: customerNotVisitedPeriod,
-            index: 0,
-            limit: 10,
-          });
-          const tableData = convertCustomerNotVisitedToTableData(response, 0);
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedCompany(null);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
+          if (notVisitedOriginalData?.data?.length) {
+            const salespersonData = (notVisitedOriginalData.data || []).filter(
+              (item: Record<string, unknown>) =>
+                item.salesperson !== undefined
+            );
+            const tableData = salespersonData.map(
+              (item: Record<string, unknown>) => ({
+                SNO:
+                  item.sno !== undefined && item.sno !== null
+                    ? Number(item.sno)
+                    : 0,
+                send_email: "send_email",
+                SALESPERSON: String(item.salesperson ?? ""),
+                COUNT: Number(item.count) || 0,
+              })
+            );
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+            setDetailedViewTitle("Not Visited Customers");
+          } else {
+            const response = await getCustomerNotVisitedData({
+              period: customerNotVisitedPeriod,
+              index: 0,
+              limit: 10,
+            });
+            const tableData = convertCustomerNotVisitedToTableData(response, 0);
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedCompany(null);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+          }
         }
       } else if (detailedViewType === "lostCustomer") {
         if (detailedViewDrillLevel === 1) {
@@ -6404,30 +6538,6 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
           setDetailedViewTitle("Gain - New Customers");
-        }
-      } else if (detailedViewType === "customerNotVisited") {
-        if (detailedViewDrillLevel === 1) {
-          // Go back from customer to salesperson level
-          if (!notVisitedOriginalData) {
-            toast.error("Original data not found");
-            setIsLoadingDetailedView(false);
-            return;
-          }
-          // Transform response to table data format using stored original data
-          const salespersonData = (notVisitedOriginalData.data || []).filter(
-            (item: any) => item.salesperson !== undefined
-          );
-          const tableData = salespersonData.map((item: any) => ({
-            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-            send_email: "send_email",
-            SALESPERSON: item.salesperson || "",
-            // EMAIL: item.email || "",
-            COUNT: item.count || 0,
-          }));
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
-          setDetailedViewTitle("Not Visited Customers");
         }
       } else if (detailedViewType === "callentry") {
         if (callEntryDrillLevel === 2) {
@@ -7386,6 +7496,87 @@ const Dashboard = () => {
   const fromMonthOptions = getFromMonthOptions(selectedYear);
   const toMonthOptions = getToMonthOptions(selectedYear);
 
+  const salesLeadershipPeriodLabel = useMemo(() => {
+    if (customerInteractionFromDate && customerInteractionToDate) {
+      return `${dayjs(customerInteractionFromDate).format("D MMM YY")} → ${dayjs(customerInteractionToDate).format("D MMM YY")}`;
+    }
+    return "Selected period";
+  }, [customerInteractionFromDate, customerInteractionToDate]);
+
+  const salesLeadershipKpiItems = useMemo(() => {
+    const e = enquiryConversionAggregatedData;
+    const pipelineN = contextTotals.outstanding;
+    const overdueN = contextTotals.overdue;
+    const revenueMtd = budgetAggregatedData.totalActualBudget;
+    const newEnquiries = e.totalEnquiries;
+    const conversionRate = `${Math.min(100, Math.max(0, e.gainPercentage)).toFixed(1)}%`;
+    const variance =
+      budgetAggregatedData.totalSalesBudget > 0
+        ? revenueMtd - budgetAggregatedData.totalSalesBudget
+        : 0;
+    const budgetTrend =
+      variance < 0 && Math.abs(variance) > 1
+        ? {
+            prefix: "▼ ",
+            main: dashFormatInrAdaptive(Math.abs(variance)),
+            sub: "vs budget",
+            color: DASH_LEADERSHIP_NEG,
+          }
+        : variance > 1
+          ? {
+              prefix: "▲ ",
+              main: dashFormatInrAdaptive(variance),
+              sub: "vs budget",
+              color: DASH_LEADERSHIP_POS,
+            }
+          : undefined;
+    const revenueSpark =
+      variance < -1 ? ("redDown" as DashLeadershipSparkKind) : ("greenUp" as DashLeadershipSparkKind);
+    return [
+      {
+        key: "new-enquiries",
+        label: "Active enquiries",
+        value: newEnquiries.toLocaleString("en-IN"),
+        trend: undefined,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      {
+        key: "conversion-rate",
+        label: "Conversion rate",
+        value: conversionRate,
+        trend: undefined,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      {
+        key: "pipeline-value",
+        label: "Pipeline value",
+        value: dashFormatInrAdaptive(pipelineN),
+        trend: undefined,
+        spark: "blueUp" as DashLeadershipSparkKind,
+      },
+      {
+        key: "revenue-mtd",
+        label: "Revenue MTD",
+        value: dashFormatInrAdaptive(revenueMtd),
+        trend: budgetTrend,
+        spark: revenueSpark,
+      },
+      {
+        key: "overdue-ar",
+        label: "Overdue AR",
+        value: dashFormatInrAdaptive(overdueN),
+        trend: undefined,
+        spark: "redUp" as DashLeadershipSparkKind,
+      },
+    ];
+  }, [
+    enquiryConversionAggregatedData,
+    contextTotals.outstanding,
+    contextTotals.overdue,
+    budgetAggregatedData.totalActualBudget,
+    budgetAggregatedData.totalSalesBudget,
+  ]);
+
   return (
     <Box
       mx={{ base: -16, sm: -24 }}
@@ -7721,12 +7912,58 @@ const Dashboard = () => {
                 overflow: "auto",
               }}
             >
-              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="lg">
-                <Grid gutter="lg" align="stretch" columns={12}>
-                <Grid.Col
-                  span={{ base: 12, md: 6 }}
-                  style={{ display: "flex", minWidth: 0 }}
-                >
+              <Box px={DASH_MAIN_PAD_X} pt={{ base: 10, sm: 14 }} pb="lg">
+                <Stack gap="md">
+                  <Box style={{ width: "100%" }}>
+                    <Text
+                      fz={11}
+                      fw={600}
+                      c="#64748B"
+                      mb={6}
+                      style={{ lineHeight: 1.35 }}
+                    >
+                      Pentagon Freight › Sales › Overview
+                    </Text>
+                    <Text
+                      fw={700}
+                      c="#111827"
+                      mb={6}
+                      style={{
+                        fontSize: "clamp(24px, 4.2vw, 36px)",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      Sales Leadership
+                    </Text>
+                    <Text fz={12} fw={600} c="#64748B" style={{ lineHeight: 1.45 }}>
+                      Leadership view · All regions · {salesLeadershipPeriodLabel}
+                    </Text>
+                  </Box>
+
+                  <SimpleGrid
+                    cols={{ base: 1, xs: 2, sm: 2, md: 3, lg: 5 }}
+                    spacing={{ base: "sm", sm: "md" }}
+                  >
+                    {salesLeadershipKpiItems.map((kpi) => (
+                      <DashSalesLeadershipKpiCard
+                        key={kpi.key}
+                        label={kpi.label}
+                        value={kpi.value}
+                        trendPrefix={kpi.trend?.prefix}
+                        trendMain={kpi.trend?.main}
+                        trendSub={kpi.trend?.sub}
+                        trendColor={kpi.trend?.color ?? "#64748B"}
+                        sparkKind={kpi.spark}
+                      />
+                    ))}
+                  </SimpleGrid>
+
+                  <Grid
+                    gutter={{ base: "md", lg: "lg" }}
+                    align="stretch"
+                    columns={12}
+                  >
+                  <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
                   <Box
                     style={{
                       flex: 1,
@@ -7753,7 +7990,7 @@ const Dashboard = () => {
                       onNotVisitedClick={handleNotVisitedClick}
                     />
                   </Box>
-                </Grid.Col>
+                  </Grid.Col>
                 <Grid.Col
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}
@@ -7782,8 +8019,41 @@ const Dashboard = () => {
                       setToDate={setCustomerInteractionToDate}
                       hideDateFilter={true}
                       onOpenEnquiryConversionModule={() =>
-                        navigate("/dashboard/enquiry-conversion")
+                        navigate("/dashboard/enquiry-conversion", {
+                          state: {
+                            fromDate:
+                              customerInteractionFromDate?.toISOString() ?? null,
+                            toDate:
+                              customerInteractionToDate?.toISOString() ?? null,
+                          },
+                        })
                       }
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CallEntrySection
+                      callEntrySummary={callEntrySummary}
+                      isLoadingCallEntry={isLoadingCallEntry}
+                      handleCallEntryViewAll={handleCallEntryViewAll}
+                      onOpenCallEntryDashboard={handleOpenCallEntryDashboard}
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
                     />
                   </Box>
                 </Grid.Col>
@@ -7828,29 +8098,6 @@ const Dashboard = () => {
                 >
                   <Box
                     style={{
-                      flex: 1,
-                      width: "100%",
-                      minWidth: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
-                    <CallEntrySection
-                      callEntrySummary={callEntrySummary}
-                      isLoadingCallEntry={isLoadingCallEntry}
-                      handleCallEntryViewAll={handleCallEntryViewAll}
-                      onOpenCallEntryDashboard={handleOpenCallEntryDashboard}
-                      fromDate={customerInteractionFromDate}
-                      toDate={customerInteractionToDate}
-                      setFromDate={setCustomerInteractionFromDate}
-                      setToDate={setCustomerInteractionToDate}
-                      hideDateFilter={true}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
-                  <Box
-                    style={{
                       width: "100%",
                       minWidth: 0,
                       display: "flex",
@@ -7891,6 +8138,7 @@ const Dashboard = () => {
                   </Box>
                 </Grid.Col>
               </Grid>
+                </Stack>
               </Box>
             </Box>
           )}

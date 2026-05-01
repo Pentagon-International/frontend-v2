@@ -1,15 +1,13 @@
 /**
- * Subtitle under “Enquiry Conversion” — matches standalone HTML:
- * `284 enquiries · ₹8.42 Cr pipeline`
+ * Subtitle under “Enquiry Conversion” on Sales Leadership overview —
+ * enquiries count only (no ₹ pipeline line).
+ *
+ * `pipelineCr` accepted for callers that still pass it; it is intentionally ignored here.
  */
 export function formatEnquiryConversionOverviewSubtitle(
   totalEnquiries: number,
-  pipelineCr?: number | null
+  _pipelineCr?: number | null
 ): string {
   const n = Math.max(0, Math.round(totalEnquiries)).toLocaleString("en-IN");
-  const pipe =
-    pipelineCr != null && Number.isFinite(pipelineCr) && pipelineCr > 0
-      ? `₹${pipelineCr.toFixed(2)} Cr`
-      : "₹ — Cr";
-  return `${n} enquiries · ${pipe} pipeline`;
+  return `${n} enquiries`;
 }

@@ -1,4 +1,6 @@
-import { Box, Text, Group } from "@mantine/core";
+import { Box, Text, Stack } from "@mantine/core";
+import { IconArrowUpRight, IconArrowDownRight } from "@tabler/icons-react";
+import { enquiryConversionColors } from "./enquiryConversionTokens";
 
 type Trend = "up" | "down" | "neutral";
 
@@ -14,35 +16,39 @@ export function MetricTrendCard({
   trendLabel?: string;
 }) {
   const trendColor =
-    trend === "up" ? "#15803D" : trend === "down" ? "#DC2626" : "#64748B";
+    trend === "up" ? "#22C55E" : trend === "down" ? "#EF4444" : enquiryConversionColors.subHeading;
 
   return (
     <Box
       style={{
-        background: "#fff",
-        border: "1px solid #E2E8F0",
-        borderRadius: 12,
-        padding: "16px 18px",
-        boxShadow:
-          "0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.06)",
-        flex: "1 1 140px",
-        minWidth: 120,
+        background: enquiryConversionColors.panelBg,
+        border: `1px solid ${enquiryConversionColors.panelBorder}`,
+        borderRadius: enquiryConversionColors.radius,
+        padding: "20px 24px",
+        boxShadow: enquiryConversionColors.shadow,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        minHeight: 120,
       }}
     >
-      <Text size="10px" fw={600} c="#64748B" tt="uppercase" ls={0.6} mb={8}>
+      <Text size="11px" fw={600} c={enquiryConversionColors.subHeading} tt="uppercase" lts={0.8} mb={12}>
         {label}
       </Text>
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
-        <Text fw={700} fz={26} c="#0F172A" lh={1.1}>
+      <Stack gap={4}>
+        <Text fw={700} fz={32} c={enquiryConversionColors.heading} lh={1}>
           {value}
         </Text>
         {trendLabel ? (
-          <Text size="xs" fw={600} c={trendColor} style={{ whiteSpace: "nowrap" }}>
-            {trend === "up" ? "▲ " : trend === "down" ? "▼ " : ""}
-            {trendLabel}
-          </Text>
+          <Box style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {trend === "up" && <IconArrowUpRight size={14} color={trendColor} stroke={3} />}
+            {trend === "down" && <IconArrowDownRight size={14} color={trendColor} stroke={3} />}
+            <Text size="xs" fw={700} c={trendColor}>
+              {trendLabel}
+            </Text>
+          </Box>
         ) : null}
-      </Group>
+      </Stack>
     </Box>
   );
 }

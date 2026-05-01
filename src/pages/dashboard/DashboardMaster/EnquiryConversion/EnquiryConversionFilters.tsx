@@ -1,11 +1,9 @@
 import {
   Group,
   Select,
-  TextInput,
   type SelectProps,
-  type TextInputProps,
 } from "@mantine/core";
-import { IconCalendar } from "@tabler/icons-react";
+import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { DateRangeInput } from "../../../../components";
 
 export type EnquiryConversionPageFilters = {
@@ -32,19 +30,20 @@ const SERVICE_OPTIONS: { value: string; label: string }[] = [
   { value: "OTHERS", label: "Others" },
 ];
 
-const selectBase: SelectProps["styles"] = {
+const selectStyles: SelectProps["styles"] = {
   input: {
-    fontSize: 12,
-    height: 32,
-    minHeight: 32,
+    fontSize: 13,
+    fontWeight: 600,
+    height: 36,
+    minHeight: 36,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    border: `1px solid ${enquiryConversionColors.panelBorder}`,
+    color: enquiryConversionColors.heading,
   },
-};
-
-const textInputBase: TextInputProps["styles"] = {
-  input: {
-    fontSize: 12,
-    height: 32,
-    minHeight: 32,
+  option: {
+    fontSize: 13,
+    fontWeight: 500,
   },
 };
 
@@ -64,53 +63,51 @@ export function EnquiryConversionFilters({
       onFiltersChange({ ...filters, [key]: value });
 
   return (
-    <Group gap="xs" justify="flex-end" wrap="wrap" align="flex-end">
-      <Group gap={6} wrap="nowrap" align="flex-end">
-        <IconCalendar size={16} color="#64748B" style={{ marginBottom: 8 }} />
-        <DateRangeInput
-          fromDate={filters.fromDate}
-          toDate={filters.toDate}
-          onFromDateChange={set("fromDate")}
-          onToDateChange={set("toDate")}
-          fromLabel=""
-          toLabel=""
-          size="xs"
-          allowDeselection={false}
-          showRangeInCalendar={false}
-          hideLabels
-          compactToolbar
-          disabled={disabled}
-          containerStyle={{ gap: 8 }}
-        />
-      </Group>
+    <Group gap="sm" justify="flex-end" wrap="wrap" align="center">
+      <DateRangeInput
+        fromDate={filters.fromDate}
+        toDate={filters.toDate}
+        onFromDateChange={set("fromDate")}
+        onToDateChange={set("toDate")}
+        fromLabel=""
+        toLabel=""
+        size="sm"
+        allowDeselection={false}
+        showRangeInCalendar={false}
+        hideLabels
+        compactToolbar
+        disabled={disabled}
+        containerStyle={{ gap: 8 }}
+      />
       <Select
-        placeholder="Type"
-        size="xs"
-        w={140}
+        placeholder="All types"
+        size="sm"
+        w={130}
         disabled={disabled}
         data={TYPE_OPTIONS}
         value={filters.type ?? ""}
         onChange={(v) => set("type")(v || null)}
-        styles={selectBase}
+        styles={selectStyles}
       />
       <Select
-        placeholder="Mode"
-        size="xs"
+        placeholder="All modes"
+        size="sm"
         w={120}
         disabled={disabled}
         data={SERVICE_OPTIONS}
         value={filters.service ?? ""}
         onChange={(v) => set("service")(v || null)}
-        styles={selectBase}
+        styles={selectStyles}
       />
-      <TextInput
-        placeholder="Salesperson"
-        size="xs"
-        w={150}
+      <Select
+        placeholder="All reps"
+        size="sm"
+        w={120}
         disabled={disabled}
+        data={[{ value: "", label: "All reps" }]}
         value={filters.salesperson}
-        onChange={(e) => set("salesperson")(e.currentTarget.value)}
-        styles={textInputBase}
+        onChange={(v) => set("salesperson")(v || "")}
+        styles={selectStyles}
       />
     </Group>
   );

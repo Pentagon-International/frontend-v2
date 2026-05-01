@@ -3,42 +3,38 @@ import type { FunnelSegment } from "./SegmentedFunnelBar";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 
 /**
- * Maps aggregated enquiry buckets into funnel segment weights for the overview bar:
- * Active (incl. any remainder vs total enquiries), Quoted, Won, Lost — no negotiation stage.
+ * Overview “Enquiry Conversion” bar — four slices (no Negot.):
+ * New (remainder + in‑flight active), Quoted, Won, Lost.
  */
 export function buildEnquiryConversionSegments(
   data: EnquiryConversionAggregatedData
 ): FunnelSegment[] {
   const q = Math.max(0, data.totalQuoteCreated);
-  const activeBase = Math.max(0, data.totalActive);
-  /* Won funnel width: sourced from backend gained (total_gain / gained); label remains “Won”. */
-  const wonFromGained = Math.max(0, data.totalGain);
+  const active = Math.max(0, data.totalActive);
+  const won = Math.max(0, data.totalGain);
   const lost = Math.max(0, data.totalLost);
   const total = Math.max(0, data.totalEnquiries);
 
-  const accounted = q + activeBase + wonFromGained + lost;
-  const remainder = Math.max(0, total > 0 ? total - accounted : 0);
-  const activeCombined = activeBase + remainder;
+  const accountedBeforeRemainder = q + active + won + lost;
+  const remainder =
+    total > 0 ? Math.max(0, total - accountedBeforeRemainder) : 0;
+  /** Combine “new” backlog + active pipeline (no separate Negot segment). */
+  const newCombined = remainder + active;
 
   return [
     {
-      key: "active",
-      label: "Active",
-      weight: activeCombined,
-      color: enquiryConversionColors.active,
+      key: "new",
+      label: "New",
+      weight: newCombined,
+      color: enquiryConversionColors.bars.navy1,
     },
     {
       key: "quoted",
       label: "Quoted",
       weight: q,
-      color: enquiryConversionColors.quoted,
+      color: enquiryConversionColors.bars.navy2,
     },
-    { key: "won", label: "Won", weight: wonFromGained, color: enquiryConversionColors.won },
-    {
-      key: "lost",
-      label: "Lost",
-      weight: lost,
-      color: enquiryConversionColors.lost,
-    },
+    { key: "won", label: "Won", weight: won, color: enquiryConversionColors.bars.won },
+    { key: "lost", label: "Lost", weight: lost, color: enquiryConversionColors.bars.lost },
   ];
 }

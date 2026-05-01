@@ -1,69 +1,87 @@
-import type { ReactNode } from "react";
-import { Group, Stack, Text } from "@mantine/core";
+import type { CSSProperties, ReactNode } from "react";
+import { Group, Stack, Text, Box } from "@mantine/core";
+import { enquiryConversionColors } from "./enquiryConversionTokens";
 
 export type ConversionMetricStripColumn = {
   key: string;
   label: string;
   value: ReactNode;
   caption?: ReactNode;
-  /** Main KPI number color */
   valueColor?: string;
   captionColor?: string;
   captionFw?: number;
 };
 
-const labelStyle = {
-  fontSize: "11px",
+const ERP_FONT = "'Geist', sans-serif";
+
+const labelStyle: CSSProperties = {
+  fontSize: 11,
   fontWeight: 600,
-  color: "#64748B",
-  textTransform: "uppercase" as const,
+  color: enquiryConversionColors.subHeading,
+  textTransform: "uppercase",
   letterSpacing: "0.06em",
+  fontFamily: ERP_FONT,
 };
 
 /**
- * Three-column KPI row used on the Overview “Enquiry Conversion” tile (same structure as Outstanding vs Overdue).
+ * Three-column KPI row on the Overview “Enquiry Conversion” tile.
  */
 export function ConversionMetricStrip({
   columns,
   onActivate,
 }: {
   columns: ConversionMetricStripColumn[];
-  /** Opens linked module / drill-down when the strip is actionable */
   onActivate?: () => void;
 }) {
   return (
-    <Group justify="space-between" align="flex-start" wrap="nowrap" gap="lg">
-      {columns.map((col) => (
-        <Stack
-          key={col.key}
-          gap={6}
-          align="center"
-          style={{
-            flex: 1,
-            cursor: onActivate ? "pointer" : undefined,
-          }}
-          onClick={onActivate}
-        >
-          <Text style={labelStyle}>{col.label}</Text>
-          <Text
-            size="xl"
-            fw={700}
-            c={col.valueColor ?? "#0F172A"}
-            style={{ lineHeight: 1.15 }}
-          >
-            {col.value}
-          </Text>
-          {col.caption != null ? (
-            <Text
-              size="xs"
-              c={col.captionColor ?? "#64748B"}
-              fw={col.captionFw ?? 400}
+    <Box style={{ fontFamily: ERP_FONT, width: "100%" }}>
+      <Group
+        justify="space-between"
+        align="flex-start"
+        wrap="wrap"
+        gap={16}
+      >
+        {columns.map((col) => {
+          return (
+            <Stack
+              key={col.key}
+              gap={4}
+              align="flex-start"
+              style={{
+                flex: "1 1 120px",
+                minWidth: 100,
+                cursor: onActivate ? "pointer" : undefined,
+              }}
+              onClick={onActivate}
             >
-              {col.caption}
-            </Text>
-          ) : null}
-        </Stack>
-      ))}
-    </Group>
+              <Text style={labelStyle}>{col.label}</Text>
+              <Text
+                fz={{ base: "xl", sm: 26 }}
+                fw={700}
+                c={col.valueColor ?? enquiryConversionColors.heading}
+                style={{ lineHeight: 1.1, fontFamily: ERP_FONT }}
+                ta="left"
+              >
+                {typeof col.value === "number"
+                  ? col.value.toLocaleString("en-IN")
+                  : col.value}
+              </Text>
+              {col.caption != null ? (
+                <Text
+                  fz={13}
+                  c={col.captionColor ?? enquiryConversionColors.heading}
+                  fw={col.captionFw ?? 400}
+                  style={{ fontFamily: ERP_FONT }}
+                  ta="left"
+                  lh={1.35}
+                >
+                  {col.caption}
+                </Text>
+              ) : null}
+            </Stack>
+          );
+        })}
+      </Group>
+    </Box>
   );
 }

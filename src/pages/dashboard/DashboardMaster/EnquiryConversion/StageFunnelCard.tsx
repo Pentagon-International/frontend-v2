@@ -11,85 +11,83 @@ export type StageFunnelRow = {
   conversionNote?: string;
   barPercent: number;
   barColor: string;
+  dotColor?: string;
+  dotBgColor?: string;
 };
 
 export function StageFunnelCard({
   title,
   subtitle,
   rows,
+  embeddedAboveModeSection,
 }: {
   title: string;
   subtitle?: string;
   rows: StageFunnelRow[];
+  /** Tighter bottom padding when stacked with By Mode inside one card */
+  embeddedAboveModeSection?: boolean;
 }) {
+  const pb = embeddedAboveModeSection ? 14 : 24;
+  const headerMb = embeddedAboveModeSection ? 18 : 24;
+  const rowGap = embeddedAboveModeSection ? 12 : 16;
+
   return (
     <Box
       style={{
-        background: "#fff",
-        border: `1px solid ${enquiryConversionColors.panelBorder}`,
-        borderRadius: 12,
-        padding: "18px 20px",
-        height: "100%",
-        boxShadow:
-          "0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.06)",
+        padding: `24px 24px ${pb}px`,
       }}
     >
-      <Stack gap={4} mb={16}>
-        <Text fw={600} fz={14} c={enquiryConversionColors.heading}>
+      <Group gap="sm" mb={headerMb} align="baseline">
+        <Text fw={700} fz={16} c={enquiryConversionColors.heading}>
           {title}
         </Text>
         {subtitle ? (
-          <Text size="xs" c="#64748B">
+          <Text size="xs" fw={500} c={enquiryConversionColors.subHeading}>
             {subtitle}
           </Text>
         ) : null}
-      </Stack>
-      <Stack gap={14}>
+      </Group>
+      <Stack gap={rowGap}>
         {rows.length === 0 ? (
-          <Text size="sm" c="#64748B">
+          <Text size="sm" c={enquiryConversionColors.subHeading}>
             No funnel data for this filter.
           </Text>
         ) : (
           <Fragment>
             {rows.map((row) => (
-              <Box key={row.stage}>
-                <Group justify="space-between" gap="sm" mb={8} wrap="nowrap">
-                  <Group gap={8} wrap="nowrap">
-                    <Box
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 2,
-                        backgroundColor: row.barColor,
-                        flexShrink: 0,
-                      }}
-                    />
-                    <Text size="sm" fw={600} c="#0F172A">
-                      {row.stage}
-                    </Text>
-                  </Group>
-                  <Group gap={12} wrap="nowrap">
-                    <Text size="xs" fw={700} c="#0F172A" ta="right">
-                      {row.count.toLocaleString("en-IN")}
-                    </Text>
-                    {row.conversionNote ? (
-                      <Text
-                        size="xs"
-                        c="#475569"
-                        ta="right"
-                        style={{ minWidth: 48 }}
-                      >
-                        {row.conversionNote}
-                      </Text>
-                    ) : null}
-                  </Group>
-                </Group>
+              <Group key={row.stage} wrap="nowrap" align="center" gap="md">
                 <Box
                   style={{
-                    position: "relative",
-                    height: 26,
+                    flex: "0 0 100px",
+                    background: row.dotBgColor || `${row.barColor}1A`,
                     borderRadius: 6,
-                    background: "#F1F5F9",
+                    padding: "4px 10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      backgroundColor: row.dotColor || row.barColor,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Text size="xs" fw={700} c={row.dotColor || row.barColor} style={{ whiteSpace: "nowrap" }}>
+                    {row.stage}
+                  </Text>
+                </Box>
+                
+                <Box
+                  style={{
+                    flex: 1,
+                    position: "relative",
+                    height: 32,
+                    borderRadius: 8,
+                    background: "#F8FAFC",
                     overflow: "hidden",
                   }}
                 >
@@ -99,43 +97,42 @@ export function StageFunnelCard({
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      width: `${Math.min(100, Math.max(6, row.barPercent))}%`,
+                      width: `${Math.min(100, Math.max(0, row.barPercent))}%`,
                       backgroundColor: row.barColor,
-                      borderRadius: 6,
+                      borderRadius: 8,
                       pointerEvents: "none",
+                      transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
                     }}
                   />
-                  <Group
-                    gap={8}
-                    wrap="nowrap"
-                    align="center"
+                  <Box
                     style={{
-                      position: "relative",
+                      position: "absolute",
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
+                      display: "flex",
+                      alignItems: "center",
                       zIndex: 1,
-                      height: "100%",
-                      padding: "0 10px",
-                      minWidth: 0,
                     }}
                   >
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c={row.barPercent < 36 ? "#0F172A" : "#fff"}
-                      style={{
-                        textShadow:
-                          row.barPercent >= 36
-                            ? "0 1px 2px rgba(0,0,0,0.22)"
-                            : "none",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
+                    <Text size="xs" fw={600} c="#FFFFFF">
                       {row.barCaption}
                     </Text>
-                  </Group>
+                  </Box>
                 </Box>
-              </Box>
+
+                <Box style={{ flex: "0 0 40px", textAlign: "right" }}>
+                  <Text size="sm" fw={700} c={enquiryConversionColors.heading}>
+                    {row.count.toLocaleString("en-IN")}
+                  </Text>
+                </Box>
+
+                <Box style={{ flex: "0 0 50px", textAlign: "right" }}>
+                  <Text size="xs" fw={500} c={enquiryConversionColors.muted}>
+                    {row.conversionNote || "—"}
+                  </Text>
+                </Box>
+              </Group>
             ))}
           </Fragment>
         )}

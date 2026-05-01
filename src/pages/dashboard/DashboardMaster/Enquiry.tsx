@@ -9,40 +9,43 @@ import {
   ConversionMetricStrip,
   type ConversionMetricStripColumn,
 } from "./EnquiryConversion";
+import { enquiryConversionColors } from "./EnquiryConversion/enquiryConversionTokens";
+
+const ERP_FONT = "'Geist', sans-serif";
+
+function normalizeGainMoMDirection(raw?: string): "up" | "down" | "flat" {
+  const d = String(raw ?? "").toLowerCase();
+  if (d === "increase" || d === "up") return "up";
+  if (d === "decrease" || d === "down") return "down";
+  return "flat";
+}
 
 function formatWonMoMCaption(meta?: EnquiryConversionOverviewMeta | null): {
   text: string;
   captionColor?: string;
   captionFw?: number;
 } {
-  const pct = meta?.gainMoMChangePctDisplay;
+  const pct = meta?.gainMoMChangePctDisplay?.trim();
   if (!pct) {
-    return { text: "— MoM", captionColor: "#64748B", captionFw: 400 };
+    return { text: "— MoM", captionColor: enquiryConversionColors.subHeading, captionFw: 500 };
   }
-  const dir = meta?.gainMoMDirection;
-  const arrow =
-    dir === "decrease" ? "▼" : dir === "increase" ? "▲" : "";
+  const dir = normalizeGainMoMDirection(meta?.gainMoMDirection);
+  const arrow = dir === "down" ? "▼" : dir === "up" ? "▲" : "";
   const color =
-    dir === "decrease"
-      ? "#DC2626"
-      : dir === "increase"
-        ? "#15803D"
-        : "#64748B";
+    dir === "down" ? enquiryConversionColors.bars.lost : dir === "up" ? enquiryConversionColors.bars.won : enquiryConversionColors.subHeading;
   const text = [arrow, pct, "MoM"].filter(Boolean).join(" ").trim();
   return { text, captionColor: color, captionFw: 600 };
 }
 
 interface EnquiryProps {
   enquiryConversionAggregatedData: EnquiryConversionAggregatedData;
-  /** Sub-line copy + WON MoM from `enquiry/enquiryconversion/` `summary` */
   enquiryConversionOverviewMeta?: EnquiryConversionOverviewMeta | null;
   isLoadingEnquiryConversion: boolean;
   isLoadingEnquiryChart: boolean;
-  /** KPI row + funnel open the Enquiry Conversion module (same as header arrow). */
   onOpenDetailModule?: () => void;
 }
 
-const FUNNEL_BAR_HEIGHT = 28;
+const FUNNEL_BAR_HEIGHT = 24;
 
 const Enquiry = ({
   enquiryConversionAggregatedData,
@@ -55,21 +58,18 @@ const Enquiry = ({
   const meta = enquiryConversionOverviewMeta;
 
   const quotedCaption = meta?.quoteCreatedPctDisplay?.length
-    ? `${meta.quoteCreatedPctDisplay} of Total`
-    : `${data.quotePercentage.toFixed(1)}% of Total`;
+    ? `${meta.quoteCreatedPctDisplay} of new`
+    : `${data.quotePercentage.toFixed(1)}% of new`;
 
-  const lostCaption = 
-  // meta?.lostRowPctDisplay?.length
-  //   ? `${meta.lostRowPctDisplay} vs won`
-  //   :
-     data.totalGain > 0
+  const lostCaption = meta?.lostRowPctDisplay?.trim()?.length
+    ? meta.lostRowPctDisplay.trim()
+    : data.totalGain > 0
       ? `${((data.totalLost / data.totalGain) * 100).toFixed(1)}% vs won`
       : data.totalEnquiries > 0
         ? `${((data.totalLost / data.totalEnquiries) * 100).toFixed(1)}% of enquiries`
         : "0.0% vs won";
 
   const wonMoM = formatWonMoMCaption(meta);
-
   const funnelSegments = buildEnquiryConversionSegments(data);
 
   const metricColumns: ConversionMetricStripColumn[] = [
@@ -77,14 +77,16 @@ const Enquiry = ({
       key: "quoted",
       label: "QUOTED",
       value: data.totalQuoteCreated,
-      valueColor: "#0F172A",
+      valueColor: enquiryConversionColors.heading,
       caption: quotedCaption,
+      captionColor: enquiryConversionColors.subHeading,
+      captionFw: 500,
     },
     {
       key: "won",
       label: "WON",
       value: data.totalGain,
-      valueColor: "#15803D",
+      valueColor: enquiryConversionColors.bars.won,
       caption: wonMoM.text,
       captionColor: wonMoM.captionColor,
       captionFw: wonMoM.captionFw,
@@ -93,19 +95,21 @@ const Enquiry = ({
       key: "lost",
       label: "LOST",
       value: data.totalLost,
-      valueColor: "#0F172A",
+      valueColor: enquiryConversionColors.heading,
       caption: lostCaption,
+      captionColor: enquiryConversionColors.subHeading,
+      captionFw: 500,
     },
   ];
 
   return (
-    <Box>
+    <Box style={{ fontFamily: ERP_FONT }}>
       {isLoadingEnquiryConversion || isLoadingEnquiryChart ? (
-        <Center h="70%">
-          <Loader size="lg" color="#105476" />
+        <Center h={160}>
+          <Loader size="md" color="#111827" />
         </Center>
       ) : (
-        <Stack gap="md" pt={4}>
+        <Stack gap={24} pt={4}>
           <ConversionMetricStrip
             columns={metricColumns}
             onActivate={onOpenDetailModule}
@@ -114,10 +118,19 @@ const Enquiry = ({
           <Box
             style={{ cursor: onOpenDetailModule ? "pointer" : undefined }}
             onClick={onOpenDetailModule}
+            onKeyDown={(e) => {
+              if (!onOpenDetailModule) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenDetailModule();
+              }
+            }}
+            role={onOpenDetailModule ? "button" : undefined}
+            tabIndex={onOpenDetailModule ? 0 : undefined}
           >
             <SegmentedFunnelBar
               segments={funnelSegments}
-              height={FUNNEL_BAR_HEIGHT}
+              height={10}
             />
           </Box>
         </Stack>

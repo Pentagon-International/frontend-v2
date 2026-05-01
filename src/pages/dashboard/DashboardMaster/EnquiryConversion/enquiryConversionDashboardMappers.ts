@@ -11,40 +11,9 @@ import type { EnquiryRow } from "./TopActiveEnquiriesTable";
 
 type Trend = "up" | "down" | "neutral";
 
-/** Design baseline from mock (284 enquiries ≈ ₹14.2 Cr pipeline); scales with API counts until value fields ship. */
-const REF_ENQUIRIES = 284;
-const REF_PIPELINE_INR = 14.2 * 1e7;
-const INR_PER_ENQUIRY = REF_PIPELINE_INR / REF_ENQUIRIES;
-
-export function pipelineValueApproxFromEnquiryCount(totalEnquiry: number): number {
-  const n = Math.max(0, totalEnquiry);
-  return (n / Math.max(REF_ENQUIRIES, 1)) * REF_PIPELINE_INR;
-}
-
-function formatInrIndianCompact(amount: number): string {
-  const neg = amount < 0;
-  const x = Math.abs(amount);
-  const p = neg ? "-" : "";
-  if (!Number.isFinite(x) || x < 1) return `${p}₹0`;
-
-  const crLbl = (v: number) => {
-    const cr = v / 1e7;
-    const dec = cr >= 100 ? 1 : cr >= 10 ? 1 : 2;
-    let t = cr.toFixed(dec);
-    if (dec === 2) t = t.replace(/\.?0+$/, "");
-    return `${p}₹${t} Cr`;
-  };
-  const lLbl = (v: number) => {
-    const l = v / 1e5;
-    const dec = l >= 10 ? 1 : 2;
-    const t = l.toFixed(dec).replace(/\.?0+$/, "");
-    return `${p}₹${t} L`;
-  };
-
-  if (x >= 1e7) return crLbl(x);
-  if (x >= 1e5) return lLbl(x);
-  return `${p}₹${Math.round(x).toLocaleString("en-IN")}`;
-}
+const PCT_GREEN = "#16A34A";
+const PCT_NAVY = "#1E3A8A";
+const PCT_ORANGE = "#F59E0B";
 
 function trendFromChange(
   s?: EnquiryConversionApiSummaryStatusChange
@@ -59,21 +28,67 @@ function trendFromChange(
   return { trend, label: s.change_percentage.trim() };
 }
 
+function parsePercentNumber(label?: string): number | undefined {
+  if (!label) return undefined;
+  const m = label.match(/-?\d+(\.\d+)?/);
+  if (!m) return undefined;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function colorFromPercent(pct: number): string {
+  if (pct >= 80) return PCT_GREEN;
+  if (pct >= 60) return PCT_NAVY;
+  return PCT_ORANGE;
+}
+
+import { enquiryConversionColors } from "./enquiryConversionTokens";
+
 const STAGE_META: Record<
-  "active" | "quoted" | "won" | "lost",
-  { label: string; color: string }
+  "new" | "quoted" | "negotiation" | "won" | "lost",
+  { label: string; barColor: string; dotColor: string; dotBgColor: string }
 > = {
-  active: { label: "Active", color: "#93C5FD" },
-  quoted: { label: "Quoted", color: "#CA8A04" },
-  won: { label: "Won", color: "#15803D" },
-  lost: { label: "Lost", color: "#DC2626" },
+  new: {
+    label: "active",
+    barColor:  enquiryConversionColors.bars.navy1,
+    dotColor: enquiryConversionColors.status.new.dot,
+    dotBgColor: enquiryConversionColors.status.new.bg,
+  },
+  quoted: {
+    label: "Quoted",
+    barColor: enquiryConversionColors.bars.navy2,
+    dotColor: enquiryConversionColors.status.quoted.dot,
+    dotBgColor: enquiryConversionColors.status.quoted.bg,
+  },
+  negotiation: {
+    label: "Negotiation",
+    barColor: enquiryConversionColors.bars.navy3,
+    dotColor: enquiryConversionColors.status.negotiation.dot,
+    dotBgColor: enquiryConversionColors.status.negotiation.bg,
+  },
+  won: {
+    label: "Won",
+    barColor: enquiryConversionColors.bars.won,
+    dotColor: enquiryConversionColors.status.won.dot,
+    dotBgColor: enquiryConversionColors.status.won.bg,
+  },
+  lost: {
+    label: "Lost",
+    barColor: enquiryConversionColors.bars.lost,
+    dotColor: enquiryConversionColors.status.lost.dot,
+    dotBgColor: enquiryConversionColors.status.lost.bg,
+  },
 };
 
 const MODE_COLORS: Record<string, string> = {
-  AIR: "#EA580C",
-  FCL: "#2563EB",
-  LCL: "#1D4ED8",
-  OTHERS: "#64748B",
+  AIR: enquiryConversionColors.modes.air,
+  FCL: enquiryConversionColors.modes.fcl,
+  LCL: enquiryConversionColors.modes.lcl,
+  ROAD: enquiryConversionColors.modes.road,
+  RAIL: enquiryConversionColors.modes.rail,
+  CUSTOMS: enquiryConversionColors.modes.customs,
+  WAREHOUSING: enquiryConversionColors.modes.warehousing,
+  OTHERS: enquiryConversionColors.muted,
 };
 
 function modeLabel(code: string): string {
@@ -109,14 +124,16 @@ export function stageLabelFromApiStatus(status: string): {
   dotColor: string;
 } {
   const u = status.toUpperCase().replace(/\s+/g, " ");
-  if (u === "ACTIVE") return { label: "Active", dotColor: "#93C5FD" };
+  if (u === "ACTIVE") return { label: "New", dotColor: enquiryConversionColors.status.new.dot };
   if (u === "QUOTE CREATED" || u.includes("QUOTE"))
-    return { label: "Quoted", dotColor: "#CA8A04" };
-  if (u.includes("GAIN")) return { label: "Won", dotColor: "#15803D" };
-  if (u === "LOST") return { label: "Lost", dotColor: "#DC2626" };
+    return { label: "Quoted", dotColor: enquiryConversionColors.status.quoted.dot };
+  if (u.includes("NEGOTIAT"))
+    return { label: "Negotiation", dotColor: enquiryConversionColors.status.negotiation.dot };
+  if (u.includes("GAIN")) return { label: "Won", dotColor: enquiryConversionColors.status.won.dot };
+  if (u === "LOST") return { label: "Lost", dotColor: enquiryConversionColors.status.lost.dot };
   return {
     label: status.charAt(0).toUpperCase() + status.slice(1).toLowerCase(),
-    dotColor: "#64748B",
+    dotColor: enquiryConversionColors.muted,
   };
 }
 
@@ -147,7 +164,7 @@ export function buildEnquiryConversionMetrics(
 
   return [
     {
-      label: "ACTIVE",
+      label: "NEW",
       value: String(s.total_active ?? 0),
       trend: a.trend,
       trendLabel: a.label,
@@ -165,15 +182,15 @@ export function buildEnquiryConversionMetrics(
       trendLabel: g.label,
     },
     {
-      label: "AVG. DEAL SIZE",
-      value: formatInrIndianCompact(INR_PER_ENQUIRY),
+      label: "TOTAL ENQUIRIES",
+      value: String(s.total_enquiry ?? 0),
       trend: "neutral",
-      trendLabel: "estimated",
+      trendLabel: "",
     },
   ];
 }
 
-/** Stage funnel — Active → Quoted → Won → Lost (no negotiation). Won uses gained totals. */
+/** Stage funnel — New → Quoted → Won → Lost. Negotiation is injected if needed. */
 export function buildStageFunnelRowsFromDashboard(
   res: EnquiryConversionDashboardResponse | undefined
 ): StageFunnelRow[] {
@@ -191,19 +208,27 @@ export function buildStageFunnelRowsFromDashboard(
     count: number,
     conversionNote?: string
   ): StageFunnelRow => {
-    const cap = `${count.toLocaleString("en-IN")} · ${formatInrIndianCompact(count * INR_PER_ENQUIRY)}`;
+    const cap = `${count.toLocaleString("en-IN")} `;
+    const meta = STAGE_META[key];
+    const parsedPct = parsePercentNumber(conversionNote);
+    const pctForColor =
+      parsedPct != null
+        ? Math.max(0, Math.min(100, parsedPct))
+        : (Math.min(count, total) / total) * 100;
     return {
-      stage: STAGE_META[key].label,
+      stage: meta.label,
       barCaption: cap,
       count,
       conversionNote: conversionNote?.trim() || undefined,
       barPercent: Math.round((Math.min(count, total) / total) * 100),
-      barColor: STAGE_META[key].color,
+      barColor: colorFromPercent(pctForColor),
+      dotColor: meta.dotColor,
+      dotBgColor: meta.dotBgColor,
     };
   };
 
   return [
-    row("active", ta, s.active_percentage?.trim()),
+    row("new", ta, s.active_percentage?.trim() || "100%"),
     row("quoted", tq, s.quote_created_percentage?.trim()),
     row("won", tg, s.gain_percentage?.trim()),
     row("lost", tl, s.lost_percentage?.trim()),
@@ -240,7 +265,7 @@ export function buildModeCardFromDashboard(
       key: code,
       label: modeLabel(code),
       color: MODE_COLORS[code] ?? "#94A3B8",
-      valueLabel: formatInrIndianCompact(c * INR_PER_ENQUIRY),
+      valueLabel: c.toLocaleString("en-IN"),
       percentLabel: pct,
     };
   });
@@ -255,15 +280,32 @@ export function buildRepRowsFromDashboard(
   if (!Array.isArray(rows) || rows.length === 0) return [];
 
   return rows.map((item) => {
+    const gainedRaw = item.gained;
     const gained = extractNumericValue(item.gained);
     const total = Math.max(1, extractNumericValue(item.total_enquiry));
-    const ratePct = Math.min(100, (gained / total) * 100);
+    const gainedPercentFromApi =
+      typeof gainedRaw === "string"
+        ? (() => {
+            const match = gainedRaw.match(/\(([^)]*%)\)/);
+            if (!match?.[1]) return undefined;
+            const pctNumber = Number(match[1].replace("%", "").trim());
+            return Number.isFinite(pctNumber) ? pctNumber : undefined;
+          })()
+        : undefined;
+    const ratePct = Math.min(
+      100,
+      gainedPercentFromApi ?? (gained / total) * 100
+    );
+    const rateLabel =
+      Number.isInteger(ratePct) || Math.abs(ratePct - Math.round(ratePct)) < 0.001
+        ? `${Math.round(ratePct)}%`
+        : `${ratePct.toFixed(1)}%`;
     return {
       name: item.salesperson,
-      rateLabel: `${ratePct.toFixed(1)}%`,
+      rateLabel,
       winsLabel: `${gained}/${total}`,
       barPercent: ratePct,
-      barColor: "#15803D",
+      barColor: colorFromPercent(ratePct),
     };
   });
 }
@@ -305,7 +347,6 @@ export function formatEnquiryConversionPageSubtitle(
 ): string {
   const total = extractNumericValue(res?.summary?.total_enquiry);
   const ok = res?.success;
-  if (!ok && !total) return "Pipeline · —";
-  const v = pipelineValueApproxFromEnquiryCount(total);
-  return `Pipeline · ${total.toLocaleString("en-IN")} enquiries · ${formatInrIndianCompact(v)} total value`;
+  if (!ok && !total) return "Enquiries · —";
+  return `${total.toLocaleString("en-IN")} enquiries`;
 }

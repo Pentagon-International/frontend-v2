@@ -14,51 +14,60 @@ export function ByModeValueCard({
   title,
   segments,
   rows,
+  embeddedBelowFunnel,
 }: {
   title: string;
   segments: FunnelSegment[];
   rows: ModeLegendRow[];
+  /** Tighter top padding when directly under Stage Funnel in one card */
+  embeddedBelowFunnel?: boolean;
 }) {
+  const pt = embeddedBelowFunnel ? 14 : 24;
+  const titleMb = embeddedBelowFunnel ? 12 : 16;
+  const listMt = embeddedBelowFunnel ? 14 : 20;
+  const rowGap = embeddedBelowFunnel ? 12 : 14;
+
   return (
     <Box
       style={{
-        background: "#fff",
-        border: `1px solid ${enquiryConversionColors.panelBorder}`,
-        borderRadius: 12,
-        padding: "18px 20px",
-        height: "100%",
-        boxShadow:
-          "0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.06)",
+        padding: `${pt}px 24px 24px`,
       }}
     >
-      <Text fw={600} fz={11} tt="uppercase" ls={0.8} c="#64748B" mb={14}>
+      <Text
+        fw={600}
+        fz={12}
+        tt="uppercase"
+        lts={0.8}
+        c={enquiryConversionColors.subHeading}
+        mb={titleMb}
+      >
         {title}
       </Text>
       {segments.length > 0 ? (
         <>
-          <SegmentedFunnelBar segments={segments} height={22} showLabels={false} />
-          <Stack gap={12} mt={18}>
+          <SegmentedFunnelBar segments={segments} height={8} showLabels={false} />
+          <Stack gap={rowGap} mt={listMt}>
             {rows.map((r) => (
               <Group key={r.key} justify="space-between" wrap="nowrap" gap="sm">
-                <Group gap={10} wrap="nowrap">
+                <Group gap={12} wrap="nowrap">
                   <Box
                     style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 3,
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
                       backgroundColor: r.color,
                       flexShrink: 0,
                     }}
                   />
-                  <Text size="sm" fw={600} c="#0F172A">
+                  <Text size="sm" fw={600} c={enquiryConversionColors.heading}>
                     {r.label}
                   </Text>
                 </Group>
                 <Group gap={16} wrap="nowrap">
-                  <Text size="sm" fw={700} c="#0F172A">
+                  <Text size="sm" fw={700} c={enquiryConversionColors.heading}>
                     {r.valueLabel}
                   </Text>
-                  <Text size="sm" c="#64748B" style={{ minWidth: 36 }} ta="right">
+                  <Text size="xs" fw={500} c={enquiryConversionColors.muted} style={{ minWidth: 32 }} ta="right">
                     {r.percentLabel}
                   </Text>
                 </Group>
@@ -67,7 +76,7 @@ export function ByModeValueCard({
           </Stack>
         </>
       ) : (
-        <Text size="sm" c="#64748B" py={16}>
+        <Text size="sm" c={enquiryConversionColors.subHeading} py={16}>
           No service breakdown for this filter.
         </Text>
       )}

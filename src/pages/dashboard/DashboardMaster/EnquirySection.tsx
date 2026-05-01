@@ -18,8 +18,6 @@ interface EnquirySectionProps {
   enquiryConversionOverviewMeta?: EnquiryConversionOverviewMeta | null;
   isLoadingEnquiryConversion: boolean;
   isLoadingEnquiryChart: boolean;
-  /** Optional pipeline total in ₹ crore for the subtitle (when APIs expose it). */
-  pipelineCr?: number | null;
   fromDate: Date | null;
   toDate: Date | null;
   setFromDate: (date: Date | null) => void;
@@ -34,7 +32,6 @@ const EnquirySection = ({
   enquiryConversionOverviewMeta,
   isLoadingEnquiryConversion,
   isLoadingEnquiryChart,
-  pipelineCr,
   fromDate,
   toDate,
   setFromDate,
@@ -43,8 +40,7 @@ const EnquirySection = ({
   onOpenEnquiryConversionModule,
 }: EnquirySectionProps) => {
   const subtitle = formatEnquiryConversionOverviewSubtitle(
-    enquiryConversionAggregatedData.totalEnquiries,
-    pipelineCr
+    enquiryConversionAggregatedData.totalEnquiries
   );
 
   return (
