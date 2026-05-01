@@ -99,6 +99,63 @@ export interface DashboardFilters {
   search?: string;
 }
 
+export interface CustomerOutstandingVsOverdueItem {
+  sno: number;
+  company_name: string;
+  location: string;
+  salesperson: string;
+  salesperson_email: string;
+  cc_mail: string[];
+  customer_code: string;
+  customer_name: string;
+  credit_display: string;
+  credit_amount: string;
+  credit_day: number;
+  status_tags: string[];
+  outstanding: string;
+  overdue: string;
+  days_1_30: string;
+  days_31_60: string;
+  days_61_plus: string;
+  risk: "LOW" | "MEDIUM" | "HIGH" | string;
+  open_line_count: number;
+}
+
+export interface CustomerOutstandingVsOverdueSummary {
+  total_outstanding: string;
+  total_overdue: string;
+  total_outstanding_percentage: string;
+  total_overdue_percentage: string;
+  open_invoices: number;
+  customer_count: number;
+  currency: string;
+  days_1_30: string;
+  days_31_60: string;
+  days_61_90: string;
+  "days_90+": string;
+}
+
+export interface CustomerOutstandingVsOverdueResponse {
+  success: boolean;
+  message: string;
+  as_of: string;
+  summary: CustomerOutstandingVsOverdueSummary;
+  data: CustomerOutstandingVsOverdueItem[];
+  total: number;
+  index: number;
+  limit: number;
+}
+
+export interface CustomerOutstandingVsOverdueFilters {
+  company: string;
+  location?: string;
+  salesman?: string;
+  customer_name?: string;
+  risk?: string;
+  index?: number;
+  limit?: number;
+}
+
 export interface CallEntryItem {
   customer_name: string;
   customer_code: string;
@@ -520,6 +577,39 @@ export const getFilteredOutstandingData = async (
     return response as FilteredOutstandingResponse;
   } catch (error) {
     console.error("Error fetching filtered outstanding data:", error);
+    throw error;
+  }
+};
+
+export const getCustomerOutstandingVsOverdueData = async (
+  filters: CustomerOutstandingVsOverdueFilters
+): Promise<CustomerOutstandingVsOverdueResponse> => {
+  try {
+    const index = Number.isFinite(filters.index) ? Number(filters.index) : 0;
+    const limit = Number.isFinite(filters.limit) ? Number(filters.limit) : 5;
+    const queryParams = new URLSearchParams();
+    queryParams.append("index", String(index));
+    queryParams.append("limit", String(limit));
+    const url = `${URL.dashboard.customerOutstandingVsOverdue}?${queryParams.toString()}`;
+    const payload: Record<string, unknown> = {
+      company: filters.company,
+    };
+    if (filters.location && filters.location.trim()) {
+      payload.location = filters.location.trim();
+    }
+    if (filters.salesman && filters.salesman.trim()) {
+      payload.salesman = filters.salesman.trim();
+    }
+    if (filters.customer_name && filters.customer_name.trim()) {
+      payload.customer_name = filters.customer_name.trim();
+    }
+    if (filters.risk && filters.risk.trim()) {
+      payload.risk = filters.risk.trim();
+    }
+    const response = await postAPICall(url, payload);
+    return response as CustomerOutstandingVsOverdueResponse;
+  } catch (error) {
+    console.error("Error fetching customer outstanding vs overdue data:", error);
     throw error;
   }
 };

@@ -262,6 +262,20 @@ const Navbar = ({
                     setIsAccountsOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Outstanding / Overdue"
+                  icon={IconChartLine}
+                  path="/dashboard/customer-outstanding-vs-overdue"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav

@@ -2101,53 +2101,16 @@ const Dashboard = () => {
   };
 
   const handleOutstandingViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("outstanding");
-      setDetailedViewTitle("Outstanding vs Over Due - Detailed View");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values
-      setDetailedViewSelectedCompany(selectedCompany);
-      setDetailedViewSelectedLocation(selectedLocation);
-      setDetailedViewSelectedSalesperson(
-        searchSalesman ? searchSalesman : null
-      );
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(drillLevel);
-
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(selectedCompany && { company: selectedCompany }),
-        ...(selectedLocation && { location: selectedLocation }),
-        ...(searchSalesman && { salesman: searchSalesman }),
-        ...(selectedYear && { year: parseInt(selectedYear) }),
-        ...(customerInteractionFromDate &&
-          customerInteractionToDate && {
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
-          }),
-      });
-
-      const response = await getFilteredOutstandingData(filterData);
-
-      const shouldRemoveSalespersonColumns = !!searchSalesman;
-      const tableData = convertFilteredResponseToTableData(
-        response,
-        shouldRemoveSalespersonColumns
-      );
-
-      if (searchSalesman) {
-        setDetailedViewTitle(`Outstanding vs Over Due - ${searchSalesman}`);
-      }
-
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/customer-outstanding-vs-overdue", {
+      state: {
+        company: companyName,
+        location: selectedLocation || null,
+        salesman: searchSalesman || null,
+        customer_name: globalSearch?.trim() || null,
+      },
+    });
   };
 
   const handleBudgetViewAll = async () => {
@@ -7512,6 +7475,9 @@ const Dashboard = () => {
         boxSizing: "border-box",
         backgroundColor: DASH_PAGE_BG,
         minWidth: 0,
+        fontFamily: DASH_TOOLBAR_FONT,
+        WebkitFontSmoothing: "antialiased",
+        MozOsxFontSmoothing: "grayscale",
       }}
     >
       {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
@@ -7919,7 +7885,11 @@ const Dashboard = () => {
                       locationData={locationData}
                       salespersonData={salespersonData}
                       selectedCompanyCtx={selectedCompanyCtx}
-                      selectedCompany={selectedCompany}
+                      selectedCompany={
+                        selectedCompany ||
+                        user?.company?.company_name ||
+                        "PENTAGON INDIA"
+                      }
                       selectedLocation={selectedLocation}
                       contextTotals={contextTotals}
                       hoverTotals={hoverTotals}

@@ -46,7 +46,8 @@ export const CollapsibleNav = ({
     (label === "Dashboard" &&
       (activeSubNav === "Overview" ||
         activeSubNav === "Enquiry Conversion" ||
-        activeSubNav === "Call Entry")) ||
+        activeSubNav === "Call Entry" ||
+        activeSubNav === "Outstanding / Overdue")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||

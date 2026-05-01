@@ -180,6 +180,8 @@ export const URL = {
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",
+    customerOutstandingVsOverdue:
+      "local-outstanding/customer-outstanding-vs-overdue/",
     callEntry: "call-entry/",
     /** Overview KPIs, rep roll-up, activity log, hourly heatmap (POST body: company, date_from, date_to). */
     callEntryDashboardData: "call-entry/data/",
