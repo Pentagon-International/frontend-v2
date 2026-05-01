@@ -46,7 +46,7 @@ export function SegmentedFunnelBar({
   /** Gap between coloured segments */
   gutterPx?: number;
 }) {
-  const norm = normalizeWeights(segments).filter(({ pct }) => pct > 0);
+  const norm = normalizeWeights(segments);
   const n = norm.length;
 
   return (
@@ -65,7 +65,7 @@ export function SegmentedFunnelBar({
             title={`${seg.label}`}
             style={{
               width: `${pct}%`,
-              minWidth: pct > 1 ? undefined : 1,
+              minWidth: pct > 0 ? (pct > 1 ? undefined : 1) : 0,
               height,
               flexShrink: 0,
               backgroundColor: seg.color,
@@ -82,6 +82,7 @@ export function SegmentedFunnelBar({
             marginTop: 10,
             width: "100%",
             gap: gutterPx,
+            justifyContent: "space-between",
           }}
         >
           {norm.map(({ seg, pct }, idx) => (
@@ -91,7 +92,7 @@ export function SegmentedFunnelBar({
               fw={600}
               c={enquiryConversionColors.subHeading}
               style={{
-                width: `${pct}%`,
+                flex: 1,
                 minWidth: 0,
                 textAlign: labelAlign(idx, n),
                 lineHeight: 1.25,

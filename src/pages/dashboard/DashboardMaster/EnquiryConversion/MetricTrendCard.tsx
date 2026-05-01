@@ -24,12 +24,12 @@ export function MetricTrendCard({
         background: enquiryConversionColors.panelBg,
         border: `1px solid ${enquiryConversionColors.panelBorder}`,
         borderRadius: enquiryConversionColors.radius,
-        padding: "20px 24px",
+        padding: "15px 0px 14px 24px",
         boxShadow: enquiryConversionColors.shadow,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
-        minHeight: 120,
+        justifyContent: "flex-start",
+        // minHeight: 120,
       }}
     >
       <Text size="11px" fw={600} c={enquiryConversionColors.subHeading} tt="uppercase" lts={0.8} mb={12}>
