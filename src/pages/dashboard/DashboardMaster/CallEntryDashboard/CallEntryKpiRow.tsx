@@ -51,12 +51,12 @@ export function CallEntryKpiRow({ data }: Props) {
       sub: `${summary?.overdue_percentage ?? "0%"} follow-up`,
       valueColor: "#EF4444",
     },
-    {
-      label: "AVG. DURATION",
-      value: "6:42",
-      sub: `+${summary?.closed_percentage ?? "0%"} vs avg`,
-      valueColor: "#0B1F3A",
-    },
+    // {
+    //   label: "AVG. DURATION",
+    //   value: "6:42",
+    //   sub: `+${summary?.closed_percentage ?? "0%"} vs avg`,
+    //   valueColor: "#0B1F3A",
+    // },
   ];
 
   return (

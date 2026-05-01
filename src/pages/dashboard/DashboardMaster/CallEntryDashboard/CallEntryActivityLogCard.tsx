@@ -102,7 +102,7 @@ export function CallEntryActivityLogCard({
             Last 24h
           </Text>
         </Group>
-        <Group gap={4} wrap="wrap" justify="flex-end">
+        {/* <Group gap={4} wrap="wrap" justify="flex-end">
           {channelTabs.map((tab) => {
             const active = activeTab === tab;
             return (
@@ -123,7 +123,7 @@ export function CallEntryActivityLogCard({
               </UnstyledButton>
             );
           })}
-        </Group>
+        </Group> */}
       </Group>
 
       <Box style={{ overflowX: "auto" }}>
