@@ -497,6 +497,10 @@ export interface EnquiryConversionDashboardResponse {
 
 /** Caption / MoM adornments on the Overview enquiry conversion tile (from `summary`). */
 export interface EnquiryConversionOverviewMeta {
+  /** MoM direction for ACTIVE from summary.status_change_vs_previous_month.active */
+  activeMoMDirection?: string;
+  /** MoM percentage text for ACTIVE (e.g. "+12.4%") */
+  activeMoMChangePctDisplay?: string;
   /** `summary.quote_created_percentage` shown under QUOTED */
   quoteCreatedPctDisplay?: string;
   /** `summary.lost_percentage` shown under LOST */
@@ -512,8 +516,14 @@ export function extractEnquiryConversionOverviewMeta(
   if (!response || typeof response !== "object") return {};
   const summary = (response as EnquiryConversionDashboardResponse).summary;
   if (!summary || typeof summary !== "object") return {};
+  const active = summary.status_change_vs_previous_month?.active;
   const gain = summary.status_change_vs_previous_month?.gain;
   return {
+    activeMoMDirection: active?.direction,
+    activeMoMChangePctDisplay:
+      typeof active?.change_percentage === "string"
+        ? active.change_percentage.trim()
+        : undefined,
     quoteCreatedPctDisplay:
       typeof summary.quote_created_percentage === "string"
         ? summary.quote_created_percentage.trim()
@@ -650,16 +660,17 @@ export const calculateAggregatedData = (data: OutstandingDataItem[]) => {
 
 // Calculate aggregated data for filtered response (different structure)
 export const calculateFilteredAggregatedData = (response: any) => {
-  console.log("Processing filtered response:", response);
+  console.log("Processing filtered response: RRRRRR", response.summary);
 
   if (response?.summary) {
+    console.log("Response summary:", response.summary);
     // Use summary data if available
     const totalOutstanding = parseFloat(
       response.summary.total_outstanding ||
-        response.summary.local_outstanding ||
+        response.summary.local_outstanding || 
         "0"
     );
-    const totalOverdue = response.summary.total_overdue;
+    const totalOverdue = parseFloat(response.summary.total_overdue || "0");
     const totalSalespersons = parseInt(
       (response.summary.total || response.summary.TOTAL || "0").toString()
     );

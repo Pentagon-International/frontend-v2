@@ -14,6 +14,7 @@ import {
 import { IconChevronLeft, IconChevronRight, IconSearch } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
+import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import {
   getCustomerOutstandingVsOverdueData,
@@ -22,7 +23,7 @@ import {
 } from "../../../service/dashboard.service";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 15;
 
 type RouteState = {
   company?: string | null;
@@ -198,119 +199,121 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     <Box
       bg="#F8F9FA"
       mx={{ base: -12, sm: -16, lg: -24 }}
-      px={{ base: 12, sm: 16, lg: 20 }}
-      py={{ base: 12, sm: 16, lg: 24 }}
+      // px={{ base: 12, sm: 16, lg: 20 }}
+      // py={{ base: 12, sm: 16, lg: 24 }}
       mih={520}
       style={{
         fontFamily: ERP_FONT_SANS,
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",
+        paddingBottom: 70,
       }}
     >
       <Stack gap={10}>
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap={8}>
-          <Box style={{ flex: "1 1 280px", minWidth: 0 }}>
-            <Text fz={11} fw={600} c="#7B8DA5" mb={5}>
-              Pentagon Freight › Sales › Outstanding / Overdue
-            </Text>
-            <Text fw={700} c="#0B1F3A" lh={1.05} style={{ fontSize: "clamp(24px, 5vw, 42px)" }}>
-              Customer Outstanding vs Overdue
-            </Text>
-            <Text fz={11} c="#8AA0B9" fw={600} mt={2} style={{ lineHeight: 1.35 }}>
-              Total AR {formatAmountRaw(summary?.total_outstanding)} ·{" "}
-              {toNumber(summary?.open_invoices).toLocaleString("en-IN")} open invoices ·{" "}
-              {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
-            </Text>
-          </Box>
+        <ERPListToolbar
+          bleed={false}
+          leading={
+            <Box style={{ minWidth: 0, paddingLeft: 10 }}>
+              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+                Pentagon Freight › Sales › Outstanding / Overdue
+              </Text>
+              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+                Customer Outstanding vs Overdue
+              </Text>
+              <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
+                Total AR {formatAmountRaw(summary?.total_outstanding)} ·{" "}
+                {toNumber(summary?.open_invoices).toLocaleString("en-IN")} open invoices ·{" "}
+                {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
+              </Text>
+            </Box>
+          }
+          actions={
+            <Box style={{ minWidth: isMobile ? 300 : 360 }}>
+              <Group align="center" gap={8} wrap="wrap" style={{ width: "100%" }}>
+                <Button
+                  size="xs"
+                  radius={6}
+                  variant="filled"
+                  style={{
+                    flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 120px",
+                    minWidth: isMobile ? 0 : undefined,
+                  }}
+                  styles={{
+                    root: {
+                      backgroundColor: "#101C2E",
+                      color: "#FFFFFF",
+                      height: 30,
+                      fontSize: 11,
+                      border: "none",
+                    },
+                    label: { fontWeight: 700 },
+                  }}
+                >
+                  As of {response?.as_of ? response.as_of : "-"}
+                </Button>
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={customerOptions}
+                  value={filters.customer_name}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, customer_name: value || "" }))}
+                  style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 170px", minWidth: isMobile ? 0 : 120 }}
+                  styles={selectInputStyles}
+                />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={salesmanOptions}
+                  value={filters.salesman}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, salesman: value || "" }))}
+                  style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 150px", minWidth: isMobile ? 0 : 120 }}
+                  styles={selectInputStyles}
+                />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={[
+                    { value: "", label: "Risk: All" },
+                    { value: "HIGH", label: "Risk: HIGH" },
+                    { value: "MEDIUM", label: "Risk: MEDIUM" },
+                    { value: "LOW", label: "Risk: LOW" },
+                  ]}
+                  value={filters.risk}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, risk: value || "" }))}
+                  style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px", minWidth: isMobile ? 0 : 120 }}
+                  styles={selectInputStyles}
+                />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={locationOptions}
+                  value={filters.location}
+                  onChange={(value) => setFilters((prev) => ({ ...prev, location: value || "" }))}
+                  style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 160px", minWidth: isMobile ? 0 : 120 }}
+                  styles={selectInputStyles}
+                />
+                {/* <Button
+                  size="xs"
+                  radius={6}
+                  variant="default"
+                  onClick={handleApplyFilters}
+                  style={{
+                    height: 30,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    flex: isMobile ? "1 1 100%" : "1 1 90px",
+                    minWidth: isMobile ? 0 : undefined,
+                    borderColor: "#E2E8F0",
+                  }}
+                >
+                  Apply
+                </Button> */}
+              </Group>
+            </Box>
+          }
+        />
 
-          <Group
-            align="center"
-            gap={8}
-            wrap="wrap"
-            style={{ flex: "1 1 320px", width: "100%" }}
-          >
-            <Button
-              size="xs"
-              radius={6}
-              variant="filled"
-              style={{
-                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 120px",
-                minWidth: isMobile ? 0 : undefined,
-              }}
-              styles={{
-                root: {
-                  backgroundColor: "#101C2E",
-                  color: "#FFFFFF",
-                  height: 30,
-                  fontSize: 11,
-                  border: "none",
-                },
-                label: { fontWeight: 700 },
-              }}
-            >
-              As of {response?.as_of ? response.as_of : "-"}
-            </Button>
-            <Select
-              size="xs"
-              radius={6}
-              data={customerOptions}
-              value={filters.customer_name}
-              onChange={(value) => setFilters((prev) => ({ ...prev, customer_name: value || "" }))}
-              style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 170px", minWidth: isMobile ? 0 : 120 }}
-              styles={selectInputStyles}
-            />
-            <Select
-              size="xs"
-              radius={6}
-              data={salesmanOptions}
-              value={filters.salesman}
-              onChange={(value) => setFilters((prev) => ({ ...prev, salesman: value || "" }))}
-              style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 150px", minWidth: isMobile ? 0 : 120 }}
-              styles={selectInputStyles}
-            />
-            <Select
-              size="xs"
-              radius={6}
-              data={[
-                { value: "", label: "Risk: All" },
-                { value: "HIGH", label: "Risk: HIGH" },
-                { value: "MEDIUM", label: "Risk: MEDIUM" },
-                { value: "LOW", label: "Risk: LOW" },
-              ]}
-              value={filters.risk}
-              onChange={(value) => setFilters((prev) => ({ ...prev, risk: value || "" }))}
-              style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px", minWidth: isMobile ? 0 : 120 }}
-              styles={selectInputStyles}
-            />
-            <Select
-              size="xs"
-              radius={6}
-              data={locationOptions}
-              value={filters.location}
-              onChange={(value) => setFilters((prev) => ({ ...prev, location: value || "" }))}
-              style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 160px", minWidth: isMobile ? 0 : 120 }}
-              styles={selectInputStyles}
-            />
-            <Button
-              size="xs"
-              radius={6}
-              variant="default"
-              onClick={handleApplyFilters}
-              style={{
-                height: 30,
-                fontSize: 11,
-                fontWeight: 700,
-                flex: isMobile ? "1 1 100%" : "1 1 90px",
-                minWidth: isMobile ? 0 : undefined,
-                borderColor: "#E2E8F0",
-              }}
-            >
-              Apply
-            </Button>
-          </Group>
-        </Group>
-
-        <TextInput
+        {/* <TextInput
           leftSection={<IconSearch size={14} color="#94A3B8" />}
           placeholder="Search enquiries, customers, invoices..."
           value={filters.customer_name}
@@ -327,9 +330,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               color: "#334155",
             },
           }}
-        />
+        /> */}
 
-        <Group gap={8} wrap="nowrap" style={{ overflowX: "auto", paddingBottom: 2 }}>
+        <Group gap={8} wrap="nowrap" style={{ overflowX: "auto", paddingBottom: 2, paddingLeft: 10, paddingRight: 10 }}>
           {bucketCards.map((card, idx) => (
             <Box
               key={card.label}
@@ -375,9 +378,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
             borderRadius: 10,
             overflow: "hidden",
             boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+           marginLeft: 10,
+           marginRight: 10,
           }}
         >
-          <Box style={{ overflowX: "auto" }}>
+          <Box style={{ overflowX: "auto", }}>
             <Table
               striped={false}
               withColumnBorders={false}
@@ -610,7 +615,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
           </Box>
         </Box>
 
-        <Group justify="space-between">
+        <Group justify="space-between" style={{ paddingLeft: 10, paddingRight: 10 }}>
           <Text fz={11} c="#7B8DA5" fw={600}>
             Showing {Math.min(total, index + 1)}-{Math.min(total, index + PAGE_SIZE)} of {total}
           </Text>

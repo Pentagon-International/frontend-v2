@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
+import { ERPListToolbar } from "../../../../components";
 import { MetricTrendCard } from "./MetricTrendCard";
 import { StageFunnelCard } from "./StageFunnelCard";
 import { ByModeValueCard } from "./ByModeValueCard";
@@ -127,8 +128,8 @@ export default function EnquiryConversionPage() {
     <Box
       bg="#F9FAFB"
       mx={{ base: -12, sm: -16, lg: -24 }}
-      px={{ base: 12, sm: 16, lg: 20 }}
-      py={{ base: 12, sm: 16, lg: 24 }}
+      // px={{ base: 12, sm: 16, lg: 20 }}
+      // py={{ base: 12, sm: 16, lg: 24 }}
       mih={520}
       style={{
         fontFamily: ERP_FONT_SANS,
@@ -137,32 +138,37 @@ export default function EnquiryConversionPage() {
       }}
     >
       <Stack gap="md">
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap={8}>
-          <Box style={{ flex: "1 1 280px", minWidth: 0 }}>
-            <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
-              Pentagon Freight › Sales › Enquiry Conversion
-            </Text>
-            <Text
-              fw={700}
-              c="#111827"
-              style={{
-                fontSize: "clamp(24px, 5vw, 40px)",
-                lineHeight: 1.08,
-              }}
-              mb={4}
-            >
-              Enquiry Conversion
-            </Text>
-            <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
-              {subtitle}
-            </Text>
-          </Box>
-          <Box style={{ flex: "1 1 300px", minWidth: 0, width: "100%" }}>
-            <Group justify={isCompact ? "stretch" : "flex-end"} wrap="wrap" gap={8} w="100%">
-              <EnquiryConversionFilters filters={filters} onFiltersChange={setFilters} />
-            </Group>
-          </Box>
-        </Group>
+        <ERPListToolbar
+          bleed={false}
+          leading={
+            <Box style={{ minWidth: 0 ,paddingLeft: 10, paddingRight: 10 }}>
+              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+                Pentagon Freight › Sales › Enquiry Conversion
+              </Text>
+              <Text
+                fw={700}
+                c="#111827"
+                style={{
+                  fontSize: "clamp(14px, 5vw, 20px)",
+                  lineHeight: 1.08,
+                }}
+                mb={4}
+              >
+                Enquiry Conversion
+              </Text>
+              <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
+                {subtitle}
+              </Text>
+            </Box>
+          }
+          actions={
+            <Box style={{ minWidth: isCompact ? 300 : 360 }}>
+              <Group justify={isCompact ? "stretch" : "flex-end"} wrap="wrap" gap={8} w="100%">
+                <EnquiryConversionFilters filters={filters} onFiltersChange={setFilters} />
+              </Group>
+            </Box>
+          }
+        />
 
         {error ? (
           <Alert color="red" variant="light" radius="md" title="Unable to load data">
@@ -186,7 +192,7 @@ export default function EnquiryConversionPage() {
           </Center>
         ) : (
           <>
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing={{ base: "sm", sm: "md" }}>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing={{ base: "sm", sm: "md" }} style={{ paddingLeft: 10, paddingRight: 10 }}>
               {metrics.map((m) => (
                 <MetricTrendCard
                   key={m.label}
@@ -198,7 +204,7 @@ export default function EnquiryConversionPage() {
               ))}
             </SimpleGrid>
 
-            <Grid gutter={{ base: 10, sm: 16 }}>
+            <Grid gutter={{ base: 10, sm: 16 }} style={{ paddingLeft: 10, paddingRight: 10 }}>
               <Grid.Col span={{ base: 12, lg: 7 }}>
                 <Box
                   style={{
@@ -239,7 +245,7 @@ export default function EnquiryConversionPage() {
                     <ConversionByRepCard
                       title="Conversion by Rep"
                       subtitle="Gained % · Gained/Total Enquiry"
-                      benchmarkPercent={benchmark}
+                      // benchmarkPercent={benchmark}
                       rows={repRowsPage}
                       pagination={
                         repTotalPages > 1

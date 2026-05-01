@@ -13,6 +13,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router-dom";
+import { DateRangeInput, ERPListToolbar } from "../../../../components";
 import useAuthStore from "../../../../store/authStore";
 import {
   getCallEntryDashboardData,
@@ -73,6 +74,14 @@ export default function CallEntryDashboardPage() {
     setRepPage(1);
     setActivityPage(1);
   }, [fromDate?.toISOString(), toDate?.toISOString(), salesperson, type]);
+
+  useEffect(() => {
+    if (!fromDate || !toDate) {
+      setIsTodayView(false);
+      return;
+    }
+    setIsTodayView(dayjs(fromDate).isSame(toDate, "day"));
+  }, [fromDate, toDate]);
 
   const fetchDashboard = useCallback(async () => {
     if (!fromDate || !toDate) return;
@@ -140,122 +149,143 @@ export default function CallEntryDashboardPage() {
     <Box
       bg="#F4F6FA"
       mx={{ base: -12, sm: -16, lg: -24 }}
-      px={{ base: 12, sm: 16, lg: 20 }}
-      py={{ base: 12, sm: 16, lg: 24 }}
+      // px={{ base: 12, sm: 16, }}
+      // py={{ base: 12, sm: 16, lg: 24 }}
       mih={520}
       style={{ fontFamily: ERP_FONT_SANS }}
     >
       <Stack gap={9}>
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap={8}>
-          <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
-            <Text fz={11} fw={600} c="#7B8DA5" mb={5}>
-              Pentagon Freight › Sales › Call Entry
-            </Text>
-            <Text fw={700} c="#0B1F3A" lh={1.04} style={{ fontSize: "clamp(24px, 4.35vw, 42px)" }}>
-              Call Entry Dashboard
-            </Text>
-            <Text fz={11} c="#8AA0B9" fw={600} mt={2} style={{ lineHeight: 1.35 }}>
-              {isTodayView ? "Today" : dayjs(fromDate).format("DD MMM")} ·{" "}
-              {data?.kpi?.total_calls || 0} calls logged · {activeRepCount} reps active
-            </Text>
-          </Box>
-
-          <Group align="center" gap={8} wrap="wrap" style={{ flex: "1 1 360px", width: "100%" }}>
-            <Button
-              size="xs"
-              variant={isTodayView ? "filled" : "default"}
-              color="#0B2D59"
-              radius={6}
-              onClick={applyTodayFilter}
-              style={{
-                minWidth: isMobile ? 0 : 74,
-                height: 30,
-                fontWeight: 700,
-                fontSize: 11,
-                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 74px",
-              }}
-            >
-              Today
-            </Button>
-            <Select
-              style={{
-                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
-                minWidth: isMobile ? 0 : 120,
-              }}
-              size="xs"
-              data={salespersonOptions}
-              value={salesperson}
-              onChange={(v) => setSalesperson(v || "all")}
-              radius={6}
-              styles={{
-                input: {
-                  height: 30,
-                  minHeight: 30,
-                  fontSize: 11,
-                  borderColor: "#DCE6F1",
-                  color: "#4A607A",
-                  fontWeight: 500,
-                  background: "#FFFFFF",
-                },
-              }}
-            />
-            <Select
-              style={{
-                flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 140px",
-                minWidth: isMobile ? 0 : 130,
-              }}
-              size="xs"
-              data={outcomeOptions}
-              value={type}
-              onChange={(v) => setType(v || "all")}
-              radius={6}
-              styles={{
-                input: {
-                  height: 30,
-                  minHeight: 30,
-                  fontSize: 11,
-                  borderColor: "#DCE6F1",
-                  color: "#4A607A",
-                  fontWeight: 500,
-                  background: "#FFFFFF",
-                },
-              }}
-            />
-            <Button
-              size="xs"
-              variant="filled"
-              color="#F8FAFC"
-              c="#26415F"
-              radius={6}
-              style={{
-                border: "1px solid #DCE6F1",
-                fontWeight: 700,
-                height: 30,
-                fontSize: 11,
-                flex: isMobile ? "1 1 100%" : "1 1 132px",
-                minWidth: isMobile ? 0 : 120,
-              }}
-              onClick={() => navigate("/call-entry-create")}
-            >
-              + Log a call
-            </Button>
-          </Group>
-        </Group>
+        <ERPListToolbar
+          bleed={false}
+          leading={
+            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }} >
+              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+                Pentagon Freight › Sales › Call Entry
+              </Text>
+              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+                Call Entry Dashboard
+              </Text>
+              <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
+                {isTodayView ? "Today" : dayjs(fromDate).format("DD MMM")} ·{" "}
+                {data?.kpi?.total_calls || 0} calls logged · {activeRepCount} reps active
+              </Text>
+            </Box>
+          }
+          actions={
+            <Box style={{ minWidth: isMobile ? 300 : 360 }}>
+              <Group align="center" gap={8} wrap="wrap" style={{ width: "100%" }}>
+                <DateRangeInput
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  onFromDateChange={setFromDate}
+                  onToDateChange={setToDate}
+                  fromLabel=""
+                  toLabel=""
+                  size="xs"
+                  allowDeselection={false}
+                  showRangeInCalendar={false}
+                  hideLabels
+                  compactToolbar
+                  containerStyle={{ gap: 6 }}
+                />
+                {/* <Button
+                  size="xs"
+                  variant={isTodayView ? "filled" : "default"}
+                  color="#0B2D59"
+                  radius={6}
+                  onClick={applyTodayFilter}
+                  style={{
+                    minWidth: isMobile ? 0 : 74,
+                    height: 30,
+                    fontWeight: 700,
+                    fontSize: 11,
+                    flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 74px",
+                  }}
+                >
+                  Today
+                </Button> */}
+                <Select
+                  style={{
+                    flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
+                    minWidth: isMobile ? 0 : 120,
+                  }}
+                  size="xs"
+                  data={salespersonOptions}
+                  value={salesperson}
+                  onChange={(v) => setSalesperson(v || "all")}
+                  radius={6}
+                  styles={{
+                    input: {
+                      height: 30,
+                      minHeight: 30,
+                      fontSize: 11,
+                      borderColor: "#DCE6F1",
+                      color: "#4A607A",
+                      fontWeight: 500,
+                      background: "#FFFFFF",
+                    },
+                  }}
+                />
+                <Select
+                  style={{
+                    flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 140px",
+                    minWidth: isMobile ? 0 : 130,
+                  }}
+                  size="xs"
+                  data={outcomeOptions}
+                  value={type}
+                  onChange={(v) => setType(v || "all")}
+                  radius={6}
+                  styles={{
+                    input: {
+                      height: 30,
+                      minHeight: 30,
+                      fontSize: 11,
+                      borderColor: "#DCE6F1",
+                      color: "#4A607A",
+                      fontWeight: 500,
+                      background: "#FFFFFF",
+                    },
+                  }}
+                />
+                {/* <Button
+                  size="xs"
+                  variant="filled"
+                  color="#F8FAFC"
+                  c="#26415F"
+                  radius={6}
+                  style={{
+                    border: "1px solid #DCE6F1",
+                    fontWeight: 700,
+                    height: 30,
+                    fontSize: 11,
+                    flex: isMobile ? "1 1 100%" : "1 1 132px",
+                    minWidth: isMobile ? 0 : 120,
+                  }}
+                  onClick={() => navigate("/call-entry-create")}
+                >
+                  + Log a call
+                </Button> */}
+              </Group>
+            </Box>
+          }
+        />
 
         {error ? (
           <Alert color="red" title="Error">
             {error}
           </Alert>
         ) : null}
-
-        <CallEntryKpiRow data={data} />
+<Box style={{ paddingLeft: 10, paddingRight: 10 }}>
+<CallEntryKpiRow data={data} />
+</Box>
 
         {isLoading && !data ? (
           <Group justify="center" py="xl">
             <Loader size="lg" color="#153F72" />
           </Group>
         ) : (
-          <Grid gutter="sm">
+          <Grid gutter="sm" style={{ paddingLeft: 10, paddingRight: 10 }}>
             <Grid.Col span={{ base: 12, xl: 7 }}>
               <CallEntryActivityLogCard
                 rows={data?.activity_log || []}

@@ -17,6 +17,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import ReactECharts from "echarts-for-react";
 import dayjs from "dayjs";
+import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import {
   calculateFinancialYearBudgetRangeForYear,
@@ -325,8 +326,7 @@ export default function BudgetVsActualDashboard() {
     <Box
       bg="#F8F9FA"
       mx={{ base: -12, sm: -16, lg: -24 }}
-      px={{ base: 12, sm: 16, lg: 20 }}
-      py={{ base: 12, sm: 16, lg: 24 }}
+
       mih={400}
       style={{
         fontFamily: ERP_FONT_SANS,
@@ -335,86 +335,98 @@ export default function BudgetVsActualDashboard() {
       }}
     >
       <Stack gap={10}>
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap={8}>
-          <Box style={{ flex: "1 1 260px", minWidth: 0 }}>
-            <Text fz={11} fw={600} c="#7B8DA5" mb={4}>
-              Pentagon Freight › Sales › Budget vs Actual
-            </Text>
-            <Text fw={700} c="#111827" style={{ fontSize: "clamp(24px, 5vw, 40px)", lineHeight: 1.08 }}>
-              Budget vs Actual
-            </Text>
-            <Text fz={11} c="#8AA0B9" fw={600} mt={4} style={{ lineHeight: 1.4 }}>
-              {fyLabel} · {formatCrL(summary.budget_ytd)} team target · {achYtd.toFixed(1)}% achieved YTD
-            </Text>
-          </Box>
+        <ERPListToolbar
+          bleed={false}
+          leading={
+            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight:15 }}>
+              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+                Pentagon Freight › Sales › Budget vs Actual
+              </Text>
+              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+                Budget vs Actual
+              </Text>
+              <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
+                {fyLabel} · {formatCrL(summary.budget_ytd)} team target · {achYtd.toFixed(1)}% achieved YTD
+              </Text>
+            </Box>
+          }
+          actions={
+            <Box style={{ minWidth: isCompact ? 300 : 360 }}>
 
-          <Group
-            gap={8}
-            wrap="wrap"
-            style={{ flex: "1 1 280px", width: "100%", justifyContent: isCompact ? "stretch" : "flex-end" }}
-          >
-            <Select
-              size="xs"
-              radius={6}
-              data={yearOptions}
-              value={selectedYear}
-              onChange={(value) => {
-                if (!value) return;
-                setSelectedYear(value);
-                const range = calculateFinancialYearBudgetRangeForYear(parseInt(value, 10));
-                setStartMonth(range.start_month);
-                setEndMonth(range.end_month);
-              }}
-              style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 118px", minWidth: isCompact ? 0 : 100 }}
-              styles={selectInputStyles}
-            />
-            <Select
-              size="xs"
-              radius={6}
-              data={[
-                { value: "salesperson", label: "By Rep" },
-                { value: "non-salesperson", label: "Non-sales" },
-              ]}
-              value={type}
-              onChange={(value) => value && setType(value as "salesperson" | "non-salesperson")}
-              style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
-              styles={selectInputStyles}
-            />
-            <Select
-              size="xs"
-              radius={6}
-              data={modeOptions}
-              value={mode}
-              onChange={(v) => setMode(v || "")}
-              style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 120px", minWidth: isCompact ? 0 : 100 }}
-              styles={selectInputStyles}
-            />
-            <Button
-              size="xs"
-              radius={6}
-              variant="default"
-              style={{
-                flex: isCompact ? "1 1 100%" : "1 1 88px",
-                minWidth: isCompact ? 0 : undefined,
-              }}
-              styles={{
-                root: {
-                  height: 30,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderColor: "#E2E8F0",
-                  color: "#1E293B",
-                  background: "#FFFFFF",
-                },
-              }}
-            >
-              Export
-            </Button>
-          </Group>
-        </Group>
+              <Group gap={8} wrap="wrap" style={{ width: "100%", justifyContent: isCompact ? "stretch" : "flex-end" }}>
+              <SegmentedControl
+                size="xs"
+                value={type}
+                onChange={(value) => setType(value as "salesperson" | "non-salesperson")}
+                data={[
+                  { label: "Sales", value: "salesperson" },
+                  { label: "Non-sales", value: "non-salesperson" },
+                ]}
+              />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={yearOptions}
+                  value={selectedYear}
+                  onChange={(value) => {
+                    if (!value) return;
+                    setSelectedYear(value);
+                    const range = calculateFinancialYearBudgetRangeForYear(parseInt(value, 10));
+                    setStartMonth(range.start_month);
+                    setEndMonth(range.end_month);
+                  }}
+                  style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 118px", minWidth: isCompact ? 0 : 100 }}
+                  styles={selectInputStyles}
+                />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={[
+                    { value: "salesperson", label: "By Rep" },
+                    { value: "non-salesperson", label: "Non-sales" },
+                  ]}
+                  value={type}
+                  onChange={(value) => value && setType(value as "salesperson" | "non-salesperson")}
+                  style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
+                  styles={selectInputStyles}
+                />
+                <Select
+                  size="xs"
+                  radius={6}
+                  data={modeOptions}
+                  value={mode}
+                  onChange={(v) => setMode(v || "")}
+                  style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 120px", minWidth: isCompact ? 0 : 100 }}
+                  styles={selectInputStyles}
+                />
+                <Button
+                  size="xs"
+                  radius={6}
+                  variant="default"
+                  style={{
+                    flex: isCompact ? "1 1 100%" : "1 1 88px",
+                    minWidth: isCompact ? 0 : undefined,
+                  }}
+                  styles={{
+                    root: {
+                      height: 30,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderColor: "#E2E8F0",
+                      color: "#1E293B",
+                      background: "#FFFFFF",
+                    },
+                  }}
+                >
+                  Export
+                </Button>
+              </Group>
+            </Box>
+          }
+        />
 
         <Stack gap={8}>
-          <SegmentedControl
+          {/* <SegmentedControl
             size="xs"
             value={type}
             onChange={(value) => setType(value as "salesperson" | "non-salesperson")}
@@ -427,9 +439,9 @@ export default function BudgetVsActualDashboard() {
               root: { maxWidth: isCompact ? "100%" : 360 },
               label: { fontSize: 11, fontWeight: 600 },
             }}
-          />
-          <Group gap={8} wrap="wrap" align="center" style={{ width: "100%" }}>
-            <Select
+          /> */}
+          <Group gap={8} wrap="wrap" align="center" style={{ width: "100%" ,}}>
+            {/* <Select
               size="xs"
               radius={6}
               w={isCompact ? undefined : 120}
@@ -448,8 +460,8 @@ export default function BudgetVsActualDashboard() {
               value={endMonth}
               onChange={(v) => v && setEndMonth(v)}
               styles={selectInputStyles}
-            />
-            <Select
+            /> */}
+            {/* <Select
               size="xs"
               radius={6}
               w={isCompact ? undefined : 140}
@@ -458,8 +470,8 @@ export default function BudgetVsActualDashboard() {
               value={salesperson}
               onChange={(v) => setSalesperson(v || "")}
               styles={selectInputStyles}
-            />
-            <Button
+            /> */}
+            {/* <Button
               size="xs"
               radius={6}
               onClick={() => void fetchData()}
@@ -475,11 +487,11 @@ export default function BudgetVsActualDashboard() {
               }}
             >
               Apply
-            </Button>
+            </Button> */}
           </Group>
         </Stack>
 
-        <Grid gutter={{ base: 8, sm: 10 }}>
+        <Grid gutter={{ base: 8, sm: 10 }} style={{ paddingLeft: 10, paddingRight: 10 }}>
           <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
             <Card
               radius={8}
@@ -579,7 +591,7 @@ export default function BudgetVsActualDashboard() {
         )}
 
         {!isLoading && (
-          <Grid gutter={{ base: 8, sm: 10 }}>
+          <Grid gutter={{ base: 8, sm: 10 }} style={{ paddingLeft: 10, paddingRight: 10 }}>
             <Grid.Col span={{ base: 12, xl: 7 }}>
               <Card
                 radius={8}

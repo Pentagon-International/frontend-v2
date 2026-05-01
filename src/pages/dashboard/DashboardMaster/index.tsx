@@ -153,6 +153,8 @@ const DASH_LEADERSHIP_POS = "#22C55E";
 const DASH_LEADERSHIP_NEG = "#EF4444";
 const DASH_LEADERSHIP_BLUE = "#3B82F6";
 const DASH_LEADERSHIP_CARD_BORDER = "#E5E7EB";
+const DASHBOARD_DATE_FILTER_STORAGE_KEY =
+  "dashboard.master.customerInteractionDateRange";
 
 function dashFormatInrAdaptive(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "₹—";
@@ -529,6 +531,28 @@ const Dashboard = () => {
     useState<string>("last_30_days");
 
   // Customer Interaction Status date range states
+  const readPersistedDashboardDateRange = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(DASHBOARD_DATE_FILTER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        fromDate?: string | null;
+        toDate?: string | null;
+      };
+      const fromDate = parsed?.fromDate ? new Date(parsed.fromDate) : null;
+      const toDate = parsed?.toDate ? new Date(parsed.toDate) : null;
+      const validFromDate =
+        fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
+      const validToDate = toDate && !Number.isNaN(toDate.getTime()) ? toDate : null;
+      if (!validFromDate && !validToDate) return null;
+      return { fromDate: validFromDate, toDate: validToDate };
+    } catch {
+      return null;
+    }
+  };
+  const persistedDateRange = readPersistedDashboardDateRange();
+
   const getDefaultFromDate = (): Date => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -537,9 +561,24 @@ const Dashboard = () => {
     return new Date();
   };
   const [customerInteractionFromDate, setCustomerInteractionFromDate] =
-    useState<Date | null>(getDefaultFromDate());
+    useState<Date | null>(persistedDateRange?.fromDate ?? getDefaultFromDate());
   const [customerInteractionToDate, setCustomerInteractionToDate] =
-    useState<Date | null>(getDefaultToDate());
+    useState<Date | null>(persistedDateRange?.toDate ?? getDefaultToDate());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        DASHBOARD_DATE_FILTER_STORAGE_KEY,
+        JSON.stringify({
+          fromDate: customerInteractionFromDate?.toISOString() ?? null,
+          toDate: customerInteractionToDate?.toISOString() ?? null,
+        })
+      );
+    } catch {
+      // Ignore storage failures and continue with in-memory state.
+    }
+  }, [customerInteractionFromDate, customerInteractionToDate]);
 
   // Enquiry and Call Entry now use the universal date selector (customerInteractionFromDate/ToDate)
   // Removed separate date states to ensure all modules use the same selected dates
@@ -7505,10 +7544,48 @@ const Dashboard = () => {
 
   const salesLeadershipKpiItems = useMemo(() => {
     const e = enquiryConversionAggregatedData;
-    const pipelineN = contextTotals.outstanding;
-    const overdueN = contextTotals.overdue;
-    const revenueMtd = budgetAggregatedData.totalActualBudget;
-    const newEnquiries = e.totalEnquiries;
+    const pipelineN = extractNumericValue(
+      (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
+    );
+    const overdueN = extractNumericValue(
+      (contextTotals as any).overdue ?? (contextTotals as any).total_overdue
+    );
+    const revenueMtd = extractNumericValue(
+      (budgetAggregatedData as any).totalActualBudget ??
+        (budgetAggregatedData as any).total_actual_budget ??
+        (budgetAggregatedData as any).actual_ytd
+    );
+    const activeEnquiries = e.totalActive;
+    const activeMoMLabel =
+      enquiryConversionOverviewMeta?.activeMoMChangePctDisplay?.trim() || "";
+    const activeMoMDir = enquiryConversionOverviewMeta?.activeMoMDirection;
+    const activeTrend =
+      activeMoMLabel.length > 0
+        ? {
+            prefix: activeMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: activeMoMLabel,
+            sub: undefined,
+            color:
+              activeMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
+    const winRateMoMLabel =
+      enquiryConversionOverviewMeta?.gainMoMChangePctDisplay?.trim() || "";
+    const winRateMoMDir = enquiryConversionOverviewMeta?.gainMoMDirection;
+    const winRateTrend =
+      winRateMoMLabel.length > 0
+        ? {
+            prefix: winRateMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: winRateMoMLabel,
+            sub: undefined,
+            color:
+              winRateMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
     const conversionRate = `${Math.min(100, Math.max(0, e.gainPercentage)).toFixed(1)}%`;
     const variance =
       budgetAggregatedData.totalSalesBudget > 0
@@ -7535,16 +7612,16 @@ const Dashboard = () => {
     return [
       {
         key: "new-enquiries",
-        label: "Active enquiries",
-        value: newEnquiries.toLocaleString("en-IN"),
-        trend: undefined,
+        label: "ACTIVE",
+        value: activeEnquiries.toLocaleString("en-IN"),
+        trend: activeTrend,
         spark: "greenUp" as DashLeadershipSparkKind,
       },
       {
         key: "conversion-rate",
         label: "Conversion rate",
         value: conversionRate,
-        trend: undefined,
+        trend: winRateTrend,
         spark: "greenUp" as DashLeadershipSparkKind,
       },
       {
@@ -7557,7 +7634,7 @@ const Dashboard = () => {
       {
         key: "revenue-mtd",
         label: "Revenue MTD",
-        value: dashFormatInrAdaptive(revenueMtd),
+        value: revenueMtd === 0 ? "0" : dashFormatInrAdaptive(revenueMtd),
         trend: budgetTrend,
         spark: revenueSpark,
       },
@@ -7571,6 +7648,10 @@ const Dashboard = () => {
     ];
   }, [
     enquiryConversionAggregatedData,
+    enquiryConversionOverviewMeta?.activeMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.activeMoMDirection,
+    enquiryConversionOverviewMeta?.gainMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.gainMoMDirection,
     contextTotals.outstanding,
     contextTotals.overdue,
     budgetAggregatedData.totalActualBudget,
@@ -7929,7 +8010,7 @@ const Dashboard = () => {
                       c="#111827"
                       mb={6}
                       style={{
-                        fontSize: "clamp(24px, 4.2vw, 36px)",
+                        fontSize: "clamp(24px, 4.2vw, 20px)",
                         lineHeight: 1.1,
                       }}
                     >
@@ -7963,7 +8044,7 @@ const Dashboard = () => {
                     align="stretch"
                     columns={12}
                   >
-                  <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
+                  {/* <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
                   <Box
                     style={{
                       flex: 1,
@@ -7990,7 +8071,7 @@ const Dashboard = () => {
                       onNotVisitedClick={handleNotVisitedClick}
                     />
                   </Box>
-                  </Grid.Col>
+                  </Grid.Col> */}
                 <Grid.Col
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}

@@ -31,10 +31,13 @@ const toNumber = (value: string | number | undefined | null): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const formatAmountRaw = (value: string | number | undefined | null): string => {
-  if (value === undefined || value === null) return "0";
-  if (typeof value === "string") return value;
-  return String(value);
+const formatAmountCompact = (value: string | number | undefined | null): string => {
+  const amount = toNumber(value);
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? "-" : "";
+  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)} L`;
+  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 };
 
 const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
@@ -161,7 +164,7 @@ const OutstandingVsOverdueCard = ({
           </Badge>
         </Group>
         <Text size="xs" c="#64748B" mt={4}>
-          Total {formatAmountRaw(summary?.total_outstanding)} ·{" "}
+          Total {formatAmountCompact(summary?.total_outstanding)} ·{" "}
           {toNumber(summary?.open_invoices).toLocaleString("en-IN")} invoices
         </Text>
       </Box>
@@ -179,7 +182,7 @@ const OutstandingVsOverdueCard = ({
                   CURRENT
                 </Text>
                 <Text fw={800} c="#16A34A" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
-                  {formatAmountRaw(metrics.currentAmount)}
+                  {formatAmountCompact(metrics.currentAmount)}
                 </Text>
                 <Text size="xs" c="#16A34A" fw={600} mt={6}>
                   {formatPercent(metrics.currentPct)}
@@ -190,7 +193,7 @@ const OutstandingVsOverdueCard = ({
                   OVERDUE
                 </Text>
                 <Text fw={800} c="#EF4444" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
-                  {formatAmountRaw(summary?.total_overdue)}
+                  {formatAmountCompact(summary?.total_overdue)}
                 </Text>
                 <Text size="xs" c="#EF4444" fw={600} mt={6}>
                   {formatPercent(metrics.overduePct)}
@@ -201,7 +204,7 @@ const OutstandingVsOverdueCard = ({
                   90+ DAYS
                 </Text>
                 <Text fw={800} c="#0F172A" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
-                  {formatAmountRaw(summary?.["days_90+"])}
+                  {formatAmountCompact(summary?.["days_90+"])}
                 </Text>
                 <Text size="xs" c="#64748B" fw={600} mt={6}>
                   {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers

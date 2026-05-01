@@ -164,7 +164,7 @@ export function buildEnquiryConversionMetrics(
 
   return [
     {
-      label: "NEW",
+      label: "ACTIVE",
       value: String(s.total_active ?? 0),
       trend: a.trend,
       trendLabel: a.label,
@@ -221,7 +221,8 @@ export function buildStageFunnelRowsFromDashboard(
       count,
       conversionNote: conversionNote?.trim() || undefined,
       barPercent: Math.round((Math.min(count, total) / total) * 100),
-      barColor: colorFromPercent(pctForColor),
+      // barColor: colorFromPercent(pctForColor),
+      barColor: meta.dotColor,
       dotColor: meta.dotColor,
       dotBgColor: meta.dotBgColor,
     };

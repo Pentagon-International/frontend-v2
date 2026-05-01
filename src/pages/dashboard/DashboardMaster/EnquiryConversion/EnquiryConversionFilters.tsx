@@ -4,7 +4,11 @@ import {
   type SelectProps,
 } from "@mantine/core";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
-import { DateRangeInput } from "../../../../components";
+import {
+  DateRangeInput,
+  DEFAULT_ERP_LIST_THEME,
+  erpToolbarSelectStyles,
+} from "../../../../components";
 
 export type EnquiryConversionPageFilters = {
   fromDate: Date | null;
@@ -31,18 +35,13 @@ const SERVICE_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const selectStyles: SelectProps["styles"] = {
+  ...erpToolbarSelectStyles(DEFAULT_ERP_LIST_THEME),
   input: {
-    fontSize: 13,
-    fontWeight: 600,
-    height: 36,
-    minHeight: 36,
-    borderRadius: 8,
+    ...erpToolbarSelectStyles(DEFAULT_ERP_LIST_THEME).input,
+    borderRadius: 6,
     backgroundColor: "#FFFFFF",
     border: `1px solid ${enquiryConversionColors.panelBorder}`,
     color: enquiryConversionColors.heading,
-  },
-  option: {
-    fontSize: 13,
     fontWeight: 500,
   },
 };
@@ -63,7 +62,7 @@ export function EnquiryConversionFilters({
       onFiltersChange({ ...filters, [key]: value });
 
   return (
-    <Group gap="sm" justify="flex-end" wrap="wrap" align="center">
+    <Group gap={8} justify="flex-end" wrap="nowrap" align="center">
       <DateRangeInput
         fromDate={filters.fromDate}
         toDate={filters.toDate}
@@ -71,17 +70,17 @@ export function EnquiryConversionFilters({
         onToDateChange={set("toDate")}
         fromLabel=""
         toLabel=""
-        size="sm"
+        size="xs"
         allowDeselection={false}
         showRangeInCalendar={false}
         hideLabels
         compactToolbar
         disabled={disabled}
-        containerStyle={{ gap: 8 }}
+        containerStyle={{ gap: 6 }}
       />
       <Select
         placeholder="All types"
-        size="sm"
+        size="xs"
         w={130}
         disabled={disabled}
         data={TYPE_OPTIONS}
@@ -91,7 +90,7 @@ export function EnquiryConversionFilters({
       />
       <Select
         placeholder="All modes"
-        size="sm"
+        size="xs"
         w={120}
         disabled={disabled}
         data={SERVICE_OPTIONS}
@@ -101,7 +100,7 @@ export function EnquiryConversionFilters({
       />
       <Select
         placeholder="All reps"
-        size="sm"
+        size="xs"
         w={120}
         disabled={disabled}
         data={[{ value: "", label: "All reps" }]}

@@ -142,12 +142,12 @@ const BudgetVsActualCard = ({
             <Badge variant="light" color="blue" radius="sm">
               {budgetType === "salesperson" ? "Sales" : "Non-Sales"}
             </Badge>
-            <Text size="sm" c="#105476" style={dashboardViewAllStyle} onClick={handleBudgetViewAll}>
+            {/* <Text size="sm" c="#105476" style={dashboardViewAllStyle} onClick={handleBudgetViewAll}>
               <Group gap={4} wrap="nowrap">
                 <span>View All</span>
                 <IconArrowRight size={14} />
               </Group>
-            </Text>
+            </Text> */}
           </Group>
         </Group>
       </Box>
