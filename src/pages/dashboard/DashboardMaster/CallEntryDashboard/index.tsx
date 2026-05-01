@@ -159,10 +159,10 @@ export default function CallEntryDashboardPage() {
           bleed={false}
           leading={
             <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }} >
-              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+              {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Call Entry
-              </Text>
-              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+              </Text> */}
+              <Text  c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08, fontFamily: "Geist", fontWeight: 550 }} mb={4}>
                 Call Entry Dashboard
               </Text>
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>

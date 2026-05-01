@@ -142,15 +142,17 @@ export default function EnquiryConversionPage() {
           bleed={false}
           leading={
             <Box style={{ minWidth: 0 ,paddingLeft: 10, paddingRight: 10 }}>
-              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+              {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Enquiry Conversion
-              </Text>
+              </Text> */}
               <Text
-                fw={700}
+                // fw={700}
                 c="#111827"
                 style={{
                   fontSize: "clamp(14px, 5vw, 20px)",
                   lineHeight: 1.08,
+                  fontFamily: "Geist", 
+                  fontWeight:'550'
                 }}
                 mb={4}
               >

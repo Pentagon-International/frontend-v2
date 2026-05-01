@@ -63,7 +63,7 @@ export const CallEntryActivity = ({ summary, isLoading }: CallEntryActivityProps
     <Stack gap="lg" style={{ flex: 1 }}>
       {/* Subtitle */}
       <Text c="#94A3B8" fz={12} fw={500} style={{ marginTop: -8 }}>
-        {total_calls} calls today · {total_sales_persons} reps
+        {total_calls} calls · {total_sales_persons} reps
       </Text>
 
       {/* KPI strip */}

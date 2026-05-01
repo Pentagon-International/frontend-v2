@@ -7995,7 +7995,7 @@ const Dashboard = () => {
             >
               <Box px={DASH_MAIN_PAD_X} pt={{ base: 10, sm: 14 }} pb="lg">
                 <Stack gap="md">
-                  <Box style={{ width: "100%" }}>
+                  {/* <Box style={{ width: "100%" }}>
                     <Text
                       fz={11}
                       fw={600}
@@ -8019,7 +8019,7 @@ const Dashboard = () => {
                     <Text fz={12} fw={600} c="#64748B" style={{ lineHeight: 1.45 }}>
                       Leadership view · All regions · {salesLeadershipPeriodLabel}
                     </Text>
-                  </Box>
+                  </Box> */}
 
                   <SimpleGrid
                     cols={{ base: 1, xs: 2, sm: 2, md: 3, lg: 5 }}

@@ -58,8 +58,8 @@ const toTitle = (value: string) =>
     .join(" ");
 
 const getRepBarColor = (pct: number): string => {
-  if (pct > 105) return "#22C55E";
-  if (pct >= 90) return "#1E293B";
+  if (pct >= 80) return "#22C55E";
+  if (pct >= 60) return "#000080";
   return "#F59E0B";
 };
 
@@ -339,10 +339,10 @@ export default function BudgetVsActualDashboard() {
           bleed={false}
           leading={
             <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight:15 }}>
-              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+              {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Budget vs Actual
-              </Text>
-              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+              </Text> */}
+              <Text  c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08, fontFamily: "Geist", fontWeight: 550 }} mb={4}>
                 Budget vs Actual
               </Text>
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
@@ -615,7 +615,7 @@ export default function BudgetVsActualDashboard() {
                 <Box style={{ overflowX: "auto" }}>
                   <Box style={{ minWidth: isCompact ? 620 : undefined }}>
                     <Grid columns={24} mb={8}>
-                      <Grid.Col span={7}>
+                      <Grid.Col span={7} style={{ paddingLeft: 20 }}>
                         <Text fz={10} fw={700} c="#94A3B8" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Rep
                         </Text>
@@ -670,7 +670,7 @@ export default function BudgetVsActualDashboard() {
                             }}
                           >
                             <Grid columns={24} align="center">
-                              <Grid.Col span={7}>
+                              <Grid.Col span={7} style={{ paddingLeft: 20 }}>
                                 <Text fw={700} fz={12} c="#111827" lineClamp={1}>
                                   {row.sales_person}
                                 </Text>
@@ -753,8 +753,8 @@ export default function BudgetVsActualDashboard() {
                     </Stack>
 
                     <Divider my={10} size="sm" style={{ borderTop: "2px solid #111827" }} />
-                    <Grid columns={24} align="center">
-                      <Grid.Col span={7}>
+                    <Grid columns={24} align="center" style={{ paddingLeft: 20 }}>
+                      <Grid.Col span={7} >
                         <Text fw={800} fz={12} c="#111827">
                           Team Total
                         </Text>

@@ -38,6 +38,17 @@ const toNumber = (value: string | number | undefined | null): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const toPercentNumber = (value: string | number | undefined | null): number => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const match = value.match(/-?\d+(\.\d+)?/);
+    if (!match) return 0;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 function formatAmountRaw(value: string | number | undefined | null): string {
   if (value === undefined || value === null) return "0";
   if (typeof value === "string") return value;
@@ -164,7 +175,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     const days90Plus = toNumber(summary["days_90+"]);
     const current = Math.max(0, totalOutstanding - (days1_30 + days31_60 + days61_90 + days90Plus));
     const cards = [
-      { label: "CURRENT", amount: current, pct: (current / totalOutstanding) * 100 },
+      {
+        label: "OVERDUE",
+        amount: summary.total_overdue,
+        pct: toPercentNumber(summary.total_overdue_percentage),
+      },
       { label: "1-30 DAYS", amount: days1_30, pct: (days1_30 / totalOutstanding) * 100 },
       { label: "31-60 DAYS", amount: days31_60, pct: (days31_60 / totalOutstanding) * 100 },
       { label: "61-90 DAYS", amount: days61_90, pct: (days61_90 / totalOutstanding) * 100 },
@@ -214,10 +229,10 @@ export default function CustomerOutstandingVsOverdueDashboard() {
           bleed={false}
           leading={
             <Box style={{ minWidth: 0, paddingLeft: 10 }}>
-              <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
+              {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Outstanding / Overdue
-              </Text>
-              <Text fw={700} c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08 }} mb={4}>
+              </Text> */}
+              <Text  c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08, fontFamily: "Geist", fontWeight: 550 }} mb={4}>
                 Customer Outstanding vs Overdue
               </Text>
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
@@ -354,7 +369,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 {formatAmountRaw(card.amount)}
               </Text>
               <Text size="10px" fw={600} c="#94A3B8" mt={4} style={{ lineHeight: 1.35 }}>
-                {card.pct.toFixed(1)}% · {Number(card.invoiceCount).toLocaleString("en-IN")} Invoices
+                {toNumber(card.pct).toFixed(1)}% ·{" "}
+                {/* {Number(card.invoiceCount).toLocaleString("en-IN")} Invoices */}
               </Text>
               {card.label === "90+ DAYS" && card.pct > 0 ? (
                 <Text size="10px" fw={700} c="#DC2626" mt={2}>
