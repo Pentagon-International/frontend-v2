@@ -190,6 +190,7 @@ export const URL = {
     /** Overview + drilldown totals (dashboard card uses `summary`). */
     enquiryEnquiryConversion: "enquiry/enquiryconversion/",
     budgetSummary: "enquiry/budget-summary/",
+    budgetVsActual: "enquiry/budget-vs-actual/",
     customerNotVisited:
       "customer_master/customer-master/customers-not-visited/",
     lostCustomers: "dashboard/new-customer-shipment/get_lost_customers/",

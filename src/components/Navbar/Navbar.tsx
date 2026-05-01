@@ -276,6 +276,20 @@ const Navbar = ({
                     setIsAccountsOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Budget vs Actual"
+                  icon={IconChartLine}
+                  path="/dashboard/budget-vs-actual"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav

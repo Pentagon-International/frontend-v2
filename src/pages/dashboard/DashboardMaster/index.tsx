@@ -2114,95 +2114,18 @@ const Dashboard = () => {
   };
 
   const handleBudgetViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("budget");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values with fallback to user company
-      const companyName =
-        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-      setDetailedViewSelectedCompany(companyName);
-      setDetailedViewSelectedSalesperson(budgetSelectedSalesperson);
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(budgetDrillLevel);
-
-      let title = "Budget vs Actual - Overall";
-      let response: any;
-
-      if (budgetDrillLevel === 0) {
-        title = "Budget vs Actual - Overall";
-        const filterData: DashboardFilters = addSearchToFilters({
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 1) {
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        title = "Budget vs Actual - Salesperson Wise";
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 2) {
-        // Month wise view - show salesperson name
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        title = `Budget vs Actual - ${salespersonName} - Month Wise`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 3) {
-        // Specific month selected
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        const monthFormatted = budgetSelectedMonth
-          ? dayjs(budgetSelectedMonth + "-01").format("MMMM YYYY")
-          : "";
-        title = `Budget vs Actual - ${salespersonName} - ${monthFormatted}`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetSelectedMonth && {
-            start_month: budgetSelectedMonth,
-            end_month: budgetSelectedMonth,
-          }),
-          ...(!budgetSelectedMonth && {
-            ...(budgetStartMonth && { start_month: budgetStartMonth }),
-            ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      }
-
-      setDetailedViewTitle(title);
-
-      const tableData = convertBudgetResponseToTableData(
-        response,
-        budgetDrillLevel,
-        budgetType
-      );
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading budget detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/budget-vs-actual", {
+      state: {
+        company: companyName,
+        type: budgetType,
+        start_month: budgetStartMonth || undefined,
+        end_month: budgetEndMonth || undefined,
+        salesperson: searchSalesman || budgetSelectedSalesperson || null,
+        mode: null,
+      },
+    });
   };
 
   const handleEnquiryConversionViewAll = async (

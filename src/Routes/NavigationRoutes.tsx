@@ -192,6 +192,7 @@ import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/Subledge
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
+import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -212,6 +213,10 @@ const NavigationRoutes = () => {
         <Route
           path="/dashboard/customer-outstanding-vs-overdue"
           element={<CustomerOutstandingVsOverdueDashboard />}
+        />
+        <Route
+          path="/dashboard/budget-vs-actual"
+          element={<BudgetVsActualDashboard />}
         />
         <Route path="/road" element={<Road />} />
         <Route path="/air">

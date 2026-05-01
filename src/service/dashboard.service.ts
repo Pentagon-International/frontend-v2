@@ -89,13 +89,14 @@ export interface DashboardFilters {
   location?: string;
   salesman?: string;
   salesperson?: string;
+  mode?: string;
   year?: number;
   month?: number;
   date_from?: string;
   date_to?: string;
   start_month?: string;
   end_month?: string;
-  type?: "salesperson" | "non-salesperson";
+  type?: string;
   search?: string;
 }
 
@@ -1509,7 +1510,9 @@ export const getFilteredBudgetData = async (
     if (filters.type) payload.type = filters.type;
     if (filters.company) payload.company = filters.company;
     if (filters.location) payload.location = filters.location;
-    if (filters.salesman) payload.salesperson = filters.salesman;
+    if (filters.salesperson) payload.salesperson = filters.salesperson;
+    else if (filters.salesman) payload.salesperson = filters.salesman;
+    if (filters.mode) payload.mode = filters.mode;
     if (filters.year && filters.month) {
       payload.month = `${filters.year}-${filters.month.toString().padStart(2, "0")}`;
     }
@@ -1551,7 +1554,10 @@ export const getFilteredBudgetData = async (
     if (filters.search) payload.search = filters.search;
 
     console.log("Budget filter payload:", payload);
-    const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    const response = await postAPICall(
+      URL.dashboard.budgetVsActual || URL.dashboard.budgetSummary,
+      payload
+    );
     console.log("Filtered budget response:", response);
     return response as BudgetResponse;
   } catch (error) {
@@ -1563,6 +1569,14 @@ export const getFilteredBudgetData = async (
 export const calculateBudgetAggregatedData = (
   response: BudgetResponse
 ): BudgetAggregatedData => {
+  const summary = (response as any)?.summary;
+  if (summary && typeof summary === "object") {
+    return {
+      totalActualBudget: Number(summary.actual_ytd || 0),
+      totalSalesBudget: Number(summary.budget_ytd || 0),
+    };
+  }
+
   let totalActualBudget = 0;
   let totalSalesBudget = 0;
 

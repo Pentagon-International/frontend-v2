@@ -1,4 +1,4 @@
-import BudgetBarChart from "./BudgetBarChart";
+import BudgetVsActualCard from "./BudgetVsActualCard";
 import { BudgetAggregatedData } from "../../../service/dashboard.service";
 
 interface BudgetSectionProps {
@@ -14,6 +14,7 @@ interface BudgetSectionProps {
   budgetEndMonth: string;
   budgetType: "salesperson" | "non-salesperson";
   selectedYear: string | null;
+  yearOptions: { value: string; label: string }[];
   fromMonthOptions: { value: string; label: string }[];
   toMonthOptions: { value: string; label: string }[];
   setBudgetDrillLevel: (level: 0 | 1 | 2 | 3) => void;
@@ -34,8 +35,7 @@ interface BudgetSectionProps {
 }
 
 const BudgetSection = (props: BudgetSectionProps) => {
-  return <BudgetBarChart {...props} />;
+  return <BudgetVsActualCard {...props} />;
 };
 
 export default BudgetSection;
-
