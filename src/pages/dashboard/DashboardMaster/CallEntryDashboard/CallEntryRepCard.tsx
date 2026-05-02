@@ -35,7 +35,7 @@ export function CallEntryRepCard({
       <Group justify="space-between" mb={10} wrap="wrap" gap={8}>
         <Group gap={6}>
           <Text fw={700} fz={13} c="#0B1F3A">
-            Calls by Rep · Today
+            Calls by Rep
           </Text>
           <Text fz={10} fw={600} c="#A3B2C2">
             Target 25/rep

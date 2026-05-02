@@ -29,7 +29,7 @@ export function CallEntryKpiRow({ data }: Props) {
   const tiles: Tile[] = [
     {
       label: "TOTAL CALLS",
-      value: kpi?.total_calls ?? 0,
+      value: summary?.total_calls ?? 0,
       sub: `Target 150  · ${summary?.overdue_percentage ?? "0%"} open`,
       valueColor: "#0B1F3A",
     },
