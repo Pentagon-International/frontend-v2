@@ -115,6 +115,21 @@ export const demoEnquiryRows: EnquiryRow[] = [
     stageDotColor: enquiryConversionColors.status.negotiation.dot,
     probability: 75,
     valueLabel: "₹48.2 L",
+    drilldownEnquiry: {
+      enquiry_id: "ENQ-2604-0188",
+      customer_name: "Tata Steel Ltd.",
+      status: "NEGOTIATION",
+      origin_code_list: ["JNPT"],
+      destination_code_list: ["HAM"],
+      services: [
+        {
+          service: "FCL",
+          service_name: "FCL",
+          origin_code_read: "JNPT",
+          destination_code_read: "HAM",
+        },
+      ],
+    },
   },
   {
     id: "2",
@@ -128,6 +143,21 @@ export const demoEnquiryRows: EnquiryRow[] = [
     stageDotColor: enquiryConversionColors.status.quoted.dot,
     probability: 50,
     valueLabel: "₹36.5 L",
+    drilldownEnquiry: {
+      enquiry_id: "ENQ-2604-0177",
+      customer_name: "Marico Industries",
+      status: "QUOTE CREATED",
+      origin_code_list: ["BLR"],
+      destination_code_list: ["LHR"],
+      services: [
+        {
+          service: "AIR",
+          service_name: "AIR",
+          origin_code_read: "BLR",
+          destination_code_read: "LHR",
+        },
+      ],
+    },
   },
   {
     id: "3",
@@ -142,5 +172,20 @@ export const demoEnquiryRows: EnquiryRow[] = [
     stageDotColor: enquiryConversionColors.status.negotiation.dot,
     probability: 60,
     valueLabel: "₹29.4 L",
+    drilldownEnquiry: {
+      enquiry_id: "ENQ-2604-0169",
+      customer_name: "Hindalco Aluminium",
+      status: "NEGOTIATION",
+      origin_code_list: ["MAA"],
+      destination_code_list: ["SIN"],
+      services: [
+        {
+          service: "FCL",
+          service_name: "FCL",
+          origin_code_read: "MAA",
+          destination_code_read: "SIN",
+        },
+      ],
+    },
   },
 ];

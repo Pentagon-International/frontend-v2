@@ -14,10 +14,17 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { ERPListToolbar } from "../../../../components";
 import { MetricTrendCard } from "./MetricTrendCard";
-import { StageFunnelCard } from "./StageFunnelCard";
-import { ByModeValueCard } from "./ByModeValueCard";
-import { ConversionByRepCard } from "./ConversionByRepCard";
-import { TopActiveEnquiriesTable } from "./TopActiveEnquiriesTable";
+import { StageFunnelCard, type StageFunnelRow } from "./StageFunnelCard";
+import { ClickableByModeValueCard } from "./ClickableByModeValueCard";
+import type { ModeLegendRow } from "./ByModeValueCard";
+import { ConversionByModeDetails } from "./ConversionByModeDetails";
+import { ConversionByRepCard, type RepBarRow } from "./ConversionByRepCard";
+import { EnquiryConversionSendEmailModal } from "./EnquiryConversionSendEmailModal";
+import {
+  TopActiveEnquiriesTable,
+  type EnquiryRow,
+} from "./TopActiveEnquiriesTable";
+import { TopActiveEnquirySendEmailModal } from "./TopActiveEnquirySendEmailModal";
 import {
   EnquiryConversionFilters,
   type EnquiryConversionPageFilters,
@@ -27,13 +34,21 @@ import {
   buildStageFunnelRowsFromDashboard,
   buildModeCardFromDashboard,
   buildRepRowsFromDashboard,
-  meanRepBenchmarkPercent,
   buildTopEnquiryRowsFromDashboard,
   formatEnquiryConversionPageSubtitle,
 } from "./enquiryConversionDashboardMappers";
 import { useEnquiryConversionDashboard } from "./useEnquiryConversionDashboard";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import useAuthStore from "../../../../store/authStore";
+import {
+  EnquiryconversionSummarydetail,
+  type EnquiryConversionSummaryMetricLabel,
+} from "./EnquiryconversionSummarydetail";
+import { StageFunnelDetails } from "./StageFunnelDetails";
+import { ConversionByRepSummary } from "./ConversionByRepSummary";
+import { ConversionByRepCustomerwiseEnquiryDetails } from "./ConversionByRepCustomerwiseEnquiryDetails";
+import { ConversionByRepCustomerwiseEnquiryList } from "./ConversionByRepCustomerwiseEnquiryList";
+import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.service";
 
 const REP_PAGE_SIZE = 5;
 const ERP_FONT_SANS = "'Geist', sans-serif";
@@ -75,6 +90,28 @@ export default function EnquiryConversionPage() {
   });
 
   const [repPage, setRepPage] = useState(1);
+  const [detailMetric, setDetailMetric] =
+    useState<EnquiryConversionSummaryMetricLabel | null>(null);
+  const [funnelStageRow, setFunnelStageRow] = useState<StageFunnelRow | null>(
+    null
+  );
+  const [repSummarySalesperson, setRepSummarySalesperson] = useState<
+    string | null
+  >(null);
+  const [topActiveDetailEnquiry, setTopActiveDetailEnquiry] =
+    useState<EnquiryDrilldownEnquiry | null>(null);
+  const [modeDetailRow, setModeDetailRow] = useState<ModeLegendRow | null>(null);
+  const [modeCustomerList, setModeCustomerList] = useState<{
+    customerCode: string;
+    customerName: string;
+  } | null>(null);
+  const [repEmailRow, setRepEmailRow] = useState<RepBarRow | null>(null);
+  const [topEnquiryEmailRow, setTopEnquiryEmailRow] =
+    useState<EnquiryRow | null>(null);
+
+  useEffect(() => {
+    if (modeDetailRow === null) setModeCustomerList(null);
+  }, [modeDetailRow]);
 
   useEffect(() => {
     setRepPage(1);
@@ -112,10 +149,6 @@ export default function EnquiryConversionPage() {
     const start = (repPageClamped - 1) * REP_PAGE_SIZE;
     return repRowsAll.slice(start, start + REP_PAGE_SIZE);
   }, [repRowsAll, repPageClamped]);
-  const benchmark = useMemo(
-    () => meanRepBenchmarkPercent(repRowsAll),
-    [repRowsAll]
-  );
   const topRows = useMemo(
     () => buildTopEnquiryRowsFromDashboard(data),
     [data]
@@ -202,6 +235,9 @@ export default function EnquiryConversionPage() {
                   value={m.value}
                   trend={m.trend}
                   trendLabel={m.trendLabel}
+                  onClick={() =>
+                    setDetailMetric(m.label as EnquiryConversionSummaryMetricLabel)
+                  }
                 />
               ))}
             </SimpleGrid>
@@ -225,17 +261,19 @@ export default function EnquiryConversionPage() {
                     subtitle="Conversion at each stage"
                     rows={stageRows}
                     embeddedAboveModeSection
+                    onFunnelRowClick={(row) => setFunnelStageRow(row)}
                   />
                   <Box
                     style={{
                       borderTop: "1px solid #E9ECEF",
                     }}
                   >
-                    <ByModeValueCard
+                    <ClickableByModeValueCard
                       title="BY MODE"
                       segments={modeSegments}
                       rows={modeRows}
                       embeddedBelowFunnel
+                      onRowClick={(row) => setModeDetailRow(row)}
                     />
                   </Box>
                 </Box>
@@ -249,6 +287,10 @@ export default function EnquiryConversionPage() {
                       subtitle="Gained % · Gained/Total Enquiry"
                       // benchmarkPercent={benchmark}
                       rows={repRowsPage}
+                      onRepRowClick={(row) =>
+                        setRepSummarySalesperson(row.name)
+                      }
+                      onRepSendEmailClick={(row) => setRepEmailRow(row)}
                       pagination={
                         repTotalPages > 1
                           ? {
@@ -265,6 +307,10 @@ export default function EnquiryConversionPage() {
                       title="Top Active Enquiries"
                       subtitle="By expected value"
                       rows={topRows}
+                      onRowClick={(row) =>
+                        setTopActiveDetailEnquiry(row.drilldownEnquiry)
+                      }
+                      onSendEmailClick={(row) => setTopEnquiryEmailRow(row)}
                     />
                   </Box>
                 </Stack>
@@ -273,6 +319,69 @@ export default function EnquiryConversionPage() {
           </>
         )}
       </Stack>
+      <EnquiryconversionSummarydetail
+        opened={detailMetric !== null}
+        onClose={() => setDetailMetric(null)}
+        metric={detailMetric}
+        company={company}
+        filters={filters}
+      />
+      <StageFunnelDetails
+        opened={funnelStageRow !== null}
+        onClose={() => setFunnelStageRow(null)}
+        stageRow={funnelStageRow}
+        company={company}
+        filters={filters}
+        onRepRowClick={(name) => setRepSummarySalesperson(name)}
+      />
+      <ConversionByRepSummary
+        opened={repSummarySalesperson !== null}
+        onClose={() => setRepSummarySalesperson(null)}
+        salesperson={repSummarySalesperson}
+        company={company}
+        filters={filters}
+      />
+      <EnquiryConversionSendEmailModal
+        opened={repEmailRow !== null}
+        onClose={() => setRepEmailRow(null)}
+        row={repEmailRow}
+      />
+      <TopActiveEnquirySendEmailModal
+        opened={topEnquiryEmailRow !== null}
+        onClose={() => setTopEnquiryEmailRow(null)}
+        row={topEnquiryEmailRow}
+      />
+      <ConversionByModeDetails
+        opened={modeDetailRow !== null}
+        onClose={() => setModeDetailRow(null)}
+        modeRow={modeDetailRow}
+        company={company}
+        filters={filters}
+        onOpenCustomerEnquiryList={(p) => setModeCustomerList(p)}
+        onOpenEnquiryDetail={(enquiry) => setTopActiveDetailEnquiry(enquiry)}
+      />
+      <ConversionByRepCustomerwiseEnquiryList
+        opened={modeCustomerList !== null}
+        onClose={() => setModeCustomerList(null)}
+        salesperson={filters.salesperson?.trim() || null}
+        company={company}
+        filters={
+          modeCustomerList !== null && modeDetailRow
+            ? { ...filters, service: modeDetailRow.key }
+            : filters
+        }
+        customerCode={modeCustomerList?.customerCode ?? null}
+        customerName={modeCustomerList?.customerName ?? ""}
+      />
+      <ConversionByRepCustomerwiseEnquiryDetails
+        opened={topActiveDetailEnquiry !== null}
+        onClose={() => setTopActiveDetailEnquiry(null)}
+        enquiry={topActiveDetailEnquiry}
+        salesperson={filters.salesperson?.trim() || "All reps"}
+        customerName={
+          topActiveDetailEnquiry?.customer_name?.trim() ?? "—"
+        }
+      />
     </Box>
   );
 }

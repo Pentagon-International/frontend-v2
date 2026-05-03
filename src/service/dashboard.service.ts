@@ -470,14 +470,146 @@ export interface EnquiryConversionSalespersonRow {
   cc_mail?: unknown[];
 }
 
+/** Customer row from POST `enquiry/salesperson-statistics/` (rep drill-down). */
+export interface EnquiryConversionSalespersonStatisticsCustomerRow {
+  sno: number;
+  customer_code: string;
+  customer_name: string;
+  active: number;
+  gained: number;
+  lost: number;
+  quote_created: number;
+  total_enquiry: number;
+}
+
+export interface EnquiryConversionSalespersonStatisticsSummary {
+  total_customer_count: number;
+  total_active: number;
+  total_gain: number;
+  total_lost: number;
+  total_quote_created: number;
+}
+
+/** POST `enquiry/salesperson-statistics/` — customer-wise stats for one salesperson. */
+export interface EnquiryConversionSalespersonStatisticsResponse {
+  success: boolean;
+  message?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  company?: string;
+  salesperson?: string;
+  /** When provided by API, used to prefill enquiry conversion–style send-email modals. */
+  salesperson_email?: string;
+  cc_mail?: string | string[];
+  data?: EnquiryConversionSalespersonStatisticsCustomerRow[];
+  summary?: EnquiryConversionSalespersonStatisticsSummary;
+}
+
+/** Nested quotation / enquiry payloads when POST includes `customer_code`. */
+export interface EnquiryDrilldownQuotationCharge {
+  charge_name?: string;
+  unit?: string;
+  no_of_units?: number;
+  sell_per_unit?: string;
+  total_sell?: string;
+  currency?: string;
+}
+
+export interface EnquiryDrilldownQuotationService {
+  total_sell?: string;
+  quote_currency?: string;
+  valid_upto?: string;
+  charges?: EnquiryDrilldownQuotationCharge[];
+  service_details?: {
+    service?: string;
+    shipment_terms_code_read?: string;
+    shipment_terms_name?: string;
+    origin_code_read?: string;
+    destination_code_read?: string;
+    origin_name?: string;
+    destination_name?: string;
+    gross_weight?: number;
+    no_of_packages?: number;
+    commodity?: string | null;
+    fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+  };
+}
+
+export interface EnquiryDrilldownQuotation {
+  quotation_id?: string;
+  created_at?: string;
+  created_by?: string;
+  created_by_name?: string;
+  quotation_services?: EnquiryDrilldownQuotationService[];
+}
+
+export interface EnquiryDrilldownService {
+  service?: string;
+  service_name?: string;
+  trade?: string;
+  shipment_terms_code_read?: string;
+  shipment_terms_name?: string;
+  origin_code_read?: string;
+  destination_code_read?: string;
+  origin_name?: string;
+  destination_name?: string;
+  gross_weight?: string | number;
+  no_of_packages?: number;
+  commodity?: string | null;
+  fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+}
+
+export interface EnquiryDrilldownEnquiry {
+  id?: number;
+  enquiry_id: string;
+  customer_name?: string;
+  customer_address?: string;
+  enquiry_received_date?: string;
+  sales_person?: string;
+  sales_coordinator?: string;
+  status: string;
+  services?: EnquiryDrilldownService[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
+  origin_list?: string[];
+  destination_list?: string[];
+  quotations?: EnquiryDrilldownQuotation[];
+}
+
+export interface EnquiryConversionCustomerwiseCustomerRow
+  extends EnquiryConversionSalespersonStatisticsCustomerRow {
+  enquiries?: EnquiryDrilldownEnquiry[];
+}
+
+export interface EnquiryConversionCustomerwiseSummary {
+  total_enquiry_count?: number;
+}
+
+/** POST `enquiry/salesperson-statistics/` with `customer_code` — stats + enquiry list. */
+export interface EnquiryConversionCustomerwiseResponse {
+  success: boolean;
+  message?: string;
+  company?: string;
+  salesperson?: string;
+  data?: EnquiryConversionCustomerwiseCustomerRow[];
+  summary?: EnquiryConversionCustomerwiseSummary;
+}
+
 export interface EnquiryConversionTopEnquiryRow {
   sno: number;
   enquiry_id: string;
   customer_name: string;
+  /** Present when API returns account code for drilldown into customer-wise enquiries. */
+  customer_code?: string;
   origin_code: string;
   destination_code: string;
   service: string;
   status: string;
+  /** When API returns them — used for send-email prefill on Top Active Enquiries. */
+  sales_person?: string;
+  salesperson_email?: string;
+  cc_mail?: string | string[];
 }
 
 /** Full POST `enquiry/enquiryconversion/` response (dashboard overview). */
@@ -1281,6 +1413,70 @@ export const getEnquiryConversionDashboardData = async (params: {
     return response as EnquiryConversionDashboardResponse;
   } catch (error) {
     console.error("Error fetching enquiry conversion dashboard data:", error);
+    throw error;
+  }
+};
+
+/**
+ * POST `enquiry/salesperson-statistics/` — customer-wise breakdown for one salesperson.
+ */
+export const getEnquiryConversionSalespersonStatistics = async (params: {
+  company: string;
+  salesperson: string;
+  date_from: string;
+  date_to: string;
+}): Promise<EnquiryConversionSalespersonStatisticsResponse> => {
+  try {
+    const response = await postAPICall(
+      URL.dashboard.enquiryConversion,
+      {
+        company: params.company,
+        salesperson: params.salesperson.trim(),
+        date_from: params.date_from,
+        date_to: params.date_to,
+      },
+      API_HEADER
+    );
+    return response as EnquiryConversionSalespersonStatisticsResponse;
+  } catch (error) {
+    console.error("Error fetching enquiry conversion salesperson statistics:", error);
+    throw error;
+  }
+};
+
+/**
+ * POST `enquiry/salesperson-statistics/` — same endpoint with `customer_code` (+ optional dashboard filters).
+ */
+export const getEnquiryConversionCustomerwiseDetail = async (params: {
+  company: string;
+  salesperson: string;
+  date_from: string;
+  date_to: string;
+  customer_code: string;
+  type?: string | null;
+  service?: string | null;
+}): Promise<EnquiryConversionCustomerwiseResponse> => {
+  try {
+    const body: Record<string, string> = {
+      company: params.company,
+      salesperson: params.salesperson.trim(),
+      date_from: params.date_from,
+      date_to: params.date_to,
+      customer_code: params.customer_code.trim(),
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
+    const svc = params.service?.trim();
+    if (svc) body.service = svc;
+
+    const response = await postAPICall(
+      URL.dashboard.enquiryConversion,
+      body,
+      API_HEADER
+    );
+    return response as EnquiryConversionCustomerwiseResponse;
+  } catch (error) {
+    console.error("Error fetching enquiry conversion customer-wise detail:", error);
     throw error;
   }
 };

@@ -20,12 +20,15 @@ export function StageFunnelCard({
   subtitle,
   rows,
   embeddedAboveModeSection,
+  onFunnelRowClick,
 }: {
   title: string;
   subtitle?: string;
   rows: StageFunnelRow[];
   /** Tighter bottom padding when stacked with By Mode inside one card */
   embeddedAboveModeSection?: boolean;
+  /** When set, each funnel row opens the stage drill-down (e.g. right drawer). */
+  onFunnelRowClick?: (row: StageFunnelRow) => void;
 }) {
   const pb = embeddedAboveModeSection ? 14 : 24;
   const headerMb = embeddedAboveModeSection ? 18 : 24;
@@ -55,7 +58,24 @@ export function StageFunnelCard({
         ) : (
           <Fragment>
             {rows.map((row) => (
-              <Group key={row.stage} wrap="nowrap" align="center" gap="md">
+              <Box
+                key={row.stage}
+                component={onFunnelRowClick ? "button" : "div"}
+                type={onFunnelRowClick ? "button" : undefined}
+                onClick={onFunnelRowClick ? () => onFunnelRowClick(row) : undefined}
+                style={{
+                  width: "100%",
+                  margin: 0,
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: onFunnelRowClick ? "pointer" : undefined,
+                  textAlign: "inherit",
+                  font: "inherit",
+                  color: "inherit",
+                }}
+              >
+              <Group wrap="nowrap" align="center" gap="md">
                 <Box
                   style={{
                     flex: "0 0 100px",
@@ -133,6 +153,7 @@ export function StageFunnelCard({
                   </Text>
                 </Box>
               </Group>
+              </Box>
             ))}
           </Fragment>
         )}

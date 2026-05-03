@@ -1,6 +1,8 @@
 import type {
   EnquiryConversionDashboardResponse,
   EnquiryConversionApiSummaryStatusChange,
+  EnquiryConversionTopEnquiryRow,
+  EnquiryDrilldownEnquiry,
 } from "../../../../service/dashboard.service";
 import { extractNumericValue } from "../../../../service/dashboard.service";
 import type { FunnelSegment } from "./SegmentedFunnelBar";
@@ -307,6 +309,12 @@ export function buildRepRowsFromDashboard(
       winsLabel: `${gained}/${total}`,
       barPercent: ratePct,
       barColor: colorFromPercent(ratePct),
+      salespersonEmail: item.salesperson_email,
+      ccMail: item.cc_mail as string | string[] | undefined,
+      active: extractNumericValue(item.active),
+      gained: extractNumericValue(item.gained),
+      lost: extractNumericValue(item.lost),
+      quoteCreated: extractNumericValue(item.quote_created),
     };
   });
 }
@@ -316,6 +324,28 @@ export function meanRepBenchmarkPercent(repRows: RepBarRow[]): number | undefine
   if (repRows.length === 0) return undefined;
   const sum = repRows.reduce((s, r) => s + r.barPercent, 0);
   return Math.round((sum / repRows.length) * 10) / 10;
+}
+
+/** Map dashboard `top_enquiries` row to drilldown shape for the details drawer. */
+export function buildDrilldownFromTopEnquiryRow(
+  e: EnquiryConversionTopEnquiryRow
+): EnquiryDrilldownEnquiry {
+  return {
+    enquiry_id: e.enquiry_id,
+    customer_name: e.customer_name,
+    status: e.status,
+    sales_person: e.sales_person,
+    origin_code_list: e.origin_code ? [e.origin_code] : undefined,
+    destination_code_list: e.destination_code ? [e.destination_code] : undefined,
+    services: [
+      {
+        service: e.service,
+        service_name: e.service,
+        origin_code_read: e.origin_code,
+        destination_code_read: e.destination_code,
+      },
+    ],
+  };
 }
 
 export function buildTopEnquiryRowsFromDashboard(
@@ -339,6 +369,10 @@ export function buildTopEnquiryRowsFromDashboard(
       stageDotColor: stage.dotColor,
       probability: null,
       valueLabel: "—",
+      drilldownEnquiry: buildDrilldownFromTopEnquiryRow(e),
+      salespersonEmail: e.salesperson_email,
+      ccMail: e.cc_mail as string | string[] | undefined,
+      salespersonName: e.sales_person?.trim(),
     };
   });
 }

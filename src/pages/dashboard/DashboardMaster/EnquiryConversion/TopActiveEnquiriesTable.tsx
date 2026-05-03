@@ -1,4 +1,14 @@
-import { Box, Table, Text, Badge, Group, Progress } from "@mantine/core";
+import {
+  ActionIcon,
+  Box,
+  Table,
+  Text,
+  Badge,
+  Group,
+  Tooltip,
+} from "@mantine/core";
+import { IconSend } from "@tabler/icons-react";
+import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.service";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 
 export type EnquiryRow = {
@@ -15,16 +25,26 @@ export type EnquiryRow = {
   /** When null/undefined, PROB. shows — */
   probability?: number | null;
   valueLabel: string;
+  /** Payload for the customer-wise enquiry details drawer. */
+  drilldownEnquiry: EnquiryDrilldownEnquiry;
+  /** From `top_enquiries` API when present — send-email prefill. */
+  salespersonEmail?: string;
+  ccMail?: string | string[];
+  salespersonName?: string;
 };
 
 export function TopActiveEnquiriesTable({
   title,
   subtitle,
   rows,
+  onRowClick,
+  onSendEmailClick,
 }: {
   title: string;
   subtitle?: string;
   rows: EnquiryRow[];
+  onRowClick?: (row: EnquiryRow) => void;
+  onSendEmailClick?: (row: EnquiryRow) => void;
 }) {
   return (
     <Box
@@ -53,21 +73,34 @@ export function TopActiveEnquiriesTable({
         <Table verticalSpacing="md" horizontalSpacing="md">
           <Table.Thead>
             <Table.Tr>
-              {["CUSTOMER", "LANE", "MODE", "STAGE",].map(
-                (h) => (
-                  <Table.Th key={h} style={{ borderBottom: `1px solid ${enquiryConversionColors.panelBorder}` }}>
-                    <Text size="11px" fw={600} c={enquiryConversionColors.subHeading} tt="uppercase" lts={0.8}>
-                      {h}
-                    </Text>
-                  </Table.Th>
-                )
-              )}
+              {[
+                ...["CUSTOMER", "LANE", "MODE", "STAGE"],
+                ...(onSendEmailClick ? (["SEND EMAIL"] as const) : []),
+              ].map((h) => (
+                <Table.Th
+                  key={h}
+                  style={{
+                    borderBottom: `1px solid ${enquiryConversionColors.panelBorder}`,
+                  }}
+                  ta={h === "SEND EMAIL" ? "center" : "left"}
+                >
+                  <Text
+                    size="11px"
+                    fw={600}
+                    c={enquiryConversionColors.subHeading}
+                    tt="uppercase"
+                    lts={0.8}
+                  >
+                    {h}
+                  </Text>
+                </Table.Th>
+              ))}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {rows.length === 0 ? (
               <Table.Tr>
-                <Table.Td colSpan={6}>
+                <Table.Td colSpan={onSendEmailClick ? 5 : 4}>
                   <Text size="sm" c={enquiryConversionColors.subHeading} py={12}>
                     No enquiries for this filter.
                   </Text>
@@ -75,7 +108,30 @@ export function TopActiveEnquiriesTable({
               </Table.Tr>
             ) : (
               rows.map((r) => (
-                <Table.Tr key={r.id}>
+                <Table.Tr
+                  key={r.id}
+                  onClick={onRowClick ? () => onRowClick(r) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (ev) => {
+                          if (ev.key === "Enter" || ev.key === " ") {
+                            ev.preventDefault();
+                            onRowClick(r);
+                          }
+                        }
+                      : undefined
+                  }
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? "button" : undefined}
+                  style={{
+                    cursor: onRowClick ? "pointer" : undefined,
+                  }}
+                  aria-label={
+                    onRowClick
+                      ? `Open details for enquiry ${r.enquiryCode}`
+                      : undefined
+                  }
+                >
                   <Table.Td style={{ minWidth: 180 }}>
                     <Text fw={700} size="sm" c={enquiryConversionColors.heading}>
                       {r.customer}
@@ -139,6 +195,25 @@ export function TopActiveEnquiriesTable({
                       </Text>
                     </Box>
                   </Table.Td>
+                  {onSendEmailClick ? (
+                    <Table.Td
+                      ta="center"
+                      style={{ width: 100, verticalAlign: "middle" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Tooltip label="Send Email" position="top" withArrow>
+                        <ActionIcon
+                          variant="light"
+                          color="#105476"
+                          size="md"
+                          aria-label={`Send email for enquiry ${r.enquiryCode}`}
+                          onClick={() => onSendEmailClick(r)}
+                        >
+                          <IconSend size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Table.Td>
+                  ) : null}
                   {/* <Table.Td style={{ minWidth: 100 }}>
                     <Group gap={8} wrap="nowrap">
                       <Box style={{ flex: 1, height: 4, background: "#F1F5F9", borderRadius: 2 }}>

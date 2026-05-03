@@ -9,17 +9,29 @@ export function MetricTrendCard({
   value,
   trend,
   trendLabel,
+  onClick,
 }: {
   label: string;
   value: string;
   trend?: Trend;
   trendLabel?: string;
+  onClick?: () => void;
 }) {
   const trendColor =
     trend === "up" ? "#22C55E" : trend === "down" ? "#EF4444" : enquiryConversionColors.subHeading;
 
   return (
     <Box
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      tabIndex={onClick ? 0 : undefined}
+      role={onClick ? "button" : undefined}
       style={{
         background: enquiryConversionColors.panelBg,
         border: `1px solid ${enquiryConversionColors.panelBorder}`,
@@ -29,6 +41,8 @@ export function MetricTrendCard({
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-start",
+        cursor: onClick ? "pointer" : undefined,
+        outline: "none",
         // minHeight: 120,
       }}
     >
