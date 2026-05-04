@@ -9,9 +9,8 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
 } from "@mantine/core";
-import { IconChevronLeft, IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { ERPListToolbar } from "../../../components";
@@ -49,20 +48,50 @@ const toPercentNumber = (value: string | number | undefined | null): number => {
   return 0;
 };
 
-function formatAmountRaw(value: string | number | undefined | null): string {
-  if (value === undefined || value === null) return "0";
-  if (typeof value === "string") return value;
-  return String(value);
+/** Indian-style digit grouping (thousands, lakhs, crores) for whole amounts. */
+function formatInrInteger(value: string | number | undefined | null): string {
+  return Math.round(toNumber(value)).toLocaleString("en-IN");
 }
 
 /** Top accent per aging bucket — matches ERP reference (green → amber → orange → deep orange → red). */
 const BUCKET_TOP_COLORS = ["#22C55E", "#F59E0B", "#FB923C", "#EA580C", "#DC2626"] as const;
 
+/** Summary-card → table column (90+ has no table column — card click is inert). */
+type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90";
+
+function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
+  switch (label) {
+    case "OVERDUE":
+      return "OVERDUE";
+    case "1-30 DAYS":
+      return "1-30";
+    case "31-60 DAYS":
+      return "31-60";
+    case "61-90 DAYS":
+      return "61-90";
+    default:
+      return null;
+  }
+}
+
+function rowBucketNumeric(row: CustomerOutstandingVsOverdueItem, bucket: ColumnSortBucket): number {
+  switch (bucket) {
+    case "OVERDUE":
+      return toNumber(row.overdue);
+    case "1-30":
+      return toNumber(row.days_1_30);
+    case "31-60":
+      return toNumber(row.days_31_60);
+    case "61-90":
+      return toNumber(row.days_61_plus);
+  }
+}
+
 function splitInvoicesByPct(openInvoices: number, pcts: number[]): number[] {
   if (openInvoices <= 0 || pcts.length === 0) return pcts.map(() => 0);
   const raw = pcts.map((p) => (openInvoices * p) / 100);
   const floored = raw.map((r) => Math.floor(r));
-  let rem = openInvoices - floored.reduce((a, b) => a + b, 0);
+  const rem = openInvoices - floored.reduce((a, b) => a + b, 0);
   const order = raw
     .map((r, i) => ({ i, frac: r - Math.floor(r) }))
     .sort((a, b) => b.frac - a.frac);
@@ -92,8 +121,27 @@ function riskPillStyle(risk: string | undefined): { bg: string; fg: string; bord
 function formatAmountCell(value: string | number | undefined | null): string {
   if (value === undefined || value === null || value === "") return "—";
   if (toNumber(value) === 0) return "—";
-  return formatAmountRaw(value);
+  return formatInrInteger(value);
 }
+
+const hdr = {
+  fontSize: 10,
+  fontWeight: 700,
+  color: "#94A3B8",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase" as const,
+  paddingTop: 12,
+  paddingBottom: 12,
+};
+
+/** Fixed layout: narrow customer column; numeric columns sized for Indian-grouped amounts (sums to 100%). */
+const col = {
+  customer: { width: "20%", minWidth: 100, maxWidth: 190 } as const,
+  outstanding: { width: "14%", minWidth: 88 } as const,
+  overdue: { width: "14%", minWidth: 88 } as const,
+  aging: { width: "11%", minWidth: 76 } as const,
+  risk: { width: "9%", minWidth: 62 } as const,
+};
 
 export default function CustomerOutstandingVsOverdueDashboard() {
   const location = useLocation();
@@ -114,6 +162,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<CustomerOutstandingVsOverdueResponse | null>(null);
+  /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
+  const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -142,7 +192,16 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   }, [fetchData]);
 
   const summary = response?.summary;
-  const rows = response?.data || [];
+  const rows = useMemo(() => response?.data || [], [response]);
+  const displayRows = useMemo(() => {
+    if (!activeSortBucket) return rows;
+    return [...rows]
+      .filter((r) => rowBucketNumeric(r, activeSortBucket) > 0)
+      .sort(
+        (a, b) =>
+          rowBucketNumeric(b, activeSortBucket) - rowBucketNumeric(a, activeSortBucket)
+      );
+  }, [rows, activeSortBucket]);
   const total = response?.total || 0;
   const currentPage = Math.floor(index / PAGE_SIZE) + 1;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -173,11 +232,10 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     const days31_60 = toNumber(summary.days_31_60);
     const days61_90 = toNumber(summary.days_61_90);
     const days90Plus = toNumber(summary["days_90+"]);
-    const current = Math.max(0, totalOutstanding - (days1_30 + days31_60 + days61_90 + days90Plus));
     const cards = [
       {
         label: "OVERDUE",
-        amount: summary.total_overdue,
+        amount: toNumber(summary.total_overdue),
         pct: toPercentNumber(summary.total_overdue_percentage),
       },
       { label: "1-30 DAYS", amount: days1_30, pct: (days1_30 / totalOutstanding) * 100 },
@@ -193,9 +251,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     return cards.map((c, i) => ({ ...c, invoiceCount: invoiceSplits[i] ?? 0 }));
   }, [summary]);
 
-  const handleApplyFilters = () => {
-    setIndex(0);
-    void fetchData();
+  const handleBucketCardClick = (label: string) => {
+    if (label === "90+ DAYS") return;
+    const bucket = summaryLabelToSortBucket(label);
+    if (!bucket) return;
+    setActiveSortBucket((prev) => (prev === bucket ? null : bucket));
   };
 
   const selectInputStyles = {
@@ -236,7 +296,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 Customer Outstanding vs Overdue
               </Text>
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
-                Total AR {formatAmountRaw(summary?.total_outstanding)} ·{" "}
+                Total AR {formatInrInteger(summary?.total_outstanding)} ·{" "}
                 {toNumber(summary?.open_invoices).toLocaleString("en-IN")} open invoices ·{" "}
                 {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
               </Text>
@@ -348,37 +408,59 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         /> */}
 
         <Group gap={8} wrap="nowrap" style={{ overflowX: "auto", paddingBottom: 2, paddingLeft: 10, paddingRight: 10 }}>
-          {bucketCards.map((card, idx) => (
-            <Box
-              key={card.label}
-              style={{
-                minWidth: isMobile ? 160 : 180,
-                flex: "1 1 180px",
-                borderRadius: 8,
-                border: "1px solid #E9ECEF",
-                background: "#FFFFFF",
-                padding: "10px 12px",
-                boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
-                borderTop: `3px solid ${BUCKET_TOP_COLORS[idx] ?? "#94A3B8"}`,
-              }}
-            >
-              <Text size="10px" fw={700} c="#64748B" tt="uppercase" style={{ letterSpacing: "0.06em" }}>
-                {card.label}
-              </Text>
-              <Text mt={4} fw={800} c="#0B1F3A" fz={isMobile ? 18 : 20} style={{ lineHeight: 1.15 }}>
-                {formatAmountRaw(card.amount)}
-              </Text>
-              <Text size="10px" fw={600} c="#94A3B8" mt={4} style={{ lineHeight: 1.35 }}>
-                {toNumber(card.pct).toFixed(1)}% ·{" "}
-                {/* {Number(card.invoiceCount).toLocaleString("en-IN")} Invoices */}
-              </Text>
-              {card.label === "90+ DAYS" && card.pct > 0 ? (
-                <Text size="10px" fw={700} c="#DC2626" mt={2}>
-                  High risk
+          {bucketCards.map((card, idx) => {
+            const sortBucket = summaryLabelToSortBucket(card.label);
+            const isDummyCard = card.label === "90+ DAYS";
+            const isActive = sortBucket !== null && activeSortBucket === sortBucket;
+            return (
+              <Box
+                key={card.label}
+                role={isDummyCard ? undefined : "button"}
+                tabIndex={isDummyCard ? undefined : 0}
+                onClick={() => handleBucketCardClick(card.label)}
+                onKeyDown={(e) => {
+                  if (isDummyCard) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleBucketCardClick(card.label);
+                  }
+                }}
+                style={{
+                  minWidth: isMobile ? 160 : 180,
+                  flex: "1 1 180px",
+                  borderRadius: 8,
+                  border: isActive ? "2px solid #153F72" : "1px solid #E9ECEF",
+                  background: "#FFFFFF",
+                  padding: "10px 12px",
+                  boxShadow: isActive
+                    ? "0 2px 8px rgba(21, 63, 114, 0.12)"
+                    : "0 1px 2px rgba(16, 24, 40, 0.04)",
+                  borderTop: `3px solid ${BUCKET_TOP_COLORS[idx] ?? "#94A3B8"}`,
+                  cursor: isDummyCard ? "default" : "pointer",
+                  outline: "none",
+                }}
+              >
+                <Text size="10px" fw={700} c="#64748B" tt="uppercase" style={{ letterSpacing: "0.06em" }}>
+                  {card.label}
                 </Text>
-              ) : null}
-            </Box>
-          ))}
+                <Text mt={4} fw={800} c="#0B1F3A" fz={isMobile ? 18 : 20} style={{ lineHeight: 1.15 }}>
+                  {formatInrInteger(card.amount)}
+                </Text>
+                <Text size="10px" fw={600} c="#94A3B8" mt={4} style={{ lineHeight: 1.35 }}>
+                  {toNumber(card.pct).toLocaleString("en-IN", {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}
+                  %
+                </Text>
+                {card.label === "90+ DAYS" && card.pct > 0 ? (
+                  <Text size="10px" fw={700} c="#DC2626" mt={2}>
+                    High risk
+                  </Text>
+                ) : null}
+              </Box>
+            );
+          })}
         </Group>
 
         {error ? (
@@ -405,105 +487,30 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               highlightOnHover
               verticalSpacing={isMobile ? "xs" : "sm"}
               horizontalSpacing={isMobile ? "xs" : "sm"}
-              miw={isMobile ? 720 : 940}
+              miw={isMobile ? 640 : 820}
+              style={{ tableLayout: "fixed", width: "100%" }}
             >
               <Table.Thead>
                 <Table.Tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E9ECEF" }}>
-                  <Table.Th
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
+                  <Table.Th style={{ ...hdr, ...col.customer, verticalAlign: "middle" }}>
                     Customer
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
+                  <Table.Th ta="right" style={{ ...hdr, ...col.outstanding, verticalAlign: "middle" }}>
                     Outstanding
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
-                    Current
+                  <Table.Th ta="right" style={{ ...hdr, ...col.overdue, verticalAlign: "middle" }}>
+                    Overdue
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
+                  <Table.Th ta="right" style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}>
                     1-30
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
+                  <Table.Th ta="right" style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}>
                     31-60
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
-                    60+
+                  <Table.Th ta="right" style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}>
+                    61-90
                   </Table.Th>
-                  <Table.Th
-                    ta="right"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: "#94A3B8",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      paddingTop: 12,
-                      paddingBottom: 12,
-                    }}
-                  >
+                  <Table.Th ta="right" style={{ ...hdr, ...col.risk, verticalAlign: "middle" }}>
                     Risk
                   </Table.Th>
                 </Table.Tr>
@@ -525,16 +532,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                       </Text>
                     </Table.Td>
                   </Table.Tr>
+                ) : displayRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Text ta="center" py="sm" c="#94A3B8">
+                        No customers with an amount in this bucket on this page.
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
                 ) : (
-                  rows.map((row: CustomerOutstandingVsOverdueItem) => {
-                    const outstanding = toNumber(row.outstanding);
-                    const overdue1_30 = toNumber(row.days_1_30);
-                    const overdue31_60 = toNumber(row.days_31_60);
+                  displayRows.map((row: CustomerOutstandingVsOverdueItem) => {
                     const overdue61Plus = toNumber(row.days_61_plus);
-                    const current = Math.max(
-                      0,
-                      outstanding - (overdue1_30 + overdue31_60 + overdue61Plus)
-                    );
                     const riskUpper = String(row.risk || "LOW").toUpperCase();
                     const highlight60Plus =
                       overdue61Plus > 0 && (riskUpper === "HIGH" || riskUpper === "MEDIUM");
@@ -544,13 +552,13 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         key={`${row.customer_code}-${row.sno}`}
                         style={{ borderBottom: "1px solid #E9ECEF" }}
                       >
-                        <Table.Td>
-                          <Group gap={8} align="flex-start" wrap="wrap">
-                            <Stack gap={3} style={{ minWidth: 0, flex: "1 1 140px" }}>
-                              <Text fw={700} fz={12} c="#0F172A" lineClamp={2}>
+                        <Table.Td style={{ ...col.customer, verticalAlign: "top" }}>
+                          <Group gap={6} align="flex-start" wrap="wrap">
+                            <Stack gap={3} style={{ minWidth: 0, flex: "1 1 0", maxWidth: "100%" }}>
+                              <Text fw={700} fz={12} c="#0F172A" lineClamp={2} style={{ wordBreak: "break-word" }}>
                                 {row.customer_name}
                               </Text>
-                              <Text fz={10} c="#64748B" lineClamp={1}>
+                              <Text fz={10} c="#64748B" lineClamp={1} style={{ wordBreak: "break-word" }}>
                                 {row.credit_display || "—"}
                               </Text>
                             </Stack>
@@ -579,32 +587,37 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             </Group>
                           </Group>
                         </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={12} c="#0F172A">
-                            {formatAmountRaw(row.outstanding)}
+                        <Table.Td ta="right" style={{ ...col.outstanding, whiteSpace: "nowrap" }}>
+                          <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {formatInrInteger(row.outstanding)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={12} c="#0F172A">
-                            {formatAmountCell(current)}
+                        <Table.Td ta="right" style={{ ...col.overdue, whiteSpace: "nowrap" }}>
+                          <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {formatAmountCell(row.overdue)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={12} c="#0F172A">
+                        <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                          <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
                             {formatAmountCell(row.days_1_30)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={12} c="#0F172A">
+                        <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                          <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
                             {formatAmountCell(row.days_31_60)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={12} c={highlight60Plus ? "#DC2626" : "#0F172A"}>
+                        <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                          <Text
+                            fw={700}
+                            fz={12}
+                            c={highlight60Plus ? "#DC2626" : "#0F172A"}
+                            style={{ fontVariantNumeric: "tabular-nums" }}
+                          >
                             {formatAmountCell(row.days_61_plus)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right">
+                        <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>
                           <Box
                             style={{
                               display: "inline-block",
@@ -633,7 +646,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
 
         <Group justify="space-between" style={{ paddingLeft: 10, paddingRight: 10 }}>
           <Text fz={11} c="#7B8DA5" fw={600}>
-            Showing {Math.min(total, index + 1)}-{Math.min(total, index + PAGE_SIZE)} of {total}
+            Showing {Math.min(total, index + 1).toLocaleString("en-IN")}-
+            {Math.min(total, index + PAGE_SIZE).toLocaleString("en-IN")} of{" "}
+            {total.toLocaleString("en-IN")}
           </Text>
           <Group gap={6}>
             <Button
