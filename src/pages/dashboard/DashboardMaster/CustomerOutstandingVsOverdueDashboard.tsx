@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Alert,
   Box,
   Button,
@@ -9,8 +10,9 @@ import {
   Stack,
   Table,
   Text,
+  Tooltip,
 } from "@mantine/core";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { ERPListToolbar } from "../../../components";
@@ -20,6 +22,7 @@ import {
   type CustomerOutstandingVsOverdueItem,
   type CustomerOutstandingVsOverdueResponse,
 } from "../../../service/dashboard.service";
+import { CustomerOutstandingSendEmailModal } from "./CustomerOutstandingSendEmailModal";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
 const PAGE_SIZE = 15;
@@ -134,13 +137,14 @@ const hdr = {
   paddingBottom: 12,
 };
 
-/** Fixed layout: narrow customer column; numeric columns sized for Indian-grouped amounts (sums to 100%). */
+/** Fixed layout: send icon; customer; numeric columns (widths sum to 100%). */
 const col = {
-  customer: { width: "20%", minWidth: 100, maxWidth: 190 } as const,
-  outstanding: { width: "14%", minWidth: 88 } as const,
-  overdue: { width: "14%", minWidth: 88 } as const,
-  aging: { width: "11%", minWidth: 76 } as const,
-  risk: { width: "9%", minWidth: 62 } as const,
+  send: { width: "4%", minWidth: 44, maxWidth: 52 } as const,
+  customer: { width: "23%", minWidth: 88, maxWidth: 200 } as const,
+  outstanding: { width: "12.5%", minWidth: 72 } as const,
+  overdue: { width: "12.5%", minWidth: 72 } as const,
+  aging: { width: "9%", minWidth: 60 } as const,
+  risk: { width: "12%", minWidth: 56 } as const,
 };
 
 export default function CustomerOutstandingVsOverdueDashboard() {
@@ -164,6 +168,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const [response, setResponse] = useState<CustomerOutstandingVsOverdueResponse | null>(null);
   /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
   const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
+  const [emailRow, setEmailRow] = useState<CustomerOutstandingVsOverdueItem | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -487,11 +492,24 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               highlightOnHover
               verticalSpacing={isMobile ? "xs" : "sm"}
               horizontalSpacing={isMobile ? "xs" : "sm"}
-              miw={isMobile ? 640 : 820}
+              miw={isMobile ? 720 : 920}
               style={{ tableLayout: "fixed", width: "100%" }}
             >
               <Table.Thead>
                 <Table.Tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E9ECEF" }}>
+                  <Table.Th
+                    ta="center"
+                    style={{ ...hdr, ...col.send, verticalAlign: "middle", paddingInline: 4 }}
+                  >
+                    <Text
+                      component="span"
+                      style={{ fontSize: 9, letterSpacing: "0.04em", lineHeight: 1.2 }}
+                    >
+                      SEND
+                      <br />
+                      EMAIL
+                    </Text>
+                  </Table.Th>
                   <Table.Th style={{ ...hdr, ...col.customer, verticalAlign: "middle" }}>
                     Customer
                   </Table.Th>
@@ -510,6 +528,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   <Table.Th ta="right" style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}>
                     61-90
                   </Table.Th>
+                  <Table.Th ta="right" style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}>
+                    90+
+                  </Table.Th>
                   <Table.Th ta="right" style={{ ...hdr, ...col.risk, verticalAlign: "middle" }}>
                     Risk
                   </Table.Th>
@@ -518,7 +539,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               <Table.Tbody>
                 {isLoading && !response ? (
                   <Table.Tr>
-                    <Table.Td colSpan={7}>
+                    <Table.Td colSpan={9}>
                       <Group justify="center" py="md">
                         <Loader size="sm" color="#153F72" />
                       </Group>
@@ -526,7 +547,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : rows.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={7}>
+                    <Table.Td colSpan={9}>
                       <Text ta="center" py="sm" c="#94A3B8">
                         No records found
                       </Text>
@@ -534,7 +555,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : displayRows.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={7}>
+                    <Table.Td colSpan={9}>
                       <Text ta="center" py="sm" c="#94A3B8">
                         No customers with an amount in this bucket on this page.
                       </Text>
@@ -552,6 +573,22 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         key={`${row.customer_code}-${row.sno}`}
                         style={{ borderBottom: "1px solid #E9ECEF" }}
                       >
+                        <Table.Td
+                          ta="center"
+                          style={{ ...col.send, verticalAlign: "middle", paddingInline: 4 }}
+                        >
+                          <Tooltip label="Send Email" position="top" withArrow>
+                            <ActionIcon
+                              variant="light"
+                              color="#105476"
+                              size="sm"
+                              aria-label={`Send outstanding email for ${row.customer_name}`}
+                              onClick={() => setEmailRow(row)}
+                            >
+                              <IconSend size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Table.Td>
                         <Table.Td style={{ ...col.customer, verticalAlign: "top" }}>
                           <Group gap={6} align="flex-start" wrap="wrap">
                             <Stack gap={3} style={{ minWidth: 0, flex: "1 1 0", maxWidth: "100%" }}>
@@ -617,6 +654,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             {formatAmountCell(row.days_61_plus)}
                           </Text>
                         </Table.Td>
+                        <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                          <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {formatAmountCell(row.days_90_plus)}
+                          </Text>
+                        </Table.Td>
                         <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>
                           <Box
                             style={{
@@ -675,6 +717,14 @@ export default function CustomerOutstandingVsOverdueDashboard() {
           </Group>
         </Group>
       </Stack>
+
+      <CustomerOutstandingSendEmailModal
+        opened={!!emailRow}
+        onClose={() => setEmailRow(null)}
+        row={emailRow}
+        companyName={company}
+        asOf={response?.as_of}
+      />
     </Box>
   );
 }
