@@ -624,6 +624,10 @@ export interface EnquiryConversionDashboardResponse {
   summary?: EnquiryConversionApiSummary;
   service?: Array<{ service: string; count: number; percentage: string }>;
   top_enquiries?: EnquiryConversionTopEnquiryRow[];
+  /** Customer-wise winners list used by mode drilldown tables. */
+  top_gained?: Array<Record<string, unknown>>;
+  /** Route/lane-wise winners list used by mode drilldown top lanes. */
+  top_gained_roted?: Array<Record<string, unknown> | string>;
   next_drilldown?: unknown;
 }
 
@@ -1387,9 +1391,10 @@ export const getEnquiryConversionDashboardData = async (params: {
   salesperson?: string | null;
   customer_name?: string | null;
   customer_code?: string | null;
+  top_gained_pagination?: { index: number; limit: number } | null;
 }): Promise<EnquiryConversionDashboardResponse> => {
   try {
-    const body: Record<string, string> = {
+    const body: Record<string, unknown> = {
       company: params.company,
       date_from: params.date_from,
       date_to: params.date_to,
@@ -1404,6 +1409,9 @@ export const getEnquiryConversionDashboardData = async (params: {
     if (cn) body.customer_name = cn;
     const cc = params.customer_code?.trim();
     if (cc) body.customer_code = cc;
+    if (params.top_gained_pagination) {
+      body.top_gained_pagination = params.top_gained_pagination;
+    }
 
     const response = await postAPICall(
       URL.dashboard.enquiryEnquiryConversion,

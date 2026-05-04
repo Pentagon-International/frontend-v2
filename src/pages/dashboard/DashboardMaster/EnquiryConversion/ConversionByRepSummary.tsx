@@ -629,7 +629,7 @@ export function ConversionByRepSummary({
                           "Enquiries",
                           "Won",
                           "Win rate",
-                          "Value",
+                          // "Value",
                           "Send email",
                         ].map((h, i) => (
                           <Table.Th
@@ -759,7 +759,7 @@ export function ConversionByRepSummary({
                                   {wrStr}%
                                 </Text>
                               </Table.Td>
-                              <Table.Td
+                              {/* <Table.Td
                                 ta="right"
                                 style={{
                                   verticalAlign: "middle",
@@ -771,7 +771,7 @@ export function ConversionByRepSummary({
                                 <Text fz={12} fw={600} c={INK} lh={1.35}>
                                   —
                                 </Text>
-                              </Table.Td>
+                              </Table.Td> */}
                               <Table.Td
                                 ta="center"
                                 style={{

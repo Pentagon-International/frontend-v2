@@ -104,6 +104,7 @@ export default function EnquiryConversionPage() {
   const [modeCustomerList, setModeCustomerList] = useState<{
     customerCode: string;
     customerName: string;
+    salesperson?: string | null;
   } | null>(null);
   const [repEmailRow, setRepEmailRow] = useState<RepBarRow | null>(null);
   const [topEnquiryEmailRow, setTopEnquiryEmailRow] =
@@ -363,11 +364,15 @@ export default function EnquiryConversionPage() {
       <ConversionByRepCustomerwiseEnquiryList
         opened={modeCustomerList !== null}
         onClose={() => setModeCustomerList(null)}
-        salesperson={filters.salesperson?.trim() || null}
+        salesperson={
+          modeCustomerList?.salesperson?.trim() ||
+          filters.salesperson?.trim() ||
+          null
+        }
         company={company}
         filters={
-          modeCustomerList !== null && modeDetailRow
-            ? { ...filters, service: modeDetailRow.key }
+          modeCustomerList !== null
+            ? { ...filters, type: null, service: null }
             : filters
         }
         customerCode={modeCustomerList?.customerCode ?? null}

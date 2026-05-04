@@ -266,7 +266,7 @@ function buildDetailContent(
       subtitle = `${formatPeriodSubtitle(filters.fromDate, filters.toDate)} · ${totalEnquiry.toLocaleString("en-IN")} enquiries received`;
       trend = linearTrend(undefined, totalEnquiry);
       breakdownTitle = "Source & mode mix";
-      tableCols = ["Source", "Enquiries", "Pipeline (₹ L)", "Share"];
+      tableCols = ["Source", "Enquiries", "Share"];
       tableVariant = "pipeline";
       const totalSvc = services.reduce((acc, x) => acc + extractNumericValue(x.count), 0);
       tableRows = services.map((row) => {
@@ -288,7 +288,7 @@ function buildDetailContent(
       subtitle = `${formatPeriodSubtitle(filters.fromDate, filters.toDate)} · ${totalActive.toLocaleString("en-IN")} active`;
       trend = linearTrend(mom?.active, totalActive);
       breakdownTitle = "Source & mode mix";
-      tableCols = ["Source", "Enquiries", "Pipeline (₹ L)", "Share"];
+      tableCols = ["Source", "Enquiries", "Share"];
       tableVariant = "pipeline";
       const totalSvc = services.reduce((acc, x) => acc + extractNumericValue(x.count), 0);
       tableRows = services.map((row) => {
@@ -368,16 +368,16 @@ function buildDetailContent(
             v: totalEnquiry.toLocaleString("en-IN"),
             d: momHint(mom?.active),
           },
-          {
-            l: "DAILY AVG",
-            v: (totalEnquiry / days).toFixed(1),
-            d: `${days}-day range`,
-          },
-          {
-            l: "PIPELINE VALUE",
-            v: "—",
-            d: "all stages",
-          },
+          // {
+          //   l: "DAILY AVG",
+          //   v: (totalEnquiry / days).toFixed(1),
+          //   d: `${days}-day range`,
+          // },
+          // {
+          //   l: "PIPELINE VALUE",
+          //   v: "—",
+          //   d: "all stages",
+          // },
           {
             l: "TOP MODE",
             v: topLabel,
@@ -392,16 +392,16 @@ function buildDetailContent(
             v: totalActive.toLocaleString("en-IN"),
             d: momHint(mom?.active),
           },
-          {
-            l: "DAILY AVG",
-            v: (totalActive / days).toFixed(1),
-            d: `${days}-day range`,
-          },
-          {
-            l: "SHARE OF TOTAL",
-            v: s?.active_percentage?.trim() ?? "—",
-            d: "of all enquiries",
-          },
+          // {
+          //   l: "DAILY AVG",
+          //   v: (totalActive / days).toFixed(1),
+          //   d: `${days}-day range`,
+          // },
+          // {
+          //   l: "SHARE OF TOTAL",
+          //   v: s?.active_percentage?.trim() ?? "—",
+          //   d: "of all enquiries",
+          // },
           {
             l: "TOP MODE",
             v: topSvc ? modeDisplayName(topSvc.service ?? "") : "—",
@@ -420,11 +420,11 @@ function buildDetailContent(
             v: String(totalQuote),
             d: "in period",
           },
-          {
-            l: "DAILY AVG",
-            v: (totalQuote / days).toFixed(1),
-            d: `${days}-day range`,
-          },
+          // {
+          //   l: "DAILY AVG",
+          //   v: (totalQuote / days).toFixed(1),
+          //   d: `${days}-day range`,
+          // },
           {
             l: "TOP MODE",
             v: topSvc ? modeDisplayName(topSvc.service ?? "") : "—",
@@ -443,11 +443,11 @@ function buildDetailContent(
             v: String(totalGain),
             d: "in period",
           },
-          {
-            l: "DAILY AVG",
-            v: (totalGain / days).toFixed(1),
-            d: `${days}-day range`,
-          },
+          // {
+          //   l: "DAILY AVG",
+          //   v: (totalGain / days).toFixed(1),
+          //   d: `${days}-day range`,
+          // },
           {
             l: "LOST",
             v: String(extractNumericValue(s?.total_lost)),
@@ -615,7 +615,7 @@ export function EnquiryconversionSummarydetail({
                   </Text>
                 </Box>
 
-                <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing={12} style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
                   {content.mini.map((k) => (
                     <Box
                       key={k.l}
@@ -764,6 +764,28 @@ export function EnquiryconversionSummarydetail({
                             </Table.Tr>
                           );
                         }
+                        if (content.tableVariant === "rep") {
+                          return (
+                            <Table.Tr key={key}>
+                              <Table.Td>
+                                <Text fz={13} fw={500} c="#0F172A">
+                                  {row.name}
+                                </Text>
+                              </Table.Td>
+                              <Table.Td ta="right">
+                                <Text fz={13} tabularNums>
+                                  {row.a}
+                                </Text>
+                              </Table.Td>
+                              <Table.Td ta="right">
+                                <Text fz={13} tabularNums>
+                                  {row.b}
+                                </Text>
+                              </Table.Td>
+                              <Table.Td>{shareBar}</Table.Td>
+                            </Table.Tr>
+                          );
+                        }
                         return (
                           <Table.Tr key={key}>
                             <Table.Td>
@@ -774,11 +796,6 @@ export function EnquiryconversionSummarydetail({
                             <Table.Td ta="right">
                               <Text fz={13} tabularNums>
                                 {row.a}
-                              </Text>
-                            </Table.Td>
-                            <Table.Td ta="right">
-                              <Text fz={13} tabularNums>
-                                {row.b}
                               </Text>
                             </Table.Td>
                             <Table.Td>{shareBar}</Table.Td>

@@ -1,14 +1,14 @@
-import {
-  Group,
-  Select,
-  type SelectProps,
-} from "@mantine/core";
+import { useMemo } from "react";
+import { Group, Select, type SelectProps } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import {
   DateRangeInput,
   DEFAULT_ERP_LIST_THEME,
   erpToolbarSelectStyles,
 } from "../../../../components";
+import { apiCallProtected } from "../../../../api/axios";
+import { URL } from "../../../../api/serverUrls";
 
 export type EnquiryConversionPageFilters = {
   fromDate: Date | null;
@@ -20,7 +20,7 @@ export type EnquiryConversionPageFilters = {
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "All types" },
-  { value: "Active", label: "Active" },
+  { value: "ACTIVE", label: "Active" },
   { value: "GAINED", label: "Won (gained)" },
   { value: "LOST", label: "Lost" },
   { value: "QUOTE CREATED", label: "Quote created" },
@@ -28,7 +28,7 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
 
 const SERVICE_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "All modes" },
-  { value: "Air", label: "Air" },
+  { value: "AIR", label: "Air" },
   { value: "LCL", label: "LCL" },
   { value: "FCL", label: "FCL" },
   { value: "OTHERS", label: "Others" },
@@ -56,6 +56,40 @@ export function EnquiryConversionFilters({
   onFiltersChange: (next: EnquiryConversionPageFilters) => void;
   disabled?: boolean;
 }) {
+  const { data: salespersonsData = [], isLoading: salespersonsLoading } =
+    useQuery({
+      queryKey: ["salespersons"],
+      queryFn: async () => {
+        try {
+          const response = await apiCallProtected.post(URL.salespersons, {});
+          const data = response as any;
+          return Array.isArray(data?.data) ? data.data : [];
+        } catch (error) {
+          console.error("Error fetching salespersons data:", error);
+          return [];
+        }
+      },
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    });
+
+  const salespersonOptions = useMemo(() => {
+    if (!salespersonsData || !Array.isArray(salespersonsData)) {
+      return [{ value: "", label: "All reps" }];
+    }
+    return [
+      { value: "", label: "All reps" },
+      ...salespersonsData
+        .filter((item: any) => item?.sales_person)
+        .map((item: any) => ({
+          value: String(item.sales_person),
+          label: String(item.sales_person),
+        })),
+    ];
+  }, [salespersonsData]);
+
   const set =
     <K extends keyof EnquiryConversionPageFilters>(key: K) =>
     (value: EnquiryConversionPageFilters[K]) =>
@@ -99,11 +133,14 @@ export function EnquiryConversionFilters({
         styles={selectStyles}
       />
       <Select
-        placeholder="All reps"
+        placeholder={salespersonsLoading ? "Loading reps..." : "All reps"}
         size="xs"
-        w={120}
-        disabled={disabled}
-        data={[{ value: "", label: "All reps" }]}
+        w={180}
+        disabled={disabled || salespersonsLoading}
+        data={salespersonOptions}
+        searchable
+        clearable={false}
+        nothingFoundMessage="No reps found"
         value={filters.salesperson}
         onChange={(v) => set("salesperson")(v || "")}
         styles={selectStyles}

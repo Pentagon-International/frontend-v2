@@ -38,7 +38,14 @@ import {
 } from "./EnquiryConversionDrawerBack";
 
 const NAVY = "#1E3A8A";
-const FONT = "'Geist', sans-serif";
+const FONT =
+  "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+const INK = "#0f172a";
+const INK3 = "#64748b";
+const INK4 = "#94a3b8";
+const LINE = "#e2e8f0";
+const PANEL_BG = "#f1f5f9";
+const TABLE_HEAD_BG = "#f8fafc";
 
 function parseEmails(emailString: string): string[] {
   if (!emailString?.trim()) return [];
@@ -97,16 +104,41 @@ function displayStageTitle(row: StageFunnelRow | null): string {
   return row.stage;
 }
 
-function repCountForStage(
+/** Raw field from `data[]` for the funnel stage (e.g. `active: "1 (100%)"`). */
+function stageMetricFieldForRep(
   item: EnquiryConversionSalespersonRow,
   row: StageFunnelRow
-): number {
+): string | number | undefined {
   const s = row.stage.trim();
-  if (s.toLowerCase() === "active") return extractNumericValue(item.active);
-  if (s === "Quoted") return extractNumericValue(item.quote_created);
-  if (s === "Won") return extractNumericValue(item.gained);
-  if (s === "Lost") return extractNumericValue(item.lost);
-  return 0;
+  if (s.toLowerCase() === "active") return item.active;
+  if (s === "Quoted") return item.quote_created;
+  if (s === "Won") return item.gained;
+  if (s === "Lost") return item.lost;
+  return undefined;
+}
+
+/**
+ * Parses API strings like `"1 (100%)"` → count `1`, share `100`.
+ * If the string has no `(pct%)` suffix, returns count via `extractNumericValue` and `apiSharePct: null`.
+ */
+function parseCountAndShareFromApiStageField(
+  value: string | number | null | undefined
+): { count: number; apiSharePct: number | null } {
+  if (value == null) return { count: 0, apiSharePct: null };
+  if (typeof value === "number") {
+    return { count: value, apiSharePct: null };
+  }
+  const str = String(value).trim();
+  const m = str.match(
+    /^\s*(\d+(?:\.\d+)?)\s*\(\s*(\d+(?:\.\d+)?)\s*%\s*\)\s*$/i
+  );
+  if (m) {
+    return {
+      count: parseFloat(m[1]),
+      apiSharePct: parseFloat(m[2]),
+    };
+  }
+  return { count: extractNumericValue(str), apiSharePct: null };
 }
 
 function summaryTotalForStage(
@@ -323,10 +355,11 @@ export function StageFunnelDetails({
     const summary = data?.summary;
     const raw = Array.isArray(data?.data) ? data!.data! : [];
 
-    const rowsWithCount = raw.map((item) => ({
-      item,
-      count: repCountForStage(item, stageRow),
-    }));
+    const rowsWithCount = raw.map((item) => {
+      const field = stageMetricFieldForRep(item, stageRow);
+      const { count, apiSharePct } = parseCountAndShareFromApiStageField(field);
+      return { item, count, apiSharePct };
+    });
 
     const sorted = [...rowsWithCount].sort((a, b) => b.count - a.count);
     const totalFromReps = sorted.reduce((s, r) => s + r.count, 0);
@@ -336,7 +369,12 @@ export function StageFunnelDetails({
     );
     const maxC = Math.max(...sorted.map((r) => r.count), 1);
     const repRows = sorted.map((r) => {
-      const share = totalCount > 0 ? (r.count / totalCount) * 100 : 0;
+      const share =
+        r.apiSharePct != null
+          ? r.apiSharePct
+          : totalFromReps > 0
+            ? (r.count / totalFromReps) * 100
+            : 0;
       return {
         item: r.item,
         name: r.item.salesperson ?? "—",
@@ -373,20 +411,21 @@ export function StageFunnelDetails({
       opened={opened}
       onClose={handleDrawerClose}
       position="right"
-      size="max(480px, 75vw)"
+      size="min(920px, 92vw)"
       padding={0}
       offset={8}
       radius="md"
       zIndex={300}
       withOverlay
-      overlayProps={{ opacity: 0.35, blur: 2 }}
+      overlayProps={{ backgroundOpacity: 0.32, color: "#0f172a", blur: 0 }}
       styles={{
         header: { display: "none" },
-        body: { padding: 0, height: "100%" },
+        body: { padding: 0, height: "100%", background: PANEL_BG },
         content: {
           fontFamily: FONT,
-          borderLeft: "1px solid #E2E8F0",
-          boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.08)",
+          borderLeft: `1px solid ${LINE}`,
+          boxShadow: "-16px 0 40px rgba(15, 23, 42, 0.18)",
+          background: PANEL_BG,
         },
       }}
     >
@@ -399,31 +438,40 @@ export function StageFunnelDetails({
         }}
       >
         <Box
-          px={20}
+          px={22}
           py={14}
           style={{
-            borderBottom: "1px solid #EEF2F7",
+            borderBottom: `1px solid ${LINE}`,
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: 14,
+            background: enquiryConversionColors.panelBg,
           }}
         >
           <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0, flex: 1 }}>
             <EnquiryConversionDrawerBack onClick={handleDrawerClose} />
             <EnquiryConversionDrawerHeaderSeparator />
-            <Text fw={600} fz={14} c="#0F172A" truncate style={{ minWidth: 0 }}>
+            <Text fw={600} fz={14} c={INK} truncate style={{ minWidth: 0, letterSpacing: "-0.01em" }}>
               {titleName} stage
             </Text>
           </Group>
-          <ActionIcon variant="subtle" color="gray" onClick={handleDrawerClose} aria-label="Close">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={handleDrawerClose}
+            aria-label="Close"
+            size={30}
+            radius="md"
+            style={{ color: INK3 }}
+          >
             <IconX size={18} stroke={2} />
           </ActionIcon>
         </Box>
 
         <ScrollArea type="scroll" scrollbarSize={8} style={{ flex: 1, minHeight: 0 }}>
-          <Stack gap="md" p={20} pb={32}>
+          <Stack gap={0} p={22} pb={32} style={{ background: PANEL_BG }}>
             {error ? (
               <Text fz={13} c="red">
                 {(error as Error).message}
@@ -432,27 +480,32 @@ export function StageFunnelDetails({
 
             {stageRow ? (
               <>
-                <Box>
-                  <Group gap={10} align="flex-start" wrap="nowrap">
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 12,
+                    marginBottom: 16,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Group gap={8} align="center" wrap="nowrap">
                     <Box
-                      mt={4}
                       style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
+                        width: 14,
+                        height: 14,
+                        borderRadius: 4,
                         background: vm?.dotColor ?? stageRow.dotColor ?? stageRow.barColor,
                         flexShrink: 0,
                       }}
                     />
-                    <Box style={{ minWidth: 0 }}>
-                      <Text fw={700} fz={15} c={NAVY} lh={1.35}>
-                        {titleName} · Reps breakdown
-                      </Text>
-                      <Text fz={12} fw={500} c="#94A3B8" mt={4}>
-                        Click a rep to see their customers
-                      </Text>
-                    </Box>
+                    <Text component="h2" m={0} fw={600} fz={18} c={INK} lh={1.2} style={{ letterSpacing: "-0.01em" }}>
+                      {titleName} · Reps breakdown
+                    </Text>
                   </Group>
+                  <Text fz={12} fw={400} c={INK3} lh={1.45}>
+                    Click a rep to see their customers
+                  </Text>
                 </Box>
 
                 {busy ? (
@@ -461,36 +514,39 @@ export function StageFunnelDetails({
                   </Center>
                 ) : vm ? (
                   <>
-                    <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                    <SimpleGrid
+                      cols={{ base: 1, sm: 4 }}
+                      spacing={10}
+                      mb={14}
+                      style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+                    >
                       {(
                         [
                           ["TOTAL ENQUIRIES", vm.totalCount.toLocaleString("en-IN")],
-                          ["PIPELINE VALUE", vm.pipelineLabel],
+                          // ["PIPELINE VALUE", vm.pipelineLabel],
                           ["REPS ACTIVE", String(vm.repsActive)],
-                          ["AVG / REP", vm.avgPerRep],
+                          // ["AVG / REP", vm.avgPerRep],
                         ] as const
                       ).map(([label, val]) => (
                         <Box
                           key={label}
-                          p={12}
+                          p="10px 12px"
                           style={{
                             background: enquiryConversionColors.panelBg,
-                            border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                            borderRadius: enquiryConversionColors.radius,
-                            boxShadow: enquiryConversionColors.shadow,
+                            border: `1px solid ${LINE}`,
+                            borderRadius: 8,
                           }}
                         >
                           <Text
-                            fz={9}
-                            fw={700}
-                            c="#8FA2B7"
+                            fz={10}
+                            fw={500}
+                            c={INK3}
                             tt="uppercase"
                             lts="0.04em"
-                            mb={8}
                           >
                             {label}
                           </Text>
-                          <Text fz={26} fw={700} c="#0B1F3A" lh={1.1}>
+                          <Text fz={18} fw={600} c={INK} lh={1.15} mt={2} style={{ letterSpacing: "-0.01em" }}>
                             {val}
                           </Text>
                         </Box>
@@ -500,29 +556,34 @@ export function StageFunnelDetails({
                     <Box
                       style={{
                         background: enquiryConversionColors.panelBg,
-                        border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                        borderRadius: enquiryConversionColors.radius,
-                        boxShadow: enquiryConversionColors.shadow,
+                        border: `1px solid ${LINE}`,
+                        borderRadius: 10,
                         overflow: "hidden",
                       }}
                     >
-                      <Table horizontalSpacing="md" verticalSpacing={12}>
+                      <Table
+                        horizontalSpacing={12}
+                        verticalSpacing={11}
+                        withRowBorders={false}
+                        highlightOnHover
+                        highlightOnHoverColor={TABLE_HEAD_BG}
+                      >
                         <Table.Thead>
-                          <Table.Tr style={{ background: "#F8FAFC" }}>
+                          <Table.Tr>
                             {[
-                              "SALES REP",
-                              "DISTRIBUTION",
-                              "COUNT",
-                              "SHARE",
-                              "VALUE",
-                              "SEND EMAIL",
+                              "Sales rep",
+                              "Distribution",
+                              "Count",
+                              "Share",
+                              // "VALUE",
+                              "Send email",
                               "",
                             ].map((h, i) => (
                               <Table.Th
                                 key={h + String(i)}
-                                fz={10}
-                                fw={700}
-                                c="#94A3B8"
+                                fz={11}
+                                fw={500}
+                                c={INK3}
                                 tt="uppercase"
                                 ta={
                                   i === 0
@@ -533,10 +594,24 @@ export function StageFunnelDetails({
                                 }
                                 style={
                                   i === 1
-                                    ? { minWidth: 120 }
+                                    ? {
+                                        minWidth: 120,
+                                        background: TABLE_HEAD_BG,
+                                        padding: "10px 12px",
+                                        borderBottom: `1px solid ${LINE}`,
+                                      }
                                     : i === 5
-                                      ? { width: 100 }
-                                      : undefined
+                                      ? {
+                                          width: 100,
+                                          background: TABLE_HEAD_BG,
+                                          padding: "10px 12px",
+                                          borderBottom: `1px solid ${LINE}`,
+                                        }
+                                      : {
+                                          background: TABLE_HEAD_BG,
+                                          padding: "10px 12px",
+                                          borderBottom: `1px solid ${LINE}`,
+                                        }
                                 }
                               >
                                 {h}
@@ -570,15 +645,15 @@ export function StageFunnelDetails({
                                 cursor: onRepRowClick ? "pointer" : undefined,
                               }}
                             >
-                              <Table.Td style={{ verticalAlign: "top" }}>
-                                <Text fz={13} fw={700} c="#0F172A">
+                              <Table.Td style={{ verticalAlign: "middle", borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} c={INK}>
                                   {r.name}
                                 </Text>
                                 {/* <Text fz={11} fw={500} c="#94A3B8" mt={2}>
                                   {r.sub}
                                 </Text> */}
                               </Table.Td>
-                              <Table.Td>
+                              <Table.Td style={{ borderBottom: `1px solid ${LINE}` }}>
                                 <Box
                                   style={{
                                     display: "flex",
@@ -607,24 +682,24 @@ export function StageFunnelDetails({
                                   </Box>
                                 </Box>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} fw={700} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
                                   {r.count.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={500} style={{ fontVariantNumeric: "tabular-nums" }}>
                                   {r.share.toFixed(1)}%
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
+                              {/* <Table.Td ta="right">
                                 <Text fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
                                   {r.valueLabel}
                                 </Text>
-                              </Table.Td>
+                              </Table.Td> */}
                               <Table.Td
                                 ta="center"
-                                style={{ width: 100, verticalAlign: "middle" }}
+                                style={{ width: 100, verticalAlign: "middle", borderBottom: `1px solid ${LINE}` }}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Tooltip label="Send Email" position="top" withArrow>
@@ -640,8 +715,8 @@ export function StageFunnelDetails({
                                   </ActionIcon>
                                 </Tooltip>
                               </Table.Td>
-                              <Table.Td ta="center" style={{ width: 36 }}>
-                                <IconChevronRight size={16} color="#CBD5E1" stroke={2} />
+                              <Table.Td ta="center" style={{ width: 36, borderBottom: `1px solid ${LINE}` }}>
+                                <IconChevronRight size={16} color={INK4} stroke={2} />
                               </Table.Td>
                             </Table.Tr>
                             );

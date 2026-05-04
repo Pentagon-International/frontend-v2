@@ -7624,13 +7624,13 @@ const Dashboard = () => {
         trend: winRateTrend,
         spark: "greenUp" as DashLeadershipSparkKind,
       },
-      {
-        key: "pipeline-value",
-        label: "Pipeline value",
-        value: dashFormatInrAdaptive(pipelineN),
-        trend: undefined,
-        spark: "blueUp" as DashLeadershipSparkKind,
-      },
+      // {
+      //   key: "pipeline-value",
+      //   label: "Pipeline value",
+      //   value: dashFormatInrAdaptive(pipelineN),
+      //   trend: undefined,
+      //   spark: "blueUp" as DashLeadershipSparkKind,
+      // },
       {
         key: "revenue-mtd",
         label: "Revenue MTD",

@@ -204,6 +204,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
           fontFamily: FONT,
           borderLeft: "1px solid #E2E8F0",
           boxShadow: "-12px 0 32px rgba(15, 23, 42, 0.12)",
+          background: "#f1f5f9",
         },
       }}
     >
@@ -455,7 +456,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
               </Box>
             </SimpleGrid>
 
-            <Box
+            {/* <Box
               style={{
                 background: enquiryConversionColors.panelBg,
                 border: `1px solid ${enquiryConversionColors.panelBorder}`,
@@ -557,7 +558,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                   </Text>
                 )}
               </Box>
-            </Box>
+            </Box> */}
           </Stack>
         </ScrollArea>
 

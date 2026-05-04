@@ -31,8 +31,16 @@ import {
   stageLabelFromApiStatus,
 } from "./enquiryConversionDashboardMappers";
 
-const FONT = "'Geist', sans-serif";
-const GREEN = "#16A34A";
+const FONT =
+  "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+const INK = "#0f172a";
+const INK2 = "#334155";
+const INK3 = "#64748b";
+const INK4 = "#94a3b8";
+const LINE = "#e2e8f0";
+const PANEL_BG = "#f1f5f9";
+const TABLE_HEAD_BG = "#f8fafc";
+const GREEN = "#16a34a";
 
 type Props = {
   opened: boolean;
@@ -40,10 +48,12 @@ type Props = {
   modeRow: ModeLegendRow | null;
   company: string;
   filters: EnquiryConversionPageFilters;
-  /** Opens `ConversionByRepCustomerwiseEnquiryList` (needs `customer_code` on sample enquiry + salesperson filter). */
+  /** Opens `ConversionByRepCustomerwiseEnquiryList` (needs `customer_code` + salesperson). */
   onOpenCustomerEnquiryList?: (payload: {
     customerCode: string;
     customerName: string;
+    /** When present (e.g. from `top_gained`), used as POST `salesperson`. */
+    salesperson?: string | null;
   }) => void;
   /** Opens the enquiry quote-detail drawer (`ConversionByRepCustomerwiseEnquiryDetails`) with a minimal drilldown payload. */
   onOpenEnquiryDetail?: (enquiry: EnquiryDrilldownEnquiry) => void;
@@ -56,10 +66,8 @@ function laneKey(e: EnquiryConversionTopEnquiryRow): string {
   return `${o}-${d}`;
 }
 
-function isWonStatus(status: string): boolean {
-  const u = status.toUpperCase();
-  return u.includes("GAIN") || u.includes("WON");
-}
+const TOP_GAINED_INDEX = 0;
+const TOP_GAINED_LIMIT = 5;
 
 function badgeStyleForStageLabel(label: string): { bg: string; fg: string } {
   const s = label.trim().toLowerCase();
@@ -98,15 +106,22 @@ export function ConversionByModeDetails({
       modeCode ?? "",
       filters.type ?? "",
       filters.salesperson.trim(),
+      TOP_GAINED_INDEX,
+      TOP_GAINED_LIMIT,
     ],
     queryFn: () =>
       getEnquiryConversionDashboardData({
         company,
         date_from: dayjs(fd!).format("DD-MM-YYYY"),
         date_to: dayjs(td!).format("DD-MM-YYYY"),
-        type: filters.type?.trim() || null,
+        // type: filters.type?.trim() || null,
+        type: "GAINED",
         service: modeCode ?? null,
         salesperson: filters.salesperson.trim() || null,
+        top_gained_pagination: {
+          index: TOP_GAINED_INDEX,
+          limit: TOP_GAINED_LIMIT,
+        },
       }),
     enabled: opened && !!modeRow && !!company && !!fd && !!td && !!modeCode,
     staleTime: 20_000,
@@ -134,66 +149,140 @@ export function ConversionByModeDetails({
   );
 
   const topLanes = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const e of topEnquiries) {
-      const k = laneKey(e);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
+    const lanesRaw = Array.isArray(data?.top_gained_roted)
+      ? data.top_gained_roted
+      : [];
+    const seen = new Set<string>();
+    const lanes: string[] = [];
+    for (const item of lanesRaw) {
+      let lane = "";
+      if (typeof item === "string") {
+        lane = item.trim();
+      } else if (item && typeof item === "object") {
+        const row = item as Record<string, unknown>;
+        lane =
+          String(
+            row.roted ??
+              row.route ??
+              row.lane ??
+              row.lane_key ??
+              row.origin_destination ??
+              ""
+          ).trim();
+        if (!lane) {
+          const o = String(row.origin_code ?? row.origin ?? "").trim();
+          const d = String(row.destination_code ?? row.destination ?? "").trim();
+          lane = o || d ? `${o}-${d}` : "";
+        }
+      }
+      if (!lane || seen.has(lane)) continue;
+      seen.add(lane);
+      lanes.push(lane);
     }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([lane]) => lane);
-  }, [topEnquiries]);
+    return lanes;
+  }, [data?.top_gained_roted]);
 
   const topCustomers = useMemo(() => {
-    type Acc = {
+    type Row = {
       name: string;
       enquiries: number;
       won: number;
-      /** First enquiry seen for this customer — used to open the details drawer. */
+      customerCode: string | null;
+      /** From `top_gained` row when API sends it. */
+      salesperson: string | null;
+      valueLabel: string;
       sampleEnquiry: EnquiryConversionTopEnquiryRow | null;
     };
-    const byName = new Map<string, Acc>();
-    for (const e of topEnquiries) {
-      const name = e.customer_name?.trim() || "—";
-      const cur =
-        byName.get(name) ??
-        ({
-          name,
-          enquiries: 0,
-          won: 0,
-          sampleEnquiry: null,
-        } as Acc);
-      if (!cur.sampleEnquiry) cur.sampleEnquiry = e;
-      cur.enquiries += 1;
-      if (isWonStatus(e.status ?? "")) cur.won += 1;
-      byName.set(name, cur);
-    }
-    return [...byName.values()]
-      .sort((a, b) => b.enquiries - a.enquiries)
-      .slice(0, 12);
-  }, [topEnquiries]);
+    const rows = Array.isArray(data?.top_gained) ? data.top_gained : [];
+    return rows.map((item) => {
+      const row = item as Record<string, unknown>;
+      const name = String(
+        row.customer_name ?? row.customer ?? row.customerName ?? row.name ?? "—"
+      ).trim() || "—";
+      const enquiriesRaw =
+        (row.total_enquiry ?? row.enquiry_count ?? row.enquiry_count ?? row.count) as
+          | string
+          | number
+          | null
+          | undefined;
+      const enquiries = extractNumericValue(
+        enquiriesRaw
+      );
+      const wonRaw = (row.gained_count ?? row.won ?? row.total_gain ?? row.gain) as
+        | string
+        | number
+        | null
+        | undefined;
+      const won = extractNumericValue(
+        wonRaw
+      );
+      const customerCodeRaw = String(row.customer_code ?? "").trim();
+      const customerCode = customerCodeRaw || null;
+      const spRaw =
+        row.sales_person ??
+        row.salesperson ??
+        row.sales_person_name ??
+        row.rep ??
+        row.account_owner;
+      const salesperson =
+        typeof spRaw === "string"
+          ? spRaw.trim() || null
+          : spRaw != null && String(spRaw).trim()
+            ? String(spRaw).trim()
+            : null;
+      const valueRaw = (row.value ?? row.total_value ?? row.gained_value ?? row.won_value) as
+        | string
+        | number
+        | null
+        | undefined;
+      const valueNum = extractNumericValue(valueRaw);
+      const valueLabel =
+        typeof valueRaw === "string" && valueRaw.trim().length > 0
+          ? valueRaw.trim()
+          : valueNum > 0
+            ? `₹${valueNum.toLocaleString("en-IN", { maximumFractionDigits: 1 })} L`
+            : "—";
+      const sampleEnquiry =
+        topEnquiries.find(
+          (e) =>
+            (customerCode && e.customer_code?.trim() === customerCode) ||
+            e.customer_name?.trim() === name
+        ) ?? null;
+      return {
+        name,
+        enquiries,
+        won,
+        customerCode,
+        salesperson,
+        valueLabel,
+        sampleEnquiry,
+      } satisfies Row;
+    });
+  }, [data?.top_gained, topEnquiries]);
 
   const titleName = modeRow?.label ?? "Mode";
+  const pipelineValueLabel = modeRow?.valueLabel?.trim() || "—";
+  const shareLabel = modeRow?.percentLabel?.trim() || "—";
 
   return (
     <Drawer
       opened={opened}
       onClose={onClose}
       position="right"
-      size="max(520px, 75vw)"
+      size="min(920px, 92vw)"
       padding={0}
       offset={8}
       radius="md"
       withOverlay
-      overlayProps={{ opacity: 0.35, blur: 2 }}
+      overlayProps={{ backgroundOpacity: 0.32, color: "#0f172a", blur: 0 }}
       styles={{
         header: { display: "none" },
-        body: { padding: 0, height: "100%" },
+        body: { padding: 0, height: "100%", background: PANEL_BG },
         content: {
           fontFamily: FONT,
-          borderLeft: "1px solid #E2E8F0",
-          boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.08)",
+          borderLeft: `1px solid ${LINE}`,
+          boxShadow: "-16px 0 40px rgba(15, 23, 42, 0.18)",
+          background: PANEL_BG,
         },
       }}
     >
@@ -206,27 +295,36 @@ export function ConversionByModeDetails({
         }}
       >
         <Box
-          px={20}
-          py={16}
+          px={22}
+          py={14}
           style={{
-            borderBottom: "1px solid #EEF2F7",
+            borderBottom: `1px solid ${LINE}`,
             flexShrink: 0,
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 14,
+            background: enquiryConversionColors.panelBg,
           }}
         >
-          <Text fw={700} fz={22} c="#0F172A" lh={1.2}>
+          <Text fw={600} fz={14} c={INK} lh={1.2} style={{ letterSpacing: "-0.01em" }}>
             {titleName}
           </Text>
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close" mt={2}>
-            <IconX size={20} stroke={2} />
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={onClose}
+            aria-label="Close"
+            size={30}
+            radius="md"
+            style={{ color: INK3 }}
+          >
+            <IconX size={18} stroke={2} />
           </ActionIcon>
         </Box>
 
         <ScrollArea type="scroll" scrollbarSize={8} style={{ flex: 1, minHeight: 0 }}>
-          <Stack gap="lg" p={20} pb={36}>
+          <Stack gap={0} p={22} pb={32} style={{ background: PANEL_BG }}>
             {error ? (
               <Text fz={13} c="red">
                 {(error as Error).message}
@@ -239,36 +337,40 @@ export function ConversionByModeDetails({
               </Center>
             ) : modeRow ? (
               <>
-                <Box>
-                  <Group gap={10} align="flex-start" wrap="nowrap">
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 12,
+                    marginBottom: 16,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Group gap={8} align="center" wrap="nowrap">
                     <Box
-                      mt={3}
                       style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 2,
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
                         background: modeRow.color,
                         flexShrink: 0,
                       }}
                     />
-                    <Box style={{ minWidth: 0 }}>
-                      <Text fw={700} fz={15} c="#1E3A8A" lh={1.35}>
-                        {titleName}
-                      </Text>
-                      <Text fz={12} fw={500} c="#64748B" mt={6} lh={1.45}>
-                        {modeRow.percentLabel} of pipeline · — ·{" "}
-                        {totalEnquiry.toLocaleString("en-IN")} enquiries this period
-                      </Text>
-                    </Box>
+                    <Text component="h2" m={0} fz={18} fw={600} c={INK} lh={1.2} style={{ letterSpacing: "-0.01em" }}>
+                      {titleName}
+                    </Text>
                   </Group>
+                  <Text fz={12} fw={400} c={INK3} lh={1.45}>
+                    {shareLabel} of pipeline · {pipelineValueLabel} · {totalEnquiry.toLocaleString("en-IN")} enquiries this period
+                  </Text>
                 </Box>
 
-                <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing={12}>
-                  <MetricTile
+                <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={10} mb={14} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                  {/* <MetricTile
                     label="Pipeline value"
-                    primary="—"
-                    secondary={`${modeRow.percentLabel} share`}
-                  />
+                    primary={pipelineValueLabel}
+                    secondary={`${shareLabel} share`}
+                  /> */}
                   <MetricTile
                     label="Enquiries"
                     primary={totalEnquiry.toLocaleString("en-IN")}
@@ -277,20 +379,28 @@ export function ConversionByModeDetails({
                     }
                   />
                   <MetricTile label="Win rate" primary={winRateLabel} />
-                  <MetricTile label="Avg deal size" primary="—" />
+                  {/* <MetricTile label="Avg deal size" primary={avgDealLabel} /> */}
                 </SimpleGrid>
 
-                <Box>
-                  <Group gap={8} align="baseline" mb={10}>
-                    <Text fw={700} fz={14} c="#0F172A">
+                <Box
+                  p={16}
+                  mb={14}
+                  style={{
+                    background: enquiryConversionColors.panelBg,
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 10,
+                  }}
+                >
+                  <Group gap={8} align="baseline" mb={12}>
+                    <Text fw={600} fz={13} c={INK}>
                       Top lanes
                     </Text>
-                    <Text fz={12} fw={500} c="#94A3B8">
+                    <Text fz={11} fw={400} c={INK4}>
                       By volume
                     </Text>
                   </Group>
                   {topLanes.length === 0 ? (
-                    <Text fz={12} c="#94A3B8">
+                    <Text fz={12} c={INK4}>
                       No lane data for this period.
                     </Text>
                   ) : (
@@ -299,14 +409,14 @@ export function ConversionByModeDetails({
                         <Box
                           key={lane}
                           px={10}
-                          py={6}
+                          py={5}
                           style={{
-                            background: "#F1F5F9",
-                            borderRadius: 6,
-                            border: "1px solid #E2E8F0",
+                            background: PANEL_BG,
+                            borderRadius: 4,
+                            border: `1px solid ${LINE}`,
                           }}
                         >
-                          <Text fz={12} fw={600} c="#0F172A">
+                          <Text fz={11} fw={500} c={INK2} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
                             {lane}
                           </Text>
                         </Box>
@@ -327,24 +437,28 @@ export function ConversionByModeDetails({
                 <Box
                   style={{
                     background: enquiryConversionColors.panelBg,
-                    border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                    borderRadius: enquiryConversionColors.radius,
-                    boxShadow: enquiryConversionColors.shadow,
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 10,
                     overflow: "hidden",
                   }}
                 >
-                  <Table horizontalSpacing="md" verticalSpacing={12}>
+                  <Table horizontalSpacing={12} verticalSpacing={11} withRowBorders={false} highlightOnHover highlightOnHoverColor={TABLE_HEAD_BG}>
                     <Table.Thead>
-                      <Table.Tr style={{ background: "#F8FAFC" }}>
-                        {(["Customer", "Enquiries", "Won", "Win rate", "Value"] as const).map(
+                      <Table.Tr>
+                        {(["Customer", "Enquiries", "Won", "Win rate", "Value", ""] as const).map(
                           (h, i) => (
                             <Table.Th
                               key={h}
-                              fz={10}
-                              fw={700}
-                              c="#94A3B8"
+                              fz={11}
+                              fw={500}
+                              c={INK3}
                               tt="uppercase"
                               ta={i === 0 ? "left" : "right"}
+                              style={{
+                                background: TABLE_HEAD_BG,
+                                padding: "10px 12px",
+                                borderBottom: `1px solid ${LINE}`,
+                              }}
                             >
                               {h}
                             </Table.Th>
@@ -355,8 +469,8 @@ export function ConversionByModeDetails({
                     <Table.Tbody>
                       {topCustomers.length === 0 ? (
                         <Table.Tr>
-                          <Table.Td colSpan={5}>
-                            <Text fz={13} c="#94A3B8" py={8}>
+                          <Table.Td colSpan={6}>
+                            <Text fz={13} c={INK4} py={8}>
                               No customer rows for this mode.
                             </Text>
                           </Table.Td>
@@ -368,26 +482,34 @@ export function ConversionByModeDetails({
                             Math.abs(wr - Math.round(wr)) < 0.05
                               ? `${Math.round(wr)}`
                               : wr.toFixed(1);
+                          const resolvedSalesperson =
+                            c.salesperson?.trim() ||
+                            filters.salesperson?.trim() ||
+                            "";
                           const openTopCustomerRow = () => {
-                            if (!c.sampleEnquiry) return;
-                            const sp = filters.salesperson?.trim();
-                            const cc = c.sampleEnquiry.customer_code?.trim();
-                            if (onOpenCustomerEnquiryList && cc && sp) {
+                            const cc =
+                              c.customerCode ??
+                              c.sampleEnquiry?.customer_code?.trim() ??
+                              "";
+                            if (onOpenCustomerEnquiryList && cc && resolvedSalesperson) {
                               onOpenCustomerEnquiryList({
                                 customerCode: cc,
                                 customerName: c.name,
+                                salesperson: resolvedSalesperson,
                               });
                               return;
                             }
-                            if (onOpenEnquiryDetail) {
+                            if (onOpenEnquiryDetail && c.sampleEnquiry) {
                               onOpenEnquiryDetail(
                                 buildDrilldownFromTopEnquiryRow(c.sampleEnquiry)
                               );
                             }
                           };
                           const topCustomerInteractive =
-                            !!c.sampleEnquiry &&
-                            (onOpenCustomerEnquiryList || onOpenEnquiryDetail);
+                            (onOpenCustomerEnquiryList &&
+                              !!(c.customerCode ?? c.sampleEnquiry?.customer_code?.trim()) &&
+                              !!resolvedSalesperson) ||
+                            (onOpenEnquiryDetail && !!c.sampleEnquiry);
                           return (
                             <Table.Tr
                               key={c.name}
@@ -408,38 +530,38 @@ export function ConversionByModeDetails({
                                 cursor: topCustomerInteractive ? "pointer" : "default",
                               }}
                             >
-                              <Table.Td style={{ verticalAlign: "top" }}>
-                                <Text fz={13} fw={700} c="#0F172A">
+                              <Table.Td style={{ verticalAlign: "middle", borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} c={INK}>
                                   {c.name}
                                 </Text>
-                                <Text fz={11} fw={500} c="#94A3B8" mt={2}>
-                                  —
-                                </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} style={{ fontVariantNumeric: "tabular-nums" }}>
                                   {c.enquiries.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
                                 <Text
-                                  fz={13}
-                                  fw={700}
+                                  fz={12}
+                                  fw={600}
                                   c={c.won > 0 ? GREEN : "#0F172A"}
                                   style={{ fontVariantNumeric: "tabular-nums" }}
                                 >
                                   {c.won.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} fw={700} c={GREEN} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} c={GREEN} style={{ fontVariantNumeric: "tabular-nums" }}>
                                   {wrStr}%
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} c="#64748B">
-                                  —
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} c={INK}>
+                                  {c.valueLabel}
                                 </Text>
+                              </Table.Td>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}`, width: 32 }}>
+                                <Text fz={14} c={INK4}>→</Text>
                               </Table.Td>
                             </Table.Tr>
                           );
@@ -449,7 +571,7 @@ export function ConversionByModeDetails({
                   </Table>
                 </Box>
 
-                <Box>
+                <Box mb={14} style={{ marginTop: 16 }}>
                   <Text fw={700} fz={15} c="#0F172A">
                     Active enquiries — {titleName}
                   </Text>
@@ -461,31 +583,36 @@ export function ConversionByModeDetails({
                 <Box
                   style={{
                     background: enquiryConversionColors.panelBg,
-                    border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                    borderRadius: enquiryConversionColors.radius,
-                    boxShadow: enquiryConversionColors.shadow,
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 10,
                     overflow: "hidden",
                   }}
                 >
-                  <Table horizontalSpacing="md" verticalSpacing={12}>
+                  <Table horizontalSpacing={12} verticalSpacing={11} withRowBorders={false} highlightOnHover highlightOnHoverColor={TABLE_HEAD_BG}>
                     <Table.Thead>
-                      <Table.Tr style={{ background: "#F8FAFC" }}>
+                      <Table.Tr>
                         {(
                           [
                             "Customer / Enquiry",
                             "Lane",
                             "Stage",
-                            "Prob",
-                            "Value",
+                            // "Probll",
+                            // "Value",
+                            "",
                           ] as const
                         ).map((h, i) => (
                           <Table.Th
                             key={h}
-                            fz={10}
-                            fw={700}
-                            c="#94A3B8"
+                            fz={11}
+                            fw={500}
+                            c={INK3}
                             tt="uppercase"
                             ta={i >= 3 ? "right" : "left"}
+                            style={{
+                              background: TABLE_HEAD_BG,
+                              padding: "10px 12px",
+                              borderBottom: `1px solid ${LINE}`,
+                            }}
                           >
                             {h}
                           </Table.Th>
@@ -495,8 +622,8 @@ export function ConversionByModeDetails({
                     <Table.Tbody>
                       {topEnquiries.length === 0 ? (
                         <Table.Tr>
-                          <Table.Td colSpan={5}>
-                            <Text fz={13} c="#94A3B8" py={8}>
+                          <Table.Td colSpan={6}>
+                            <Text fz={13} c={INK4} py={8}>
                               No active enquiries for this mode.
                             </Text>
                           </Table.Td>
@@ -527,20 +654,20 @@ export function ConversionByModeDetails({
                               role={onOpenEnquiryDetail ? "button" : undefined}
                               style={{ cursor: onOpenEnquiryDetail ? "pointer" : undefined }}
                             >
-                              <Table.Td style={{ verticalAlign: "top", maxWidth: 220 }}>
-                                <Text fz={13} fw={700} c="#0F172A" lineClamp={2}>
+                              <Table.Td style={{ verticalAlign: "middle", maxWidth: 220, borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={12} fw={600} c={INK} lineClamp={2}>
                                   {e.customer_name ?? "—"}
                                 </Text>
-                                <Text fz={11} fw={500} c="#94A3B8" mt={4}>
+                                <Text fz={10.5} fw={400} c={INK4} mt={1}>
                                   {e.enquiry_id}
                                 </Text>
                               </Table.Td>
-                              <Table.Td style={{ whiteSpace: "nowrap" }}>
-                                <Text fz={13} c="#0F172A">
+                              <Table.Td style={{ whiteSpace: "nowrap", borderBottom: `1px solid ${LINE}` }}>
+                                <Text fz={11} c={INK2} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
                                   {laneKey(e)}
                                 </Text>
                               </Table.Td>
-                              <Table.Td style={{ verticalAlign: "middle" }}>
+                              <Table.Td style={{ verticalAlign: "middle", borderBottom: `1px solid ${LINE}` }}>
                                 <Badge
                                   size="sm"
                                   variant="light"
@@ -548,23 +675,17 @@ export function ConversionByModeDetails({
                                     root: {
                                       background: bg,
                                       color: fg,
-                                      fontWeight: 600,
+                                      fontWeight: 500,
                                       textTransform: "none",
+                                      borderRadius: 4,
                                     },
                                   }}
                                 >
                                   {stage.label}
                                 </Badge>
                               </Table.Td>
-                              <Table.Td ta="right" style={{ fontVariantNumeric: "tabular-nums" }}>
-                                <Text fz={13} c="#64748B">
-                                  —
-                                </Text>
-                              </Table.Td>
-                              <Table.Td ta="right" style={{ fontVariantNumeric: "tabular-nums" }}>
-                                <Text fz={13} c="#64748B">
-                                  —
-                                </Text>
+                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}`, width: 32 }}>
+                                <Text fz={14} c={INK4}>→</Text>
                               </Table.Td>
                             </Table.Tr>
                           );
@@ -593,23 +714,21 @@ function MetricTile({
 }) {
   return (
     <Box
-      p={14}
+      p="10px 12px"
       style={{
         background: enquiryConversionColors.panelBg,
-        border: `1px solid ${enquiryConversionColors.panelBorder}`,
-        borderRadius: enquiryConversionColors.radius,
-        boxShadow: enquiryConversionColors.shadow,
-        minHeight: 96,
+        border: `1px solid ${LINE}`,
+        borderRadius: 8,
       }}
     >
-      <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={10}>
+      <Text fz={10} fw={500} c={INK3} tt="uppercase" lts="0.04em">
         {label}
       </Text>
-      <Text fz={22} fw={700} c="#0B1F3A" lh={1.15}>
+      <Text fz={18} fw={600} c={INK} lh={1.15} mt={2} style={{ letterSpacing: "-0.01em" }}>
         {primary}
       </Text>
       {secondary ? (
-        <Text fz={11} fw={500} c="#94A3B8" mt={6}>
+        <Text fz={10} fw={400} c={INK4} mt={1}>
           {secondary}
         </Text>
       ) : null}
