@@ -32,10 +32,22 @@ import {
 import type { EnquiryConversionPageFilters } from "./EnquiryConversionFilters";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { ConversionByRepCustomerwiseEnquiryList } from "./ConversionByRepCustomerwiseEnquiryList";
+import {
+  EnquiryConversionDrawerBack,
+  EnquiryConversionDrawerHeaderSeparator,
+} from "./EnquiryConversionDrawerBack";
 
-const FONT = "'Geist', sans-serif";
-const GREEN = "#16A34A";
-const RED = "#EF4444";
+/** Aligned with Pentagon Sales Dashboard standalone (`:root`, `.dd-*`, `.card`, table drilldown) */
+const FONT =
+  "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+const INK = "#0f172a";
+const INK3 = "#64748b";
+const INK4 = "#94a3b8";
+const LINE = "#e2e8f0";
+const PANEL_BG = "#f1f5f9";
+const TABLE_HEAD_BG = "#f8fafc";
+const GOOD = "#16a34a";
+const BAD = "#dc2626";
 
 function parseEmails(emailString: string): string[] {
   if (!emailString?.trim()) return [];
@@ -325,20 +337,21 @@ export function ConversionByRepSummary({
       opened={opened}
       onClose={handleCloseSummary}
       position="right"
-      size="max(480px, 75vw)"
+      size="min(920px, 92vw)"
       padding={0}
       offset={8}
       radius="md"
       zIndex={400}
       withOverlay
-      overlayProps={{ opacity: 0.35, blur: 2 }}
+      overlayProps={{ backgroundOpacity: 0.32, color: "#0f172a", blur: 0 }}
       styles={{
         header: { display: "none" },
-        body: { padding: 0, height: "100%" },
+        body: { padding: 0, height: "100%", background: PANEL_BG },
         content: {
           fontFamily: FONT,
-          borderLeft: "1px solid #E2E8F0",
-          boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.08)",
+          borderLeft: `1px solid ${LINE}`,
+          boxShadow: "-16px 0 40px rgba(15, 23, 42, 0.18)",
+          background: PANEL_BG,
         },
       }}
     >
@@ -351,26 +364,33 @@ export function ConversionByRepSummary({
         }}
       >
         <Box
-          px={20}
+          px={22}
           py={14}
           style={{
-            borderBottom: "1px solid #EEF2F7",
             flexShrink: 0,
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 14,
+            background: enquiryConversionColors.panelBg,
+            borderBottom: `1px solid ${LINE}`,
           }}
         >
-          <Box style={{ minWidth: 0 }}>
-            <Text fw={700} fz={20} c="#0F172A" lh={1.2}>
+          <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0, flex: 1 }}>
+            <EnquiryConversionDrawerBack onClick={handleCloseSummary} />
+            <EnquiryConversionDrawerHeaderSeparator />
+            <Text
+              fw={600}
+              fz={14}
+              c={INK}
+              lh={1.2}
+              truncate
+              style={{ letterSpacing: "-0.01em", minWidth: 0 }}
+            >
               {titleName}
             </Text>
-            <Text fz={12} fw={500} c="#94A3B8" mt={6} lh={1.45}>
-              {subLine}
-            </Text>
-          </Box>
-          <Group gap={8} wrap="nowrap" align="flex-start" mt={2}>
+          </Group>
+          <Group gap={8} wrap="nowrap" align="center">
             <Button
               size="xs"
               variant="light"
@@ -386,6 +406,9 @@ export function ConversionByRepSummary({
               color="gray"
               onClick={handleCloseSummary}
               aria-label="Close"
+              size={30}
+              radius="md"
+              style={{ color: INK3 }}
             >
               <IconX size={18} stroke={2} />
             </ActionIcon>
@@ -393,7 +416,7 @@ export function ConversionByRepSummary({
         </Box>
 
         <ScrollArea type="scroll" scrollbarSize={8} style={{ flex: 1, minHeight: 0 }}>
-          <Stack gap="md" p={20} pb={32}>
+          <Stack gap={0} p={22} pb={32} style={{ background: PANEL_BG }}>
             {error ? (
               <Text fz={13} c="red">
                 {(error as Error).message}
@@ -406,146 +429,216 @@ export function ConversionByRepSummary({
               </Center>
             ) : (
               <>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={12}>
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 12,
+                    marginBottom: 16,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Text
+                    component="h2"
+                    m={0}
+                    fz={18}
+                    fw={600}
+                    c={INK}
+                    lh={1.2}
+                    style={{ letterSpacing: "-0.01em" }}
+                  >
+                    {titleName}
+                  </Text>
+                  <Text fz={12} c={INK3} fw={400} lh={1.45}>
+                    {subLine}
+                  </Text>
+                </Box>
+
+                <SimpleGrid
+                  cols={{ base: 1, sm: 4 }}
+                  spacing={10}
+                  mb={16}
+                  style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+                >
                   <Box
-                    p={12}
+                    p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
-                      border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                      borderRadius: enquiryConversionColors.radius,
-                      boxShadow: enquiryConversionColors.shadow,
-                      minHeight: 92,
+                      border: `1px solid ${LINE}`,
+                      borderRadius: 8,
                     }}
                   >
                     <Text
-                      fz={9}
-                      fw={700}
-                      c="#8FA2B7"
+                      fz={10}
+                      fw={500}
+                      c={INK3}
                       tt="uppercase"
                       lts="0.04em"
-                      mb={8}
                     >
-                      CUSTOMERS
+                      Customers
                     </Text>
-                    <Text fz={26} fw={700} c="#0B1F3A" lh={1.1} mb={4}>
+                    <Text
+                      fz={18}
+                      fw={600}
+                      c={INK}
+                      lh={1.15}
+                      mt={2}
+                      style={{ letterSpacing: "-0.01em" }}
+                    >
                       {totalCustomers.toLocaleString("en-IN")}
                     </Text>
-                    <Text fz={11} fw={600} c="#9AAABD">
+                    <Text fz={10} fw={400} c={INK4} mt={1}>
                       Last 30 days
                     </Text>
                   </Box>
                   <Box
-                    p={12}
+                    p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
-                      border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                      borderRadius: enquiryConversionColors.radius,
-                      boxShadow: enquiryConversionColors.shadow,
-                      minHeight: 92,
+                      border: `1px solid ${LINE}`,
+                      borderRadius: 8,
                     }}
                   >
                     <Text
-                      fz={9}
-                      fw={700}
-                      c="#8FA2B7"
+                      fz={10}
+                      fw={500}
+                      c={INK3}
                       tt="uppercase"
                       lts="0.04em"
-                      mb={8}
                     >
-                      ENQUIRIES
+                      Enquiries
                     </Text>
-                    <Text fz={26} fw={700} c="#0B1F3A" lh={1.1}>
+                    <Text
+                      fz={18}
+                      fw={600}
+                      c={INK}
+                      lh={1.15}
+                      mt={2}
+                      style={{ letterSpacing: "-0.01em" }}
+                    >
                       {totalEnquiries.toLocaleString("en-IN")}
                     </Text>
                   </Box>
                   <Box
-                    p={12}
+                    p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
-                      border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                      borderRadius: enquiryConversionColors.radius,
-                      boxShadow: enquiryConversionColors.shadow,
-                      minHeight: 92,
+                      border: `1px solid ${LINE}`,
+                      borderRadius: 8,
                     }}
                   >
                     <Text
-                      fz={9}
-                      fw={700}
-                      c="#8FA2B7"
+                      fz={10}
+                      fw={500}
+                      c={INK3}
                       tt="uppercase"
                       lts="0.04em"
-                      mb={8}
                     >
-                      WON
+                      Won
                     </Text>
-                    <Text fz={26} fw={700} c={GREEN} lh={1.1} mb={4}>
+                    <Text
+                      fz={18}
+                      fw={600}
+                      c={GOOD}
+                      lh={1.15}
+                      mt={2}
+                      style={{ letterSpacing: "-0.01em" }}
+                    >
                       {totalGain.toLocaleString("en-IN")}
                     </Text>
-                    <Text fz={11} fw={700} c={GREEN}>
+                    <Text fz={10} fw={400} c={GOOD} mt={1}>
                       {winRateLabel}% win rate
                     </Text>
                   </Box>
                   <Box
-                    p={12}
+                    p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
-                      border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                      borderRadius: enquiryConversionColors.radius,
-                      boxShadow: enquiryConversionColors.shadow,
-                      minHeight: 92,
+                      border: `1px solid ${LINE}`,
+                      borderRadius: 8,
                     }}
                   >
                     <Text
-                      fz={9}
-                      fw={700}
-                      c="#8FA2B7"
+                      fz={10}
+                      fw={500}
+                      c={INK3}
                       tt="uppercase"
                       lts="0.04em"
-                      mb={8}
                     >
-                      WON VALUE
+                      Won value
                     </Text>
-                    <Text fz={26} fw={700} c="#0B1F3A" lh={1.1}>
+                    <Text
+                      fz={18}
+                      fw={600}
+                      c={INK}
+                      lh={1.15}
+                      mt={2}
+                      style={{ letterSpacing: "-0.01em" }}
+                    >
                       —
                     </Text>
                   </Box>
                 </SimpleGrid>
 
-                <Box>
-                  <Text fw={700} fz={15} c="#0F172A">
-                    Customer-wise conversion
-                  </Text>
-                  <Text fz={12} fw={500} c="#94A3B8" mt={4}>
-                    Click a customer for enquiry list
-                  </Text>
-                </Box>
-
                 <Box
                   style={{
                     background: enquiryConversionColors.panelBg,
-                    border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                    borderRadius: enquiryConversionColors.radius,
-                    boxShadow: enquiryConversionColors.shadow,
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 10,
                     overflow: "hidden",
                   }}
                 >
-                  <Table horizontalSpacing="md" verticalSpacing={12}>
+                  <Box
+                    px={18}
+                    pt={18}
+                    pb={12}
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      marginBottom: 0,
+                    }}
+                  >
+                    <Text
+                      component="h3"
+                      m={0}
+                      fz={13}
+                      fw={600}
+                      c={INK}
+                      style={{ letterSpacing: "-0.005em" }}
+                    >
+                      Customer-wise conversion
+                    </Text>
+                    <Text fz={11} c={INK4} fw={400}>
+                      Click a customer for enquiry list
+                    </Text>
+                  </Box>
+                  <Table
+                    horizontalSpacing={12}
+                    verticalSpacing={11}
+                    withRowBorders={false}
+                    highlightOnHover
+                    highlightOnHoverColor={TABLE_HEAD_BG}
+                    style={{ borderTop: `1px solid ${LINE}` }}
+                  >
                     <Table.Thead>
-                      <Table.Tr style={{ background: "#F8FAFC" }}>
+                      <Table.Tr>
                         {[
-                          "CUSTOMER",
-                          "ENQUIRIES",
-                          "WON",
-                          "WIN RATE",
-                          "VALUE",
-                          "SEND EMAIL",
+                          "Customer",
+                          "Enquiries",
+                          "Won",
+                          "Win rate",
+                          "Value",
+                          "Send email",
                         ].map((h, i) => (
                           <Table.Th
                             key={h}
-                            fz={10}
-                            fw={700}
-                            c="#94A3B8"
+                            fz={11}
+                            fw={500}
+                            c={INK3}
                             tt="uppercase"
+                            lts="0.04em"
                             ta={
                               i === 0
                                 ? "left"
@@ -553,7 +646,13 @@ export function ConversionByRepSummary({
                                   ? "center"
                                   : "right"
                             }
-                            style={i === 5 ? { width: 100 } : undefined}
+                            style={{
+                              background: TABLE_HEAD_BG,
+                              padding: "10px 12px",
+                              borderBottom: `1px solid ${LINE}`,
+                              whiteSpace: "nowrap",
+                              ...(i === 5 ? { width: 100 } : {}),
+                            }}
                           >
                             {h}
                           </Table.Th>
@@ -578,7 +677,16 @@ export function ConversionByRepSummary({
                             Math.abs(wr - Math.round(wr)) < 0.05
                               ? `${Math.round(wr)}`
                               : wr.toFixed(1);
-                          const wrColor = wr > 0 ? GREEN : RED;
+                          const wrColor = wr > 0 ? GOOD : BAD;
+                          const rowExtra = r as unknown as Record<string, unknown>;
+                          const industryRaw =
+                            rowExtra.industry ??
+                            rowExtra.customer_industry ??
+                            rowExtra.segment;
+                          const industry =
+                            typeof industryRaw === "string"
+                              ? industryRaw.trim()
+                              : "";
                           return (
                             <Table.Tr
                               key={r.customer_code}
@@ -590,37 +698,88 @@ export function ConversionByRepSummary({
                               }
                               style={{ cursor: "pointer" }}
                             >
-                              <Table.Td style={{ verticalAlign: "top" }}>
-                                <Text fz={13} fw={700} c="#0F172A">
+                              <Table.Td
+                                style={{
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                }}
+                              >
+                                <Text fz={12} fw={600} c={INK} lh={1.35}>
                                   {r.customer_name}
                                 </Text>
-                                <Text fz={11} fw={500} c="#94A3B8" mt={2}>
-                                  —
-                                </Text>
+                                {industry ? (
+                                  <Text fz={10.5} c={INK4} mt={1} lh={1.3}>
+                                    {industry}
+                                  </Text>
+                                ) : null}
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td
+                                ta="right"
+                                style={{
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                <Text fz={12} c={INK} lh={1.35}>
                                   {te.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} fw={700} c={g > 0 ? GREEN : "#0F172A"} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td
+                                ta="right"
+                                style={{
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                <Text
+                                  fz={12}
+                                  fw={600}
+                                  c={GOOD}
+                                  lh={1.35}
+                                  style={{ fontVariantNumeric: "tabular-nums" }}
+                                >
                                   {g.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} fw={700} c={wrColor} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td
+                                ta="right"
+                                style={{
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                <Text fz={12} fw={600} c={wrColor} lh={1.35}>
                                   {wrStr}%
                                 </Text>
                               </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              <Table.Td
+                                ta="right"
+                                style={{
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                <Text fz={12} fw={600} c={INK} lh={1.35}>
                                   —
                                 </Text>
                               </Table.Td>
                               <Table.Td
                                 ta="center"
-                                style={{ width: 100, verticalAlign: "middle" }}
+                                style={{
+                                  width: 100,
+                                  verticalAlign: "middle",
+                                  padding: "11px 12px",
+                                  borderBottom: `1px solid ${LINE}`,
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Tooltip label="Send Email" position="top" withArrow>

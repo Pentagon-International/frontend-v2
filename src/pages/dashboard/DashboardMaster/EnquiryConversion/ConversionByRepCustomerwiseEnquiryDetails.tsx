@@ -10,7 +10,7 @@ import {
   Table,
   Text,
 } from "@mantine/core";
-import { IconArrowLeft, IconX } from "@tabler/icons-react";
+import { IconX } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.service";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
@@ -23,6 +23,10 @@ import {
   primaryQuoteTotalSell,
   winProbLabel,
 } from "./customerwiseEnquiryHelpers";
+import {
+  EnquiryConversionDrawerBack,
+  EnquiryConversionDrawerHeaderSeparator,
+} from "./EnquiryConversionDrawerBack";
 
 const FONT = "'Geist', sans-serif";
 const NAVY_BTN = "#0B1F3A";
@@ -223,17 +227,10 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
             gap: 12,
           }}
         >
-          <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="sm"
-              aria-label="Back"
-              onClick={onClose}
-            >
-              <IconArrowLeft size={18} stroke={2} />
-            </ActionIcon>
-            <Text fz={12} fw={600} c="#64748B" truncate style={{ minWidth: 0 }}>
+          <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0, flex: 1 }}>
+            <EnquiryConversionDrawerBack onClick={onClose} />
+            <EnquiryConversionDrawerHeaderSeparator />
+            <Text fz={12} fw={500} c="#64748B" truncate style={{ minWidth: 0 }}>
               {salesperson} &gt; {customerName} &gt; {enquiry.enquiry_id}
             </Text>
           </Group>
@@ -279,7 +276,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
               </Group>
             </Box>
 
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={12}>
+            <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
               <Box
                 p={14}
                 style={{
