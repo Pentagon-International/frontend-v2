@@ -32,6 +32,10 @@ import {
 import type { EnquiryConversionPageFilters } from "./EnquiryConversionFilters";
 import type { StageFunnelRow } from "./StageFunnelCard";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
+import {
+  EnquiryConversionDrawerBack,
+  EnquiryConversionDrawerHeaderSeparator,
+} from "./EnquiryConversionDrawerBack";
 
 const NAVY = "#1E3A8A";
 const FONT = "'Geist', sans-serif";
@@ -403,11 +407,16 @@ export function StageFunnelDetails({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 14,
           }}
         >
-          <Text fw={600} fz={14} c="#0F172A">
-            {titleName} stage
-          </Text>
+          <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0, flex: 1 }}>
+            <EnquiryConversionDrawerBack onClick={handleDrawerClose} />
+            <EnquiryConversionDrawerHeaderSeparator />
+            <Text fw={600} fz={14} c="#0F172A" truncate style={{ minWidth: 0 }}>
+              {titleName} stage
+            </Text>
+          </Group>
           <ActionIcon variant="subtle" color="gray" onClick={handleDrawerClose} aria-label="Close">
             <IconX size={18} stroke={2} />
           </ActionIcon>
@@ -452,7 +461,7 @@ export function StageFunnelDetails({
                   </Center>
                 ) : vm ? (
                   <>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={12}>
+                    <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
                       {(
                         [
                           ["TOTAL ENQUIRIES", vm.totalCount.toLocaleString("en-IN")],
@@ -469,7 +478,6 @@ export function StageFunnelDetails({
                             border: `1px solid ${enquiryConversionColors.panelBorder}`,
                             borderRadius: enquiryConversionColors.radius,
                             boxShadow: enquiryConversionColors.shadow,
-                            minHeight: 88,
                           }}
                         >
                           <Text
@@ -566,9 +574,9 @@ export function StageFunnelDetails({
                                 <Text fz={13} fw={700} c="#0F172A">
                                   {r.name}
                                 </Text>
-                                <Text fz={11} fw={500} c="#94A3B8" mt={2}>
+                                {/* <Text fz={11} fw={500} c="#94A3B8" mt={2}>
                                   {r.sub}
-                                </Text>
+                                </Text> */}
                               </Table.Td>
                               <Table.Td>
                                 <Box

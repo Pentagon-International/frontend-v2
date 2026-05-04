@@ -10,6 +10,7 @@ import {
   Center,
   ScrollArea,
   ActionIcon,
+  Group,
 } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -22,6 +23,10 @@ import {
 } from "../../../../service/dashboard.service";
 import type { EnquiryConversionPageFilters } from "./EnquiryConversionFilters";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
+import {
+  EnquiryConversionDrawerBack,
+  EnquiryConversionDrawerHeaderSeparator,
+} from "./EnquiryConversionDrawerBack";
 
 const NAVY = "#1E3A8A";
 const NAVY_BG = "rgba(30, 58, 138, 0.08)";
@@ -568,11 +573,16 @@ export function EnquiryconversionSummarydetail({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 14,
           }}
         >
-          <Text fw={600} fz={14} c="#0F172A">
-            {drawerTitle}
-          </Text>
+          <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0, flex: 1 }}>
+            <EnquiryConversionDrawerBack onClick={onClose} />
+            <EnquiryConversionDrawerHeaderSeparator />
+            <Text fw={600} fz={14} c="#0F172A" truncate style={{ minWidth: 0 }}>
+              {drawerTitle}
+            </Text>
+          </Group>
           <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close">
             <IconX size={18} stroke={2} />
           </ActionIcon>
@@ -605,7 +615,7 @@ export function EnquiryconversionSummarydetail({
                   </Text>
                 </Box>
 
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={12}>
+                <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
                   {content.mini.map((k) => (
                     <Box
                       key={k.l}
@@ -615,7 +625,7 @@ export function EnquiryconversionSummarydetail({
                         border: `1px solid ${enquiryConversionColors.panelBorder}`,
                         borderRadius: enquiryConversionColors.radius,
                         boxShadow: enquiryConversionColors.shadow,
-                        minHeight: 92,
+                        // minHeight: 92,
                       }}
                     >
                       <Text
