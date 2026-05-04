@@ -33,7 +33,10 @@ import useAuthStore from "../../../store/authStore";
 import {
   DetailedViewTable,
   PipelineSalespersonByRepTable,
+  PipelineSalespersonBreakdownDrawerTable,
   PipelineSalespersonCustomerDrawerTable,
+  PipelineProductByServiceTable,
+  PipelineRegionByRegionTable,
 } from "../../../components";
 
 interface PipelineReportProps {
@@ -1052,7 +1055,6 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             expected: item.expected_profit || 0,
           }));
           setProductSalespersonData(salespersonData);
-          setProductData([]); // Clear base data when showing salesperson data
           // Store summary if available
           if (response.summary) {
             setProductSalespersonSummary(response.summary);
@@ -3051,6 +3053,23 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     ((drillLevel === 1 && !selectedColumnType) ||
       (drillLevel === 2 && Boolean(selectedColumnType)));
 
+  /** Product tab: rep list, customer list, and product-originated financial drill in the right drawer. */
+  const showProductPipelineDrawer =
+    activeTab === "product" &&
+    (productDrillLevel > 0 ||
+      (drillLevel === 2 &&
+        Boolean(selectedColumnType) &&
+        Boolean(selectedService) &&
+        !selectedSector));
+
+  /** Region/Sector tab: drill views and sector-originated financial drill in the right drawer. */
+  const showSectorPipelineDrawer =
+    activeTab === "region" &&
+    (sectorDrillLevel > 0 ||
+      (drillLevel === 2 &&
+        Boolean(selectedColumnType) &&
+        Boolean(selectedSector)));
+
   const salespersonCustomerDrawerTableModel = useMemo(() => {
     const customerRows: PipelineCustomerRow[] = [];
     const rowDrilldownIndices: number[] = [];
@@ -3062,6 +3081,44 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     });
     return { customerRows, rowDrilldownIndices };
   }, [drilldownData]);
+
+  const regionPipelineBaseRows = useMemo(
+    () =>
+      sectorData.map((item) => ({
+        region: item.region || "-",
+        potential: item.potential_profit || 0,
+        pipeline: item.pipeline_profit || 0,
+        gained: item.gained_profit || 0,
+        lost: item.lost_profit || 0,
+        quote: item.quoted_profit || 0,
+        expected: item.expected_profit || 0,
+      })),
+    [sectorData]
+  );
+
+  const productCustomerDrawerTableModel = useMemo(() => {
+    const customerRows: PipelineCustomerRow[] = [];
+    const rowDrilldownIndices: number[] = [];
+    productDrilldownData.forEach((row, drilldownIndex) => {
+      const name = (row.customer_name ?? "").trim();
+      if (!name || name === "TOTAL") return;
+      customerRows.push(row);
+      rowDrilldownIndices.push(drilldownIndex);
+    });
+    return { customerRows, rowDrilldownIndices };
+  }, [productDrilldownData]);
+
+  const sectorCustomerDrawerTableModel = useMemo(() => {
+    const customerRows: PipelineCustomerRow[] = [];
+    const rowDrilldownIndices: number[] = [];
+    sectorDrilldownData.forEach((row, drilldownIndex) => {
+      const name = (row.customer_name ?? "").trim();
+      if (!name || name === "TOTAL") return;
+      customerRows.push(row);
+      rowDrilldownIndices.push(drilldownIndex);
+    });
+    return { customerRows, rowDrilldownIndices };
+  }, [sectorDrilldownData]);
 
   const displayPotentialCustomersDrill2Table = useMemo(() => {
     if (!selectedColumnType) return potentialCustomersData;
@@ -3134,8 +3191,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   ]);
 
   // Show financial column detail view when drillLevel === 2 (from clicking financial columns)
-  // Skip full-page view when the same content is shown inside the salesperson pipeline drawer
-  if (drillLevel === 2 && selectedColumnType && !showSalespersonPipelineDrawer) {
+  // Skip full-page when the same content is shown inside a pipeline right drawer
+  if (
+    drillLevel === 2 &&
+    selectedColumnType &&
+    !showSalespersonPipelineDrawer &&
+    !showProductPipelineDrawer &&
+    !showSectorPipelineDrawer
+  ) {
     // Determine which back handler to use based on context
     let backHandler = handleBack;
     if (selectedSector) {
@@ -3163,7 +3226,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         moduleType="pipelineReport"
         onClose={handleResetToBase}
         loading={drilldownLoading}
-        onColumnClick={handleColumnClick}
+        onColumnClick={
+          handleColumnClick as React.ComponentProps<
+            typeof DetailedViewTable
+          >["onColumnClick"]
+        }
         onBack={backHandler}
         showBackButton={true}
         showCloseButton={true}
@@ -3217,146 +3284,6 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     );
   }
 
-  // Show product drill level view (similar to salesperson drill level)
-  if (productDrillLevel > 0) {
-    return (
-      <DetailedViewTable
-        data={displayProductData}
-        title={getTitle()}
-        drillLevel={productDrillLevel}
-        moduleType="pipelineReport"
-        onClose={handleResetToBase}
-        loading={
-          productLoading ||
-          productSalespersonLoading ||
-          productDrilldownLoading ||
-          cellEditLoading
-        }
-        onColumnClick={handleProductColumnClick}
-        onBack={productDrillLevel > 0 ? handleProductBack : undefined}
-        showBackButton={productDrillLevel > 0}
-        showCloseButton={productDrillLevel > 0}
-        selectedColumnType={productDrillLevel === 2 ? selectedColumnType : null}
-        hideExpected={true}
-        headerActions={
-          <Group gap="sm" align="center">
-            {/* <SegmentedControl
-              value={calculation}
-              onChange={(value) => {
-                setCalculation(value as "volume" | "no_of_shipments");
-              }}
-              data={[
-                { label: "Volume", value: "volume" },
-                { label: "No. of Shipments", value: "no_of_shipments" },
-              ]}
-              size="xs"
-              color="#105476"
-              styles={{
-                root: {
-                  backgroundColor: "#f0f0f0",
-                },
-                indicator: {
-                  backgroundColor: "#105476",
-                },
-                label: {
-                  color: "#105476",
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                },
-              }}
-            /> */}
-            {/* Commented out - can be used in future case */}
-            {/* <Select
-              placeholder="Select period"
-              data={[
-                { value: "current-month", label: "Current month" },
-                { value: "monthly", label: "Last Month" },
-                { value: "quarterly", label: "Last 3 Months" },
-                { value: "half-yearly", label: "Last 6 Months" },
-              ]}
-              value={period}
-              onChange={handlePeriodChange}
-              size="xs"
-              style={{ width: "150px" }}
-            /> */}
-          </Group>
-        }
-        onCellEdit={handleProductCellEdit}
-      />
-    );
-  }
-
-  // Show sector drill level view (similar to salesperson drill level)
-  if (sectorDrillLevel > 0) {
-    return (
-      <DetailedViewTable
-        data={displaySectorData}
-        title={getTitle()}
-        drillLevel={sectorDrillLevel}
-        moduleType="pipelineReport"
-        onClose={handleResetToBase}
-        loading={
-          sectorLoading ||
-          sectorSalespersonLoading ||
-          sectorDrilldownLoading ||
-          cellEditLoading
-        }
-        onColumnClick={handleSectorColumnClick}
-        onBack={sectorDrillLevel > 0 ? handleSectorBack : undefined}
-        showBackButton={sectorDrillLevel > 0}
-        showCloseButton={sectorDrillLevel > 0}
-        selectedColumnType={sectorDrillLevel === 2 ? selectedColumnType : null}
-        hideExpected={true}
-        headerActions={
-          <Group gap="sm" align="center">
-            {/* <SegmentedControl
-              value={calculation}
-              onChange={(value) => {
-                setCalculation(value as "volume" | "no_of_shipments");
-              }}
-              data={[
-                { label: "Volume", value: "volume" },
-                { label: "No. of Shipments", value: "no_of_shipments" },
-              ]}
-              size="xs"
-              color="#105476"
-              styles={{
-                root: {
-                  backgroundColor: "#f0f0f0",
-                },
-                indicator: {
-                  backgroundColor: "#105476",
-                },
-                label: {
-                  color: "#105476",
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                },
-              }}
-            /> */}
-            {/* Commented out - can be used in future case */}
-            {/* <Select
-              placeholder="Select period"
-              data={[
-                { value: "current-month", label: "Current month" },
-                { value: "monthly", label: "Last Month" },
-                { value: "quarterly", label: "Last 3 Months" },
-                { value: "half-yearly", label: "Last 6 Months" },
-              ]}
-              value={period}
-              onChange={handlePeriodChange}
-              size="xs"
-              style={{ width: "150px" }}
-            /> */}
-          </Group>
-        }
-        onCellEdit={handleSectorCellEdit}
-      />
-    );
-  }
-
   // Handle tab change - load data if not already loaded
   const handleTabChange = (value: string | null) => {
     if (!value) return;
@@ -3372,6 +3299,42 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       setDrilldownData([]);
       void loadPipelineData(undefined, period);
     }
+    if (value !== "product" && (productDrillLevel > 0 || selectedService)) {
+      setProductDrillLevel(0);
+      setSelectedService(null);
+      setSelectedServiceType(null);
+      setProductSalespersonData([]);
+      setProductSalespersonSummary(null);
+      setProductDrilldownData([]);
+      setProductDrilldownSummary(null);
+      if (drillLevel === 2 && selectedService && !selectedSector) {
+        setDrillLevel(0);
+        setSelectedColumnType(null);
+        setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
+      }
+      void loadProductData(period);
+    }
+    if (value !== "region" && (sectorDrillLevel > 0 || selectedSector)) {
+      setSectorDrillLevel(0);
+      setSelectedSector(null);
+      setSectorSalespersonData([]);
+      setSectorSalespersonSummary(null);
+      setSectorDrilldownData([]);
+      setSectorDrilldownSummary(null);
+      if (drillLevel === 2 && selectedSector) {
+        setDrillLevel(0);
+        setSelectedColumnType(null);
+        setSelectedSalesperson(null);
+        setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
+      }
+      void loadSectorData(period);
+    }
     setActiveTab(value);
 
     // Load data for the selected tab if not already loaded
@@ -3386,8 +3349,52 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     }
   };
 
-  // Show tabs at drill level 0, or salesperson pipeline drawer (customer list + in-drawer financial drill)
-  if (drillLevel === 0 || showSalespersonPipelineDrawer) {
+  const handlePipelineDrawerNavBack = () => {
+    if (showSalespersonPipelineDrawer) handleBack();
+    else if (showProductPipelineDrawer) handleProductBack();
+    else if (showSectorPipelineDrawer) handleSectorBack();
+  };
+
+  let pipelineDrawerHeaderLabel = "";
+  if (showSalespersonPipelineDrawer) {
+    pipelineDrawerHeaderLabel =
+      drillLevel === 2 && selectedColumnType
+        ? `${selectedSalesperson?.trim() || "Sales rep"} › ${getTitle()}`
+        : `Pipeline · ${selectedSalesperson?.trim() || "Sales rep"} · Customers`;
+  } else if (showProductPipelineDrawer) {
+    if (
+      drillLevel === 2 &&
+      selectedColumnType &&
+      selectedService &&
+      !selectedSector
+    ) {
+      pipelineDrawerHeaderLabel = `Product · ${getTitle()} · Level 3/3`;
+    } else if (productDrillLevel === 2) {
+      pipelineDrawerHeaderLabel = `Pipeline · Product · ${selectedSalesperson?.trim() || "Customers"} · Level 2/3`;
+    } else if (productDrillLevel === 1) {
+      pipelineDrawerHeaderLabel = `Pipeline · ${[selectedService, selectedServiceType].filter(Boolean).join(" ") || "Product"} · By rep · Level 1/3`;
+    } else {
+      pipelineDrawerHeaderLabel = "Pipeline · Product";
+    }
+  } else if (showSectorPipelineDrawer) {
+    if (drillLevel === 2 && selectedColumnType && selectedSector) {
+      pipelineDrawerHeaderLabel = `Region · ${getTitle()} · Level 3/3`;
+    } else if (sectorDrillLevel === 2) {
+      pipelineDrawerHeaderLabel = `Pipeline · ${(selectedSector || "").trim() || "Region"} · ${selectedSalesperson?.trim() || "Customers"} · Level 2/3`;
+    } else if (sectorDrillLevel === 1) {
+      pipelineDrawerHeaderLabel = `Pipeline · Region · ${(selectedSector || "").trim() || "Sector"} · Level 1/3`;
+    } else {
+      pipelineDrawerHeaderLabel = "Pipeline · Region";
+    }
+  }
+
+  // Show tabs at base drill, or any pipeline right drawer (salesperson / product / region)
+  if (
+    drillLevel === 0 ||
+    showSalespersonPipelineDrawer ||
+    showProductPipelineDrawer ||
+    showSectorPipelineDrawer
+  ) {
     return (
       <>
       <Box>
@@ -3523,37 +3530,27 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               </Group>
             )}
             <Box
+              px={{ base: "sm", sm: "md" }}
+              py="md"
               style={{
-                height: onBack ? "70vh" : "70vh",
-                overflow: "visible",
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
                 position: "relative",
               }}
             >
-              <DetailedViewTable
-                data={displayProductData}
-                title=""
-                drillLevel={productDrillLevel}
-                moduleType="pipelineReport"
-                onClose={() => {
-                  if (onBack) {
-                    onBack();
-                  }
+              <PipelineProductByServiceTable
+                title="By product"
+                subtitle={pipelineSalespersonBarSubtitle}
+                rows={productData}
+                loading={productLoading || cellEditLoading}
+                onRowClick={(row) => {
+                  void handleProductColumnClick("service", row.service, row);
                 }}
-                loading={
-                  productLoading ||
-                  productSalespersonLoading ||
-                  productDrilldownLoading
-                }
-                onColumnClick={handleProductColumnClick}
-                onBack={undefined}
-                showBackButton={false}
-                showCloseButton={false}
-                hideExpected={true}
-                headerActions={undefined}
-                onCellEdit={undefined}
+                emptyMessage="No product pipeline data"
               />
             </Box>
-            </Tabs.Panel>
+          </Tabs.Panel>
 
           <Tabs.Panel value="region" pt="md">
             {onBack && (
@@ -3570,43 +3567,46 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               </Group>
             )}
             <Box
+              px={{ base: "sm", sm: "md" }}
+              py="md"
               style={{
-                height: onBack ? "70vh" : "70vh",
-                overflow: "visible",
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
                 position: "relative",
               }}
             >
-              <DetailedViewTable
-                data={displaySectorData}
-                title=""
-                drillLevel={sectorDrillLevel}
-                moduleType="pipelineReport"
-                onClose={() => {
-                  if (onBack) {
-                    onBack();
-                  }
+              <PipelineRegionByRegionTable
+                title="By region / sector"
+                subtitle={pipelineSalespersonBarSubtitle}
+                rows={regionPipelineBaseRows}
+                loading={sectorLoading || cellEditLoading}
+                onRowClick={(row) => {
+                  void handleSectorColumnClick("region", row.region, {
+                    region: row.region,
+                    potential: row.potential,
+                    pipeline: row.pipeline,
+                    gained: row.gained,
+                    lost: row.lost,
+                    quote: row.quote,
+                    expected: row.expected,
+                    total: 0,
+                  });
                 }}
-                loading={
-                  sectorLoading ||
-                  sectorSalespersonLoading ||
-                  sectorDrilldownLoading
-                }
-                onColumnClick={handleSectorColumnClick}
-                onBack={undefined}
-                showBackButton={false}
-                showCloseButton={false}
-                hideExpected={true}
-                headerActions={undefined}
-                onCellEdit={handleSectorCellEdit}
+                emptyMessage="No regional pipeline data"
               />
             </Box>
-            </Tabs.Panel>
+          </Tabs.Panel>
         </Tabs>
       </Box>
 
       <Drawer
-        opened={showSalespersonPipelineDrawer}
-        onClose={handleBack}
+        opened={
+          showSalespersonPipelineDrawer ||
+          showProductPipelineDrawer ||
+          showSectorPipelineDrawer
+        }
+        onClose={handlePipelineDrawerNavBack}
         position="right"
         size="max(520px, 75vw)"
         padding={0}
@@ -3651,20 +3651,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 color="gray"
                 size="sm"
                 aria-label="Back"
-                onClick={handleBack}
+                onClick={handlePipelineDrawerNavBack}
               >
                 <IconArrowLeft size={18} stroke={2} />
               </ActionIcon>
               <Text fz={12} fw={600} c="#64748B" truncate style={{ minWidth: 0 }}>
-                {drillLevel === 2 && selectedColumnType
-                  ? `${selectedSalesperson?.trim() || "Sales rep"} › ${getTitle()}`
-                  : `Pipeline · ${selectedSalesperson?.trim() || "Sales rep"} · Customers`}
+                {pipelineDrawerHeaderLabel}
               </Text>
             </Group>
             <ActionIcon
               variant="subtle"
               color="gray"
-              onClick={handleBack}
+              onClick={handlePipelineDrawerNavBack}
               aria-label="Close"
             >
               <IconX size={18} stroke={2} />
@@ -3677,52 +3675,229 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             style={{ flex: 1, minHeight: 0 }}
           >
             <Box p={20} pb={28} style={{ minWidth: 0 }}>
-              {drillLevel === 2 && selectedColumnType ? (
-                <DetailedViewTable
-                  data={displayPotentialCustomersDrill2Table}
-                  title=""
-                  drillLevel={2}
-                  moduleType="pipelineReport"
-                  onClose={handleResetToBase}
-                  loading={drilldownLoading}
-                  onColumnClick={handleColumnClick}
-                  onBack={undefined}
-                  showBackButton={false}
-                  showCloseButton={false}
-                  selectedColumnType={selectedColumnType}
-                  headerActions={undefined}
-                  onCellEdit={undefined}
-                />
-              ) : (
-                <PipelineSalespersonCustomerDrawerTable
-                  rows={salespersonCustomerDrawerTableModel.customerRows}
-                  rowDrilldownIndices={
-                    salespersonCustomerDrawerTableModel.rowDrilldownIndices
-                  }
-                  summary={drilldownSummary}
-                  salespersonLabel={selectedSalesperson}
-                  loading={
-                    initialLoading || drilldownLoading || cellEditLoading
-                  }
-                  periodLabel={pipelineSalespersonBarSubtitle}
-                  onFinancialColumnClick={(columnType, row) => {
-                    void handleColumnClick(
-                      columnType,
-                      row.customer_name,
-                      row
-                    );
-                  }}
-                  onExpectedEnter={(drilldownIndex, row, value) => {
-                    void handleCellEdit(
-                      drilldownIndex,
-                      "expected",
-                      value,
-                      row,
-                      true
-                    );
-                  }}
-                />
-              )}
+              {showSalespersonPipelineDrawer ? (
+                drillLevel === 2 && selectedColumnType ? (
+                  <DetailedViewTable
+                    data={displayPotentialCustomersDrill2Table}
+                    title=""
+                    drillLevel={2}
+                    moduleType="pipelineReport"
+                    onClose={handleResetToBase}
+                    loading={drilldownLoading}
+                    onColumnClick={
+                      handleColumnClick as React.ComponentProps<
+                        typeof DetailedViewTable
+                      >["onColumnClick"]
+                    }
+                    onBack={undefined}
+                    showBackButton={false}
+                    showCloseButton={false}
+                    selectedColumnType={selectedColumnType}
+                    headerActions={undefined}
+                    onCellEdit={undefined}
+                  />
+                ) : (
+                  <PipelineSalespersonCustomerDrawerTable
+                    rows={salespersonCustomerDrawerTableModel.customerRows}
+                    rowDrilldownIndices={
+                      salespersonCustomerDrawerTableModel.rowDrilldownIndices
+                    }
+                    summary={drilldownSummary}
+                    salespersonLabel={selectedSalesperson}
+                    loading={
+                      initialLoading || drilldownLoading || cellEditLoading
+                    }
+                    periodLabel={pipelineSalespersonBarSubtitle}
+                    onFinancialColumnClick={(columnType, row) => {
+                      void handleColumnClick(
+                        columnType,
+                        row.customer_name,
+                        row
+                      );
+                    }}
+                    onExpectedEnter={(drilldownIndex, row, value) => {
+                      void handleCellEdit(
+                        drilldownIndex,
+                        "expected",
+                        value,
+                        row,
+                        true
+                      );
+                    }}
+                  />
+                )
+              ) : null}
+              {showProductPipelineDrawer ? (
+                <>
+                  {drillLevel === 2 &&
+                  selectedColumnType &&
+                  selectedService &&
+                  !selectedSector ? (
+                    <DetailedViewTable
+                      data={displayPotentialCustomersDrill2Table}
+                      title=""
+                      drillLevel={2}
+                      moduleType="pipelineReport"
+                      onClose={handleResetToBase}
+                      loading={drilldownLoading}
+                      onColumnClick={
+                        handleColumnClick as React.ComponentProps<
+                          typeof DetailedViewTable
+                        >["onColumnClick"]
+                      }
+                      onBack={undefined}
+                      showBackButton={false}
+                      showCloseButton={false}
+                      selectedColumnType={selectedColumnType}
+                      headerActions={undefined}
+                      onCellEdit={undefined}
+                    />
+                  ) : productDrillLevel === 2 && drillLevel === 0 ? (
+                    <PipelineSalespersonCustomerDrawerTable
+                      rows={productCustomerDrawerTableModel.customerRows}
+                      rowDrilldownIndices={
+                        productCustomerDrawerTableModel.rowDrilldownIndices
+                      }
+                      summary={productDrilldownSummary}
+                      salespersonLabel={selectedSalesperson}
+                      breakdownHeading={
+                        selectedSalesperson
+                          ? `${selectedSalesperson.trim()} · Customers breakdown`
+                          : null
+                      }
+                      loading={
+                        productDrilldownLoading ||
+                        productSalespersonLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleProductColumnClick(
+                          columnType,
+                          row.customer_name,
+                          row
+                        );
+                      }}
+                      onExpectedEnter={(drilldownIndex, row, value) => {
+                        void handleProductCellEdit(
+                          drilldownIndex,
+                          "expected",
+                          value,
+                          row,
+                          true
+                        );
+                      }}
+                    />
+                  ) : productDrillLevel === 1 ? (
+                    <PipelineSalespersonBreakdownDrawerTable
+                      rows={productSalespersonData}
+                      summary={productSalespersonSummary}
+                      breakdownHeading={`${[selectedService, selectedServiceType]
+                        .filter(Boolean)
+                        .join(" ") || "Product"} · Salesperson breakdown`}
+                      loading={
+                        productLoading ||
+                        productSalespersonLoading ||
+                        productDrilldownLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onSalespersonClick={(row) => {
+                        const salespersonRow = row as PipelineProductSalespersonRow;
+                        void handleProductColumnClick(
+                          "salesperson",
+                          salespersonRow.salesperson,
+                          salespersonRow
+                        );
+                      }}
+                      emptyMessage="No salesperson pipeline data"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {showSectorPipelineDrawer ? (
+                <>
+                  {drillLevel === 2 && selectedColumnType && selectedSector ? (
+                    <DetailedViewTable
+                      data={displayPotentialCustomersDrill2Table}
+                      title=""
+                      drillLevel={2}
+                      moduleType="pipelineReport"
+                      onClose={handleResetToBase}
+                      loading={drilldownLoading}
+                      onColumnClick={
+                        handleColumnClick as React.ComponentProps<
+                          typeof DetailedViewTable
+                        >["onColumnClick"]
+                      }
+                      onBack={undefined}
+                      showBackButton={false}
+                      showCloseButton={false}
+                      selectedColumnType={selectedColumnType}
+                      headerActions={undefined}
+                      onCellEdit={undefined}
+                    />
+                  ) : sectorDrillLevel === 2 && drillLevel === 0 ? (
+                    <PipelineSalespersonCustomerDrawerTable
+                      rows={sectorCustomerDrawerTableModel.customerRows}
+                      rowDrilldownIndices={
+                        sectorCustomerDrawerTableModel.rowDrilldownIndices
+                      }
+                      summary={sectorDrilldownSummary}
+                      salespersonLabel={selectedSalesperson || selectedSector}
+                      breakdownHeading={
+                        selectedSalesperson
+                          ? `${(selectedSector || "").trim()} · ${selectedSalesperson.trim()} · Customers breakdown`
+                          : `${(selectedSector || "").trim()} · Customers breakdown`
+                      }
+                      loading={
+                        sectorDrilldownLoading ||
+                        sectorSalespersonLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleSectorColumnClick(
+                          columnType,
+                          row.customer_name,
+                          row
+                        );
+                      }}
+                      onExpectedEnter={(drilldownIndex, row, value) => {
+                        void handleSectorCellEdit(
+                          drilldownIndex,
+                          "expected",
+                          value,
+                          row,
+                          true
+                        );
+                      }}
+                    />
+                  ) : sectorDrillLevel === 1 ? (
+                    <PipelineSalespersonBreakdownDrawerTable
+                      rows={sectorSalespersonData}
+                      summary={sectorSalespersonSummary}
+                      breakdownHeading={`${(selectedSector || "").trim() || "Region"} · Salesperson breakdown`}
+                      loading={
+                        sectorLoading ||
+                        sectorSalespersonLoading ||
+                        sectorDrilldownLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onSalespersonClick={(row) => {
+                        const salespersonRow = row as PipelineSalespersonRow;
+                        void handleSectorColumnClick(
+                          "salesperson",
+                          salespersonRow.salesperson,
+                          salespersonRow
+                        );
+                      }}
+                      emptyMessage="No salesperson pipeline data"
+                    />
+                  ) : null}
+                </>
+              ) : null}
             </Box>
           </ScrollArea>
         </Box>

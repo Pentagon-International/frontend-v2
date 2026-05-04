@@ -12,6 +12,9 @@ import BarChart from "./BarChart";
 import DrilldownHorizontalBarChart from "./DrilldownHorizontalBarChart";
 import PipelineSalespersonByRepTable from "./PipelineSalespersonByRepTable";
 import PipelineSalespersonCustomerDrawerTable from "./PipelineSalespersonCustomerDrawerTable";
+import PipelineSalespersonBreakdownDrawerTable from "./PipelineSalespersonBreakdownDrawerTable";
+import PipelineProductByServiceTable from "./PipelineProductByServiceTable";
+import PipelineRegionByRegionTable from "./PipelineRegionByRegionTable";
 import { EstimatesSection, useEstimatesForm } from "./EstimatesSection";
 import {
   ERPListBulkSelectionBar,
@@ -97,6 +100,9 @@ export {
   DrilldownHorizontalBarChart,
   PipelineSalespersonByRepTable,
   PipelineSalespersonCustomerDrawerTable,
+  PipelineSalespersonBreakdownDrawerTable,
+  PipelineProductByServiceTable,
+  PipelineRegionByRegionTable,
   EstimatesSection,
   useEstimatesForm,
   ERPListBulkSelectionBar,
@@ -170,6 +176,8 @@ export type {
 } from "./DrilldownHorizontalBarChart";
 export { shortNameLabel } from "./DrilldownHorizontalBarChart";
 export type { PipelineSalespersonRepRow } from "./PipelineSalespersonByRepTable";
+export type { PipelineProductByServiceRow } from "./PipelineProductByServiceTable";
+export type { PipelineRegionByRegionRow } from "./PipelineRegionByRegionTable";
 export type { EstimateRow, EstimatesFormValues } from "./EstimatesSection";
 export type {
   ErpListTheme,

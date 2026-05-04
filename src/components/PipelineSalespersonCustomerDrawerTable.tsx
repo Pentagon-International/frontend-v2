@@ -4,7 +4,6 @@ import {
   Center,
   Group,
   Loader,
-  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -51,6 +50,8 @@ export interface PipelineSalespersonCustomerDrawerTableProps {
   summary: PipelineCustomerDrawerSummary | null;
   /** Sales rep name for “Reps breakdown”-style section title in the drawer. */
   salespersonLabel?: string | null;
+  /** When set, replaces the default “{salesperson} · Customers breakdown” heading line. */
+  breakdownHeading?: string | null;
   loading?: boolean;
   emptyMessage?: string;
   /** Date range label for KPI strip (e.g. "01 Jan 2026 – 31 Jan 2026"). */
@@ -71,17 +72,6 @@ function sumField(rows: PipelineCustomerDrawerRow[], key: keyof PipelineCustomer
     const v = r[key];
     return acc + (typeof v === "number" && Number.isFinite(v) ? v : 0);
   }, 0);
-}
-
-function customerActivityTotal(r: PipelineCustomerDrawerRow) {
-  return (
-    Math.max(0, r.potential) +
-    Math.max(0, r.pipeline) +
-    Math.max(0, r.gained) +
-    Math.max(0, r.lost) +
-    Math.max(0, r.quote) +
-    Math.max(0, r.expected)
-  );
 }
 
 function ExpectedEditCell({
@@ -148,6 +138,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
   rowDrilldownIndices,
   summary,
   salespersonLabel,
+  breakdownHeading,
   loading,
   emptyMessage = "No customer rows for this rep.",
   periodLabel,
@@ -155,21 +146,23 @@ export default function PipelineSalespersonCustomerDrawerTable({
   onExpectedEnter,
 }: PipelineSalespersonCustomerDrawerTableProps) {
   const kpis = useMemo(() => {
-    const count = rows.length;
     const pot = summary?.total_potential ?? sumField(rows, "potential");
     const pipe = summary?.total_pipeline ?? sumField(rows, "pipeline");
-    const customersWithWork = rows.filter((r) => customerActivityTotal(r) > 0).length;
-    const customersActive = customersWithWork > 0 ? customersWithWork : count;
-    const avgPerCustomer =
-      count > 0
-        ? (pot / count).toFixed(1)
-        : customersActive > 0
-          ? (pot / customersActive).toFixed(1)
-          : "0.0";
-    return { count, pot, pipe, customersActive, avgPerCustomer };
+    const quoted = summary?.total_quoted ?? sumField(rows, "quote");
+    const gained = summary?.total_gained ?? sumField(rows, "gained");
+    const lost = summary?.total_lost ?? sumField(rows, "lost");
+    return { pot, pipe, quoted, gained, lost };
   }, [rows, summary]);
 
   const repTitle = (salespersonLabel ?? "").trim() || "Sales rep";
+  const totalCustomerCount = useMemo(() => {
+    const codes = new Set<string>();
+    for (const r of rows) {
+      const c = String(r.customer_code ?? "").trim();
+      if (c) codes.add(c);
+    }
+    return codes.size > 0 ? codes.size : rows.length;
+  }, [rows]);
 
   const headerKpiCards = (
     [
@@ -181,14 +174,26 @@ export default function PipelineSalespersonCustomerDrawerTable({
         "TOTAL PIPELINE",
         Math.round(kpis.pipe).toLocaleString("en-IN"),
       ],
-      ["CUSTOMERS ACTIVE", String(kpis.customersActive)],
-      ["AVG / CUSTOMER", kpis.avgPerCustomer],
+      [
+        "TOTAL QUOTED",
+        Math.round(kpis.quoted).toLocaleString("en-IN"),
+      ],
+      [
+        "TOTAL GAINED",
+        Math.round(kpis.gained).toLocaleString("en-IN"),
+      ],
+      [
+        "TOTAL LOST",
+        Math.round(kpis.lost).toLocaleString("en-IN"),
+      ],
+      ["TOTAL CUSTOMER", String(totalCustomerCount)],
     ] as const
   ).map(([label, val]) => (
     <Box
       key={label}
-      p={12}
+      p={8}
       style={{
+        minWidth: 0,
         background: enquiryConversionColors.panelBg,
         border: `1px solid ${enquiryConversionColors.panelBorder}`,
         borderRadius: enquiryConversionColors.radius,
@@ -196,16 +201,18 @@ export default function PipelineSalespersonCustomerDrawerTable({
       }}
     >
       <Text
-        fz={9}
+        fz={8}
         fw={700}
         c="#8FA2B7"
         tt="uppercase"
         lts="0.04em"
-        mb={8}
+        mb={6}
+        lineClamp={2}
+        style={{ wordBreak: "break-word" }}
       >
         {label}
       </Text>
-      <Text fz={26} fw={700} c="#0B1F3A" lh={1.1}>
+      <Text fz={18} fw={700} c="#0B1F3A" lh={1.1} truncate>
         {val}
       </Text>
     </Box>
@@ -235,7 +242,9 @@ export default function PipelineSalespersonCustomerDrawerTable({
           />
           <Box style={{ minWidth: 0 }}>
             <Text fw={700} fz={15} c={NAVY} lh={1.35}>
-              {repTitle} · Customers breakdown
+              {(breakdownHeading ?? "").trim()
+                ? (breakdownHeading ?? "").trim()
+                : `${repTitle} · Customers breakdown`}
             </Text>
             {periodLabel ? (
               <Text fz={12} fw={500} c="#94A3B8" mt={6} lh={1.45}>
@@ -246,9 +255,17 @@ export default function PipelineSalespersonCustomerDrawerTable({
         </Group>
       </Box>
 
-      <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12}>
+      <Box
+        style={{
+          width: "100%",
+          display: "grid",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          gap: 8,
+          alignItems: "stretch",
+        }}
+      >
         {headerKpiCards}
-      </SimpleGrid>
+      </Box>
 
       <Box>
         <Text fw={700} fz={15} c="#0F172A">
