@@ -3492,8 +3492,6 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 width: "100%",
                 maxWidth: "100%",
                 boxSizing: "border-box",
-                maxHeight: "min(78vh, 960px)",
-                overflow: "auto",
                 position: "relative",
               }}
             >
@@ -3702,6 +3700,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                     salespersonCustomerDrawerTableModel.rowDrilldownIndices
                   }
                   summary={drilldownSummary}
+                  salespersonLabel={selectedSalesperson}
                   loading={
                     initialLoading || drilldownLoading || cellEditLoading
                   }

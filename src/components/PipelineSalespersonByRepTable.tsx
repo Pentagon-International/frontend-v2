@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Box, Center, Group, Loader, Stack, Text } from "@mantine/core";
 import { shortNameLabel } from "./DrilldownHorizontalBarChart";
+import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 
 export type PipelineSalespersonRepRow = {
   salesperson: string;
@@ -243,13 +244,13 @@ function PipelineSalespersonByRepTable({
     );
   }
 
-  const headerCell = (label: string) => (
+  const headerCell = (label: string, ta: "left" | "center" = "center") => (
     <Text
       size="xs"
       fw={600}
       c="dimmed"
       tt="uppercase"
-      ta="center"
+      ta={ta}
       style={{
         letterSpacing: "0.04em",
       }}
@@ -259,11 +260,12 @@ function PipelineSalespersonByRepTable({
   );
 
   return (
+    <Box style={{ overflowX: "auto", width: "100%" }}>
     <Stack
       gap="md"
       style={{
-        width: "100%",
-        maxWidth: "100%",
+        width: "max-content",
+        minWidth: "100%",
         boxSizing: "border-box",
         padding: "16px 14px",
         borderRadius: 12,
@@ -283,7 +285,7 @@ function PipelineSalespersonByRepTable({
         ) : null}
       </Box>
 
-      <Box style={{ overflowX: "auto", width: "100%" }}>
+      <Box style={{ width: "100%" }}>
         <Box style={{ width: "100%", minWidth: 0 }}>
           <Box
             style={{
@@ -296,7 +298,9 @@ function PipelineSalespersonByRepTable({
               marginBottom: 2,
             }}
           >
-            {headerCell("Salesman")}
+            <Box style={{ paddingInline: 12 }}>
+              {headerCell("Salesman", "left")}
+            </Box>
             {headerCell("Potential")}
             {headerCell("Pipeline")}
             {headerCell("Gained")}
@@ -332,15 +336,21 @@ function PipelineSalespersonByRepTable({
                 <Box
                   style={{
                     minWidth: 0,
-                    textAlign: "center",
-                    paddingInline: 2,
+                    textAlign: "left",
+                    padding: "11px 12px",
                   }}
                 >
-                  <Text size="xs" fw={700} c="#111" lh={1.25}>
+                  <Text fz={13} fw={700} c={enquiryConversionColors.heading} lh={1.35}>
                     {shortNameLabel(row.salesperson)}
                   </Text>
                   {sub ? (
-                    <Text size="xs" c="dimmed" mt={2} lh={1.35}>
+                    <Text
+                      fz={11}
+                      fw={500}
+                      c={enquiryConversionColors.muted}
+                      mt={2}
+                      lh={1.35}
+                    >
                       {sub}
                     </Text>
                   ) : null}
@@ -374,6 +384,7 @@ function PipelineSalespersonByRepTable({
         </Box>
       </Box>
     </Stack>
+    </Box>
   );
 }
 

@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Center,
+  Group,
   Loader,
   SimpleGrid,
   Stack,
@@ -13,6 +14,8 @@ import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/Enqu
 
 const GREEN = "#16A34A";
 const RED = "#EF4444";
+const NAVY = "#1E3A8A";
+const DOT = "#105476";
 
 export type PipelineCustomerDrawerRow = {
   customer_code: string;
@@ -46,6 +49,8 @@ export interface PipelineSalespersonCustomerDrawerTableProps {
   /** Per-row index in parent `drilldownData` (for expected profit save). */
   rowDrilldownIndices: number[];
   summary: PipelineCustomerDrawerSummary | null;
+  /** Sales rep name for “Reps breakdown”-style section title in the drawer. */
+  salespersonLabel?: string | null;
   loading?: boolean;
   emptyMessage?: string;
   /** Date range label for KPI strip (e.g. "01 Jan 2026 – 31 Jan 2026"). */
@@ -68,40 +73,14 @@ function sumField(rows: PipelineCustomerDrawerRow[], key: keyof PipelineCustomer
   }, 0);
 }
 
-function KpiCard({
-  label,
-  value,
-  sub,
-  valueColor = "#0B1F3A",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  valueColor?: string;
-}) {
+function customerActivityTotal(r: PipelineCustomerDrawerRow) {
   return (
-    <Box
-      p={12}
-      style={{
-        background: enquiryConversionColors.panelBg,
-        border: `1px solid ${enquiryConversionColors.panelBorder}`,
-        borderRadius: enquiryConversionColors.radius,
-        boxShadow: enquiryConversionColors.shadow,
-        minHeight: 88,
-      }}
-    >
-      <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={8}>
-        {label}
-      </Text>
-      <Text fz={24} fw={700} c={valueColor} lh={1.1}>
-        {value}
-      </Text>
-      {sub ? (
-        <Text fz={11} fw={600} c="#9AAABD" mt={4}>
-          {sub}
-        </Text>
-      ) : null}
-    </Box>
+    Math.max(0, r.potential) +
+    Math.max(0, r.pipeline) +
+    Math.max(0, r.gained) +
+    Math.max(0, r.lost) +
+    Math.max(0, r.quote) +
+    Math.max(0, r.expected)
   );
 }
 
@@ -133,7 +112,7 @@ function ExpectedEditCell({
         }
       }}
       styles={{
-        root: { maxWidth: 64 },
+        root: { maxWidth: 64, marginInline: "auto" },
         input: {
           textAlign: "right",
           fontVariantNumeric: "tabular-nums",
@@ -168,6 +147,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
   rows,
   rowDrilldownIndices,
   summary,
+  salespersonLabel,
   loading,
   emptyMessage = "No customer rows for this rep.",
   periodLabel,
@@ -178,12 +158,58 @@ export default function PipelineSalespersonCustomerDrawerTable({
     const count = rows.length;
     const pot = summary?.total_potential ?? sumField(rows, "potential");
     const pipe = summary?.total_pipeline ?? sumField(rows, "pipeline");
-    const gained = summary?.total_gained ?? sumField(rows, "gained");
-    const lost = summary?.total_lost ?? sumField(rows, "lost");
-    const quoted = summary?.total_quoted ?? sumField(rows, "quote");
-    const exp = summary?.total_expected ?? sumField(rows, "expected");
-    return { count, pot, pipe, gained, lost, quoted, exp };
+    const customersWithWork = rows.filter((r) => customerActivityTotal(r) > 0).length;
+    const customersActive = customersWithWork > 0 ? customersWithWork : count;
+    const avgPerCustomer =
+      count > 0
+        ? (pot / count).toFixed(1)
+        : customersActive > 0
+          ? (pot / customersActive).toFixed(1)
+          : "0.0";
+    return { count, pot, pipe, customersActive, avgPerCustomer };
   }, [rows, summary]);
+
+  const repTitle = (salespersonLabel ?? "").trim() || "Sales rep";
+
+  const headerKpiCards = (
+    [
+      [
+        "TOTAL POTENTIAL",
+        Math.round(kpis.pot).toLocaleString("en-IN"),
+      ],
+      [
+        "TOTAL PIPELINE",
+        Math.round(kpis.pipe).toLocaleString("en-IN"),
+      ],
+      ["CUSTOMERS ACTIVE", String(kpis.customersActive)],
+      ["AVG / CUSTOMER", kpis.avgPerCustomer],
+    ] as const
+  ).map(([label, val]) => (
+    <Box
+      key={label}
+      p={12}
+      style={{
+        background: enquiryConversionColors.panelBg,
+        border: `1px solid ${enquiryConversionColors.panelBorder}`,
+        borderRadius: enquiryConversionColors.radius,
+        boxShadow: enquiryConversionColors.shadow,
+      }}
+    >
+      <Text
+        fz={9}
+        fw={700}
+        c="#8FA2B7"
+        tt="uppercase"
+        lts="0.04em"
+        mb={8}
+      >
+        {label}
+      </Text>
+      <Text fz={26} fw={700} c="#0B1F3A" lh={1.1}>
+        {val}
+      </Text>
+    </Box>
+  ));
 
   if (loading) {
     return (
@@ -195,40 +221,38 @@ export default function PipelineSalespersonCustomerDrawerTable({
 
   return (
     <Stack gap="lg">
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={12}>
-        <KpiCard
-          label="Customers"
-          value={kpis.count.toLocaleString("en-IN")}
-          sub={periodLabel}
-        />
-        <KpiCard label="Potential" value={Math.round(kpis.pot).toLocaleString("en-IN")} />
-        <KpiCard label="Pipeline" value={Math.round(kpis.pipe).toLocaleString("en-IN")} />
-        <KpiCard
-          label="Gained"
-          value={Math.round(kpis.gained).toLocaleString("en-IN")}
-          valueColor={GREEN}
-        />
-        <KpiCard
-          label="Lost"
-          value={Math.round(kpis.lost).toLocaleString("en-IN")}
-          valueColor={kpis.lost > 0 ? RED : "#0B1F3A"}
-        />
-        <KpiCard
-          label="Quoted"
-          value={Math.round(kpis.quoted).toLocaleString("en-IN")}
-        />
-        <KpiCard
-          label="Expected profit"
-          value={Math.round(kpis.exp).toLocaleString("en-IN")}
-        />
+      <Box>
+        <Group gap={10} align="flex-start" wrap="nowrap">
+          <Box
+            mt={4}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: DOT,
+              flexShrink: 0,
+            }}
+          />
+          <Box style={{ minWidth: 0 }}>
+            <Text fw={700} fz={15} c={NAVY} lh={1.35}>
+              {repTitle} · Customers breakdown
+            </Text>
+            {periodLabel ? (
+              <Text fz={12} fw={500} c="#94A3B8" mt={6} lh={1.45}>
+                {periodLabel}
+              </Text>
+            ) : null}
+          </Box>
+        </Group>
+      </Box>
+
+      <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12}>
+        {headerKpiCards}
       </SimpleGrid>
 
       <Box>
         <Text fw={700} fz={15} c="#0F172A">
           Customer-wise pipeline
-        </Text>
-        <Text fz={12} fw={500} c="#94A3B8" mt={4}>
-          Click a number to open details (where available)
         </Text>
       </Box>
 
@@ -247,12 +271,12 @@ export default function PipelineSalespersonCustomerDrawerTable({
               <Table.Tr style={{ background: "#F8FAFC" }}>
                 {[
                   { label: "Customer", ta: "left" as const, w: undefined },
-                  { label: "Potential", ta: "right" as const, w: undefined },
-                  { label: "Pipeline", ta: "right" as const, w: undefined },
-                  { label: "Quoted", ta: "right" as const, w: undefined },
-                  { label: "Gained", ta: "right" as const, w: undefined },
-                  { label: "Lost", ta: "right" as const, w: undefined },
-                  { label: "Expected", ta: "right" as const, w: 72 },
+                  { label: "Potential", ta: "center" as const, w: undefined },
+                  { label: "Pipeline", ta: "center" as const, w: undefined },
+                  { label: "Quoted", ta: "center" as const, w: undefined },
+                  { label: "Gained", ta: "center" as const, w: undefined },
+                  { label: "Lost", ta: "center" as const, w: undefined },
+                  { label: "Expected", ta: "center" as const, w: 72 },
                 ].map((h) => (
                   <Table.Th
                     key={h.label}
@@ -282,7 +306,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                   const drillIdx = rowDrilldownIndices[i] ?? i;
                   return (
                     <Table.Tr key={r.customer_code || `${r.customer_name}-${i}`}>
-                      <Table.Td style={{ verticalAlign: "top" }}>
+                      <Table.Td style={{ verticalAlign: "top", textAlign: "left" }}>
                         <Text fz={13} fw={700} c="#0F172A">
                           {r.customer_name}
                         </Text>
@@ -293,7 +317,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         ) : null}
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           cursor: r.potential > 0 ? "pointer" : undefined,
                           verticalAlign: "middle",
@@ -306,7 +330,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         <MetricText n={r.potential} fw={r.potential > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           cursor: r.pipeline > 0 ? "pointer" : undefined,
                           verticalAlign: "middle",
@@ -319,7 +343,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         <MetricText n={r.pipeline} fw={r.pipeline > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           cursor: r.quote > 0 ? "pointer" : undefined,
                           verticalAlign: "middle",
@@ -331,7 +355,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         <MetricText n={r.quote} fw={r.quote > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           cursor: r.gained > 0 ? "pointer" : undefined,
                           verticalAlign: "middle",
@@ -347,7 +371,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         />
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           cursor: r.lost > 0 ? "pointer" : undefined,
                           verticalAlign: "middle",
@@ -363,7 +387,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                         />
                       </Table.Td>
                       <Table.Td
-                        ta="right"
+                        ta="center"
                         style={{
                           width: 72,
                           maxWidth: 72,
