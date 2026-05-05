@@ -165,7 +165,7 @@ type Props = {
    * Opens the rep summary drawer (`ConversionByRepSummary`). From there, choosing a customer opens
    * `ConversionByRepCustomerwiseEnquiryList` (same flow as “Conversion by Rep”).
    */
-  onRepRowClick?: (salesperson: string) => void;
+  onRepRowClick?: (salesperson: string, apiType: string | null) => void;
 };
 
 export function StageFunnelDetails({
@@ -195,6 +195,20 @@ export function StageFunnelDetails({
   const fd = filters.fromDate;
   const td = filters.toDate;
   const apiType = funnelStageRowToApiType(stageRow);
+  const normalizedApiType = (apiType ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+  const stageCountLabel =
+    normalizedApiType === "ACTIVE"
+      ? "ACTIVE COUNT"
+      : normalizedApiType === "QUOTE CREATED"
+        ? "QUOTE CREATED COUNT"
+        : normalizedApiType === "GAINED"
+          ? "WON COUNT"
+          : normalizedApiType === "LOST"
+            ? "LOST COUNT"
+            : "STAGE COUNT";
 
   const handleDrawerClose = () => {
     closeSendEmail();
@@ -523,8 +537,13 @@ export function StageFunnelDetails({
                       {(
                         [
                           ["TOTAL ENQUIRIES", vm.totalCount.toLocaleString("en-IN")],
+                          [
+                            stageCountLabel,
+                            vm.totalCount.toLocaleString("en-IN"),
+                          ],
                           // ["PIPELINE VALUE", vm.pipelineLabel],
                           ["REPS ACTIVE", String(vm.repsActive)],
+
                           // ["AVG / REP", vm.avgPerRep],
                         ] as const
                       ).map(([label, val]) => (
@@ -623,7 +642,7 @@ export function StageFunnelDetails({
                           {vm.repRows.map((r, idx) => {
                             const openRep = () => {
                               const name = r.name?.trim();
-                              if (name && onRepRowClick) onRepRowClick(name);
+                              if (name && onRepRowClick) onRepRowClick(name, apiType);
                             };
                             return (
                             <Table.Tr

@@ -16,9 +16,11 @@ import {
 import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import { apiCallProtected } from "../../../../api/axios";
+import { URL } from "../../../../api/serverUrls";
 import {
-  getEnquiryConversionCustomerwiseDetail,
   extractNumericValue,
+  type EnquiryConversionCustomerwiseResponse,
   type EnquiryDrilldownEnquiry,
 } from "../../../../service/dashboard.service";
 import type { EnquiryConversionPageFilters } from "./EnquiryConversionFilters";
@@ -26,11 +28,8 @@ import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { stageLabelFromApiStatus } from "./enquiryConversionDashboardMappers";
 import {
   badgeColorForMode,
-  formatInrLakhs,
   laneFromEnquiry,
   modeAbbrev,
-  primaryQuoteTotalSell,
-  winProbLabel,
 } from "./customerwiseEnquiryHelpers";
 import { ConversionByRepCustomerwiseEnquiryDetails } from "./ConversionByRepCustomerwiseEnquiryDetails";
 import {
@@ -49,11 +48,13 @@ const LINE = "#e2e8f0";
 const PANEL_BG = "#f1f5f9";
 const TABLE_HEAD_BG = "#f8fafc";
 const GOOD = "#16a34a";
+const BAD = "#dc2626";
 
 type Props = {
   opened: boolean;
   onClose: () => void;
   salesperson: string | null;
+  apiType?: string | null;
   company: string;
   filters: EnquiryConversionPageFilters;
   customerCode: string | null;
@@ -64,6 +65,7 @@ export function ConversionByRepCustomerwiseEnquiryList({
   opened,
   onClose,
   salesperson,
+  apiType = null,
   company,
   filters,
   customerCode,
@@ -71,32 +73,49 @@ export function ConversionByRepCustomerwiseEnquiryList({
 }: Props) {
   const fd = filters.fromDate;
   const td = filters.toDate;
+  const normalizedApiType = (apiType ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+  const stageMetricLabel =
+    normalizedApiType === "ACTIVE"
+      ? "Active"
+      : normalizedApiType === "QUOTE CREATED"
+        ? "Quote created"
+        : normalizedApiType === "LOST"
+          ? "Lost"
+          : "Won";
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: [
       "enquiryConversionCustomerwise",
       company,
-      salesperson ?? "",
       customerCode ?? "",
       fd?.toISOString() ?? "",
       td?.toISOString() ?? "",
-      filters.type ?? "",
+      apiType ?? "",
       filters.service ?? "",
     ],
-    queryFn: () =>
-      getEnquiryConversionCustomerwiseDetail({
+    queryFn: async () => {
+      const body: Record<string, string> = {
         company,
-        salesperson: salesperson!,
         date_from: dayjs(fd!).format("DD-MM-YYYY"),
         date_to: dayjs(td!).format("DD-MM-YYYY"),
         customer_code: customerCode!,
-        type: filters.type,
-        service: filters.service,
-      }),
+      };
+      const t = apiType?.trim();
+      if (t) body.type = t;
+      const svc = filters.service?.trim();
+      if (svc) body.service = svc;
+      const response = await apiCallProtected.post(
+        URL.dashboard.enquiryConversion,
+        body
+      );
+      return response as unknown as EnquiryConversionCustomerwiseResponse;
+    },
     enabled:
       opened &&
       !!customerCode?.trim() &&
-      !!salesperson?.trim() &&
       !!company &&
       !!fd &&
       !!td,
@@ -115,19 +134,19 @@ export function ConversionByRepCustomerwiseEnquiryList({
     summaryTotal != null && summaryTotal !== undefined
       ? summaryTotal
       : te || enquiries.length;
+  const active = extractNumericValue(row?.active);
   const gained = extractNumericValue(row?.gained);
-  const wr = te > 0 ? (gained / te) * 100 : 0;
-  const wrStr =
-    Math.abs(wr - Math.round(wr)) < 0.05 ? `${Math.round(wr)}` : wr.toFixed(1);
-
-  let wonValueSum = 0;
-  for (const e of enquiries) {
-    if (e.status?.toUpperCase().includes("GAIN")) {
-      wonValueSum += primaryQuoteTotalSell(e);
-    }
-  }
-  const wonValueLabel =
-    wonValueSum > 0 ? formatInrLakhs(wonValueSum) : "—";
+  const quoteCreated = extractNumericValue(row?.quote_created);
+  const lost = extractNumericValue(row?.lost);
+  const stageMetricValue =
+    normalizedApiType === "ACTIVE"
+      ? active
+      : normalizedApiType === "QUOTE CREATED"
+        ? quoteCreated
+        : normalizedApiType === "LOST"
+          ? lost
+          : gained;
+  const stageMetricColor = normalizedApiType === "LOST" ? BAD : GOOD;
 
   const repLabel = salesperson?.trim() || data?.salesperson || "Rep";
 
@@ -252,10 +271,10 @@ export function ConversionByRepCustomerwiseEnquiryList({
               ) : (
                 <>
                   <SimpleGrid
-                    cols={{ base: 1, sm: 4 }}
+                    cols={{ base: 1, sm: 5 }}
                     spacing={10}
                     mb={16}
-                    style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+                    style={{ gridTemplateColumns: "repeat(5, 1fr)" }}
                   >
                     {[
                       {
@@ -264,20 +283,20 @@ export function ConversionByRepCustomerwiseEnquiryList({
                         valueColor: INK,
                       },
                       {
-                        label: "Won",
-                        value: gained.toLocaleString("en-IN"),
-                        valueColor: GOOD,
+                        label: stageMetricLabel,
+                        value: stageMetricValue.toLocaleString("en-IN"),
+                        valueColor: stageMetricColor,
                       },
-                      {
-                        label: "Win rate",
-                        value: `${wrStr}%`,
-                        valueColor: INK,
-                      },
-                      {
-                        label: "Won value (FY)",
-                        value: wonValueLabel,
-                        valueColor: INK,
-                      },
+                      // {
+                      //   label: "Win rate",
+                      //   value: `${wrStr}%`,
+                      //   valueColor: INK,
+                      // },
+                      // {
+                      //   label: "Won value (FY)",
+                      //   value: wonValueLabel,
+                      //   valueColor: INK,
+                      // },
                     ].map((k) => (
                       <Box
                         key={k.label}
@@ -359,8 +378,8 @@ export function ConversionByRepCustomerwiseEnquiryList({
                             "Lane",
                             "Mode",
                             "Stage",
-                            "Prob.",
-                            "Value",
+                            // "Prob.",
+                            // "Value",
                           ].map((h, i) => (
                             <Table.Th
                               key={h}
@@ -399,7 +418,6 @@ export function ConversionByRepCustomerwiseEnquiryList({
                             const recv = e.enquiry_received_date
                               ? dayjs(e.enquiry_received_date).format("D MMM")
                               : "—";
-                            const val = primaryQuoteTotalSell(e);
                             return (
                               <Table.Tr
                                 key={e.id ?? e.enquiry_id}
@@ -494,7 +512,7 @@ export function ConversionByRepCustomerwiseEnquiryList({
                                     </Text>
                                   </Box>
                                 </Table.Td>
-                                <Table.Td
+                                {/* <Table.Td
                                   ta="right"
                                   style={{
                                     verticalAlign: "middle",
@@ -519,7 +537,7 @@ export function ConversionByRepCustomerwiseEnquiryList({
                                   <Text fz={12} fw={600} c={INK} lh={1.35}>
                                     {val > 0 ? formatInrLakhs(val) : "—"}
                                   </Text>
-                                </Table.Td>
+                                </Table.Td> */}
                               </Table.Tr>
                             );
                           })

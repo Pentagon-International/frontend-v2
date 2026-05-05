@@ -17,6 +17,8 @@ import {
 import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import { apiCallProtected } from "../../../../api/axios";
+import { URL } from "../../../../api/serverUrls";
 import {
   getEnquiryConversionDashboardData,
   extractNumericValue,
@@ -82,6 +84,122 @@ function badgeStyleForStageLabel(label: string): { bg: string; fg: string } {
   if (s === "lost")
     return { bg: enquiryConversionColors.status.lost.bg, fg: enquiryConversionColors.status.lost.dot };
   return { bg: "#F1F5F9", fg: "#64748B" };
+}
+
+function mapQuotationFilterRowToDrilldown(
+  row: Record<string, unknown>
+): EnquiryDrilldownEnquiry {
+  const quotationArr = Array.isArray(row.quotation)
+    ? (row.quotation as Array<Record<string, unknown>>)
+    : [];
+  const quotations = quotationArr.map((q) => {
+    const charges = Array.isArray(q.charges)
+      ? (q.charges as Array<Record<string, unknown>>).map((c) => ({
+          charge_name: String(c.charge_name ?? ""),
+          unit: String(c.unit ?? ""),
+          no_of_units:
+            typeof c.no_of_units === "number"
+              ? c.no_of_units
+              : Number(c.no_of_units ?? 0),
+          sell_per_unit: String(c.sell_per_unit ?? ""),
+          total_sell: String(c.total_sell ?? ""),
+          currency: String(c.currency ?? ""),
+        }))
+      : [];
+    const cargo = Array.isArray(q.cargo_details)
+      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
+      : undefined;
+    return {
+      quotation_id: String(q.quotation_id ?? ""),
+      created_at: String(q.created_at ?? ""),
+      quotation_services: [
+        {
+          total_sell: String(
+            charges.reduce(
+              (s, c) => s + Number(c.total_sell ?? 0),
+              0
+            ) || ""
+          ),
+          quote_currency: String(q.quote_currency ?? "INR"),
+          valid_upto: String(q.valid_upto ?? ""),
+          charges,
+          service_details: {
+            service: String(q.service_type ?? q.service_name ?? ""),
+            shipment_terms_code_read: String(q.shipment_terms_code ?? ""),
+            shipment_terms_name: String(q.shipment_terms ?? ""),
+            origin_code_read: String(q.origin_code ?? ""),
+            destination_code_read: String(q.destination_code ?? ""),
+            origin_name: String(q.origin ?? ""),
+            destination_name: String(q.destination ?? ""),
+            gross_weight:
+              typeof cargo?.gross_weight === "number"
+                ? cargo.gross_weight
+                : Number(cargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof cargo?.no_of_packages === "number"
+                ? cargo.no_of_packages
+                : Number(cargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              q.commodity == null ? null : String(q.commodity ?? ""),
+          },
+        },
+      ],
+    };
+  });
+
+  const firstQuote = quotationArr[0];
+  const firstCargo = Array.isArray(firstQuote?.cargo_details)
+    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
+    : undefined;
+  return {
+    id: typeof row.id === "number" ? row.id : Number(row.id ?? 0) || undefined,
+    enquiry_id: String(row.enquiry_id ?? ""),
+    customer_name: String(row.customer_name ?? ""),
+    customer_address: String(row.customer_address ?? ""),
+    enquiry_received_date: String(row.enquiry_received_date ?? ""),
+    sales_person: String(row.sales_person ?? ""),
+    status: String(row.status ?? ""),
+    services: firstQuote
+      ? [
+          {
+            service: String(firstQuote.service_type ?? ""),
+            service_name: String(firstQuote.service_name ?? ""),
+            trade: String(firstQuote.trade ?? ""),
+            shipment_terms_code_read: String(firstQuote.shipment_terms_code ?? ""),
+            shipment_terms_name: String(firstQuote.shipment_terms ?? ""),
+            origin_code_read: String(firstQuote.origin_code ?? ""),
+            destination_code_read: String(firstQuote.destination_code ?? ""),
+            origin_name: String(firstQuote.origin ?? ""),
+            destination_name: String(firstQuote.destination ?? ""),
+            gross_weight:
+              typeof firstCargo?.gross_weight === "number"
+                ? firstCargo.gross_weight
+                : Number(firstCargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof firstCargo?.no_of_packages === "number"
+                ? firstCargo.no_of_packages
+                : Number(firstCargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              firstQuote.commodity == null
+                ? null
+                : String(firstQuote.commodity ?? ""),
+          },
+        ]
+      : [],
+    origin_list: Array.isArray(row.origin_list)
+      ? (row.origin_list as string[])
+      : [],
+    destination_list: Array.isArray(row.destination_list)
+      ? (row.destination_list as string[])
+      : [],
+    origin_code_list: Array.isArray(row.origin_code_list)
+      ? (row.origin_code_list as string[])
+      : [],
+    destination_code_list: Array.isArray(row.destination_code_list)
+      ? (row.destination_code_list as string[])
+      : [],
+    quotations,
+  };
 }
 
 export function ConversionByModeDetails({
@@ -240,7 +358,7 @@ export function ConversionByModeDetails({
         typeof valueRaw === "string" && valueRaw.trim().length > 0
           ? valueRaw.trim()
           : valueNum > 0
-            ? `₹${valueNum.toLocaleString("en-IN", { maximumFractionDigits: 1 })} L`
+            ? `${valueNum.toLocaleString("en-IN", { maximumFractionDigits: 1 })} `
             : "—";
       const sampleEnquiry =
         topEnquiries.find(
@@ -445,7 +563,7 @@ export function ConversionByModeDetails({
                   <Table horizontalSpacing={12} verticalSpacing={11} withRowBorders={false} highlightOnHover highlightOnHoverColor={TABLE_HEAD_BG}>
                     <Table.Thead>
                       <Table.Tr>
-                        {(["Customer", "Enquiries", "Won", "Win rate", "Value", ""] as const).map(
+                        {(["Customer", "Enquiries", "Won", "Value", ""] as const).map(
                           (h, i) => (
                             <Table.Th
                               key={h}
@@ -491,7 +609,7 @@ export function ConversionByModeDetails({
                               c.customerCode ??
                               c.sampleEnquiry?.customer_code?.trim() ??
                               "";
-                            if (onOpenCustomerEnquiryList && cc && resolvedSalesperson) {
+                            if (onOpenCustomerEnquiryList && cc) {
                               onOpenCustomerEnquiryList({
                                 customerCode: cc,
                                 customerName: c.name,
@@ -507,8 +625,7 @@ export function ConversionByModeDetails({
                           };
                           const topCustomerInteractive =
                             (onOpenCustomerEnquiryList &&
-                              !!(c.customerCode ?? c.sampleEnquiry?.customer_code?.trim()) &&
-                              !!resolvedSalesperson) ||
+                              !!(c.customerCode ?? c.sampleEnquiry?.customer_code?.trim())) ||
                             (onOpenEnquiryDetail && !!c.sampleEnquiry);
                           return (
                             <Table.Tr
@@ -548,11 +665,6 @@ export function ConversionByModeDetails({
                                   style={{ fontVariantNumeric: "tabular-nums" }}
                                 >
                                   {c.won.toLocaleString("en-IN")}
-                                </Text>
-                              </Table.Td>
-                              <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
-                                <Text fz={12} fw={600} c={GREEN} style={{ fontVariantNumeric: "tabular-nums" }}>
-                                  {wrStr}%
                                 </Text>
                               </Table.Td>
                               <Table.Td ta="right" style={{ borderBottom: `1px solid ${LINE}` }}>
@@ -632,9 +744,38 @@ export function ConversionByModeDetails({
                         topEnquiries.map((e) => {
                           const stage = stageLabelFromApiStatus(e.status ?? "");
                           const { bg, fg } = badgeStyleForStageLabel(stage.label);
-                          const openActiveDetail = () => {
+                          const openActiveDetail = async () => {
                             if (!onOpenEnquiryDetail) return;
-                            onOpenEnquiryDetail(buildDrilldownFromTopEnquiryRow(e));
+                            try {
+                              const payload = {
+                                filters: {
+                                  date_from: dayjs(fd!).format("YYYY-MM-DD"),
+                                  date_to: dayjs(td!).format("YYYY-MM-DD"),
+                                  enquiry_id: e.enquiry_id,
+                                },
+                              };
+                              const res = await apiCallProtected.post(
+                                URL.quotationFilter,
+                                payload
+                              );
+                              const data = (res as { data?: unknown }).data as
+                                | { data?: unknown[] }
+                                | undefined;
+                              const first = Array.isArray(data?.data)
+                                ? (data!.data![0] as Record<string, unknown> | undefined)
+                                : undefined;
+                              if (first) {
+                                onOpenEnquiryDetail(
+                                  mapQuotationFilterRowToDrilldown(first)
+                                );
+                                return;
+                              }
+                            } catch {
+                              // fall back to existing lightweight mapper on API failure
+                            }
+                            onOpenEnquiryDetail(
+                              buildDrilldownFromTopEnquiryRow(e)
+                            );
                           };
                           return (
                             <Table.Tr

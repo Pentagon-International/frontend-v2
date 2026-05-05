@@ -12,7 +12,10 @@ import {
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
+import dayjs from "dayjs";
 import { ERPListToolbar } from "../../../../components";
+import { apiCallProtected } from "../../../../api/axios";
+import { URL } from "../../../../api/serverUrls";
 import { MetricTrendCard } from "./MetricTrendCard";
 import { StageFunnelCard, type StageFunnelRow } from "./StageFunnelCard";
 import { ClickableByModeValueCard } from "./ClickableByModeValueCard";
@@ -52,6 +55,120 @@ import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.serv
 
 const REP_PAGE_SIZE = 5;
 const ERP_FONT_SANS = "'Geist', sans-serif";
+
+function mapQuotationFilterRowToDrilldown(
+  row: Record<string, unknown>
+): EnquiryDrilldownEnquiry {
+  const quotationArr = Array.isArray(row.quotation)
+    ? (row.quotation as Array<Record<string, unknown>>)
+    : [];
+  const quotations = quotationArr.map((q) => {
+    const charges = Array.isArray(q.charges)
+      ? (q.charges as Array<Record<string, unknown>>).map((c) => ({
+          charge_name: String(c.charge_name ?? ""),
+          unit: String(c.unit ?? ""),
+          no_of_units:
+            typeof c.no_of_units === "number"
+              ? c.no_of_units
+              : Number(c.no_of_units ?? 0),
+          sell_per_unit: String(c.sell_per_unit ?? ""),
+          total_sell: String(c.total_sell ?? ""),
+          currency: String(c.currency ?? ""),
+        }))
+      : [];
+    const cargo = Array.isArray(q.cargo_details)
+      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
+      : undefined;
+    return {
+      quotation_id: String(q.quotation_id ?? ""),
+      created_at: String(q.created_at ?? ""),
+      quotation_services: [
+        {
+          total_sell: String(
+            charges.reduce((s, c) => s + Number(c.total_sell ?? 0), 0) || ""
+          ),
+          quote_currency: String(q.quote_currency ?? "INR"),
+          valid_upto: String(q.valid_upto ?? ""),
+          charges,
+          service_details: {
+            service: String(q.service_type ?? q.service_name ?? ""),
+            shipment_terms_code_read: String(q.shipment_terms_code ?? ""),
+            shipment_terms_name: String(q.shipment_terms ?? ""),
+            origin_code_read: String(q.origin_code ?? ""),
+            destination_code_read: String(q.destination_code ?? ""),
+            origin_name: String(q.origin ?? ""),
+            destination_name: String(q.destination ?? ""),
+            gross_weight:
+              typeof cargo?.gross_weight === "number"
+                ? cargo.gross_weight
+                : Number(cargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof cargo?.no_of_packages === "number"
+                ? cargo.no_of_packages
+                : Number(cargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              q.commodity == null ? null : String(q.commodity ?? ""),
+          },
+        },
+      ],
+    };
+  });
+
+  const firstQuote = quotationArr[0];
+  const firstCargo = Array.isArray(firstQuote?.cargo_details)
+    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
+    : undefined;
+
+  return {
+    id: typeof row.id === "number" ? row.id : Number(row.id ?? 0) || undefined,
+    enquiry_id: String(row.enquiry_id ?? ""),
+    customer_name: String(row.customer_name ?? ""),
+    customer_address: String(row.customer_address ?? ""),
+    enquiry_received_date: String(row.enquiry_received_date ?? ""),
+    sales_person: String(row.sales_person ?? ""),
+    status: String(row.status ?? ""),
+    services: firstQuote
+      ? [
+          {
+            service: String(firstQuote.service_type ?? ""),
+            service_name: String(firstQuote.service_name ?? ""),
+            trade: String(firstQuote.trade ?? ""),
+            shipment_terms_code_read: String(
+              firstQuote.shipment_terms_code ?? ""
+            ),
+            shipment_terms_name: String(firstQuote.shipment_terms ?? ""),
+            origin_code_read: String(firstQuote.origin_code ?? ""),
+            destination_code_read: String(firstQuote.destination_code ?? ""),
+            origin_name: String(firstQuote.origin ?? ""),
+            destination_name: String(firstQuote.destination ?? ""),
+            gross_weight:
+              typeof firstCargo?.gross_weight === "number"
+                ? firstCargo.gross_weight
+                : Number(firstCargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof firstCargo?.no_of_packages === "number"
+                ? firstCargo.no_of_packages
+                : Number(firstCargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              firstQuote.commodity == null
+                ? null
+                : String(firstQuote.commodity ?? ""),
+          },
+        ]
+      : [],
+    origin_list: Array.isArray(row.origin_list) ? (row.origin_list as string[]) : [],
+    destination_list: Array.isArray(row.destination_list)
+      ? (row.destination_list as string[])
+      : [],
+    origin_code_list: Array.isArray(row.origin_code_list)
+      ? (row.origin_code_list as string[])
+      : [],
+    destination_code_list: Array.isArray(row.destination_code_list)
+      ? (row.destination_code_list as string[])
+      : [],
+    quotations,
+  };
+}
 
 function monthStart(): Date {
   const n = new Date();
@@ -98,6 +215,7 @@ export default function EnquiryConversionPage() {
   const [repSummarySalesperson, setRepSummarySalesperson] = useState<
     string | null
   >(null);
+  const [repSummaryApiType, setRepSummaryApiType] = useState<string | null>(null);
   const [topActiveDetailEnquiry, setTopActiveDetailEnquiry] =
     useState<EnquiryDrilldownEnquiry | null>(null);
   const [modeDetailRow, setModeDetailRow] = useState<ModeLegendRow | null>(null);
@@ -157,6 +275,36 @@ export default function EnquiryConversionPage() {
   const subtitle = formatEnquiryConversionPageSubtitle(data);
 
   const showBusy = (isLoading || isFetching) && !data;
+
+  const handleTopActiveRowClick = async (row: EnquiryRow) => {
+    if (!filters.fromDate || !filters.toDate || !row.enquiryCode?.trim()) {
+      setTopActiveDetailEnquiry(row.drilldownEnquiry);
+      return;
+    }
+    try {
+      const payload = {
+        filters: {
+          date_from: dayjs(filters.fromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(filters.toDate).format("YYYY-MM-DD"),
+          enquiry_id: row.enquiryCode.trim(),
+        },
+      };
+      const res = await apiCallProtected.post(URL.quotationFilter, payload);
+      const body = (res as { data?: unknown }).data as
+        | { data?: unknown[] }
+        | undefined;
+      const first = Array.isArray(body?.data)
+        ? (body?.data?.[0] as Record<string, unknown> | undefined)
+        : undefined;
+      if (first) {
+        setTopActiveDetailEnquiry(mapQuotationFilterRowToDrilldown(first));
+        return;
+      }
+    } catch {
+      // keep existing fallback behavior on API failure
+    }
+    setTopActiveDetailEnquiry(row.drilldownEnquiry);
+  };
 
   return (
     <Box
@@ -288,9 +436,10 @@ export default function EnquiryConversionPage() {
                       subtitle="Gained % · Gained/Total Enquiry"
                       // benchmarkPercent={benchmark}
                       rows={repRowsPage}
-                      onRepRowClick={(row) =>
-                        setRepSummarySalesperson(row.name)
-                      }
+                      onRepRowClick={(row) => {
+                        setRepSummarySalesperson(row.name);
+                        setRepSummaryApiType(null);
+                      }}
                       onRepSendEmailClick={(row) => setRepEmailRow(row)}
                       pagination={
                         repTotalPages > 1
@@ -308,9 +457,7 @@ export default function EnquiryConversionPage() {
                       title="Top Active Enquiries"
                       subtitle="By expected value"
                       rows={topRows}
-                      onRowClick={(row) =>
-                        setTopActiveDetailEnquiry(row.drilldownEnquiry)
-                      }
+                      onRowClick={handleTopActiveRowClick}
                       onSendEmailClick={(row) => setTopEnquiryEmailRow(row)}
                     />
                   </Box>
@@ -333,12 +480,19 @@ export default function EnquiryConversionPage() {
         stageRow={funnelStageRow}
         company={company}
         filters={filters}
-        onRepRowClick={(name) => setRepSummarySalesperson(name)}
+        onRepRowClick={(name, apiType) => {
+          setRepSummarySalesperson(name);
+          setRepSummaryApiType(apiType);
+        }}
       />
       <ConversionByRepSummary
         opened={repSummarySalesperson !== null}
-        onClose={() => setRepSummarySalesperson(null)}
+        onClose={() => {
+          setRepSummarySalesperson(null);
+          setRepSummaryApiType(null);
+        }}
         salesperson={repSummarySalesperson}
+        apiType={repSummaryApiType}
         company={company}
         filters={filters}
       />

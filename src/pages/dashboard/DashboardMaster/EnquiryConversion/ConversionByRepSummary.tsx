@@ -47,7 +47,6 @@ const LINE = "#e2e8f0";
 const PANEL_BG = "#f1f5f9";
 const TABLE_HEAD_BG = "#f8fafc";
 const GOOD = "#16a34a";
-const BAD = "#dc2626";
 
 function parseEmails(emailString: string): string[] {
   if (!emailString?.trim()) return [];
@@ -93,6 +92,7 @@ type Props = {
   opened: boolean;
   onClose: () => void;
   salesperson: string | null;
+  apiType?: string | null;
   company: string;
   filters: EnquiryConversionPageFilters;
 };
@@ -101,6 +101,7 @@ export function ConversionByRepSummary({
   opened,
   onClose,
   salesperson,
+  apiType = null,
   company,
   filters,
 }: Props) {
@@ -130,6 +131,18 @@ export function ConversionByRepSummary({
 
   const fd = filters.fromDate;
   const td = filters.toDate;
+  const normalizedApiType = (apiType ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+  const stageMetricLabel =
+    normalizedApiType === "ACTIVE"
+      ? "Active"
+      : normalizedApiType === "QUOTE CREATED"
+        ? "Quote created"
+        : normalizedApiType === "LOST"
+          ? "Lost"
+          : "Won";
 
   const handleCloseSummary = () => {
     setCustomerDrawer(null);
@@ -145,6 +158,7 @@ export function ConversionByRepSummary({
       "enquiryConversionRepSummary",
       company,
       salesperson ?? "",
+      apiType ?? "",
       fd?.toISOString() ?? "",
       td?.toISOString() ?? "",
     ],
@@ -154,6 +168,7 @@ export function ConversionByRepSummary({
         salesperson: salesperson!,
         date_from: dayjs(fd!).format("DD-MM-YYYY"),
         date_to: dayjs(td!).format("DD-MM-YYYY"),
+        type: apiType,
       }),
     enabled: opened && !!salesperson?.trim() && !!company && !!fd && !!td,
     staleTime: 20_000,
@@ -168,6 +183,14 @@ export function ConversionByRepSummary({
     0
   );
   const totalGain = extractNumericValue(summary?.total_gain);
+  const totalStageCount =
+    normalizedApiType === "ACTIVE"
+      ? extractNumericValue(summary?.total_active)
+      : normalizedApiType === "QUOTE CREATED"
+        ? extractNumericValue(summary?.total_quote_created)
+        : normalizedApiType === "LOST"
+          ? extractNumericValue(summary?.total_lost)
+          : totalGain;
   const totalCustomers = extractNumericValue(summary?.total_customer_count);
   const winRateOverall =
     totalEnquiries > 0 ? (totalGain / totalEnquiries) * 100 : 0;
@@ -491,7 +514,7 @@ export function ConversionByRepSummary({
                       Last 30 days
                     </Text>
                   </Box>
-                  <Box
+                  {/* <Box
                     p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
@@ -518,7 +541,7 @@ export function ConversionByRepSummary({
                     >
                       {totalEnquiries.toLocaleString("en-IN")}
                     </Text>
-                  </Box>
+                  </Box> */}
                   <Box
                     p="10px 12px"
                     style={{
@@ -534,7 +557,7 @@ export function ConversionByRepSummary({
                       tt="uppercase"
                       lts="0.04em"
                     >
-                      Won
+                      {stageMetricLabel}
                     </Text>
                     <Text
                       fz={18}
@@ -544,13 +567,13 @@ export function ConversionByRepSummary({
                       mt={2}
                       style={{ letterSpacing: "-0.01em" }}
                     >
-                      {totalGain.toLocaleString("en-IN")}
+                      {totalStageCount.toLocaleString("en-IN")}
                     </Text>
                     <Text fz={10} fw={400} c={GOOD} mt={1}>
                       {winRateLabel}% win rate
                     </Text>
                   </Box>
-                  <Box
+                  {/* <Box
                     p="10px 12px"
                     style={{
                       background: enquiryConversionColors.panelBg,
@@ -577,7 +600,7 @@ export function ConversionByRepSummary({
                     >
                       —
                     </Text>
-                  </Box>
+                  </Box> */}
                 </SimpleGrid>
 
                 <Box
@@ -627,8 +650,8 @@ export function ConversionByRepSummary({
                         {[
                           "Customer",
                           "Enquiries",
-                          "Won",
-                          "Win rate",
+                          stageMetricLabel,
+                          // "Win rate",
                           // "Value",
                           "Send email",
                         ].map((h, i) => (
@@ -671,13 +694,14 @@ export function ConversionByRepSummary({
                       ) : (
                         rows.map((r) => {
                           const te = extractNumericValue(r.total_enquiry);
-                          const g = extractNumericValue(r.gained);
-                          const wr = te > 0 ? (g / te) * 100 : 0;
-                          const wrStr =
-                            Math.abs(wr - Math.round(wr)) < 0.05
-                              ? `${Math.round(wr)}`
-                              : wr.toFixed(1);
-                          const wrColor = wr > 0 ? GOOD : BAD;
+                          const stageMetric =
+                            normalizedApiType === "ACTIVE"
+                              ? extractNumericValue(r.active)
+                              : normalizedApiType === "QUOTE CREATED"
+                                ? extractNumericValue(r.quote_created)
+                                : normalizedApiType === "LOST"
+                                  ? extractNumericValue(r.lost)
+                                  : extractNumericValue(r.gained);
                           const rowExtra = r as unknown as Record<string, unknown>;
                           const industryRaw =
                             rowExtra.industry ??
@@ -743,10 +767,10 @@ export function ConversionByRepSummary({
                                   lh={1.35}
                                   style={{ fontVariantNumeric: "tabular-nums" }}
                                 >
-                                  {g.toLocaleString("en-IN")}
+                                  {stageMetric.toLocaleString("en-IN")}
                                 </Text>
                               </Table.Td>
-                              <Table.Td
+                              {/* <Table.Td
                                 ta="right"
                                 style={{
                                   verticalAlign: "middle",
@@ -758,7 +782,7 @@ export function ConversionByRepSummary({
                                 <Text fz={12} fw={600} c={wrColor} lh={1.35}>
                                   {wrStr}%
                                 </Text>
-                              </Table.Td>
+                              </Table.Td> */}
                               {/* <Table.Td
                                 ta="right"
                                 style={{
@@ -904,6 +928,7 @@ export function ConversionByRepSummary({
       opened={customerDrawer !== null}
       onClose={() => setCustomerDrawer(null)}
       salesperson={salesperson}
+      apiType={apiType}
       company={company}
       filters={filters}
       customerCode={customerDrawer?.code ?? null}

@@ -138,7 +138,7 @@ export function TopActiveEnquiriesTable({
                     </Text>
                     <Group gap={8} mt={2}>
                       <Text size="11px" fw={500} c={enquiryConversionColors.muted}>
-                        {r.enquiryCode} · {r.ageLabel}
+                        {r.enquiryCode} 
                       </Text>
                       {r.stale ? (
                         <Badge size="xs" color="yellow.7" variant="light" radius="sm" fw={700} px={4} h={16}>

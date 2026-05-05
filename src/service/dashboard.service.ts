@@ -1435,16 +1435,20 @@ export const getEnquiryConversionSalespersonStatistics = async (params: {
   salesperson: string;
   date_from: string;
   date_to: string;
+  type?: string | null;
 }): Promise<EnquiryConversionSalespersonStatisticsResponse> => {
   try {
+    const body: Record<string, string> = {
+      company: params.company,
+      salesperson: params.salesperson.trim(),
+      date_from: params.date_from,
+      date_to: params.date_to,
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
     const response = await postAPICall(
       URL.dashboard.enquiryConversion,
-      {
-        company: params.company,
-        salesperson: params.salesperson.trim(),
-        date_from: params.date_from,
-        date_to: params.date_to,
-      },
+      body,
       API_HEADER
     );
     return response as EnquiryConversionSalespersonStatisticsResponse;

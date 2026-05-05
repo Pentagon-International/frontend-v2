@@ -113,6 +113,15 @@ function buildTimeline(e: EnquiryDrilldownEnquiry): TimelineItem[] {
       actor: q.created_by_name || q.created_by || "System",
     });
   }
+  const quotationUpdatedAt = (q as { updated_at?: string } | undefined)?.updated_at;
+  if (quotationUpdatedAt) {
+    items.push({
+      dt: quotationUpdatedAt,
+      title: "Quotation updated",
+      actor: q?.created_by_name || q?.created_by || "System",
+    });
+  }
+
   const st = e.status?.toUpperCase() ?? "";
   if (st.includes("GAIN")) {
     items.push({
@@ -278,27 +287,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
             </Box>
 
             <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-              <Box
-                p={14}
-                style={{
-                  background: enquiryConversionColors.panelBg,
-                  border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                  borderRadius: enquiryConversionColors.radius,
-                  boxShadow: enquiryConversionColors.shadow,
-                }}
-              >
-                <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={8}>
-                  QUOTE VALUE
-                </Text>
-                <Text fz={22} fw={700} c="#0B1F3A" lh={1.15}>
-                  {quoteFmt.primary}
-                </Text>
-                {quoteFmt.secondary ? (
-                  <Text fz={12} fw={600} c="#64748B" mt={4}>
-                    {quoteFmt.secondary}
-                  </Text>
-                ) : null}
-              </Box>
+          
               <Box
                 p={14}
                 style={{
@@ -329,9 +318,6 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
               >
                 <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={8}>
                   TRANSIT
-                </Text>
-                <Text fz={16} fw={700} c="#0B1F3A" lh={1.2}>
-                  —
                 </Text>
                 <Text fz={12} fw={600} c="#64748B" mt={4}>
                   {lanePretty(enquiry)}
@@ -380,14 +366,6 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                 </Text>
                 <Stack gap={10}>
                   <DetailRow label="Customer" value={customerName || enquiry.customer_name || "—"} />
-                  <DetailRow
-                    label="Contact"
-                    value={
-                      enquiry.sales_coordinator
-                        ? `${enquiry.sales_coordinator} · Sales ops`
-                        : "—"
-                    }
-                  />
                   <DetailRow label="Cargo" value={cargoSummary(enquiry)} />
                   <DetailRow label="Weight" value={weightLabel(enquiry)} />
                   <DetailRow label="Lane" value={lanePretty(enquiry)} />
