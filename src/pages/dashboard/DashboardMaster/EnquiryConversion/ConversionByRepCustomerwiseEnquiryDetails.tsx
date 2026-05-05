@@ -11,7 +11,10 @@ import {
   Text,
 } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import { apiCallProtected } from "../../../../api/axios";
+import { URL } from "../../../../api/serverUrls";
 import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.service";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { stageLabelFromApiStatus } from "./enquiryConversionDashboardMappers";
@@ -38,6 +41,119 @@ type Props = {
   salesperson: string;
   customerName: string;
 };
+
+function mapQuotationFilterRowToDrilldown(
+  row: Record<string, unknown>
+): EnquiryDrilldownEnquiry {
+  const quotationArr = Array.isArray(row.quotation)
+    ? (row.quotation as Array<Record<string, unknown>>)
+    : [];
+  const quotations = quotationArr.map((q) => {
+    const charges = Array.isArray(q.charges)
+      ? (q.charges as Array<Record<string, unknown>>).map((c) => ({
+          charge_name: String(c.charge_name ?? ""),
+          unit: String(c.unit ?? ""),
+          no_of_units:
+            typeof c.no_of_units === "number"
+              ? c.no_of_units
+              : Number(c.no_of_units ?? 0),
+          sell_per_unit: String(c.sell_per_unit ?? ""),
+          total_sell: String(c.total_sell ?? ""),
+          currency: String(c.currency ?? ""),
+        }))
+      : [];
+    const cargo = Array.isArray(q.cargo_details)
+      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
+      : undefined;
+    return {
+      quotation_id: String(q.quotation_id ?? ""),
+      created_at: String(q.created_at ?? ""),
+      quotation_services: [
+        {
+          total_sell: String(
+            charges.reduce((s, c) => s + Number(c.total_sell ?? 0), 0) || ""
+          ),
+          quote_currency: String(q.quote_currency ?? "INR"),
+          valid_upto: String(q.valid_upto ?? ""),
+          charges,
+          service_details: {
+            service: String(q.service_type ?? q.service_name ?? ""),
+            shipment_terms_code_read: String(q.shipment_terms_code ?? ""),
+            shipment_terms_name: String(q.shipment_terms ?? ""),
+            origin_code_read: String(q.origin_code ?? ""),
+            destination_code_read: String(q.destination_code ?? ""),
+            origin_name: String(q.origin ?? ""),
+            destination_name: String(q.destination ?? ""),
+            gross_weight:
+              typeof cargo?.gross_weight === "number"
+                ? cargo.gross_weight
+                : Number(cargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof cargo?.no_of_packages === "number"
+                ? cargo.no_of_packages
+                : Number(cargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              q.commodity == null ? null : String(q.commodity ?? ""),
+          },
+        },
+      ],
+    };
+  });
+
+  const firstQuote = quotationArr[0];
+  const firstCargo = Array.isArray(firstQuote?.cargo_details)
+    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
+    : undefined;
+  return {
+    id: typeof row.id === "number" ? row.id : Number(row.id ?? 0) || undefined,
+    enquiry_id: String(row.enquiry_id ?? ""),
+    customer_name: String(row.customer_name ?? ""),
+    customer_address: String(row.customer_address ?? ""),
+    enquiry_received_date: String(row.enquiry_received_date ?? ""),
+    sales_person: String(row.sales_person ?? ""),
+    status: String(row.status ?? ""),
+    services: firstQuote
+      ? [
+          {
+            service: String(firstQuote.service_type ?? ""),
+            service_name: String(firstQuote.service_name ?? ""),
+            trade: String(firstQuote.trade ?? ""),
+            shipment_terms_code_read: String(firstQuote.shipment_terms_code ?? ""),
+            shipment_terms_name: String(firstQuote.shipment_terms ?? ""),
+            origin_code_read: String(firstQuote.origin_code ?? ""),
+            destination_code_read: String(firstQuote.destination_code ?? ""),
+            origin_name: String(firstQuote.origin ?? ""),
+            destination_name: String(firstQuote.destination ?? ""),
+            gross_weight:
+              typeof firstCargo?.gross_weight === "number"
+                ? firstCargo.gross_weight
+                : Number(firstCargo?.gross_weight ?? 0) || undefined,
+            no_of_packages:
+              typeof firstCargo?.no_of_packages === "number"
+                ? firstCargo.no_of_packages
+                : Number(firstCargo?.no_of_packages ?? 0) || undefined,
+            commodity:
+              firstQuote.commodity == null
+                ? null
+                : String(firstQuote.commodity ?? ""),
+          },
+        ]
+      : [],
+    origin_list: Array.isArray(row.origin_list)
+      ? (row.origin_list as string[])
+      : [],
+    destination_list: Array.isArray(row.destination_list)
+      ? (row.destination_list as string[])
+      : [],
+    origin_code_list: Array.isArray(row.origin_code_list)
+      ? (row.origin_code_list as string[])
+      : [],
+    destination_code_list: Array.isArray(row.destination_code_list)
+      ? (row.destination_code_list as string[])
+      : [],
+    quotations,
+  };
+}
 
 function formatQuoteValueDisplay(e: EnquiryDrilldownEnquiry): {
   primary: string;
@@ -113,6 +229,15 @@ function buildTimeline(e: EnquiryDrilldownEnquiry): TimelineItem[] {
       actor: q.created_by_name || q.created_by || "System",
     });
   }
+  const quotationUpdatedAt = (q as { updated_at?: string } | undefined)?.updated_at;
+  if (quotationUpdatedAt) {
+    items.push({
+      dt: quotationUpdatedAt,
+      title: "Quotation updated",
+      actor: q?.created_by_name || q?.created_by || "System",
+    });
+  }
+
   const st = e.status?.toUpperCase() ?? "";
   if (st.includes("GAIN")) {
     items.push({
@@ -148,21 +273,63 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
 }: Props) {
   if (!enquiry) return null;
 
-  const qs = firstQuoteService(enquiry);
-  const stage = stageLabelFromApiStatus(enquiry.status);
-  const prob = winProbLabel(enquiry.status);
-  const quoteFmt = formatQuoteValueDisplay(enquiry);
-  const svc0 = enquiry.services?.[0];
+  const queryDateFrom = (
+    enquiry as EnquiryDrilldownEnquiry & { __filterDateFrom?: string }
+  ).__filterDateFrom;
+  const queryDateTo = (
+    enquiry as EnquiryDrilldownEnquiry & { __filterDateTo?: string }
+  ).__filterDateTo;
+
+  const { data: apiEnquiry } = useQuery({
+    queryKey: [
+      "enquiryConversionQuotationFilterDetails",
+      enquiry.enquiry_id ?? "",
+      queryDateFrom ?? "",
+      queryDateTo ?? "",
+    ],
+    queryFn: async () => {
+      const payload = {
+        filters: {
+          date_from: queryDateFrom!,
+          date_to: queryDateTo!,
+          enquiry_id: enquiry.enquiry_id,
+        },
+      };
+      const res = await apiCallProtected.post(URL.quotationFilter, payload);
+      // const res = await apiCallProtected.post(URL.enquiryFilter, payload);
+      const body = (res as { data?: unknown }).data as
+        | { data?: unknown[] }
+        | undefined;
+      const first = Array.isArray(body?.data)
+        ? (body.data?.[0] as Record<string, unknown> | undefined)
+        : undefined;
+      return first ? mapQuotationFilterRowToDrilldown(first) : null;
+    },
+    enabled:
+      opened &&
+      !!enquiry.enquiry_id?.trim() &&
+      !!queryDateFrom?.trim() &&
+      !!queryDateTo?.trim(),
+    staleTime: 20_000,
+  });
+
+  const displayEnquiry = apiEnquiry ?? enquiry;
+
+  const qs = firstQuoteService(displayEnquiry);
+  const stage = stageLabelFromApiStatus(displayEnquiry.status);
+  const prob = winProbLabel(displayEnquiry.status);
+  const quoteFmt = formatQuoteValueDisplay(displayEnquiry);
+  const svc0 = displayEnquiry.services?.[0];
   const modeTitle =
     svc0?.service_name ||
     (svc0?.service ? `${svc0.service} ${svc0.trade ?? ""}`.trim() : "—");
   const terms = svc0?.shipment_terms_name || svc0?.shipment_terms_code_read || "—";
   const validityDays =
-    qs?.valid_upto && enquiry.enquiry_received_date
+    qs?.valid_upto && displayEnquiry.enquiry_received_date
       ? Math.max(
           0,
           dayjs(qs.valid_upto).diff(
-            dayjs(enquiry.enquiry_received_date),
+            dayjs(displayEnquiry.enquiry_received_date),
             "day"
           )
         )
@@ -173,17 +340,17 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
       : qs?.valid_upto
         ? "Open"
         : "—";
-  const validitySub = enquiry.enquiry_received_date
-    ? `From ${dayjs(enquiry.enquiry_received_date).format("D MMM YYYY")}`
+  const validitySub = displayEnquiry.enquiry_received_date
+    ? `From ${dayjs(displayEnquiry.enquiry_received_date).format("D MMM YYYY")}`
     : qs?.valid_upto
       ? `Until ${dayjs(qs.valid_upto).format("D MMM YYYY")}`
       : "—";
 
   const charges = qs?.charges ?? [];
-  const totalSell = primaryQuoteTotalSell(enquiry);
+  const totalSell = primaryQuoteTotalSell(displayEnquiry);
   const quoteCur = (qs?.quote_currency || "INR").toUpperCase();
 
-  const timeline = buildTimeline(enquiry);
+  const timeline = buildTimeline(displayEnquiry);
 
   return (
     <Drawer
@@ -232,7 +399,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
             <EnquiryConversionDrawerBack onClick={onClose} />
             <EnquiryConversionDrawerHeaderSeparator />
             <Text fz={12} fw={500} c="#64748B" truncate style={{ minWidth: 0 }}>
-              {salesperson} &gt; {customerName} &gt; {enquiry.enquiry_id}
+              {salesperson} &gt; {customerName} &gt; {displayEnquiry.enquiry_id}
             </Text>
           </Group>
           <ActionIcon
@@ -249,7 +416,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
           <Stack gap="lg" p={20} pb={100}>
             <Box>
               <Text fw={700} fz={22} c="#0F172A">
-                {enquiry.enquiry_id}
+                {displayEnquiry.enquiry_id}
               </Text>
               <Group gap={8} mt={8} wrap="wrap">
                 <Text fz={13} fw={600} c="#334155">
@@ -278,27 +445,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
             </Box>
 
             <SimpleGrid cols={{ base: 1, sm: 4 }} spacing={12} style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-              <Box
-                p={14}
-                style={{
-                  background: enquiryConversionColors.panelBg,
-                  border: `1px solid ${enquiryConversionColors.panelBorder}`,
-                  borderRadius: enquiryConversionColors.radius,
-                  boxShadow: enquiryConversionColors.shadow,
-                }}
-              >
-                <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={8}>
-                  QUOTE VALUE
-                </Text>
-                <Text fz={22} fw={700} c="#0B1F3A" lh={1.15}>
-                  {quoteFmt.primary}
-                </Text>
-                {quoteFmt.secondary ? (
-                  <Text fz={12} fw={600} c="#64748B" mt={4}>
-                    {quoteFmt.secondary}
-                  </Text>
-                ) : null}
-              </Box>
+          
               <Box
                 p={14}
                 style={{
@@ -330,11 +477,8 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                 <Text fz={9} fw={700} c="#8FA2B7" tt="uppercase" lts="0.04em" mb={8}>
                   TRANSIT
                 </Text>
-                <Text fz={16} fw={700} c="#0B1F3A" lh={1.2}>
-                  —
-                </Text>
                 <Text fz={12} fw={600} c="#64748B" mt={4}>
-                  {lanePretty(enquiry)}
+                  {lanePretty(displayEnquiry)}
                 </Text>
               </Box>
               <Box
@@ -379,18 +523,10 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                   CUSTOMER &amp; CARGO
                 </Text>
                 <Stack gap={10}>
-                  <DetailRow label="Customer" value={customerName || enquiry.customer_name || "—"} />
-                  <DetailRow
-                    label="Contact"
-                    value={
-                      enquiry.sales_coordinator
-                        ? `${enquiry.sales_coordinator} · Sales ops`
-                        : "—"
-                    }
-                  />
-                  <DetailRow label="Cargo" value={cargoSummary(enquiry)} />
-                  <DetailRow label="Weight" value={weightLabel(enquiry)} />
-                  <DetailRow label="Lane" value={lanePretty(enquiry)} />
+                  <DetailRow label="Customer" value={customerName || displayEnquiry.customer_name || "—"} />
+                  <DetailRow label="Cargo" value={cargoSummary(displayEnquiry)} />
+                  <DetailRow label="Weight" value={weightLabel(displayEnquiry)} />
+                  <DetailRow label="Lane" value={lanePretty(displayEnquiry)} />
                   <DetailRow label="Sales rep" value={salesperson} />
                   <DetailRow label="Source" value="—" />
                 </Stack>

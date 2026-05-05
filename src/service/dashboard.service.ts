@@ -90,6 +90,10 @@ export interface DashboardFilters {
   salesman?: string;
   salesperson?: string;
   mode?: string;
+  by_sales_rep_ytd?: {
+    index: number;
+    limit: number;
+  };
   year?: number;
   month?: number;
   date_from?: string;
@@ -715,6 +719,57 @@ export interface BudgetResponse {
 export interface BudgetAggregatedData {
   totalActualBudget: number;
   totalSalesBudget: number;
+}
+
+export interface SalespersonMonthlyBudgetItem {
+  sno: number;
+  month: string;
+  actual_budget: number;
+  sales_budget: number;
+  currency?: string;
+  trade_type?: string | null;
+  service_type?: string | null;
+  incentive_percentage?: number;
+  incentive_amount?: number;
+}
+
+export interface SalespersonMonthlyBudgetData {
+  company_name: string;
+  date_range: string;
+  currency?: string;
+  salesperson: string;
+  budget: SalespersonMonthlyBudgetItem[];
+  summary?: {
+    total: number;
+    total_actual_budget: number;
+    total_sales_budget: number;
+  };
+}
+
+export interface SalespersonMonthlyBudgetResponse {
+  success: boolean;
+  message: string;
+  budget_summary_version?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  summary?: {
+    total_actual_budget: number;
+    total_sales_budget: number;
+    currency?: string;
+  };
+  data: SalespersonMonthlyBudgetData[];
+}
+
+export interface BudgetVsActualSalespersonNameRow {
+  sno: number;
+  salesperson: string;
+}
+
+export interface BudgetVsActualSalespersonNamesResponse {
+  status: boolean;
+  message: string;
+  data: BudgetVsActualSalespersonNameRow[];
 }
 
 // Get filtered outstanding data
@@ -1439,16 +1494,20 @@ export const getEnquiryConversionSalespersonStatistics = async (params: {
   salesperson: string;
   date_from: string;
   date_to: string;
+  type?: string | null;
 }): Promise<EnquiryConversionSalespersonStatisticsResponse> => {
   try {
+    const body: Record<string, string> = {
+      company: params.company,
+      salesperson: params.salesperson.trim(),
+      date_from: params.date_from,
+      date_to: params.date_to,
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
     const response = await postAPICall(
       URL.dashboard.enquiryConversion,
-      {
-        company: params.company,
-        salesperson: params.salesperson.trim(),
-        date_from: params.date_from,
-        date_to: params.date_to,
-      },
+      body,
       API_HEADER
     );
     return response as EnquiryConversionSalespersonStatisticsResponse;
@@ -1734,6 +1793,12 @@ export const getFilteredBudgetData = async (
     if (filters.salesperson) payload.salesperson = filters.salesperson;
     else if (filters.salesman) payload.salesperson = filters.salesman;
     if (filters.mode) payload.mode = filters.mode;
+    if (filters.by_sales_rep_ytd) {
+      payload.by_sales_rep_ytd = {
+        index: Number(filters.by_sales_rep_ytd.index) || 0,
+        limit: Number(filters.by_sales_rep_ytd.limit) || 2,
+      };
+    }
     if (filters.year && filters.month) {
       payload.month = `${filters.year}-${filters.month.toString().padStart(2, "0")}`;
     }
@@ -1783,6 +1848,45 @@ export const getFilteredBudgetData = async (
     return response as BudgetResponse;
   } catch (error) {
     console.error("Error fetching filtered budget data:", error);
+    throw error;
+  }
+};
+
+export const getSalespersonMonthlyBudgetSummary = async (params: {
+  company: string;
+  salesperson: string;
+  start_month: string;
+  end_month: string;
+  type: string;
+}): Promise<SalespersonMonthlyBudgetResponse> => {
+  try {
+    const payload = {
+      type: params.type,
+      company: params.company,
+      salesperson: params.salesperson,
+      start_month: params.start_month,
+      end_month: params.end_month,
+    };
+    const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    return response as SalespersonMonthlyBudgetResponse;
+  } catch (error) {
+    console.error("Error fetching salesperson monthly budget summary:", error);
+    throw error;
+  }
+};
+
+export const getBudgetVsActualSalespersonNames = async (
+  search: string
+): Promise<BudgetVsActualSalespersonNamesResponse> => {
+  try {
+    const payload = {
+      model: "budget-vs-actual",
+      search: search.trim(),
+    };
+    const response = await postAPICall(URL.dashboard.budgetVsActualSalespersonNames, payload);
+    return response as BudgetVsActualSalespersonNamesResponse;
+  } catch (error) {
+    console.error("Error fetching budget vs actual salesperson names:", error);
     throw error;
   }
 };

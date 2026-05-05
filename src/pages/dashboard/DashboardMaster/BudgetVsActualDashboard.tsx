@@ -21,8 +21,10 @@ import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import {
   calculateFinancialYearBudgetRangeForYear,
+  getBudgetVsActualSalespersonNames,
   getFilteredBudgetData,
 } from "../../../service/dashboard.service";
+import SalespersonMonthlyBudget from "./SalespersonMonthlyBudget";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
 
@@ -98,26 +100,6 @@ function getCurrentFinancialYearStart(): string {
   return month >= 4 ? String(year) : String(year - 1);
 }
 
-function getFinancialMonthOptions(selectedYear: string | null) {
-  const baseYear = selectedYear
-    ? parseInt(selectedYear, 10)
-    : parseInt(getCurrentFinancialYearStart(), 10);
-  const options: Array<{ value: string; label: string }> = [];
-  for (let month = 4; month <= 12; month += 1) {
-    options.push({
-      value: `${baseYear}-${String(month).padStart(2, "0")}`,
-      label: dayjs(`${baseYear}-${String(month).padStart(2, "0")}-01`).format("MMM YYYY"),
-    });
-  }
-  for (let month = 1; month <= 3; month += 1) {
-    options.push({
-      value: `${baseYear + 1}-${String(month).padStart(2, "0")}`,
-      label: dayjs(`${baseYear + 1}-${String(month).padStart(2, "0")}-01`).format("MMM YYYY"),
-    });
-  }
-  return options;
-}
-
 export default function BudgetVsActualDashboard() {
   const location = useLocation();
   const isMobile = useMediaQuery("(max-width: 62em)");
@@ -138,12 +120,20 @@ export default function BudgetVsActualDashboard() {
   );
   const [endMonth, setEndMonth] = useState(routeState.end_month || initialRange.end_month);
   const [salesperson, setSalesperson] = useState(routeState.salesperson || "");
+  const [salespersonSearch, setSalespersonSearch] = useState(routeState.salesperson || "");
+  const [salespersonOptions, setSalespersonOptions] = useState<Array<{ value: string; label: string }>>([
+    { value: "", label: "All reps" },
+  ]);
+  const [salespersonOptionsLoading, setSalespersonOptionsLoading] = useState(false);
   const [mode, setMode] = useState(routeState.mode || "");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<any>(null);
+  const [repPageIndex, setRepPageIndex] = useState(0);
+  const [repPageLimit] = useState(6);
+  const [selectedRepForDrawer, setSelectedRepForDrawer] = useState("");
+  const [salespersonDrawerOpened, setSalespersonDrawerOpened] = useState(false);
 
-  const monthOptions = useMemo(() => getFinancialMonthOptions(selectedYear), [selectedYear]);
   const yearOptions = useMemo(() => {
     const current = parseInt(getCurrentFinancialYearStart(), 10);
     return Array.from({ length: 4 }, (_, i) => {
@@ -161,6 +151,10 @@ export default function BudgetVsActualDashboard() {
         company,
         start_month: startMonth,
         end_month: endMonth,
+        by_sales_rep_ytd: {
+          index: repPageIndex,
+          limit: repPageLimit,
+        },
         ...(salesperson && { salesperson }),
         ...(mode && { mode }),
       } as any);
@@ -171,25 +165,48 @@ export default function BudgetVsActualDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [company, endMonth, mode, salesperson, startMonth, type]);
+  }, [company, endMonth, mode, repPageIndex, repPageLimit, salesperson, startMonth, type]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    setRepPageIndex(0);
+  }, [type, company, startMonth, endMonth, mode, salesperson]);
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setSalespersonOptionsLoading(true);
+        const response = await getBudgetVsActualSalespersonNames(salespersonSearch || "");
+        if (!active) return;
+        const fetched = Array.isArray(response?.data)
+          ? response.data
+              .map((row) => String(row.salesperson || "").trim())
+              .filter(Boolean)
+              .map((name) => ({ value: name, label: name }))
+          : [];
+        setSalespersonOptions([{ value: "", label: "All reps" }, ...fetched]);
+      } catch (err) {
+        console.error("Error loading salesperson dropdown options:", err);
+        if (active) setSalespersonOptions([{ value: "", label: "All reps" }]);
+      } finally {
+        if (active) setSalespersonOptionsLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [salespersonSearch]);
+
   const summary = response?.summary || {};
   const repRows = response?.by_sales_rep_ytd?.rows || [];
   const monthlyTrend = response?.monthly_trend || [];
   const byMode = response?.by_mode_ytd || [];
-
-  const salespersonOptions = useMemo(() => {
-    const names = Array.from(
-      new Set<string>(
-        repRows.map((row: any) => String(row.sales_person || "").trim()).filter(Boolean)
-      )
-    );
-    return [{ value: "", label: "All reps" }, ...names.map((n) => ({ value: n, label: n }))];
-  }, [repRows]);
 
   const modeOptions = useMemo(() => {
     const modes = Array.from(
@@ -202,6 +219,13 @@ export default function BudgetVsActualDashboard() {
     () => repRows.filter((row: any) => !salesperson || row.sales_person === salesperson),
     [repRows, salesperson]
   );
+  const repMeta = response?.by_sales_rep_ytd || {};
+  const repTotal = toNumber(repMeta.total ?? repMeta.pagination_total ?? filteredRepRows.length);
+  const hasPrevRepPage = repPageIndex > 0;
+  const hasNextRepPage =
+    repTotal > 0
+      ? (repPageIndex + 1) * repPageLimit < repTotal
+      : filteredRepRows.length >= repPageLimit;
 
   const teamSummary = useMemo(() => {
     const rowSummary = response?.by_sales_rep_ytd?.summary;
@@ -381,12 +405,15 @@ export default function BudgetVsActualDashboard() {
                 <Select
                   size="xs"
                   radius={6}
-                  data={[
-                    { value: "salesperson", label: "By Rep" },
-                    { value: "non-salesperson", label: "Non-sales" },
-                  ]}
-                  value={type}
-                  onChange={(value) => value && setType(value as "salesperson" | "non-salesperson")}
+                  searchable
+                  clearable
+                  nothingFoundMessage="No salesperson found"
+                  data={salespersonOptions}
+                  value={salesperson || null}
+                  searchValue={salespersonSearch}
+                  onSearchChange={setSalespersonSearch}
+                  onChange={(value) => setSalesperson(value || "")}
+                  rightSection={salespersonOptionsLoading ? <Loader size={14} color="#105476" /> : undefined}
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
                   styles={selectInputStyles}
                 />
@@ -399,7 +426,7 @@ export default function BudgetVsActualDashboard() {
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 120px", minWidth: isCompact ? 0 : 100 }}
                   styles={selectInputStyles}
                 />
-                <Button
+                {/* <Button
                   size="xs"
                   radius={6}
                   variant="default"
@@ -419,7 +446,7 @@ export default function BudgetVsActualDashboard() {
                   }}
                 >
                   Export
-                </Button>
+                </Button> */}
               </Group>
             </Box>
           }
@@ -644,7 +671,7 @@ export default function BudgetVsActualDashboard() {
                     </Grid>
 
                     <Stack gap={0}>
-                      {filteredRepRows.slice(0, 6).map((row: any, idx: number) => {
+                      {filteredRepRows.map((row: any, idx: number) => {
                         const budget = toNumber(row.budget);
                         const actual = toNumber(row.actual);
                         const variance = toNumber(row.variance);
@@ -653,13 +680,6 @@ export default function BudgetVsActualDashboard() {
                         const actualPct = clamp((actual / maxBase) * 100, 0, 100);
                         const markerPct = clamp((budget / maxBase) * 100, 0, 100);
                         const barColor = getRepBarColor(achv);
-                        const roleLabel =
-                          idx % 3 === 0
-                            ? "North · Ocean lead"
-                            : idx % 3 === 1
-                              ? "West · FCL specialist"
-                              : "South · Air freight";
-
                         return (
                           <Box
                             key={`${row.sno}-${row.sales_person}`}
@@ -667,6 +687,20 @@ export default function BudgetVsActualDashboard() {
                             style={{
                               borderTop: idx === 0 ? "1px solid #E9ECEF" : "none",
                               borderBottom: "1px solid #E9ECEF",
+                              cursor: "pointer",
+                              transition: "background-color 120ms ease",
+                            }}
+                            onClick={() => {
+                              const selectedRep = String(row.sales_person || "").trim();
+                              if (!selectedRep) return;
+                              setSelectedRepForDrawer(selectedRep);
+                              setSalespersonDrawerOpened(true);
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#F8FAFC";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#FFFFFF";
                             }}
                           >
                             <Grid columns={24} align="center">
@@ -674,9 +708,9 @@ export default function BudgetVsActualDashboard() {
                                 <Text fw={700} fz={12} c="#111827" lineClamp={1}>
                                   {row.sales_person}
                                 </Text>
-                                <Text fz={10} c="#9CA3AF" lineClamp={1}>
+                                {/* <Text fz={10} c="#9CA3AF" lineClamp={1}>
                                   {roleLabel}
-                                </Text>
+                                </Text> */}
                               </Grid.Col>
                               <Grid.Col span={3}>
                                 <Text fw={600} fz={12} c="#64748B" ta="right">
@@ -751,6 +785,58 @@ export default function BudgetVsActualDashboard() {
                         );
                       })}
                     </Stack>
+
+                    <Group justify="space-between" mt={8} mb={6}>
+                      <Text fz={11} fw={600} c="#94A3B8">
+                        Page {repPageIndex + 1}
+                        {repTotal > 0
+                          ? ` · Showing ${repPageIndex * repPageLimit + 1}-${Math.min(
+                              (repPageIndex + 1) * repPageLimit,
+                              repTotal
+                            )} of ${repTotal}`
+                          : ""}
+                      </Text>
+                      <Group gap={6}>
+                        <Button
+                          size="xs"
+                          radius={6}
+                          variant="default"
+                          disabled={!hasPrevRepPage}
+                          onClick={() => setRepPageIndex((prev) => Math.max(0, prev - 1))}
+                          styles={{
+                            root: {
+                              height: 28,
+                              borderColor: "#E2E8F0",
+                              background: "#FFFFFF",
+                              color: "#1E293B",
+                              fontSize: 11,
+                              fontWeight: 700,
+                            },
+                          }}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          size="xs"
+                          radius={6}
+                          variant="default"
+                          disabled={!hasNextRepPage}
+                          onClick={() => setRepPageIndex((prev) => prev + 1)}
+                          styles={{
+                            root: {
+                              height: 28,
+                              borderColor: "#E2E8F0",
+                              background: "#FFFFFF",
+                              color: "#1E293B",
+                              fontSize: 11,
+                              fontWeight: 700,
+                            },
+                          }}
+                        >
+                          Next
+                        </Button>
+                      </Group>
+                    </Group>
 
                     <Divider my={10} size="sm" style={{ borderTop: "2px solid #111827" }} />
                     <Grid columns={24} align="center" style={{ paddingLeft: 20 }}>
@@ -959,6 +1045,15 @@ export default function BudgetVsActualDashboard() {
           </Grid>
         )}
       </Stack>
+      <SalespersonMonthlyBudget
+        opened={salespersonDrawerOpened}
+        onClose={() => setSalespersonDrawerOpened(false)}
+        company={company}
+        salesperson={selectedRepForDrawer}
+        startMonth={startMonth}
+        endMonth={endMonth}
+        type={type}
+      />
     </Box>
   );
 }
