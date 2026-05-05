@@ -289,7 +289,8 @@ export default function EnquiryConversionPage() {
           enquiry_id: row.enquiryCode.trim(),
         },
       };
-      const res = await apiCallProtected.post(URL.quotationFilter, payload);
+      // const res = await apiCallProtected.post(URL.quotationFilter, payload);
+      const res = await apiCallProtected.post(URL.enquiryFilter, payload);
       const body = (res as { data?: unknown }).data as
         | { data?: unknown[] }
         | undefined;
