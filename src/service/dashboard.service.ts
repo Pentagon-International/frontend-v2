@@ -90,6 +90,10 @@ export interface DashboardFilters {
   salesman?: string;
   salesperson?: string;
   mode?: string;
+  by_sales_rep_ytd?: {
+    index: number;
+    limit: number;
+  };
   year?: number;
   month?: number;
   date_from?: string;
@@ -1785,6 +1789,12 @@ export const getFilteredBudgetData = async (
     if (filters.salesperson) payload.salesperson = filters.salesperson;
     else if (filters.salesman) payload.salesperson = filters.salesman;
     if (filters.mode) payload.mode = filters.mode;
+    if (filters.by_sales_rep_ytd) {
+      payload.by_sales_rep_ytd = {
+        index: Number(filters.by_sales_rep_ytd.index) || 0,
+        limit: Number(filters.by_sales_rep_ytd.limit) || 2,
+      };
+    }
     if (filters.year && filters.month) {
       payload.month = `${filters.year}-${filters.month.toString().padStart(2, "0")}`;
     }

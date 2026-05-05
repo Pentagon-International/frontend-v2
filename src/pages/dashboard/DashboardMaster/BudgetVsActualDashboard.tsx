@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
+  Button,
   Card,
   Divider,
   Grid,
@@ -128,6 +129,8 @@ export default function BudgetVsActualDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<any>(null);
+  const [repPageIndex, setRepPageIndex] = useState(0);
+  const [repPageLimit] = useState(6);
   const [selectedRepForDrawer, setSelectedRepForDrawer] = useState("");
   const [salespersonDrawerOpened, setSalespersonDrawerOpened] = useState(false);
 
@@ -148,6 +151,10 @@ export default function BudgetVsActualDashboard() {
         company,
         start_month: startMonth,
         end_month: endMonth,
+        by_sales_rep_ytd: {
+          index: repPageIndex,
+          limit: repPageLimit,
+        },
         ...(salesperson && { salesperson }),
         ...(mode && { mode }),
       } as any);
@@ -158,11 +165,15 @@ export default function BudgetVsActualDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [company, endMonth, mode, salesperson, startMonth, type]);
+  }, [company, endMonth, mode, repPageIndex, repPageLimit, salesperson, startMonth, type]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setRepPageIndex(0);
+  }, [type, company, startMonth, endMonth, mode, salesperson]);
 
   useEffect(() => {
     let active = true;
@@ -208,6 +219,13 @@ export default function BudgetVsActualDashboard() {
     () => repRows.filter((row: any) => !salesperson || row.sales_person === salesperson),
     [repRows, salesperson]
   );
+  const repMeta = response?.by_sales_rep_ytd || {};
+  const repTotal = toNumber(repMeta.total ?? repMeta.pagination_total ?? filteredRepRows.length);
+  const hasPrevRepPage = repPageIndex > 0;
+  const hasNextRepPage =
+    repTotal > 0
+      ? (repPageIndex + 1) * repPageLimit < repTotal
+      : filteredRepRows.length >= repPageLimit;
 
   const teamSummary = useMemo(() => {
     const rowSummary = response?.by_sales_rep_ytd?.summary;
@@ -653,7 +671,7 @@ export default function BudgetVsActualDashboard() {
                     </Grid>
 
                     <Stack gap={0}>
-                      {filteredRepRows.slice(0, 6).map((row: any, idx: number) => {
+                      {filteredRepRows.map((row: any, idx: number) => {
                         const budget = toNumber(row.budget);
                         const actual = toNumber(row.actual);
                         const variance = toNumber(row.variance);
@@ -767,6 +785,58 @@ export default function BudgetVsActualDashboard() {
                         );
                       })}
                     </Stack>
+
+                    <Group justify="space-between" mt={8} mb={6}>
+                      <Text fz={11} fw={600} c="#94A3B8">
+                        Page {repPageIndex + 1}
+                        {repTotal > 0
+                          ? ` · Showing ${repPageIndex * repPageLimit + 1}-${Math.min(
+                              (repPageIndex + 1) * repPageLimit,
+                              repTotal
+                            )} of ${repTotal}`
+                          : ""}
+                      </Text>
+                      <Group gap={6}>
+                        <Button
+                          size="xs"
+                          radius={6}
+                          variant="default"
+                          disabled={!hasPrevRepPage}
+                          onClick={() => setRepPageIndex((prev) => Math.max(0, prev - 1))}
+                          styles={{
+                            root: {
+                              height: 28,
+                              borderColor: "#E2E8F0",
+                              background: "#FFFFFF",
+                              color: "#1E293B",
+                              fontSize: 11,
+                              fontWeight: 700,
+                            },
+                          }}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          size="xs"
+                          radius={6}
+                          variant="default"
+                          disabled={!hasNextRepPage}
+                          onClick={() => setRepPageIndex((prev) => prev + 1)}
+                          styles={{
+                            root: {
+                              height: 28,
+                              borderColor: "#E2E8F0",
+                              background: "#FFFFFF",
+                              color: "#1E293B",
+                              fontSize: 11,
+                              fontWeight: 700,
+                            },
+                          }}
+                        >
+                          Next
+                        </Button>
+                      </Group>
+                    </Group>
 
                     <Divider my={10} size="sm" style={{ borderTop: "2px solid #111827" }} />
                     <Grid columns={24} align="center" style={{ paddingLeft: 20 }}>
