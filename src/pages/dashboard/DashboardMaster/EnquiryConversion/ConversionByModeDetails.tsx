@@ -744,38 +744,16 @@ export function ConversionByModeDetails({
                         topEnquiries.map((e) => {
                           const stage = stageLabelFromApiStatus(e.status ?? "");
                           const { bg, fg } = badgeStyleForStageLabel(stage.label);
-                          const openActiveDetail = async () => {
+                          const openActiveDetail = () => {
                             if (!onOpenEnquiryDetail) return;
-                            try {
-                              const payload = {
-                                filters: {
-                                  date_from: dayjs(fd!).format("YYYY-MM-DD"),
-                                  date_to: dayjs(td!).format("YYYY-MM-DD"),
-                                  enquiry_id: e.enquiry_id,
-                                },
+                            const drill = buildDrilldownFromTopEnquiryRow(e) as
+                              EnquiryDrilldownEnquiry & {
+                                __filterDateFrom?: string;
+                                __filterDateTo?: string;
                               };
-                              const res = await apiCallProtected.post(
-                                URL.quotationFilter,
-                                payload
-                              );
-                              const data = (res as { data?: unknown }).data as
-                                | { data?: unknown[] }
-                                | undefined;
-                              const first = Array.isArray(data?.data)
-                                ? (data!.data![0] as Record<string, unknown> | undefined)
-                                : undefined;
-                              if (first) {
-                                onOpenEnquiryDetail(
-                                  mapQuotationFilterRowToDrilldown(first)
-                                );
-                                return;
-                              }
-                            } catch {
-                              // fall back to existing lightweight mapper on API failure
-                            }
-                            onOpenEnquiryDetail(
-                              buildDrilldownFromTopEnquiryRow(e)
-                            );
+                            drill.__filterDateFrom = dayjs(fd!).format("YYYY-MM-DD");
+                            drill.__filterDateTo = dayjs(td!).format("YYYY-MM-DD");
+                            onOpenEnquiryDetail(drill);
                           };
                           return (
                             <Table.Tr

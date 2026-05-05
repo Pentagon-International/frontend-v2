@@ -713,6 +713,57 @@ export interface BudgetAggregatedData {
   totalSalesBudget: number;
 }
 
+export interface SalespersonMonthlyBudgetItem {
+  sno: number;
+  month: string;
+  actual_budget: number;
+  sales_budget: number;
+  currency?: string;
+  trade_type?: string | null;
+  service_type?: string | null;
+  incentive_percentage?: number;
+  incentive_amount?: number;
+}
+
+export interface SalespersonMonthlyBudgetData {
+  company_name: string;
+  date_range: string;
+  currency?: string;
+  salesperson: string;
+  budget: SalespersonMonthlyBudgetItem[];
+  summary?: {
+    total: number;
+    total_actual_budget: number;
+    total_sales_budget: number;
+  };
+}
+
+export interface SalespersonMonthlyBudgetResponse {
+  success: boolean;
+  message: string;
+  budget_summary_version?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  summary?: {
+    total_actual_budget: number;
+    total_sales_budget: number;
+    currency?: string;
+  };
+  data: SalespersonMonthlyBudgetData[];
+}
+
+export interface BudgetVsActualSalespersonNameRow {
+  sno: number;
+  salesperson: string;
+}
+
+export interface BudgetVsActualSalespersonNamesResponse {
+  status: boolean;
+  message: string;
+  data: BudgetVsActualSalespersonNameRow[];
+}
+
 // Get filtered outstanding data
 export const getFilteredOutstandingData = async (
   filters: DashboardFilters
@@ -1783,6 +1834,45 @@ export const getFilteredBudgetData = async (
     return response as BudgetResponse;
   } catch (error) {
     console.error("Error fetching filtered budget data:", error);
+    throw error;
+  }
+};
+
+export const getSalespersonMonthlyBudgetSummary = async (params: {
+  company: string;
+  salesperson: string;
+  start_month: string;
+  end_month: string;
+  type: string;
+}): Promise<SalespersonMonthlyBudgetResponse> => {
+  try {
+    const payload = {
+      type: params.type,
+      company: params.company,
+      salesperson: params.salesperson,
+      start_month: params.start_month,
+      end_month: params.end_month,
+    };
+    const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    return response as SalespersonMonthlyBudgetResponse;
+  } catch (error) {
+    console.error("Error fetching salesperson monthly budget summary:", error);
+    throw error;
+  }
+};
+
+export const getBudgetVsActualSalespersonNames = async (
+  search: string
+): Promise<BudgetVsActualSalespersonNamesResponse> => {
+  try {
+    const payload = {
+      model: "budget-vs-actual",
+      search: search.trim(),
+    };
+    const response = await postAPICall(URL.dashboard.budgetVsActualSalespersonNames, payload);
+    return response as BudgetVsActualSalespersonNamesResponse;
+  } catch (error) {
+    console.error("Error fetching budget vs actual salesperson names:", error);
     throw error;
   }
 };
