@@ -772,6 +772,17 @@ export interface BudgetVsActualSalespersonNamesResponse {
   data: BudgetVsActualSalespersonNameRow[];
 }
 
+export interface CustomerOutstandingVsOverdueSalespersonNameRow {
+  sno: number;
+  salesperson: string;
+}
+
+export interface CustomerOutstandingVsOverdueSalespersonNamesResponse {
+  status: boolean;
+  message: string;
+  data: CustomerOutstandingVsOverdueSalespersonNameRow[];
+}
+
 // Get filtered outstanding data
 export const getFilteredOutstandingData = async (
   filters: DashboardFilters
@@ -818,6 +829,32 @@ export const getCustomerOutstandingVsOverdueData = async (
     return response as CustomerOutstandingVsOverdueResponse;
   } catch (error) {
     console.error("Error fetching customer outstanding vs overdue data:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch searchable "All reps" options for Customer Outstanding vs Overdue page.
+ * Backend expects POST payload: { model: "customer-outstanding-vs-overdue", search: "PARESH" }.
+ */
+export const getCustomerOutstandingVsOverdueSalespersonNames = async (args: {
+  search: string;
+}): Promise<CustomerOutstandingVsOverdueSalespersonNamesResponse> => {
+  try {
+    const payload = {
+      model: "customer-outstanding-vs-overdue",
+      search: args.search,
+    };
+    const response = await postAPICall(
+      URL.dashboard.budgetVsActualSalespersonNames,
+      payload
+    );
+    return response as CustomerOutstandingVsOverdueSalespersonNamesResponse;
+  } catch (error) {
+    console.error(
+      "Error fetching customer outstanding vs overdue salesperson names:",
+      error
+    );
     throw error;
   }
 };

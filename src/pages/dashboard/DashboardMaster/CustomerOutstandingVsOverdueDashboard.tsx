@@ -19,6 +19,7 @@ import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import {
   getCustomerOutstandingVsOverdueData,
+  getCustomerOutstandingVsOverdueSalespersonNames,
   type CustomerOutstandingVsOverdueItem,
   type CustomerOutstandingVsOverdueResponse,
 } from "../../../service/dashboard.service";
@@ -173,6 +174,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
   const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
   const [emailRow, setEmailRow] = useState<CustomerOutstandingVsOverdueItem | null>(null);
+  const [salesmanSearch, setSalesmanSearch] = useState(filters.salesman || "");
+  const [salesmanOptions, setSalesmanOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [salesmanOptionsLoading, setSalesmanOptionsLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -220,12 +226,34 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     return [{ value: "", label: "All locations" }, ...unique.map((v) => ({ value: v, label: v }))];
   }, [rows]);
 
-  const salesmanOptions = useMemo(() => {
-    const unique = Array.from(
-      new Set(rows.map((r) => (r.salesperson || "").trim()).filter(Boolean))
-    );
-    return [{ value: "", label: "All reps" }, ...unique.map((v) => ({ value: v, label: v }))];
-  }, [rows]);
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setSalesmanOptionsLoading(true);
+        const response = await getCustomerOutstandingVsOverdueSalespersonNames({
+          search: salesmanSearch || "",
+        });
+        if (!active) return;
+        const fetched = Array.isArray(response?.data)
+          ? response.data
+              .map((row) => String(row.salesperson || "").trim())
+              .filter(Boolean)
+              .map((name) => ({ value: name, label: name }))
+          : [];
+        setSalesmanOptions(fetched);
+      } catch (err) {
+        console.error("Error loading reps dropdown options:", err);
+        if (active) setSalesmanOptions([]);
+      } finally {
+        if (active) setSalesmanOptionsLoading(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [salesmanSearch]);
 
   const customerOptions = useMemo(() => {
     const unique = Array.from(
@@ -355,9 +383,18 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 <Select
                   size="xs"
                   radius={6}
+                  searchable
+                  clearable
+                  placeholder="Search Rep"
+                  nothingFoundMessage="No salesperson found"
                   data={salesmanOptions}
-                  value={filters.salesman}
+                  value={filters.salesman || null}
+                  searchValue={salesmanSearch}
+                  onSearchChange={setSalesmanSearch}
                   onChange={(value) => setFilters((prev) => ({ ...prev, salesman: value || "" }))}
+                  rightSection={
+                    salesmanOptionsLoading ? <Loader size={14} color="#105476" /> : undefined
+                  }
                   style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 150px", minWidth: isMobile ? 0 : 120 }}
                   styles={selectInputStyles}
                 />
