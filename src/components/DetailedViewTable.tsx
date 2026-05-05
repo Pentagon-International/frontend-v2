@@ -247,6 +247,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         ? ["customer_code", "CUSTOMER_CODE"]
         : []),
 
+      // Pipeline drill level 2 (e.g. salesman financial / line items): hide customer code column from UI
+      ...(moduleType === "pipelineReport" && drillLevel === 2
+        ? ["customer_code", "CUSTOMER_CODE"]
+        : []),
+
       // Hide email-related fields - salesperson_email and cc_mail
       "salesperson_email",
       "cc_mail",
@@ -1005,6 +1010,17 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
         console.log("headerText :", headerText);
         console.log("key :", key);
+        const isPipelineReportDrill2 =
+          moduleType === "pipelineReport" && drillLevel === 2;
+        const columnSize =
+          isPipelineReportDrill2 &&
+          (key === "enquiry_id" || key === "ENQUIRY_ID")
+            ? 280
+            : isPipelineReportDrill2 &&
+                (key === "customer_name" || key === "CUSTOMER_NAME")
+              ? 320
+              : 150;
+
         columnDefs.push({
           accessorKey: key,
           header: headerText,
@@ -1126,7 +1142,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             }
             return <Text size="sm">{cellValue}</Text>;
           },
-          size: 150,
+          size: columnSize,
         });
       }
     });
