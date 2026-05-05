@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -87,6 +87,7 @@ export default function CallEntryDashboardPage() {
   const [selectedRepName, setSelectedRepName] = useState<string>("");
   const [customerWise, setCustomerWise] =
     useState<CallEntryStatisticsResponse | null>(null);
+  const hasRestoredCustomerWiseDrawerRef = useRef(false);
   const [isTodayView, setIsTodayView] = useState<boolean>(
     !!(
       routeFromDate &&
@@ -196,12 +197,14 @@ export default function CallEntryDashboardPage() {
   };
 
   useEffect(() => {
-    if (!initialCustomerWiseRep || !fromDate || !toDate || isLoading) return;
-    if (
-      (selectedRepName || "").trim() === initialCustomerWiseRep &&
-      customerWiseOpened
-    )
-      return;
+    // Drawer should open only on explicit "Calls by Rep" click.
+    // The only exception is when returning from list/edit with an explicit
+    // route-state asking us to restore the drawer once.
+    if (hasRestoredCustomerWiseDrawerRef.current) return;
+    if (!initialCustomerWiseRep || !fromDate || !toDate) return;
+
+    hasRestoredCustomerWiseDrawerRef.current = true;
+
     void handleRepRowClick({
       sno: 0,
       salesperson: initialCustomerWiseRep,
@@ -212,9 +215,18 @@ export default function CallEntryDashboardPage() {
       total_calls: 0,
       percentage: "0%",
     });
-    // run once for route-state restore
+
+    // Clear the one-time restore flag so future refetches (e.g. KPI filter)
+    // don't reopen the drawer.
+    navigate(".", {
+      replace: true,
+      state: {
+        ...routeState,
+        openCustomerWiseForSalesperson: null,
+      } satisfies CallEntryDashboardRouteState,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCustomerWiseRep, fromDateIso, toDateIso, isLoading]);
+  }, [initialCustomerWiseRep, fromDateIso, toDateIso]);
 
   const openFilteredCallEntryList = (args: {
     customerCode: string;
