@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Alert,
   Box,
-  Button,
+  Drawer,
   Grid,
   Group,
   Loader,
   Select,
+  ScrollArea,
   Stack,
   Text,
 } from "@mantine/core";
@@ -14,10 +16,16 @@ import { useMediaQuery } from "@mantine/hooks";
 import dayjs from "dayjs";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DateRangeInput, ERPListToolbar } from "../../../../components";
+import { CallEntryCustomerDrawerTable } from "../../../../components";
 import useAuthStore from "../../../../store/authStore";
+import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import {
   getCallEntryDashboardData,
+  getCallEntryStatistics,
   type CallEntryDashboardResponse,
+  type CallEntryDashboardRepRow,
+  type CallEntryCustomerData,
+  type CallEntryStatisticsResponse,
 } from "../../../../service/dashboard.service";
 import { CallEntryKpiRow } from "./CallEntryKpiRow";
 import { CallEntryActivityLogCard } from "./CallEntryActivityLogCard";
@@ -36,6 +44,7 @@ type CallEntryDashboardRouteState = {
   company?: string | null;
   fromDate?: string | null;
   toDate?: string | null;
+  openCustomerWiseForSalesperson?: string | null;
 };
 
 function parseRouteDate(value?: string | null): Date | null {
@@ -55,8 +64,13 @@ export default function CallEntryDashboardPage() {
     "PENTAGON INDIA";
   const routeFromDate = parseRouteDate(routeState.fromDate);
   const routeToDate = parseRouteDate(routeState.toDate);
+  const initialCustomerWiseRep = String(
+    routeState.openCustomerWiseForSalesperson || "",
+  ).trim();
 
-  const [fromDate, setFromDate] = useState<Date | null>(routeFromDate || monthStart());
+  const [fromDate, setFromDate] = useState<Date | null>(
+    routeFromDate || monthStart(),
+  );
   const [toDate, setToDate] = useState<Date | null>(routeToDate || new Date());
   const [salesperson, setSalesperson] = useState<string>("all");
   const [type, setType] = useState<string>("all");
@@ -65,15 +79,29 @@ export default function CallEntryDashboardPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<CallEntryDashboardResponse | null>(null);
+  const [customerWiseOpened, setCustomerWiseOpened] = useState(false);
+  const [customerWiseLoading, setCustomerWiseLoading] = useState(false);
+  const [customerWiseError, setCustomerWiseError] = useState<string | null>(
+    null,
+  );
+  const [selectedRepName, setSelectedRepName] = useState<string>("");
+  const [customerWise, setCustomerWise] =
+    useState<CallEntryStatisticsResponse | null>(null);
   const [isTodayView, setIsTodayView] = useState<boolean>(
-    !!(routeFromDate && routeToDate && dayjs(routeFromDate).isSame(routeToDate, "day"))
+    !!(
+      routeFromDate &&
+      routeToDate &&
+      dayjs(routeFromDate).isSame(routeToDate, "day")
+    ),
   );
   const isMobile = useMediaQuery("(max-width: 48em)");
+  const fromDateIso = fromDate?.toISOString() || "";
+  const toDateIso = toDate?.toISOString() || "";
 
   useEffect(() => {
     setRepPage(1);
     setActivityPage(1);
-  }, [fromDate?.toISOString(), toDate?.toISOString(), salesperson, type]);
+  }, [fromDateIso, toDateIso, salesperson, type]);
 
   useEffect(() => {
     if (!fromDate || !toDate) {
@@ -118,7 +146,9 @@ export default function CallEntryDashboardPage() {
   }, [fetchDashboard]);
 
   const salespersonOptions = useMemo(() => {
-    const list = (data?.calls_by_rep || []).map((r) => r.salesperson).filter(Boolean);
+    const list = (data?.calls_by_rep || [])
+      .map((r) => r.salesperson)
+      .filter(Boolean);
     const unique = Array.from(new Set(list));
     return [
       { value: "all", label: "All reps" },
@@ -131,18 +161,113 @@ export default function CallEntryDashboardPage() {
     { value: "today", label: "Today" },
     { value: "upcoming", label: "Upcoming" },
     { value: "overdue", label: "Overdue" },
-    { value: "closed", label: "Closed" },
+    { value: "close", label: "Closed" },
   ];
 
   const activeRepCount = useMemo(() => {
-    return (data?.calls_by_rep || []).filter((row) => (row.total_calls || 0) > 0).length;
+    return (data?.calls_by_rep || []).filter(
+      (row) => (row.total_calls || 0) > 0,
+    ).length;
   }, [data?.calls_by_rep]);
 
-  const applyTodayFilter = () => {
-    const t = new Date();
-    setFromDate(t);
-    setToDate(t);
-    setIsTodayView(true);
+  const handleRepRowClick = async (row: CallEntryDashboardRepRow) => {
+    if (!fromDate || !toDate) return;
+    const salespersonName = String(row.salesperson || "").trim();
+    if (!salespersonName) return;
+    setSelectedRepName(salespersonName);
+    setCustomerWiseOpened(true);
+    setCustomerWiseLoading(true);
+    setCustomerWiseError(null);
+    try {
+      const response = await getCallEntryStatistics({
+        company,
+        date_from: dayjs(fromDate).format("DD-MM-YYYY"),
+        date_to: dayjs(toDate).format("DD-MM-YYYY"),
+        salesperson: salespersonName,
+      });
+      setCustomerWise(response);
+    } catch (err) {
+      console.error("Error fetching customer-wise call entry statistics:", err);
+      setCustomerWiseError("Unable to load customer-wise statistics.");
+      setCustomerWise(null);
+    } finally {
+      setCustomerWiseLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!initialCustomerWiseRep || !fromDate || !toDate || isLoading) return;
+    if (
+      (selectedRepName || "").trim() === initialCustomerWiseRep &&
+      customerWiseOpened
+    )
+      return;
+    void handleRepRowClick({
+      sno: 0,
+      salesperson: initialCustomerWiseRep,
+      total_overdue: 0,
+      total_today: 0,
+      total_upcoming: 0,
+      total_closed: 0,
+      total_calls: 0,
+      percentage: "0%",
+    });
+    // run once for route-state restore
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCustomerWiseRep, fromDateIso, toDateIso, isLoading]);
+
+  const openFilteredCallEntryList = (args: {
+    customerCode: string;
+    status: "OVERDUE" | "TODAY" | "UPCOMING" | "CLOSED" | null;
+  }) => {
+    if (!fromDate || !toDate) return;
+    navigate("/call-entry", {
+      state: {
+        fromDashboard: true,
+        returnToDashboard: true,
+        dashboardState: {
+          source: "callEntryDashboardPage",
+          company,
+          fromDate: dayjs(fromDate).format("YYYY-MM-DD"),
+          toDate: dayjs(toDate).format("YYYY-MM-DD"),
+          openCustomerWiseForSalesperson: selectedRepName || null,
+        },
+        initialFilters: {
+          date_from: dayjs(fromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(toDate).format("YYYY-MM-DD"),
+          customer: args.customerCode || null,
+          status: args.status,
+          sales_person: selectedRepName || null,
+        },
+      },
+    });
+  };
+
+  const handleActivityLogRowClick = (row: {
+    id?: number | string;
+    status?: string;
+  }) => {
+    const id = Number(row.id);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (!fromDate || !toDate) return;
+    console.log("[CallEntryDashboard] ActivityLog click", {
+      id,
+      rawStatus: row.status,
+      fromDate: dayjs(fromDate).format("YYYY-MM-DD"),
+      toDate: dayjs(toDate).format("YYYY-MM-DD"),
+    });
+    navigate(`/call-entry-create/${id}`, {
+      state: {
+        returnTo: "/dashboard/call-entry-dashboard",
+        returnToState: {
+          source: "callEntryDashboardPage",
+          company,
+          fromDate: dayjs(fromDate).format("YYYY-MM-DD"),
+          toDate: dayjs(toDate).format("YYYY-MM-DD"),
+          openCustomerWiseForSalesperson: selectedRepName || null,
+        },
+      },
+    });
   };
 
   return (
@@ -158,22 +283,37 @@ export default function CallEntryDashboardPage() {
         <ERPListToolbar
           bleed={false}
           leading={
-            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }} >
+            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }}>
               {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Call Entry
               </Text> */}
-              <Text  c="#111827" style={{ fontSize: "clamp(14px, 5vw, 20px)", lineHeight: 1.08, fontFamily: "Geist", fontWeight: 550 }} mb={4}>
+              <Text
+                c="#111827"
+                style={{
+                  fontSize: "clamp(14px, 5vw, 20px)",
+                  lineHeight: 1.08,
+                  fontFamily: "Geist",
+                  fontWeight: 550,
+                }}
+                mb={4}
+              >
                 Call Entry Dashboard
               </Text>
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
                 {isTodayView ? "Today" : dayjs(fromDate).format("DD MMM")} ·{" "}
-                {data?.kpi?.total_calls || 0} calls logged · {activeRepCount} reps active
+                {data?.kpi?.total_calls || 0} calls logged · {activeRepCount}{" "}
+                reps active
               </Text>
             </Box>
           }
           actions={
             <Box style={{ minWidth: isMobile ? 300 : 360 }}>
-              <Group align="center" gap={8} wrap="wrap" style={{ width: "100%" }}>
+              <Group
+                align="center"
+                gap={8}
+                wrap="wrap"
+                style={{ width: "100%" }}
+              >
                 <DateRangeInput
                   fromDate={fromDate}
                   toDate={toDate}
@@ -277,7 +417,14 @@ export default function CallEntryDashboardPage() {
           </Alert>
         ) : null}
 <Box style={{ paddingLeft: 10, paddingRight: 10 }}>
-<CallEntryKpiRow data={data} />
+<CallEntryKpiRow
+  data={data}
+  loading={isLoading}
+  activeType={type}
+  onTypeToggle={(nextType) => {
+    setType((prev) => (prev === nextType ? "all" : nextType));
+  }}
+/>
 </Box>
 
         {isLoading && !data ? (
@@ -293,6 +440,7 @@ export default function CallEntryDashboardPage() {
                 total={data?.activity_log_meta?.total || 0}
                 pageSize={PAGE_SIZE}
                 onPageChange={setActivityPage}
+                onRowClick={handleActivityLogRowClick}
               />
             </Grid.Col>
             <Grid.Col span={{ base: 12, xl: 5 }}>
@@ -303,6 +451,9 @@ export default function CallEntryDashboardPage() {
                   total={data?.calls_by_rep_meta?.total || 0}
                   pageSize={PAGE_SIZE}
                   onPageChange={setRepPage}
+                  onRowClick={(row) => {
+                    void handleRepRowClick(row);
+                  }}
                 />
                 <CallEntryHeatmapCard rows={data?.call_heatmap?.rows || []} />
               </Stack>
@@ -310,6 +461,126 @@ export default function CallEntryDashboardPage() {
           </Grid>
         )}
       </Stack>
+      <Drawer
+        opened={customerWiseOpened}
+        onClose={() => setCustomerWiseOpened(false)}
+        position="right"
+        size="max(520px, 75vw)"
+        padding={0}
+        offset={8}
+        radius="md"
+        zIndex={400}
+        withOverlay
+        overlayProps={{ opacity: 0.35, blur: 2 }}
+        styles={{
+          header: { display: "none" },
+          body: { padding: 0, height: "100%" },
+          content: {
+            fontFamily: "Geist, sans-serif",
+            borderLeft: "1px solid #E2E8F0",
+            boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.1)",
+          },
+        }}
+      >
+        <Box
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100vh",
+            maxHeight: "100%",
+          }}
+        >
+          <Box
+            px={20}
+            py={12}
+            style={{
+              borderBottom: "1px solid #EEF2F7",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={() => setCustomerWiseOpened(false)}
+              >
+                <IconArrowLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Text
+                fz={12}
+                fw={600}
+                c="#64748B"
+                truncate
+                style={{ minWidth: 0 }}
+              >
+                {selectedRepName
+                  ? `Call Entry · ${selectedRepName.trim()} · Customers`
+                  : "Call Entry · Customers"}
+              </Text>
+            </Group>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setCustomerWiseOpened(false)}
+              aria-label="Close"
+            >
+              <IconX size={18} stroke={2} />
+            </ActionIcon>
+          </Box>
+
+          <ScrollArea
+            type="scroll"
+            scrollbarSize={8}
+            style={{ flex: 1, minHeight: 0 }}
+          >
+            <Box p={20} pb={28} style={{ minWidth: 0 }}>
+              <CallEntryCustomerDrawerTable
+                rows={(customerWise?.data as CallEntryCustomerData[]) || []}
+                summary={customerWise?.summary || null}
+                heading={
+                  selectedRepName
+                    ? `${selectedRepName.trim()} · Customers breakdown`
+                    : "Customers breakdown"
+                }
+                periodLabel={
+                  fromDate && toDate
+                    ? `${dayjs(fromDate).format("DD MMM YYYY")} – ${dayjs(toDate).format("DD MMM YYYY")}`
+                    : undefined
+                }
+                loading={customerWiseLoading}
+                emptyMessage="No customer-wise rows found."
+                onMetricClick={(metric, row) => {
+                  const status =
+                    metric === "total_overdue"
+                      ? "OVERDUE"
+                      : metric === "total_today"
+                        ? "TODAY"
+                        : metric === "total_upcoming"
+                          ? "UPCOMING"
+                          : metric === "total_closed"
+                            ? "CLOSED"
+                            : null;
+                  openFilteredCallEntryList({
+                    customerCode: row.customer_code,
+                    status,
+                  });
+                }}
+              />
+              {customerWiseError ? (
+                <Alert color="red" title="Error" mt="sm">
+                  {customerWiseError}
+                </Alert>
+              ) : null}
+            </Box>
+          </ScrollArea>
+        </Box>
+      </Drawer>
     </Box>
   );
 }

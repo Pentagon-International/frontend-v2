@@ -12,6 +12,7 @@ import BarChart from "./BarChart";
 import DrilldownHorizontalBarChart from "./DrilldownHorizontalBarChart";
 import PipelineSalespersonByRepTable from "./PipelineSalespersonByRepTable";
 import PipelineSalespersonCustomerDrawerTable from "./PipelineSalespersonCustomerDrawerTable";
+import CallEntryCustomerDrawerTable from "./CallEntryCustomerDrawerTable";
 import PipelineSalespersonBreakdownDrawerTable from "./PipelineSalespersonBreakdownDrawerTable";
 import PipelineProductByServiceTable from "./PipelineProductByServiceTable";
 import PipelineRegionByRegionTable from "./PipelineRegionByRegionTable";
@@ -100,6 +101,7 @@ export {
   DrilldownHorizontalBarChart,
   PipelineSalespersonByRepTable,
   PipelineSalespersonCustomerDrawerTable,
+  CallEntryCustomerDrawerTable,
   PipelineSalespersonBreakdownDrawerTable,
   PipelineProductByServiceTable,
   PipelineRegionByRegionTable,

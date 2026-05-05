@@ -8,6 +8,7 @@ type Props = {
   total: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onRowClick?: (row: CallEntryDashboardRepRow) => void;
 };
 
 const cardStyle = {
@@ -25,6 +26,7 @@ export function CallEntryRepCard({
   total,
   pageSize,
   onPageChange,
+  onRowClick,
 }: Props) {
   const isMobile = useMediaQuery("(max-width: 48em)");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -71,7 +73,13 @@ export function CallEntryRepCard({
           const widthPct = Math.max(6, ((row.total_calls || 0) / maxCalls) * 100);
           const barColor = barPalette[index % barPalette.length];
           return (
-            <Group key={`${row.sno}-${row.salesperson}`} gap={8} wrap="nowrap">
+            <Group
+              key={`${row.sno}-${row.salesperson}`}
+              gap={8}
+              wrap="nowrap"
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              style={{ cursor: onRowClick ? "pointer" : "default" }}
+            >
               <Text
                 c="#64748B"
                 fz={10}

@@ -1,7 +1,7 @@
 import { Box, Group, Stack, Table, Text, UnstyledButton } from "@mantine/core";
 import dayjs from "dayjs";
 import { IconArrowDownLeft, IconArrowUpRight, IconX } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import type { CallEntryActivityLogRow } from "../../../../service/dashboard.service";
 
@@ -11,6 +11,7 @@ type Props = {
   total: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onRowClick?: (row: CallEntryActivityLogRow) => void;
 };
 
 const cardStyle = {
@@ -34,8 +35,7 @@ const outcomeChipColors: Record<string, { bg: string; fg: string }> = {
   default: { bg: "#E8EEF5", fg: "#55667A" },
 };
 
-const channelTabs = ["All", "Inbound", "Outbound", "Missed"] as const;
-type ChannelTab = (typeof channelTabs)[number];
+type ChannelTab = "All" | "Inbound" | "Outbound" | "Missed";
 
 function getOutcomeChip(outcome: string) {
   const key = outcome.trim().toLowerCase();
@@ -82,10 +82,11 @@ export function CallEntryActivityLogCard({
   total,
   pageSize,
   onPageChange,
+  onRowClick,
 }: Props) {
   const isMobile = useMediaQuery("(max-width: 48em)");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const [activeTab, setActiveTab] = useState<ChannelTab>("All");
+  const activeTab: ChannelTab = "All";
   const visibleRows = useMemo(() => {
     if (activeTab === "All") return rows;
     return rows.filter((r) => getRowChannel(r) === activeTab);
@@ -172,7 +173,11 @@ export function CallEntryActivityLogCard({
               return (
                 <Table.Tr
                   key={`${row.sno}-${row.customer_code}`}
-                  style={{ borderBottom: "1px solid #EDF2F7" }}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  style={{
+                    borderBottom: "1px solid #EDF2F7",
+                    cursor: onRowClick ? "pointer" : "default",
+                  }}
                 >
                   <Table.Td>
                     <Box

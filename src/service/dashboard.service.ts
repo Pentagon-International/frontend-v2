@@ -292,6 +292,7 @@ export interface CallEntryCallHeatmap {
 }
 
 export interface CallEntryActivityLogRow {
+  id: number;
   customer_code: string;
   customer_name: string;
   purpose: string;
