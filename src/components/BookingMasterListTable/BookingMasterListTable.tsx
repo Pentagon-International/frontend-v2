@@ -31,6 +31,7 @@ import {
 export type BookingMasterVisibleColumns = {
   sno: boolean;
   shipment: boolean;
+  houseno: boolean;
   date: boolean;
   customer: boolean;
   route: boolean;
@@ -47,6 +48,7 @@ export type BookingMasterVisibleColumns = {
 export const DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS: BookingMasterVisibleColumns = {
   sno: true,
   shipment: true,
+  houseno: true,
   date: true,
   customer: true,
   route: true,
@@ -66,6 +68,7 @@ export type BookingMasterTableRowModel<TRaw = unknown> = {
   milestone: BookingMilestoneRow;
   shipment_code: string;
   enquiry_id?: string | null;
+  houseno: string;
   date: string;
   customer_name: string;
   originCode: string;
@@ -235,6 +238,22 @@ export function BookingMasterListTable<TRaw>({
                 }}
               >
                 Booking ID
+              </th>
+            )}
+            {v.houseno && (
+              <th
+                style={{
+                  padding: "10px 14px",
+                  textAlign: "left",
+                  fontWeight: 500,
+                  fontSize: 14,
+                  color: muted,
+                  backgroundColor: headerBg,
+                  borderBottom: `1px solid ${border}`,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                House No
               </th>
             )}
             {v.date && (
@@ -487,6 +506,13 @@ export function BookingMasterListTable<TRaw>({
                           {booking.enquiry_id}
                         </Text>
                       ) : null}
+                    </td>
+                  )}
+                  {v.houseno && (
+                    <td style={{ padding: "10px 14px" }}>
+                      <Text fw={600} size="sm" c={fg}>
+                        {booking.houseno}
+                      </Text>
                     </td>
                   )}
                   {v.date && (

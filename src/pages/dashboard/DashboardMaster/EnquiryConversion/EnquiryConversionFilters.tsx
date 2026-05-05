@@ -77,10 +77,9 @@ export function EnquiryConversionFilters({
 
   const salespersonOptions = useMemo(() => {
     if (!salespersonsData || !Array.isArray(salespersonsData)) {
-      return [{ value: "", label: "All reps" }];
+      return [];
     }
     return [
-      { value: "", label: "All reps" },
       ...salespersonsData
         .filter((item: any) => item?.sales_person)
         .map((item: any) => ({
@@ -139,9 +138,9 @@ export function EnquiryConversionFilters({
         disabled={disabled || salespersonsLoading}
         data={salespersonOptions}
         searchable
-        clearable={false}
+        clearable
         nothingFoundMessage="No reps found"
-        value={filters.salesperson}
+        value={filters.salesperson || null}
         onChange={(v) => set("salesperson")(v || "")}
         styles={selectStyles}
       />

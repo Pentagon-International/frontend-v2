@@ -121,9 +121,7 @@ export default function BudgetVsActualDashboard() {
   const [endMonth, setEndMonth] = useState(routeState.end_month || initialRange.end_month);
   const [salesperson, setSalesperson] = useState(routeState.salesperson || "");
   const [salespersonSearch, setSalespersonSearch] = useState(routeState.salesperson || "");
-  const [salespersonOptions, setSalespersonOptions] = useState<Array<{ value: string; label: string }>>([
-    { value: "", label: "All reps" },
-  ]);
+  const [salespersonOptions, setSalespersonOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [salespersonOptionsLoading, setSalespersonOptionsLoading] = useState(false);
   const [mode, setMode] = useState(routeState.mode || "");
   const [isLoading, setIsLoading] = useState(false);
@@ -188,7 +186,7 @@ export default function BudgetVsActualDashboard() {
               .filter(Boolean)
               .map((name) => ({ value: name, label: name }))
           : [];
-        setSalespersonOptions([{ value: "", label: "All reps" }, ...fetched]);
+        setSalespersonOptions([ ...fetched]);
       } catch (err) {
         console.error("Error loading salesperson dropdown options:", err);
         if (active) setSalespersonOptions([{ value: "", label: "All reps" }]);
@@ -416,6 +414,7 @@ export default function BudgetVsActualDashboard() {
                   rightSection={salespersonOptionsLoading ? <Loader size={14} color="#105476" /> : undefined}
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
                   styles={selectInputStyles}
+                  placeholder="Search Rep"
                 />
                 <Select
                   size="xs"

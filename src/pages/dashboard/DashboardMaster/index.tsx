@@ -7632,13 +7632,13 @@ const Dashboard = () => {
       //   trend: undefined,
       //   spark: "blueUp" as DashLeadershipSparkKind,
       // },
-      {
-        key: "revenue-mtd",
-        label: "Revenue MTD",
-        value: revenueMtd === 0 ? "0" : dashFormatInrAdaptive(revenueMtd),
-        trend: budgetTrend,
-        spark: revenueSpark,
-      },
+      // {
+      //   key: "revenue-mtd",
+      //   label: "Revenue MTD",
+      //   value: revenueMtd === 0 ? "0" : dashFormatInrAdaptive(revenueMtd),
+      //   trend: budgetTrend,
+      //   spark: revenueSpark,
+      // },
       {
         key: "overdue-ar",
         label: "Overdue AR",
@@ -8045,34 +8045,7 @@ const Dashboard = () => {
                     align="stretch"
                     columns={12}
                   >
-                  {/* <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
-                  <Box
-                    style={{
-                      flex: 1,
-                      width: "100%",
-                      minWidth: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
-                    <CustomerInteractionStatus
-                      data={customerInteractionData}
-                      loading={isLoadingCustomerInteraction}
-                      customerInteractionPeriod={customerInteractionPeriod}
-                      setCustomerInteractionPeriod={
-                        () => {} // Commented out - can be used in future case
-                      }
-                      fromDate={customerInteractionFromDate}
-                      toDate={customerInteractionToDate}
-                      setFromDate={setCustomerInteractionFromDate}
-                      setToDate={setCustomerInteractionToDate}
-                      hideDateFilter={true}
-                      onGainClick={handleGainClick}
-                      onLostClick={handleLostClick}
-                      onNotVisitedClick={handleNotVisitedClick}
-                    />
-                  </Box>
-                  </Grid.Col> */}
+
                 <Grid.Col
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}
@@ -8219,6 +8192,34 @@ const Dashboard = () => {
                     />
                   </Box>
                 </Grid.Col>
+                <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CustomerInteractionStatus
+                      data={customerInteractionData}
+                      loading={isLoadingCustomerInteraction}
+                      customerInteractionPeriod={customerInteractionPeriod}
+                      setCustomerInteractionPeriod={
+                        () => {} // Commented out - can be used in future case
+                      }
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                      onGainClick={handleGainClick}
+                      onLostClick={handleLostClick}
+                      onNotVisitedClick={handleNotVisitedClick}
+                    />
+                  </Box>
+                  </Grid.Col>
               </Grid>
                 </Stack>
               </Box>

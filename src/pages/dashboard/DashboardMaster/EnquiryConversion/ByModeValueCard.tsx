@@ -19,7 +19,7 @@ export function ByModeValueCard({
   title: string;
   segments: FunnelSegment[];
   rows: ModeLegendRow[];
-  /** Tighter top padding when directly under Stage Funnel in one card */
+  /** Tighter top padding when directly under  in one card */
   embeddedBelowFunnel?: boolean;
 }) {
   const pt = embeddedBelowFunnel ? 14 : 24;
