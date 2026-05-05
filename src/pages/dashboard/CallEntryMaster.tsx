@@ -1984,7 +1984,17 @@ function CallEntry() {
                         onClick={() => {
                           const dashboardState =
                             location.state?.dashboardState || dashboardStateRef.current;
-                          if (dashboardState) {
+                          if (dashboardState?.source === "callEntryDashboardPage") {
+                            navigate("/dashboard/call-entry-dashboard", {
+                              state: {
+                                company: dashboardState.company || null,
+                                fromDate: dashboardState.fromDate || null,
+                                toDate: dashboardState.toDate || null,
+                                openCustomerWiseForSalesperson:
+                                  dashboardState.openCustomerWiseForSalesperson || null,
+                              },
+                            });
+                          } else if (dashboardState) {
                             navigate("/", {
                               state: {
                                 returnToCallEntryDetailedView: true,

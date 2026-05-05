@@ -25,6 +25,8 @@ import {
   IconMapPin,
   IconMapPinFilled,
   IconChartPie2,
+  IconLayoutDashboard,
+  IconChartLine,
   IconPlane,
   IconPlaneDeparture,
   IconPlaneArrival,
@@ -84,6 +86,7 @@ const Navbar = ({
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
@@ -212,18 +215,83 @@ const Navbar = ({
               ) : (
                 <Divider mb="xs" color="#1A2D42" size="sm" />
               )}
-              <SimpleNavLink
+              <CollapsibleNav
                 label="Dashboard"
+                openedLocal={isDashboardOpen}
+                setOpenedLocal={setIsDashboardOpen}
                 icon={IconChartPie2}
-                path="/"
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                  setIsAirOpen,
-                  setIsSeaExportOpen,
-                }}
-              />
+              >
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Overview"
+                  icon={IconLayoutDashboard}
+                  path="/"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Enquiry Conversion"
+                  icon={IconChartLine}
+                  path="/dashboard/enquiry-conversion"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Call Entry"
+                  icon={IconKeyboard}
+                  path="/dashboard/call-entry-dashboard"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Outstanding / Overdue"
+                  icon={IconChartLine}
+                  path="/dashboard/customer-outstanding-vs-overdue"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Budget vs Actual"
+                  icon={IconChartLine}
+                  path="/dashboard/budget-vs-actual"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+              </CollapsibleNav>
               <Box>
                 <CollapsibleNav
                   label="Sales"

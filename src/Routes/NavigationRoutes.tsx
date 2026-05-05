@@ -6,6 +6,7 @@ import {
   CallModeView,
   CustomerPanMaster,
   Dashboard,
+  EnquiryConversionPage,
   GroupCompany,
   GroupCompanyEdit,
   GroupCompanyView,
@@ -189,6 +190,9 @@ import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
+import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
+import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
+import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
 import AirImportDsr from "../pages/Air/AirImportDsr";
 import AirExportDsr from "../pages/Air/AirExportDsr";
 import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
@@ -202,6 +206,22 @@ const NavigationRoutes = () => {
     <Routes>
       <Route path="/" element={<RootLayout />}>
         <Route index element={isStaff ? <Dashboard /> : <Dashboard />} />
+        <Route
+          path="/dashboard/enquiry-conversion"
+          element={<EnquiryConversionPage />}
+        />
+        <Route
+          path="/dashboard/call-entry-dashboard"
+          element={<CallEntryDashboardPage />}
+        />
+        <Route
+          path="/dashboard/customer-outstanding-vs-overdue"
+          element={<CustomerOutstandingVsOverdueDashboard />}
+        />
+        <Route
+          path="/dashboard/budget-vs-actual"
+          element={<BudgetVsActualDashboard />}
+        />
         <Route path="/road" element={<Road />} />
         <Route path="/air">
           <Route path="import-dsr" element={<AirImportDsr />} />

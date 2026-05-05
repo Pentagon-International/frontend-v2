@@ -18,6 +18,9 @@
   --header-bg: #ffffff;
   --accent: #105476;
   --accent-light: #DBEAFE;
+  /* Pipeline chart — potential bar gradient */
+  --navy-700: #0a2540;
+  --navy-500: #135578;
   --surface: #ffffff;
   --border: #E2E8F0;
   --text-primary: #1E293B;

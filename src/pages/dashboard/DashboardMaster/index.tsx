@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Box,
   Grid,
@@ -14,6 +14,7 @@ import {
   Text,
   Button,
   Textarea,
+  SimpleGrid,
 } from "@mantine/core";
 import { IconSearch, IconX, IconSend } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -28,18 +29,16 @@ import {
   getFilteredOutstandingData,
   calculateAggregatedData,
   calculateFilteredAggregatedData,
-  getCallEntryData,
   calculateCallEntryAggregatedData,
   filterCallEntryData,
   getCallEntryStatistics,
-  calculateCallEntryDateRange,
-  getEnquiryConversionData,
+  getCallEntryDashboardData,
+  mapCallEntryDashboardToLegacyResponse,
   getFilteredEnquiryConversionData,
-  calculateEnquiryConversionAggregatedData,
-  calculateFilteredEnquiryConversionAggregatedData,
+  getEnquiryConversionDashboardData,
+  resolveEnquiryConversionAggregatedFromResponse,
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
-  calculateFinancialYearBudgetRange,
   calculateFinancialYearBudgetRangeForYear,
   calculateStartMonthFromEndMonth,
   getFinancialYearOptions,
@@ -49,25 +48,21 @@ import {
   getCustomerInteractionStatusSummary,
   DashboardFilters,
   CallEntryAggregatedData,
+  CallEntryStatisticsFilters,
   CallEntryStatisticsSummary,
   CallEntryStatisticsResponse,
+  CallEntryDashboardFilters,
   CallEntrySalespersonData,
   CallEntryCustomerData,
   CallEntryDetailData,
   EnquiryConversionAggregatedData,
+  EnquiryConversionOverviewMeta,
   BudgetAggregatedData,
   extractNumericValue,
+  extractEnquiryConversionOverviewMeta,
 } from "../../../service/dashboard.service";
-import { useQuery } from "@tanstack/react-query";
 import { DetailedViewTable, DateRangeInput } from "../../../components";
 import dayjs from "dayjs";
-import Outstanding from "./Outstanding";
-import Budget from "./Budget";
-import CallEntry from "./CallEntry";
-import Enquiry from "./Enquiry";
-import NewCustomers from "./NewCustomers";
-import LostCustomer from "./LostCustomer";
-import CustomerNotVisited from "./CustomerNotVisited";
 import CustomerInteractionStatus from "./CustomerInteractionStatus";
 import CallEntrySection from "./CallEntrySection";
 import OutstandingSection from "./OutstandingSection";
@@ -148,11 +143,136 @@ const dashToolbarSearchInputStyles = {
   },
 } as const;
 
-/** Page chrome behind the white toolbar — matches AirExportBookingMaster `pageBg`. */
-const DASH_PAGE_BG = "#F0F4F8";
+/** Page chrome behind the white toolbar — matches Sales Leadership reference. */
+const DASH_PAGE_BG = "#F8F9FB";
 
 /** Matches AppShellLayout main `px`; negative margin on dashboard root cancels this so scrollbars align to the main column edge, then content uses this as padding inside scroll areas. */
 const DASH_MAIN_PAD_X = { base: 16, sm: 24 } as const;
+
+const DASH_LEADERSHIP_POS = "#22C55E";
+const DASH_LEADERSHIP_NEG = "#EF4444";
+const DASH_LEADERSHIP_BLUE = "#3B82F6";
+const DASH_LEADERSHIP_CARD_BORDER = "#E5E7EB";
+const DASHBOARD_DATE_FILTER_STORAGE_KEY =
+  "dashboard.master.customerInteractionDateRange";
+
+function dashFormatInrAdaptive(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "₹—";
+  const crores = n / 1e7;
+  const lakhs = n / 1e5;
+  if (crores >= 0.005) return `₹${crores.toFixed(2)} Cr`;
+  if (lakhs >= 0.05) return `₹${lakhs.toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+type DashLeadershipSparkKind = "greenUp" | "blueUp" | "redDown" | "redUp";
+
+function DashLeadershipSparkline({ kind }: { kind: DashLeadershipSparkKind }) {
+  const stroke =
+    kind === "greenUp"
+      ? DASH_LEADERSHIP_POS
+      : kind === "blueUp"
+        ? DASH_LEADERSHIP_BLUE
+        : DASH_LEADERSHIP_NEG;
+  const points =
+    kind === "redDown"
+      ? "0,6 16,9 32,12 48,16 64,20 80,22 100,24"
+      : kind === "redUp"
+        ? "0,20 16,18 32,16 48,14 64,12 80,9 100,7"
+        : kind === "blueUp"
+          ? "0,22 16,19 32,16 48,12 64,10 80,7 100,5"
+          : "0,24 16,20 32,16 48,12 64,9 80,6 100,4";
+  return (
+    <svg
+      width="100%"
+      height={28}
+      viewBox="0 0 100 28"
+      preserveAspectRatio="none"
+      style={{ display: "block" }}
+      aria-hidden
+    >
+      <polyline
+        fill="none"
+        stroke={stroke}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
+function DashSalesLeadershipKpiCard({
+  label,
+  value,
+  trendPrefix,
+  trendMain,
+  trendSub,
+  trendColor,
+  sparkKind,
+}: {
+  label: string;
+  value: string;
+  trendPrefix?: string;
+  trendMain?: string;
+  trendSub?: string;
+  trendColor: string;
+  sparkKind: DashLeadershipSparkKind;
+}) {
+  return (
+    <Box
+      style={{
+        backgroundColor: "#FFFFFF",
+        border: `1px solid ${DASH_LEADERSHIP_CARD_BORDER}`,
+        borderRadius: 10,
+        padding: "14px 16px",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minHeight: 120,
+      }}
+    >
+      <Group justify="space-between" align="flex-start" gap={8} wrap="nowrap">
+        <Text
+          fz={11}
+          fw={700}
+          tt="uppercase"
+          lts={0.6}
+          c="#64748B"
+          style={{ lineHeight: 1.3 }}
+        >
+          {label}
+        </Text>
+      </Group>
+      <Text fz={22} fw={800} c="#0F172A" lh={1.15}>
+        {value}
+      </Text>
+      {trendMain ? (
+        <Text fz={11} lh={1.35} style={{ whiteSpace: "nowrap" }}>
+          <Text span c={trendColor} fw={700}>
+            {trendPrefix ?? ""}
+            {trendMain}
+          </Text>
+          {trendSub ? (
+            <Text span fw={600} c="#94A3B8">
+              {" "}
+              {trendSub}
+            </Text>
+          ) : null}
+        </Text>
+      ) : (
+        <Text fz={11} fw={600} c="#94A3B8">
+          {/* Selected date range */}
+        </Text>
+      )}
+      {/* <Box mt="auto">
+        <DashLeadershipSparkline kind={sparkKind} />
+      </Box> */}
+    </Box>
+  );
+}
 
 const Dashboard = () => {
   const { user } = useAuthStore();
@@ -237,9 +357,6 @@ const Dashboard = () => {
   const [initialEnquiryFilterType, setInitialEnquiryFilterType] = useState<
     "all" | "gain" | "lost" | "active" | "quote"
   >("all");
-  const [enquiryView, setEnquiryView] = useState<"gain-lost" | "active-quote">(
-    "gain-lost"
-  );
   const [callEntryFilterType, setCallEntryFilterType] = useState<
     "all" | "overdue" | "today" | "upcoming" | "closed"
   >("all");
@@ -405,6 +522,8 @@ const Dashboard = () => {
       activePercentage: 0,
       quotePercentage: 0,
     });
+  const [enquiryConversionOverviewMeta, setEnquiryConversionOverviewMeta] =
+    useState<EnquiryConversionOverviewMeta>({});
 
   // Section-level period states (for unified filters in section headers)
   const [customerInteractionPeriod, setCustomerInteractionPeriod] =
@@ -413,6 +532,28 @@ const Dashboard = () => {
     useState<string>("last_30_days");
 
   // Customer Interaction Status date range states
+  const readPersistedDashboardDateRange = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(DASHBOARD_DATE_FILTER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        fromDate?: string | null;
+        toDate?: string | null;
+      };
+      const fromDate = parsed?.fromDate ? new Date(parsed.fromDate) : null;
+      const toDate = parsed?.toDate ? new Date(parsed.toDate) : null;
+      const validFromDate =
+        fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
+      const validToDate = toDate && !Number.isNaN(toDate.getTime()) ? toDate : null;
+      if (!validFromDate && !validToDate) return null;
+      return { fromDate: validFromDate, toDate: validToDate };
+    } catch {
+      return null;
+    }
+  };
+  const persistedDateRange = readPersistedDashboardDateRange();
+
   const getDefaultFromDate = (): Date => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -421,9 +562,24 @@ const Dashboard = () => {
     return new Date();
   };
   const [customerInteractionFromDate, setCustomerInteractionFromDate] =
-    useState<Date | null>(getDefaultFromDate());
+    useState<Date | null>(persistedDateRange?.fromDate ?? getDefaultFromDate());
   const [customerInteractionToDate, setCustomerInteractionToDate] =
-    useState<Date | null>(getDefaultToDate());
+    useState<Date | null>(persistedDateRange?.toDate ?? getDefaultToDate());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        DASHBOARD_DATE_FILTER_STORAGE_KEY,
+        JSON.stringify({
+          fromDate: customerInteractionFromDate?.toISOString() ?? null,
+          toDate: customerInteractionToDate?.toISOString() ?? null,
+        })
+      );
+    } catch {
+      // Ignore storage failures and continue with in-memory state.
+    }
+  }, [customerInteractionFromDate, customerInteractionToDate]);
 
   // Enquiry and Call Entry now use the universal date selector (customerInteractionFromDate/ToDate)
   // Removed separate date states to ensure all modules use the same selected dates
@@ -1451,14 +1607,14 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const response = await getCallEntryStatistics(
+      const dash = await getCallEntryDashboardData(
         addSearchToCallEntryFilters({
           company: companyName,
-        })
+        }) as CallEntryDashboardFilters
       );
 
-      setCallEntryStatisticsData(response);
-      setCallEntrySummary(response.summary);
+      setCallEntryStatisticsData(mapCallEntryDashboardToLegacyResponse(dash));
+      setCallEntrySummary(dash.summary);
     } catch (error) {
       console.error("Error fetching call entry statistics:", error);
       toast.error("Failed to fetch call entry data");
@@ -1508,19 +1664,22 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(companyName && { company: companyName }),
+      const response = await getEnquiryConversionDashboardData({
+        company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
       });
 
-      const response = await getFilteredEnquiryConversionData(filterData);
-      const aggregatedData =
-        calculateFilteredEnquiryConversionAggregatedData(response);
-      setEnquiryConversionAggregatedData(aggregatedData);
+      setEnquiryConversionAggregatedData(
+        resolveEnquiryConversionAggregatedFromResponse(response)
+      );
+      setEnquiryConversionOverviewMeta(
+        extractEnquiryConversionOverviewMeta(response)
+      );
     } catch (error) {
       console.error("Error fetching enquiry conversion data:", error);
       toast.error("Failed to fetch enquiry conversion data");
+      setEnquiryConversionOverviewMeta({});
     } finally {
       setIsLoadingEnquiryConversion(false);
     }
@@ -1672,23 +1831,24 @@ const Dashboard = () => {
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
-  // Helper function for call entry filters - uses DD-MM-YYYY format
+  // Helper — `getCallEntryStatistics` expects `CallEntryStatisticsFilters` with dates.
   const addSearchToCallEntryFilters = useCallback(
-    <T extends DashboardFilters>(filters: T): T => {
-      let updatedFilters = { ...filters };
-      if (globalSearch && globalSearch.trim()) {
-        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
+    (
+      filters: Omit<CallEntryStatisticsFilters, "date_from" | "date_to" | "search"> & {
+        search?: string;
       }
-      // Add date range filter from common date filter in DD-MM-YYYY format for call entry
-      if (customerInteractionFromDate && customerInteractionToDate) {
-        updatedFilters = {
-          ...updatedFilters,
-          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
-          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-      }
-      return updatedFilters as T;
-    },
+    ): CallEntryStatisticsFilters => ({
+      ...filters,
+      search: globalSearch?.trim() || filters.search || "",
+      date_from:
+        customerInteractionFromDate != null
+          ? dayjs(customerInteractionFromDate).format("DD-MM-YYYY")
+          : "",
+      date_to:
+        customerInteractionToDate != null
+          ? dayjs(customerInteractionToDate).format("DD-MM-YYYY")
+          : "",
+    }),
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
@@ -1785,30 +1945,28 @@ const Dashboard = () => {
               company: companyName,
               period: customerInteractionPeriod,
             }),
-        // Use filtered API call with company name and date range for enquiry conversion data
-        // Updated to use date range instead of period
-        // Always use selected dates if available, otherwise fall back to getEnquiryConversionData
+        // Enquiry conversion overview — POST enquiry/enquiryconversion/ only (needs date range)
         (async () => {
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const filterData: DashboardFilters = addSearchToFilters({
-              ...(companyName && { company: companyName }),
+            return await getEnquiryConversionDashboardData({
+              company: companyName,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
             });
-            return await getFilteredEnquiryConversionData(filterData);
-          } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            return await getEnquiryConversionData();
           }
+          return null;
         })(),
-        // Call entry statistics - use selected date range
+        // Call entry overview — POST call-entry/data/
         (async () => {
-          return await getCallEntryStatistics(
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            return null;
+          }
+          return await getCallEntryDashboardData(
             addSearchToCallEntryFilters({
               company: companyName,
-            })
+            }) as CallEntryDashboardFilters
           );
         })(),
       ]);
@@ -1942,39 +2100,34 @@ const Dashboard = () => {
         setIsLoadingCustomerInteraction(false);
       }
 
-      // Process Enquiry Conversion response
+      // Process Enquiry Conversion — POST enquiry/enquiryconversion/ only
       if (enquiryConversionResponse) {
-        const hasEnquiryData =
-          (enquiryConversionResponse as any)?.data?.[0]?.Enquiry_data !==
-          undefined;
-
-        const calculatedEnquiryConversionData = hasEnquiryData
-          ? calculateEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            )
-          : calculateFilteredEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            );
-
-        setEnquiryConversionAggregatedData(calculatedEnquiryConversionData);
-        // Don't reset period here - preserve user's selected period
-        setIsLoadingEnquiryConversion(false);
-      } else if (results[3].status === "rejected") {
-        setIsLoadingEnquiryConversion(false);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(
+            enquiryConversionResponse as any
+          )
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryConversionResponse)
+        );
+      } else {
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
+      setIsLoadingEnquiryConversion(false);
 
       // Process Call Entry response
-      if (callEntryResponse) {
-        // New API response structure
-        setCallEntryStatisticsData(
-          callEntryResponse as CallEntryStatisticsResponse
-        );
-        setCallEntrySummary(
-          (callEntryResponse as CallEntryStatisticsResponse).summary
-        );
-        // Don't reset period here - let it be controlled by user selection only
+      if (results[4].status === "fulfilled") {
+        if (callEntryResponse) {
+          setCallEntryStatisticsData(
+            mapCallEntryDashboardToLegacyResponse(callEntryResponse)
+          );
+          setCallEntrySummary(callEntryResponse.summary);
+        }
         setIsLoadingCallEntry(false);
-      } else if (results[4].status === "rejected") {
+      } else {
         setIsLoadingCallEntry(false);
       }
     } catch (error) {
@@ -1986,6 +2139,7 @@ const Dashboard = () => {
       setIsLoadingBudget(false);
       setIsLoadingCustomerInteraction(false);
       setIsLoadingEnquiryConversion(false);
+      setEnquiryConversionOverviewMeta({});
       setIsLoadingCallEntry(false);
     } finally {
       // Only set loading to false if all operations completed
@@ -2036,22 +2190,22 @@ const Dashboard = () => {
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       if (customerInteractionFromDate && customerInteractionToDate) {
-        const enquiryFilterData: DashboardFilters = {
+        const enquiryResponse = await getEnquiryConversionDashboardData({
           company: companyNameForEnquiry,
           date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
           date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-        const enquiryResponse =
-          await getFilteredEnquiryConversionData(enquiryFilterData);
-        const aggregatedEnquiryConversion =
-          calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+        });
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryResponse)
+        );
       } else {
-        // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-        const enquiryResponse = await getEnquiryConversionData();
-        const aggregatedEnquiryConversion =
-          calculateEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
       // Don't reset period here - preserve user's selected period
 
@@ -2100,145 +2254,31 @@ const Dashboard = () => {
   };
 
   const handleOutstandingViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("outstanding");
-      setDetailedViewTitle("Outstanding vs Over Due - Detailed View");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values
-      setDetailedViewSelectedCompany(selectedCompany);
-      setDetailedViewSelectedLocation(selectedLocation);
-      setDetailedViewSelectedSalesperson(
-        searchSalesman ? searchSalesman : null
-      );
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(drillLevel);
-
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(selectedCompany && { company: selectedCompany }),
-        ...(selectedLocation && { location: selectedLocation }),
-        ...(searchSalesman && { salesman: searchSalesman }),
-        ...(selectedYear && { year: parseInt(selectedYear) }),
-        ...(customerInteractionFromDate &&
-          customerInteractionToDate && {
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
-          }),
-      });
-
-      const response = await getFilteredOutstandingData(filterData);
-
-      const shouldRemoveSalespersonColumns = !!searchSalesman;
-      const tableData = convertFilteredResponseToTableData(
-        response,
-        shouldRemoveSalespersonColumns
-      );
-
-      if (searchSalesman) {
-        setDetailedViewTitle(`Outstanding vs Over Due - ${searchSalesman}`);
-      }
-
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/customer-outstanding-vs-overdue", {
+      state: {
+        company: companyName,
+        location: selectedLocation || null,
+        salesman: searchSalesman || null,
+        customer_name: globalSearch?.trim() || null,
+      },
+    });
   };
 
   const handleBudgetViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("budget");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values with fallback to user company
-      const companyName =
-        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-      setDetailedViewSelectedCompany(companyName);
-      setDetailedViewSelectedSalesperson(budgetSelectedSalesperson);
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(budgetDrillLevel);
-
-      let title = "Budget vs Actual - Overall";
-      let response: any;
-
-      if (budgetDrillLevel === 0) {
-        title = "Budget vs Actual - Overall";
-        const filterData: DashboardFilters = addSearchToFilters({
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 1) {
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        title = "Budget vs Actual - Salesperson Wise";
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 2) {
-        // Month wise view - show salesperson name
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        title = `Budget vs Actual - ${salespersonName} - Month Wise`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 3) {
-        // Specific month selected
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        const monthFormatted = budgetSelectedMonth
-          ? dayjs(budgetSelectedMonth + "-01").format("MMMM YYYY")
-          : "";
-        title = `Budget vs Actual - ${salespersonName} - ${monthFormatted}`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetSelectedMonth && {
-            start_month: budgetSelectedMonth,
-            end_month: budgetSelectedMonth,
-          }),
-          ...(!budgetSelectedMonth && {
-            ...(budgetStartMonth && { start_month: budgetStartMonth }),
-            ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      }
-
-      setDetailedViewTitle(title);
-
-      const tableData = convertBudgetResponseToTableData(
-        response,
-        budgetDrillLevel,
-        budgetType
-      );
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading budget detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/budget-vs-actual", {
+      state: {
+        company: companyName,
+        type: budgetType,
+        start_month: budgetStartMonth || undefined,
+        end_month: budgetEndMonth || undefined,
+        salesperson: searchSalesman || budgetSelectedSalesperson || null,
+        mode: null,
+      },
+    });
   };
 
   const handleEnquiryConversionViewAll = async (
@@ -2415,6 +2455,28 @@ const Dashboard = () => {
       setIsLoadingDetailedView(false);
     }
   };
+
+  const handleOpenCallEntryDashboard = useCallback(() => {
+    const companyName =
+      user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+    navigate("/dashboard/call-entry-dashboard", {
+      state: {
+        company: companyName,
+        fromDate: customerInteractionFromDate
+          ? dayjs(customerInteractionFromDate).toISOString()
+          : null,
+        toDate: customerInteractionToDate
+          ? dayjs(customerInteractionToDate).toISOString()
+          : null,
+      },
+    });
+  }, [
+    customerInteractionFromDate,
+    customerInteractionToDate,
+    navigate,
+    selectedCompany,
+    user?.company?.company_name,
+  ]);
 
   // Customer Not Visited handlers (similar to Budget handlers)
   const handleCustomerNotVisitedPeriodChange = useCallback(
@@ -6440,17 +6502,38 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(1);
         } else if (detailedViewDrillLevel === 1) {
-          // Go back to initial View All state
-          const response = await getCustomerNotVisitedData({
-            period: customerNotVisitedPeriod,
-            index: 0,
-            limit: 10,
-          });
-          const tableData = convertCustomerNotVisitedToTableData(response, 0);
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedCompany(null);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
+          if (notVisitedOriginalData?.data?.length) {
+            const salespersonData = (notVisitedOriginalData.data || []).filter(
+              (item: Record<string, unknown>) =>
+                item.salesperson !== undefined
+            );
+            const tableData = salespersonData.map(
+              (item: Record<string, unknown>) => ({
+                SNO:
+                  item.sno !== undefined && item.sno !== null
+                    ? Number(item.sno)
+                    : 0,
+                send_email: "send_email",
+                SALESPERSON: String(item.salesperson ?? ""),
+                COUNT: Number(item.count) || 0,
+              })
+            );
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+            setDetailedViewTitle("Not Visited Customers");
+          } else {
+            const response = await getCustomerNotVisitedData({
+              period: customerNotVisitedPeriod,
+              index: 0,
+              limit: 10,
+            });
+            const tableData = convertCustomerNotVisitedToTableData(response, 0);
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedCompany(null);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+          }
         }
       } else if (detailedViewType === "lostCustomer") {
         if (detailedViewDrillLevel === 1) {
@@ -6495,30 +6578,6 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
           setDetailedViewTitle("Gain - New Customers");
-        }
-      } else if (detailedViewType === "customerNotVisited") {
-        if (detailedViewDrillLevel === 1) {
-          // Go back from customer to salesperson level
-          if (!notVisitedOriginalData) {
-            toast.error("Original data not found");
-            setIsLoadingDetailedView(false);
-            return;
-          }
-          // Transform response to table data format using stored original data
-          const salespersonData = (notVisitedOriginalData.data || []).filter(
-            (item: any) => item.salesperson !== undefined
-          );
-          const tableData = salespersonData.map((item: any) => ({
-            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-            send_email: "send_email",
-            SALESPERSON: item.salesperson || "",
-            // EMAIL: item.email || "",
-            COUNT: item.count || 0,
-          }));
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
-          setDetailedViewTitle("Not Visited Customers");
         }
       } else if (detailedViewType === "callentry") {
         if (callEntryDrillLevel === 2) {
@@ -6874,24 +6933,24 @@ const Dashboard = () => {
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const enquiryFilterData: DashboardFilters = {
+            const enquiryResponse = await getEnquiryConversionDashboardData({
               company: companyNameForEnquiry,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            };
-            const enquiryResponse =
-              await getFilteredEnquiryConversionData(enquiryFilterData);
-            const aggregatedEnquiryConversion =
-              calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+            });
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+            );
+            setEnquiryConversionOverviewMeta(
+              extractEnquiryConversionOverviewMeta(enquiryResponse)
+            );
           } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            const enquiryResponse = await getEnquiryConversionData();
-            const aggregatedEnquiryConversion =
-              calculateEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(undefined)
+            );
+            setEnquiryConversionOverviewMeta({});
           }
 
           await refreshBudgetData();
@@ -7477,6 +7536,129 @@ const Dashboard = () => {
   const fromMonthOptions = getFromMonthOptions(selectedYear);
   const toMonthOptions = getToMonthOptions(selectedYear);
 
+  const salesLeadershipPeriodLabel = useMemo(() => {
+    if (customerInteractionFromDate && customerInteractionToDate) {
+      return `${dayjs(customerInteractionFromDate).format("D MMM YY")} → ${dayjs(customerInteractionToDate).format("D MMM YY")}`;
+    }
+    return "Selected period";
+  }, [customerInteractionFromDate, customerInteractionToDate]);
+
+  const salesLeadershipKpiItems = useMemo(() => {
+    const e = enquiryConversionAggregatedData;
+    const pipelineN = extractNumericValue(
+      (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
+    );
+    const overdueN = extractNumericValue(
+      (contextTotals as any).overdue ?? (contextTotals as any).total_overdue
+    );
+    const revenueMtd = extractNumericValue(
+      (budgetAggregatedData as any).totalActualBudget ??
+        (budgetAggregatedData as any).total_actual_budget ??
+        (budgetAggregatedData as any).actual_ytd
+    );
+    const activeEnquiries = e.totalActive;
+    const activeMoMLabel =
+      enquiryConversionOverviewMeta?.activeMoMChangePctDisplay?.trim() || "";
+    const activeMoMDir = enquiryConversionOverviewMeta?.activeMoMDirection;
+    const activeTrend =
+      activeMoMLabel.length > 0
+        ? {
+            prefix: activeMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: activeMoMLabel,
+            sub: undefined,
+            color:
+              activeMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
+    const winRateMoMLabel =
+      enquiryConversionOverviewMeta?.gainMoMChangePctDisplay?.trim() || "";
+    const winRateMoMDir = enquiryConversionOverviewMeta?.gainMoMDirection;
+    const winRateTrend =
+      winRateMoMLabel.length > 0
+        ? {
+            prefix: winRateMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: winRateMoMLabel,
+            sub: undefined,
+            color:
+              winRateMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
+    const conversionRate = `${Math.min(100, Math.max(0, e.gainPercentage)).toFixed(1)}%`;
+    const variance =
+      budgetAggregatedData.totalSalesBudget > 0
+        ? revenueMtd - budgetAggregatedData.totalSalesBudget
+        : 0;
+    const budgetTrend =
+      variance < 0 && Math.abs(variance) > 1
+        ? {
+            prefix: "▼ ",
+            main: dashFormatInrAdaptive(Math.abs(variance)),
+            sub: "vs budget",
+            color: DASH_LEADERSHIP_NEG,
+          }
+        : variance > 1
+          ? {
+              prefix: "▲ ",
+              main: dashFormatInrAdaptive(variance),
+              sub: "vs budget",
+              color: DASH_LEADERSHIP_POS,
+            }
+          : undefined;
+    const revenueSpark =
+      variance < -1 ? ("redDown" as DashLeadershipSparkKind) : ("greenUp" as DashLeadershipSparkKind);
+    return [
+      {
+        key: "new-enquiries",
+        label: "ACTIVE",
+        value: activeEnquiries.toLocaleString("en-IN"),
+        trend: activeTrend,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      {
+        key: "conversion-rate",
+        label: "Conversion rate",
+        value: conversionRate,
+        trend: winRateTrend,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      // {
+      //   key: "pipeline-value",
+      //   label: "Pipeline value",
+      //   value: dashFormatInrAdaptive(pipelineN),
+      //   trend: undefined,
+      //   spark: "blueUp" as DashLeadershipSparkKind,
+      // },
+      {
+        key: "revenue-mtd",
+        label: "Revenue MTD",
+        value: revenueMtd === 0 ? "0" : dashFormatInrAdaptive(revenueMtd),
+        trend: budgetTrend,
+        spark: revenueSpark,
+      },
+      {
+        key: "overdue-ar",
+        label: "Overdue AR",
+        value: dashFormatInrAdaptive(overdueN),
+        trend: undefined,
+        spark: "redUp" as DashLeadershipSparkKind,
+      },
+    ];
+  }, [
+    enquiryConversionAggregatedData,
+    enquiryConversionOverviewMeta?.activeMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.activeMoMDirection,
+    enquiryConversionOverviewMeta?.gainMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.gainMoMDirection,
+    contextTotals.outstanding,
+    contextTotals.overdue,
+    budgetAggregatedData.totalActualBudget,
+    budgetAggregatedData.totalSalesBudget,
+  ]);
+
   return (
     <Box
       mx={{ base: -16, sm: -24 }}
@@ -7489,6 +7671,9 @@ const Dashboard = () => {
         boxSizing: "border-box",
         backgroundColor: DASH_PAGE_BG,
         minWidth: 0,
+        fontFamily: DASH_TOOLBAR_FONT,
+        WebkitFontSmoothing: "antialiased",
+        MozOsxFontSmoothing: "grayscale",
       }}
     >
       {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
@@ -7809,12 +7994,58 @@ const Dashboard = () => {
                 overflow: "auto",
               }}
             >
-              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="lg">
-                <Grid gutter="lg" align="stretch" columns={12}>
-                <Grid.Col
-                  span={{ base: 12, md: 6 }}
-                  style={{ display: "flex", minWidth: 0 }}
-                >
+              <Box px={DASH_MAIN_PAD_X} pt={{ base: 10, sm: 14 }} pb="lg">
+                <Stack gap="md">
+                  {/* <Box style={{ width: "100%" }}>
+                    <Text
+                      fz={11}
+                      fw={600}
+                      c="#64748B"
+                      mb={6}
+                      style={{ lineHeight: 1.35 }}
+                    >
+                      Pentagon Freight › Sales › Overview
+                    </Text>
+                    <Text
+                      fw={700}
+                      c="#111827"
+                      mb={6}
+                      style={{
+                        fontSize: "clamp(24px, 4.2vw, 20px)",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      Sales Leadership
+                    </Text>
+                    <Text fz={12} fw={600} c="#64748B" style={{ lineHeight: 1.45 }}>
+                      Leadership view · All regions · {salesLeadershipPeriodLabel}
+                    </Text>
+                  </Box> */}
+
+                  <SimpleGrid
+                    cols={{ base: 1, xs: 2, sm: 2, md: 3, lg: 5 }}
+                    spacing={{ base: "sm", sm: "md" }}
+                  >
+                    {salesLeadershipKpiItems.map((kpi) => (
+                      <DashSalesLeadershipKpiCard
+                        key={kpi.key}
+                        label={kpi.label}
+                        value={kpi.value}
+                        trendPrefix={kpi.trend?.prefix}
+                        trendMain={kpi.trend?.main}
+                        trendSub={kpi.trend?.sub}
+                        trendColor={kpi.trend?.color ?? "#64748B"}
+                        sparkKind={kpi.spark}
+                      />
+                    ))}
+                  </SimpleGrid>
+
+                  <Grid
+                    gutter={{ base: "md", lg: "lg" }}
+                    align="stretch"
+                    columns={12}
+                  >
+                  {/* <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
                   <Box
                     style={{
                       flex: 1,
@@ -7841,7 +8072,7 @@ const Dashboard = () => {
                       onNotVisitedClick={handleNotVisitedClick}
                     />
                   </Box>
-                </Grid.Col>
+                  </Grid.Col> */}
                 <Grid.Col
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}
@@ -7859,17 +8090,47 @@ const Dashboard = () => {
                       enquiryConversionAggregatedData={
                         enquiryConversionAggregatedData
                       }
+                      enquiryConversionOverviewMeta={
+                        enquiryConversionOverviewMeta
+                      }
                       isLoadingEnquiryConversion={isLoadingEnquiryConversion}
                       isLoadingEnquiryChart={isLoadingEnquiryChart}
-                      enquiryView={enquiryView}
-                      setEnquiryView={setEnquiryView}
-                      handleEnquiryConversionViewAll={
-                        handleEnquiryConversionViewAll
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                      onOpenEnquiryConversionModule={() =>
+                        navigate("/dashboard/enquiry-conversion", {
+                          state: {
+                            fromDate:
+                              customerInteractionFromDate?.toISOString() ?? null,
+                            toDate:
+                              customerInteractionToDate?.toISOString() ?? null,
+                          },
+                        })
                       }
-                      selectedPeriod={enquiryPeriod}
-                      setSelectedPeriod={
-                        () => {} // Commented out - can be used in future case
-                      }
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CallEntrySection
+                      callEntrySummary={callEntrySummary}
+                      isLoadingCallEntry={isLoadingCallEntry}
+                      handleCallEntryViewAll={handleCallEntryViewAll}
+                      onOpenCallEntryDashboard={handleOpenCallEntryDashboard}
                       fromDate={customerInteractionFromDate}
                       toDate={customerInteractionToDate}
                       setFromDate={setCustomerInteractionFromDate}
@@ -7899,7 +8160,11 @@ const Dashboard = () => {
                       locationData={locationData}
                       salespersonData={salespersonData}
                       selectedCompanyCtx={selectedCompanyCtx}
-                      selectedCompany={selectedCompany}
+                      selectedCompany={
+                        selectedCompany ||
+                        user?.company?.company_name ||
+                        "PENTAGON INDIA"
+                      }
                       selectedLocation={selectedLocation}
                       contextTotals={contextTotals}
                       hoverTotals={hoverTotals}
@@ -7913,32 +8178,6 @@ const Dashboard = () => {
                   span={{ base: 12, md: 6 }}
                   style={{ display: "flex", minWidth: 0 }}
                 >
-                  <Box
-                    style={{
-                      flex: 1,
-                      width: "100%",
-                      minWidth: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
-                    <CallEntrySection
-                      callEntrySummary={callEntrySummary}
-                      isLoadingCallEntry={isLoadingCallEntry}
-                      handleCallEntryViewAll={handleCallEntryViewAll}
-                      selectedPeriod={callEntryPeriod}
-                      setSelectedPeriod={
-                        () => {} // Commented out - can be used in future case
-                      }
-                      fromDate={customerInteractionFromDate}
-                      toDate={customerInteractionToDate}
-                      setFromDate={setCustomerInteractionFromDate}
-                      setToDate={setCustomerInteractionToDate}
-                      hideDateFilter={true}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
                   <Box
                     style={{
                       width: "100%",
@@ -7981,6 +8220,7 @@ const Dashboard = () => {
                   </Box>
                 </Grid.Col>
               </Grid>
+                </Stack>
               </Box>
             </Box>
           )}

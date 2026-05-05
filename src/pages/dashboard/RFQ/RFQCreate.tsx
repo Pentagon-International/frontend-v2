@@ -412,7 +412,7 @@ function mapRfqApiPayloadToQuotationServiceRow(
   }
 
   return {
-    id: numericId,
+    ...(serviceDetail.id && { id: serviceDetail.id } ),
     service: serviceDetail.service,
     trade: serviceDetail.trade,
     service_code: serviceDetail.service_code,

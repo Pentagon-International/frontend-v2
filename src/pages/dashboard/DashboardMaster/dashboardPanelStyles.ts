@@ -19,13 +19,11 @@ export const dashboardPanelShell: CSSProperties = {
 /** Same header height & divider position across all dashboard tiles. */
 export const dashboardPanelHeaderBand: CSSProperties = {
   flexShrink: 0,
-  minHeight: 44,
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-  paddingBottom: 8,
-  marginBottom: 16,
-  borderBottom: "1px solid #EEF2F6",
+  paddingBottom: 0,
+  marginBottom: 12,
   boxSizing: "border-box",
 };
 

@@ -1,160 +1,138 @@
-import { Group, Text, Stack, Box, Loader, Center } from "@mantine/core";
-import { EnquiryConversionAggregatedData } from "../../../service/dashboard.service";
+import { Stack, Box, Loader, Center } from "@mantine/core";
+import type {
+  EnquiryConversionAggregatedData,
+  EnquiryConversionOverviewMeta,
+} from "../../../service/dashboard.service";
+import {
+  SegmentedFunnelBar,
+  buildEnquiryConversionSegments,
+  ConversionMetricStrip,
+  type ConversionMetricStripColumn,
+} from "./EnquiryConversion";
+import { enquiryConversionColors } from "./EnquiryConversion/enquiryConversionTokens";
+
+const ERP_FONT = "'Geist', sans-serif";
+
+function normalizeGainMoMDirection(raw?: string): "up" | "down" | "flat" {
+  const d = String(raw ?? "").toLowerCase();
+  if (d === "increase" || d === "up") return "up";
+  if (d === "decrease" || d === "down") return "down";
+  return "flat";
+}
+
+function formatWonMoMCaption(meta?: EnquiryConversionOverviewMeta | null): {
+  text: string;
+  captionColor?: string;
+  captionFw?: number;
+} {
+  const pct = meta?.gainMoMChangePctDisplay?.trim();
+  if (!pct) {
+    return { text: "— MoM", captionColor: enquiryConversionColors.subHeading, captionFw: 500 };
+  }
+  const dir = normalizeGainMoMDirection(meta?.gainMoMDirection);
+  const arrow = dir === "down" ? "▼" : dir === "up" ? "▲" : "";
+  const color =
+    dir === "down" ? enquiryConversionColors.bars.lost : dir === "up" ? enquiryConversionColors.bars.won : enquiryConversionColors.subHeading;
+  const text = [arrow, pct, "MoM"].filter(Boolean).join(" ").trim();
+  return { text, captionColor: color, captionFw: 600 };
+}
 
 interface EnquiryProps {
   enquiryConversionAggregatedData: EnquiryConversionAggregatedData;
+  enquiryConversionOverviewMeta?: EnquiryConversionOverviewMeta | null;
   isLoadingEnquiryConversion: boolean;
   isLoadingEnquiryChart: boolean;
-  enquiryView: "gain-lost" | "active-quote";
-  setEnquiryView: (view: "gain-lost" | "active-quote") => void;
-  handleEnquiryConversionViewAll: (
-    filterType: "all" | "gain" | "lost" | "active" | "quote"
-  ) => void;
-  selectedPeriod: string;
-  setSelectedPeriod: (period: string) => void;
+  onOpenDetailModule?: () => void;
 }
+
+const FUNNEL_BAR_HEIGHT = 24;
 
 const Enquiry = ({
   enquiryConversionAggregatedData,
+  enquiryConversionOverviewMeta,
   isLoadingEnquiryConversion,
   isLoadingEnquiryChart,
-  handleEnquiryConversionViewAll,
+  onOpenDetailModule,
 }: EnquiryProps) => {
+  const data = enquiryConversionAggregatedData;
+  const meta = enquiryConversionOverviewMeta;
+
+  const quotedCaption = meta?.quoteCreatedPctDisplay?.length
+    ? `${meta.quoteCreatedPctDisplay} of new`
+    : `${data.quotePercentage.toFixed(1)}% of new`;
+
+  const lostCaption = meta?.lostRowPctDisplay?.trim()?.length
+    ? meta.lostRowPctDisplay.trim()
+    : data.totalGain > 0
+      ? `${((data.totalLost / data.totalGain) * 100).toFixed(1)}% vs won`
+      : data.totalEnquiries > 0
+        ? `${((data.totalLost / data.totalEnquiries) * 100).toFixed(1)}% of enquiries`
+        : "0.0% vs won";
+
+  const wonMoM = formatWonMoMCaption(meta);
+  const funnelSegments = buildEnquiryConversionSegments(data);
+
+  const metricColumns: ConversionMetricStripColumn[] = [
+    {
+      key: "quoted",
+      label: "QUOTED",
+      value: data.totalQuoteCreated,
+      valueColor: enquiryConversionColors.heading,
+      caption: quotedCaption,
+      captionColor: enquiryConversionColors.subHeading,
+      captionFw: 500,
+    },
+    {
+      key: "won",
+      label: "WON",
+      value: data.totalGain,
+      valueColor: enquiryConversionColors.bars.won,
+      caption: wonMoM.text,
+      captionColor: wonMoM.captionColor,
+      captionFw: wonMoM.captionFw,
+    },
+    {
+      key: "lost",
+      label: "LOST",
+      value: data.totalLost,
+      valueColor: enquiryConversionColors.heading,
+      caption: lostCaption,
+      captionColor: enquiryConversionColors.subHeading,
+      captionFw: 500,
+    },
+  ];
+
   return (
-    <Box>
+    <Box style={{ fontFamily: ERP_FONT }}>
       {isLoadingEnquiryConversion || isLoadingEnquiryChart ? (
-        <Center h="70%">
-          <Loader size="lg" color="#105476" />
+        <Center h={160}>
+          <Loader size="md" color="#111827" />
         </Center>
       ) : (
-        <Stack gap="md" style={{ paddingTop: "16px" }}>
-          {/* Horizontal Bar Chart */}
+        <Stack gap={24} pt={4}>
+          <ConversionMetricStrip
+            columns={metricColumns}
+            onActivate={onOpenDetailModule}
+          />
+
           <Box
-            style={{
-              width: "100%",
-              height: "40px",
-              display: "flex",
-              borderRadius: "4px",
-              overflow: "hidden",
+            style={{ cursor: onOpenDetailModule ? "pointer" : undefined }}
+            onClick={onOpenDetailModule}
+            onKeyDown={(e) => {
+              if (!onOpenDetailModule) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenDetailModule();
+              }
             }}
+            role={onOpenDetailModule ? "button" : undefined}
+            tabIndex={onOpenDetailModule ? 0 : undefined}
           >
-            <Box
-              style={{
-                backgroundColor: "#2E7D32",
-                width: `${enquiryConversionAggregatedData.gainPercentage}%`,
-                cursor: "pointer",
-                transition: "opacity 0.2s ease",
-              }}
-              onClick={() => handleEnquiryConversionViewAll("gain")}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "0.8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "1";
-              }}
-            />
-            <Box
-              style={{
-                backgroundColor: "#8B0000",
-                width: `${enquiryConversionAggregatedData.lossPercentage}%`,
-                cursor: "pointer",
-                transition: "opacity 0.2s ease",
-              }}
-              onClick={() => handleEnquiryConversionViewAll("lost")}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "0.8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "1";
-              }}
-            />
-            <Box
-              style={{
-                backgroundColor: "#F6C667",
-                width: `${enquiryConversionAggregatedData.activePercentage}%`,
-                cursor: "pointer",
-                transition: "opacity 0.2s ease",
-              }}
-              onClick={() => handleEnquiryConversionViewAll("active")}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "0.8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "1";
-              }}
-            />
-            <Box
-              style={{
-                backgroundColor: "#64B5F6",
-                width: `${enquiryConversionAggregatedData.quotePercentage}%`,
-                cursor: "pointer",
-                transition: "opacity 0.2s ease",
-              }}
-              onClick={() => handleEnquiryConversionViewAll("quote")}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "0.8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "1";
-              }}
+            <SegmentedFunnelBar
+              segments={funnelSegments}
+              height={10}
             />
           </Box>
-
-          {/* Labels below the bar */}
-          <Group justify="space-between" style={{ paddingTop: "8px" }}>
-            <Stack
-              align="center"
-              gap={4}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleEnquiryConversionViewAll("gain")}
-            >
-              <Text size="xs" c="dimmed">
-                Gain
-              </Text>
-              <Text size="lg" fw={700} c="#2E7D32">
-                {enquiryConversionAggregatedData.totalGain}
-              </Text>
-            </Stack>
-            <Stack
-              align="center"
-              gap={4}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleEnquiryConversionViewAll("lost")}
-            >
-              <Text size="xs" c="dimmed">
-                Loss
-              </Text>
-              <Text size="lg" fw={700} c="#8B0000">
-                {enquiryConversionAggregatedData.totalLost}
-              </Text>
-            </Stack>
-            <Stack
-              align="center"
-              gap={4}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleEnquiryConversionViewAll("active")}
-            >
-              <Text size="xs" c="dimmed">
-                Active
-              </Text>
-              <Text size="lg" fw={700} c="#F6C667">
-                {enquiryConversionAggregatedData.totalActive}
-              </Text>
-            </Stack>
-            <Stack
-              align="center"
-              gap={4}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleEnquiryConversionViewAll("quote")}
-            >
-              <Text size="xs" c="dimmed">
-                Quoted
-              </Text>
-              <Text size="lg" fw={700} c="#1976D2">
-                {enquiryConversionAggregatedData.totalQuoteCreated}
-              </Text>
-            </Stack>
-          </Group>
         </Stack>
       )}
     </Box>

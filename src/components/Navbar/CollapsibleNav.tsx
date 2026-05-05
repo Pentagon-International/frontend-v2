@@ -43,6 +43,12 @@ export const CollapsibleNav = ({
 
   const hasActiveChild =
     (label === "Sales" && activeSubNav === "Tariff") ||
+    (label === "Dashboard" &&
+      (activeSubNav === "Overview" ||
+        activeSubNav === "Enquiry Conversion" ||
+        activeSubNav === "Call Entry" ||
+        activeSubNav === "Outstanding / Overdue" ||
+        activeSubNav === "Budget vs Actual")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
@@ -208,10 +214,17 @@ export const CollapsibleNav = ({
         if (label === "Air") {
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
         } else if (label === "Ocean") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
         } else if (label === "Sales") {
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Dashboard", false);
+        } else if (label === "Dashboard") {
+          setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
         }

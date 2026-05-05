@@ -179,9 +179,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/help")) {
       setActiveNav("System");
       setActiveSubNav("Help");
+    } else if (path.startsWith("/dashboard/enquiry-conversion")) {
+      setActiveNav("Dashboard");
+      setActiveSubNav("Enquiry Conversion");
     } else if (path === "/") {
       setActiveNav("Dashboard");
-      setActiveSubNav("");
+      setActiveSubNav("Overview");
     } else if (path === "/get-rate") {
       setActiveNav("Sales");
       setActiveSubNav("Enquiry");

@@ -89,14 +89,81 @@ export interface DashboardFilters {
   location?: string;
   salesman?: string;
   salesperson?: string;
+  mode?: string;
+  by_sales_rep_ytd?: {
+    index: number;
+    limit: number;
+  };
   year?: number;
   month?: number;
   date_from?: string;
   date_to?: string;
   start_month?: string;
   end_month?: string;
-  type?: "salesperson" | "non-salesperson";
+  type?: string;
   search?: string;
+}
+
+export interface CustomerOutstandingVsOverdueItem {
+  sno: number;
+  company_name: string;
+  location: string;
+  salesperson: string;
+  salesperson_email: string;
+  cc_mail: string[];
+  customer_code: string;
+  customer_name: string;
+  credit_display: string;
+  credit_amount: string;
+  credit_day: number;
+  status_tags: string[];
+  outstanding: string;
+  overdue: string;
+  days_1_30: string;
+  days_31_60: string;
+  /** New API row key for 61-90 bucket. */
+  days_61_90?: string | number;
+  /** Primary API row key for 90+ bucket. */
+  days_90_plus?: string | number;
+  /** Backward compatibility for older API shape. */
+  days_61_plus?: string | number;
+  risk: "LOW" | "MEDIUM" | "HIGH" | string;
+  open_line_count: number;
+}
+
+export interface CustomerOutstandingVsOverdueSummary {
+  total_outstanding: string;
+  total_overdue: string;
+  total_outstanding_percentage: string;
+  total_overdue_percentage: string;
+  open_invoices: number;
+  customer_count: number;
+  currency: string;
+  days_1_30: string;
+  days_31_60: string;
+  days_61_90: string;
+  days_90_plus?: string | number;
+}
+
+export interface CustomerOutstandingVsOverdueResponse {
+  success: boolean;
+  message: string;
+  as_of: string;
+  summary: CustomerOutstandingVsOverdueSummary;
+  data: CustomerOutstandingVsOverdueItem[];
+  total: number;
+  index: number;
+  limit: number;
+}
+
+export interface CustomerOutstandingVsOverdueFilters {
+  company: string;
+  location?: string;
+  salesman?: string;
+  customer_name?: string;
+  risk?: string;
+  index?: number;
+  limit?: number;
 }
 
 export interface CallEntryItem {
@@ -177,6 +244,104 @@ export interface CallEntryStatisticsSummary {
   total_upcoming: number;
   total_closed: number;
   total_calls: number;
+  overdue_percentage?: string;
+  today_percentage?: string;
+  upcoming_percentage?: string;
+  closed_percentage?: string;
+}
+
+/** POST `call-entry/data/` — filters mirror API. */
+export interface CallEntryDashboardFilters {
+  company: string;
+  date_from?: string;
+  date_to?: string;
+  calls_by_rep_pagination?: {
+    index: number;
+    limit: number;
+  };
+  activity_log_pagination?: {
+    index: number;
+    limit: number;
+  };
+  salesperson?: string | null;
+  type?: string | null;
+  search?: string | null;
+}
+
+export interface CallEntryDashboardRepRow {
+  sno: number;
+  salesperson: string;
+  total_overdue: number;
+  total_today: number;
+  total_upcoming: number;
+  total_closed: number;
+  total_calls: number;
+  percentage?: string;
+  salesperson_email?: string;
+  cc_mail?: string[] | string;
+}
+
+export interface CallEntryHeatmapHour {
+  hour: number;
+  count: number;
+}
+
+export interface CallEntryHeatmapRow {
+  salesperson: string;
+  hours: CallEntryHeatmapHour[];
+}
+
+export interface CallEntryCallHeatmap {
+  rows: CallEntryHeatmapRow[];
+}
+
+export interface CallEntryActivityLogRow {
+  id: number;
+  customer_code: string;
+  customer_name: string;
+  purpose: string;
+  outcome: string;
+  salesperson: string;
+  call_date: string;
+  followup_date: string;
+  status: string;
+  sno: number;
+}
+
+export interface CallEntryDashboardResponse {
+  success: boolean;
+  message: string;
+  filters_applied: {
+    company: string;
+    date_from: string;
+    date_to: string;
+    salesperson: string | null;
+    type: string | null;
+    search: string | null;
+  };
+  kpi: {
+    total_overdue: number;
+    total_today: number;
+    total_upcoming: number;
+    total_closed: number;
+    total_calls: number;
+  };
+  calls_by_rep: CallEntryDashboardRepRow[];
+  calls_by_rep_meta?: {
+    total: number;
+    index: number;
+    limit: number;
+    paginated: boolean;
+  };
+  activity_log: CallEntryActivityLogRow[];
+  activity_log_meta?: {
+    total: number;
+    index: number;
+    limit: number;
+    paginated: boolean;
+  };
+  call_heatmap?: CallEntryCallHeatmap;
+  summary: CallEntryStatisticsSummary;
 }
 
 export interface CallEntryStatisticsResponse {
@@ -256,6 +421,7 @@ export interface EnquiryFilteredResponse {
 }
 
 export interface EnquiryConversionAggregatedData {
+  /** API “gained” counts; shown as “Won” in enquiry funnel / KPI strip. */
   totalGain: number;
   totalLost: number;
   totalActive: number;
@@ -265,6 +431,259 @@ export interface EnquiryConversionAggregatedData {
   lossPercentage: number;
   activePercentage: number;
   quotePercentage: number;
+}
+
+/** `summary` from POST `enquiry/enquiryconversion/`. */
+export interface EnquiryConversionApiSummaryStatusChange {
+  change_count?: number;
+  change_percentage?: string;
+  direction?: string;
+  previous_value?: number;
+  current_value?: number;
+}
+
+export interface EnquiryConversionApiSummary {
+  total_salesperson_count?: number;
+  total_active?: number;
+  /** Gained enquiries — funnel / metrics display as Won. */
+  total_gain?: number;
+  /** Some payloads use this alias for gained. */
+  total_gained?: number;
+  total_lost?: number;
+  total_quote_created?: number;
+  total_enquiry?: number;
+  /** Pre-formatted shares (e.g. `"60%"`) from enquiry/enquiryconversion/ summary */
+  active_percentage?: string;
+  gain_percentage?: string;
+  lost_percentage?: string;
+  quote_created_percentage?: string;
+  status_change_vs_previous_month?: {
+    active?: EnquiryConversionApiSummaryStatusChange;
+    gain?: EnquiryConversionApiSummaryStatusChange;
+    lost?: EnquiryConversionApiSummaryStatusChange;
+    quote_created?: EnquiryConversionApiSummaryStatusChange;
+    current_range?: { date_from?: string; date_to?: string };
+    previous_range?: { date_from?: string; date_to?: string };
+  };
+}
+
+/** Salesperson-level row from POST `enquiry/enquiryconversion/`. */
+export interface EnquiryConversionSalespersonRow {
+  sno?: number;
+  salesperson: string;
+  active?: string | number;
+  gained?: string | number;
+  lost?: string | number;
+  quote_created?: string | number;
+  total_enquiry: number;
+  salesperson_email?: string;
+  cc_mail?: unknown[];
+}
+
+/** Customer row from POST `enquiry/salesperson-statistics/` (rep drill-down). */
+export interface EnquiryConversionSalespersonStatisticsCustomerRow {
+  sno: number;
+  customer_code: string;
+  customer_name: string;
+  active: number;
+  gained: number;
+  lost: number;
+  quote_created: number;
+  total_enquiry: number;
+}
+
+export interface EnquiryConversionSalespersonStatisticsSummary {
+  total_customer_count: number;
+  total_active: number;
+  total_gain: number;
+  total_lost: number;
+  total_quote_created: number;
+}
+
+/** POST `enquiry/salesperson-statistics/` — customer-wise stats for one salesperson. */
+export interface EnquiryConversionSalespersonStatisticsResponse {
+  success: boolean;
+  message?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  company?: string;
+  salesperson?: string;
+  /** When provided by API, used to prefill enquiry conversion–style send-email modals. */
+  salesperson_email?: string;
+  cc_mail?: string | string[];
+  data?: EnquiryConversionSalespersonStatisticsCustomerRow[];
+  summary?: EnquiryConversionSalespersonStatisticsSummary;
+}
+
+/** Nested quotation / enquiry payloads when POST includes `customer_code`. */
+export interface EnquiryDrilldownQuotationCharge {
+  charge_name?: string;
+  unit?: string;
+  no_of_units?: number;
+  sell_per_unit?: string;
+  total_sell?: string;
+  currency?: string;
+}
+
+export interface EnquiryDrilldownQuotationService {
+  total_sell?: string;
+  quote_currency?: string;
+  valid_upto?: string;
+  charges?: EnquiryDrilldownQuotationCharge[];
+  service_details?: {
+    service?: string;
+    shipment_terms_code_read?: string;
+    shipment_terms_name?: string;
+    origin_code_read?: string;
+    destination_code_read?: string;
+    origin_name?: string;
+    destination_name?: string;
+    gross_weight?: number;
+    no_of_packages?: number;
+    commodity?: string | null;
+    fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+  };
+}
+
+export interface EnquiryDrilldownQuotation {
+  quotation_id?: string;
+  created_at?: string;
+  created_by?: string;
+  created_by_name?: string;
+  quotation_services?: EnquiryDrilldownQuotationService[];
+}
+
+export interface EnquiryDrilldownService {
+  service?: string;
+  service_name?: string;
+  trade?: string;
+  shipment_terms_code_read?: string;
+  shipment_terms_name?: string;
+  origin_code_read?: string;
+  destination_code_read?: string;
+  origin_name?: string;
+  destination_name?: string;
+  gross_weight?: string | number;
+  no_of_packages?: number;
+  commodity?: string | null;
+  fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+}
+
+export interface EnquiryDrilldownEnquiry {
+  id?: number;
+  enquiry_id: string;
+  customer_name?: string;
+  customer_address?: string;
+  enquiry_received_date?: string;
+  sales_person?: string;
+  sales_coordinator?: string;
+  status: string;
+  services?: EnquiryDrilldownService[];
+  origin_code_list?: string[];
+  destination_code_list?: string[];
+  origin_list?: string[];
+  destination_list?: string[];
+  quotations?: EnquiryDrilldownQuotation[];
+}
+
+export interface EnquiryConversionCustomerwiseCustomerRow
+  extends EnquiryConversionSalespersonStatisticsCustomerRow {
+  enquiries?: EnquiryDrilldownEnquiry[];
+}
+
+export interface EnquiryConversionCustomerwiseSummary {
+  total_enquiry_count?: number;
+}
+
+/** POST `enquiry/salesperson-statistics/` with `customer_code` — stats + enquiry list. */
+export interface EnquiryConversionCustomerwiseResponse {
+  success: boolean;
+  message?: string;
+  company?: string;
+  salesperson?: string;
+  data?: EnquiryConversionCustomerwiseCustomerRow[];
+  summary?: EnquiryConversionCustomerwiseSummary;
+}
+
+export interface EnquiryConversionTopEnquiryRow {
+  sno: number;
+  enquiry_id: string;
+  customer_name: string;
+  /** Present when API returns account code for drilldown into customer-wise enquiries. */
+  customer_code?: string;
+  origin_code: string;
+  destination_code: string;
+  service: string;
+  status: string;
+  /** When API returns them — used for send-email prefill on Top Active Enquiries. */
+  sales_person?: string;
+  salesperson_email?: string;
+  cc_mail?: string | string[];
+}
+
+/** Full POST `enquiry/enquiryconversion/` response (dashboard overview). */
+export interface EnquiryConversionDashboardResponse {
+  success: boolean;
+  message?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  company?: string;
+  data?: EnquiryConversionSalespersonRow[];
+  summary?: EnquiryConversionApiSummary;
+  service?: Array<{ service: string; count: number; percentage: string }>;
+  top_enquiries?: EnquiryConversionTopEnquiryRow[];
+  /** Customer-wise winners list used by mode drilldown tables. */
+  top_gained?: Array<Record<string, unknown>>;
+  /** Route/lane-wise winners list used by mode drilldown top lanes. */
+  top_gained_roted?: Array<Record<string, unknown> | string>;
+  next_drilldown?: unknown;
+}
+
+/** Caption / MoM adornments on the Overview enquiry conversion tile (from `summary`). */
+export interface EnquiryConversionOverviewMeta {
+  /** MoM direction for ACTIVE from summary.status_change_vs_previous_month.active */
+  activeMoMDirection?: string;
+  /** MoM percentage text for ACTIVE (e.g. "+12.4%") */
+  activeMoMChangePctDisplay?: string;
+  /** `summary.quote_created_percentage` shown under QUOTED */
+  quoteCreatedPctDisplay?: string;
+  /** `summary.lost_percentage` shown under LOST */
+  lostRowPctDisplay?: string;
+  gainMoMDirection?: string;
+  /** e.g. `"-100%"` — paired with direction for WON row */
+  gainMoMChangePctDisplay?: string;
+}
+
+export function extractEnquiryConversionOverviewMeta(
+  response: unknown
+): EnquiryConversionOverviewMeta {
+  if (!response || typeof response !== "object") return {};
+  const summary = (response as EnquiryConversionDashboardResponse).summary;
+  if (!summary || typeof summary !== "object") return {};
+  const active = summary.status_change_vs_previous_month?.active;
+  const gain = summary.status_change_vs_previous_month?.gain;
+  return {
+    activeMoMDirection: active?.direction,
+    activeMoMChangePctDisplay:
+      typeof active?.change_percentage === "string"
+        ? active.change_percentage.trim()
+        : undefined,
+    quoteCreatedPctDisplay:
+      typeof summary.quote_created_percentage === "string"
+        ? summary.quote_created_percentage.trim()
+        : undefined,
+    lostRowPctDisplay:
+      typeof summary.lost_percentage === "string"
+        ? summary.lost_percentage.trim()
+        : undefined,
+    gainMoMDirection: gain?.direction,
+    gainMoMChangePctDisplay:
+      typeof gain?.change_percentage === "string"
+        ? gain.change_percentage.trim()
+        : undefined,
+  };
 }
 
 // Budget interfaces
@@ -302,6 +721,57 @@ export interface BudgetAggregatedData {
   totalSalesBudget: number;
 }
 
+export interface SalespersonMonthlyBudgetItem {
+  sno: number;
+  month: string;
+  actual_budget: number;
+  sales_budget: number;
+  currency?: string;
+  trade_type?: string | null;
+  service_type?: string | null;
+  incentive_percentage?: number;
+  incentive_amount?: number;
+}
+
+export interface SalespersonMonthlyBudgetData {
+  company_name: string;
+  date_range: string;
+  currency?: string;
+  salesperson: string;
+  budget: SalespersonMonthlyBudgetItem[];
+  summary?: {
+    total: number;
+    total_actual_budget: number;
+    total_sales_budget: number;
+  };
+}
+
+export interface SalespersonMonthlyBudgetResponse {
+  success: boolean;
+  message: string;
+  budget_summary_version?: string;
+  total?: number;
+  index?: number;
+  limit?: number | null;
+  summary?: {
+    total_actual_budget: number;
+    total_sales_budget: number;
+    currency?: string;
+  };
+  data: SalespersonMonthlyBudgetData[];
+}
+
+export interface BudgetVsActualSalespersonNameRow {
+  sno: number;
+  salesperson: string;
+}
+
+export interface BudgetVsActualSalespersonNamesResponse {
+  status: boolean;
+  message: string;
+  data: BudgetVsActualSalespersonNameRow[];
+}
+
 // Get filtered outstanding data
 export const getFilteredOutstandingData = async (
   filters: DashboardFilters
@@ -315,6 +785,39 @@ export const getFilteredOutstandingData = async (
     return response as FilteredOutstandingResponse;
   } catch (error) {
     console.error("Error fetching filtered outstanding data:", error);
+    throw error;
+  }
+};
+
+export const getCustomerOutstandingVsOverdueData = async (
+  filters: CustomerOutstandingVsOverdueFilters
+): Promise<CustomerOutstandingVsOverdueResponse> => {
+  try {
+    const index = Number.isFinite(filters.index) ? Number(filters.index) : 0;
+    const limit = Number.isFinite(filters.limit) ? Number(filters.limit) : 5;
+    const queryParams = new URLSearchParams();
+    queryParams.append("index", String(index));
+    queryParams.append("limit", String(limit));
+    const url = `${URL.dashboard.customerOutstandingVsOverdue}?${queryParams.toString()}`;
+    const payload: Record<string, unknown> = {
+      company: filters.company,
+    };
+    if (filters.location && filters.location.trim()) {
+      payload.location = filters.location.trim();
+    }
+    if (filters.salesman && filters.salesman.trim()) {
+      payload.salesman = filters.salesman.trim();
+    }
+    if (filters.customer_name && filters.customer_name.trim()) {
+      payload.customer_name = filters.customer_name.trim();
+    }
+    if (filters.risk && filters.risk.trim()) {
+      payload.risk = filters.risk.trim();
+    }
+    const response = await postAPICall(url, payload);
+    return response as CustomerOutstandingVsOverdueResponse;
+  } catch (error) {
+    console.error("Error fetching customer outstanding vs overdue data:", error);
     throw error;
   }
 };
@@ -354,16 +857,17 @@ export const calculateAggregatedData = (data: OutstandingDataItem[]) => {
 
 // Calculate aggregated data for filtered response (different structure)
 export const calculateFilteredAggregatedData = (response: any) => {
-  console.log("Processing filtered response:", response);
+  console.log("Processing filtered response: RRRRRR", response.summary);
 
   if (response?.summary) {
+    console.log("Response summary:", response.summary);
     // Use summary data if available
     const totalOutstanding = parseFloat(
       response.summary.total_outstanding ||
-        response.summary.local_outstanding ||
+        response.summary.local_outstanding || 
         "0"
     );
-    const totalOverdue = response.summary.total_overdue;
+    const totalOverdue = parseFloat(response.summary.total_overdue || "0");
     const totalSalespersons = parseInt(
       (response.summary.total || response.summary.TOTAL || "0").toString()
     );
@@ -449,6 +953,104 @@ export const getCallEntryStatistics = async (
     return response as CallEntryStatisticsResponse;
   } catch (error) {
     console.error("Error fetching call entry statistics:", error);
+    throw error;
+  }
+};
+
+function dedupeCallEntryDashboardReps(
+  rows: CallEntryDashboardRepRow[]
+): CallEntryDashboardRepRow[] {
+  const seen = new Set<string>();
+  const out: CallEntryDashboardRepRow[] = [];
+  for (const row of rows || []) {
+    const key = (row.salesperson || "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+function normalizeCcMail(
+  raw: string[] | string | undefined
+): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  return raw ? [raw] : [];
+}
+
+/**
+ * Maps POST `call-entry/data/` into the legacy statistics shape used by email + level-0 tables.
+ */
+export const mapCallEntryDashboardToLegacyResponse = (
+  r: CallEntryDashboardResponse
+): CallEntryStatisticsResponse => {
+  const fa = r.filters_applied;
+  const reps = dedupeCallEntryDashboardReps(r.calls_by_rep || []);
+  const data: CallEntrySalespersonData[] = reps.map((row) => ({
+    salesperson: row.salesperson,
+    total_overdue: row.total_overdue,
+    total_today: row.total_today,
+    total_upcoming: row.total_upcoming,
+    total_closed: row.total_closed,
+    total_calls: row.total_calls,
+    salesperson_email: row.salesperson_email || "",
+    cc_mail: normalizeCcMail(row.cc_mail),
+  }));
+  data.sort((a, b) => (b.total_calls || 0) - (a.total_calls || 0));
+
+  const meta = r.calls_by_rep_meta;
+  return {
+    success: r.success,
+    message: r.message,
+    index: meta?.index ?? 0,
+    limit: meta?.limit ?? null,
+    company_code: "",
+    company_name: fa?.company ?? "",
+    type: fa?.type ?? null,
+    date: null,
+    date_from: fa?.date_from ?? "",
+    date_to: fa?.date_to ?? "",
+    data,
+    summary: r.summary,
+  };
+};
+
+/**
+ * Call-entry overview: KPIs, rep list slice, heatmap (POST `call-entry/data/`).
+ */
+export const getCallEntryDashboardData = async (
+  filters: CallEntryDashboardFilters
+): Promise<CallEntryDashboardResponse> => {
+  const payload: Record<string, unknown> = {
+    company: filters.company,
+  };
+  if (filters.date_from) payload.date_from = filters.date_from;
+  if (filters.date_to) payload.date_to = filters.date_to;
+  if (filters.calls_by_rep_pagination) {
+    payload.calls_by_rep_pagination = filters.calls_by_rep_pagination;
+  }
+  if (filters.activity_log_pagination) {
+    payload.activity_log_pagination = filters.activity_log_pagination;
+  }
+  if (filters.salesperson != null && String(filters.salesperson).trim()) {
+    payload.salesperson = filters.salesperson;
+  }
+  if (filters.type != null && String(filters.type).trim()) {
+    payload.type = filters.type;
+  }
+  if (filters.search != null && String(filters.search).trim()) {
+    payload.search = filters.search;
+  }
+
+  try {
+    const response = await postAPICall(
+      URL.dashboard.callEntryDashboardData,
+      payload
+    );
+    return response as CallEntryDashboardResponse;
+  } catch (error) {
+    console.error("Error fetching call entry dashboard data:", error);
     throw error;
   }
 };
@@ -839,6 +1441,120 @@ export const getFilteredEnquiryConversionData = async (
 };
 
 /**
+ * POST `enquiry/enquiryconversion/` — optional filters align with drilldown template.
+ */
+export const getEnquiryConversionDashboardData = async (params: {
+  company: string;
+  date_from: string;
+  date_to: string;
+  type?: string | null;
+  service?: string | null;
+  salesperson?: string | null;
+  customer_name?: string | null;
+  customer_code?: string | null;
+  top_gained_pagination?: { index: number; limit: number } | null;
+}): Promise<EnquiryConversionDashboardResponse> => {
+  try {
+    const body: Record<string, unknown> = {
+      company: params.company,
+      date_from: params.date_from,
+      date_to: params.date_to,
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
+    const svc = params.service?.trim();
+    if (svc) body.service = svc;
+    const sp = params.salesperson?.trim();
+    if (sp) body.salesperson = sp;
+    const cn = params.customer_name?.trim();
+    if (cn) body.customer_name = cn;
+    const cc = params.customer_code?.trim();
+    if (cc) body.customer_code = cc;
+    if (params.top_gained_pagination) {
+      body.top_gained_pagination = params.top_gained_pagination;
+    }
+
+    const response = await postAPICall(
+      URL.dashboard.enquiryEnquiryConversion,
+      body,
+      API_HEADER
+    );
+    return response as EnquiryConversionDashboardResponse;
+  } catch (error) {
+    console.error("Error fetching enquiry conversion dashboard data:", error);
+    throw error;
+  }
+};
+
+/**
+ * POST `enquiry/salesperson-statistics/` — customer-wise breakdown for one salesperson.
+ */
+export const getEnquiryConversionSalespersonStatistics = async (params: {
+  company: string;
+  salesperson: string;
+  date_from: string;
+  date_to: string;
+  type?: string | null;
+}): Promise<EnquiryConversionSalespersonStatisticsResponse> => {
+  try {
+    const body: Record<string, string> = {
+      company: params.company,
+      salesperson: params.salesperson.trim(),
+      date_from: params.date_from,
+      date_to: params.date_to,
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
+    const response = await postAPICall(
+      URL.dashboard.enquiryConversion,
+      body,
+      API_HEADER
+    );
+    return response as EnquiryConversionSalespersonStatisticsResponse;
+  } catch (error) {
+    console.error("Error fetching enquiry conversion salesperson statistics:", error);
+    throw error;
+  }
+};
+
+/**
+ * POST `enquiry/salesperson-statistics/` — same endpoint with `customer_code` (+ optional dashboard filters).
+ */
+export const getEnquiryConversionCustomerwiseDetail = async (params: {
+  company: string;
+  salesperson: string;
+  date_from: string;
+  date_to: string;
+  customer_code: string;
+  type?: string | null;
+  service?: string | null;
+}): Promise<EnquiryConversionCustomerwiseResponse> => {
+  try {
+    const body: Record<string, string> = {
+      company: params.company,
+      salesperson: params.salesperson.trim(),
+      date_from: params.date_from,
+      date_to: params.date_to,
+      customer_code: params.customer_code.trim(),
+    };
+    const t = params.type?.trim();
+    if (t) body.type = t;
+    const svc = params.service?.trim();
+    if (svc) body.service = svc;
+
+    const response = await postAPICall(
+      URL.dashboard.enquiryConversion,
+      body,
+      API_HEADER
+    );
+    return response as EnquiryConversionCustomerwiseResponse;
+  } catch (error) {
+    console.error("Error fetching enquiry conversion customer-wise detail:", error);
+    throw error;
+  }
+};
+
+/**
  * Helper function to extract numeric value from number or string format like "1 (50.00%)"
  */
 export const extractNumericValue = (value: number | string | null | undefined): number => {
@@ -971,6 +1687,86 @@ export const calculateFilteredEnquiryConversionAggregatedData = (
   };
 };
 
+function sumDashboardRowGained(data: unknown[] | undefined): number {
+  if (!Array.isArray(data)) return 0;
+  return data.reduce<number>((sum, row) => {
+    if (row && typeof row === "object" && "gained" in row) {
+      return sum + extractNumericValue((row as { gained?: number | string }).gained);
+    }
+    return sum;
+  }, 0);
+}
+
+export const mapEnquiryConversionSummaryToAggregatedData = (
+  summary: EnquiryConversionApiSummary | null | undefined,
+  salespersonRows?: unknown[]
+): EnquiryConversionAggregatedData => {
+  const totalEnquiries =
+    summary?.total_enquiry !== undefined && summary?.total_enquiry !== null
+      ? extractNumericValue(summary.total_enquiry)
+      : 0;
+  let totalGain =
+    extractNumericValue(
+      summary?.total_gain ??
+        summary?.total_gain
+    );
+  const summaryDefinesGainDirectly =
+    summary != null &&
+    ("total_gain" in summary ||
+      "total_gained" in summary);
+  if (!summaryDefinesGainDirectly && salespersonRows) {
+    totalGain = sumDashboardRowGained(salespersonRows);
+  }
+  const totalLost = extractNumericValue(summary?.total_lost);
+  const totalActive = extractNumericValue(summary?.total_active);
+  const totalQuoteCreated = extractNumericValue(summary?.total_quote_created);
+
+  const gainPercentage =
+    totalEnquiries > 0 ? (totalGain / totalEnquiries) * 100 : 0;
+  const lossPercentage =
+    totalEnquiries > 0 ? (totalLost / totalEnquiries) * 100 : 0;
+  const activePercentage =
+    totalEnquiries > 0 ? (totalActive / totalEnquiries) * 100 : 0;
+  const quotePercentage =
+    totalEnquiries > 0 ? (totalQuoteCreated / totalEnquiries) * 100 : 0;
+
+  return {
+    totalGain,
+    totalLost,
+    totalActive,
+    totalQuoteCreated,
+    totalEnquiries,
+    gainPercentage: Math.round(gainPercentage),
+    lossPercentage: Math.round(lossPercentage),
+    activePercentage: Math.round(activePercentage),
+    quotePercentage: Math.round(quotePercentage),
+  };
+};
+
+/** Overview tile totals from POST `enquiry/enquiryconversion/` only (`summary`). */
+export const resolveEnquiryConversionAggregatedFromResponse = (
+  response: EnquiryConversionDashboardResponse | null | undefined
+): EnquiryConversionAggregatedData => {
+  const empty: EnquiryConversionAggregatedData = {
+    totalGain: 0,
+    totalLost: 0,
+    totalActive: 0,
+    totalQuoteCreated: 0,
+    totalEnquiries: 0,
+    gainPercentage: 0,
+    lossPercentage: 0,
+    activePercentage: 0,
+    quotePercentage: 0,
+  };
+
+  if (!response?.summary) return empty;
+
+  return mapEnquiryConversionSummaryToAggregatedData(
+    response.summary,
+    response.data
+  );
+};
+
 // Budget API functions
 export const getBudgetSummary = async (): Promise<BudgetResponse> => {
   try {
@@ -994,7 +1790,15 @@ export const getFilteredBudgetData = async (
     if (filters.type) payload.type = filters.type;
     if (filters.company) payload.company = filters.company;
     if (filters.location) payload.location = filters.location;
-    if (filters.salesman) payload.salesperson = filters.salesman;
+    if (filters.salesperson) payload.salesperson = filters.salesperson;
+    else if (filters.salesman) payload.salesperson = filters.salesman;
+    if (filters.mode) payload.mode = filters.mode;
+    if (filters.by_sales_rep_ytd) {
+      payload.by_sales_rep_ytd = {
+        index: Number(filters.by_sales_rep_ytd.index) || 0,
+        limit: Number(filters.by_sales_rep_ytd.limit) || 2,
+      };
+    }
     if (filters.year && filters.month) {
       payload.month = `${filters.year}-${filters.month.toString().padStart(2, "0")}`;
     }
@@ -1036,7 +1840,10 @@ export const getFilteredBudgetData = async (
     if (filters.search) payload.search = filters.search;
 
     console.log("Budget filter payload:", payload);
-    const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    const response = await postAPICall(
+      URL.dashboard.budgetVsActual || URL.dashboard.budgetSummary,
+      payload
+    );
     console.log("Filtered budget response:", response);
     return response as BudgetResponse;
   } catch (error) {
@@ -1045,9 +1852,56 @@ export const getFilteredBudgetData = async (
   }
 };
 
+export const getSalespersonMonthlyBudgetSummary = async (params: {
+  company: string;
+  salesperson: string;
+  start_month: string;
+  end_month: string;
+  type: string;
+}): Promise<SalespersonMonthlyBudgetResponse> => {
+  try {
+    const payload = {
+      type: params.type,
+      company: params.company,
+      salesperson: params.salesperson,
+      start_month: params.start_month,
+      end_month: params.end_month,
+    };
+    const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    return response as SalespersonMonthlyBudgetResponse;
+  } catch (error) {
+    console.error("Error fetching salesperson monthly budget summary:", error);
+    throw error;
+  }
+};
+
+export const getBudgetVsActualSalespersonNames = async (
+  search: string
+): Promise<BudgetVsActualSalespersonNamesResponse> => {
+  try {
+    const payload = {
+      model: "budget-vs-actual",
+      search: search.trim(),
+    };
+    const response = await postAPICall(URL.dashboard.budgetVsActualSalespersonNames, payload);
+    return response as BudgetVsActualSalespersonNamesResponse;
+  } catch (error) {
+    console.error("Error fetching budget vs actual salesperson names:", error);
+    throw error;
+  }
+};
+
 export const calculateBudgetAggregatedData = (
   response: BudgetResponse
 ): BudgetAggregatedData => {
+  const summary = (response as any)?.summary;
+  if (summary && typeof summary === "object") {
+    return {
+      totalActualBudget: Number(summary.actual_ytd || 0),
+      totalSalesBudget: Number(summary.budget_ytd || 0),
+    };
+  }
+
   let totalActualBudget = 0;
   let totalSalesBudget = 0;
 

@@ -183,10 +183,18 @@ export const URL = {
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",
+    customerOutstandingVsOverdue:
+      "local-outstanding/customer-outstanding-vs-overdue/",
     callEntry: "call-entry/",
+    /** Overview KPIs, rep roll-up, activity log, hourly heatmap (POST body: company, date_from, date_to). */
+    callEntryDashboardData: "call-entry/data/",
     callEntryStatistics: "call-entry/statistics/",
     enquiryConversion: "enquiry/salesperson-statistics/",
+    /** Overview + drilldown totals (dashboard card uses `summary`). */
+    enquiryEnquiryConversion: "enquiry/enquiryconversion/",
     budgetSummary: "enquiry/budget-summary/",
+    budgetVsActual: "enquiry/budget-vs-actual/",
+    budgetVsActualSalespersonNames: "salesperson-names/",
     customerNotVisited:
       "customer_master/customer-master/customers-not-visited/",
     lostCustomers: "dashboard/new-customer-shipment/get_lost_customers/",
