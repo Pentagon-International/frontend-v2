@@ -416,6 +416,7 @@ export default function BudgetVsActualDashboard() {
                   rightSection={salespersonOptionsLoading ? <Loader size={14} color="#105476" /> : undefined}
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
                   styles={selectInputStyles}
+                  placeholder="Search Rep"
                 />
                 <Select
                   size="xs"

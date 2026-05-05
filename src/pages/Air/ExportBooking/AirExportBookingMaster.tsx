@@ -268,6 +268,7 @@ type PersistedListFilters = {
 type VisibleColumnsState = {
   sno: boolean;
   shipment: boolean;
+  houseno: boolean;
   date: boolean;
   customer: boolean;
   route: boolean;
@@ -873,7 +874,7 @@ function AirExportBookingMaster() {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
-    shipment: true, date: true, customer: true, route: true, status: true,
+    shipment: true, houseno: true, date: true, customer: true, route: true, status: true,
     mawb: true, flight: true, pieces: true, weight: true, handler: true,
     lastMilestone: true,
   });
@@ -1762,6 +1763,7 @@ function AirExportBookingMaster() {
                         {/* {visibleColumns.shipment && <Th col="shipment" label="Shipment" sortable />} */}
                         {visibleColumns.sno && <Th col="sno" label="S.No"  />}
                         {visibleColumns.shipment && <Th col="shipment" label="Booking ID"  />}
+                        {visibleColumns.houseno && <Th col="houseno" label="House No"  />}
                         {visibleColumns.date && <Th col="date" label="Date"  />}
                         {visibleColumns.customer && <Th col="customer" label="Customer"  />}
                         {visibleColumns.route && <Th col="route" label="Route" />}
