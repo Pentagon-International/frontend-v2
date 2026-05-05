@@ -117,9 +117,12 @@ export interface CustomerOutstandingVsOverdueItem {
   overdue: string;
   days_1_30: string;
   days_31_60: string;
-  days_61_plus: string;
-  /** 90+ day aging bucket when returned by API. */
+  /** New API row key for 61-90 bucket. */
+  days_61_90?: string | number;
+  /** Primary API row key for 90+ bucket. */
   days_90_plus?: string | number;
+  /** Backward compatibility for older API shape. */
+  days_61_plus?: string | number;
   risk: "LOW" | "MEDIUM" | "HIGH" | string;
   open_line_count: number;
 }
@@ -135,7 +138,7 @@ export interface CustomerOutstandingVsOverdueSummary {
   days_1_30: string;
   days_31_60: string;
   days_61_90: string;
-  "days_90+": string;
+  days_90_plus?: string | number;
 }
 
 export interface CustomerOutstandingVsOverdueResponse {

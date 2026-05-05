@@ -59,8 +59,8 @@ function formatInrInteger(value: string | number | undefined | null): string {
 /** Top accent per aging bucket — matches ERP reference (green → amber → orange → deep orange → red). */
 const BUCKET_TOP_COLORS = ["#22C55E", "#F59E0B", "#FB923C", "#EA580C", "#DC2626"] as const;
 
-/** Summary-card → table column (90+ has no table column — card click is inert). */
-type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90";
+/** Summary-card → table column mapping used for click-sort/filter. */
+type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90" | "90+";
 
 function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
   switch (label) {
@@ -72,6 +72,8 @@ function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
       return "31-60";
     case "61-90 DAYS":
       return "61-90";
+    case "90+ DAYS":
+      return "90+";
     default:
       return null;
   }
@@ -86,7 +88,9 @@ function rowBucketNumeric(row: CustomerOutstandingVsOverdueItem, bucket: ColumnS
     case "31-60":
       return toNumber(row.days_31_60);
     case "61-90":
-      return toNumber(row.days_61_plus);
+      return toNumber(row.days_61_90 ?? row.days_61_plus);
+    case "90+":
+      return toNumber(row.days_90_plus);
   }
 }
 
@@ -236,7 +240,11 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     const days1_30 = toNumber(summary.days_1_30);
     const days31_60 = toNumber(summary.days_31_60);
     const days61_90 = toNumber(summary.days_61_90);
-    const days90Plus = toNumber(summary["days_90+"]);
+    const hasDays90Plus =
+      summary.days_90_plus !== undefined &&
+      summary.days_90_plus !== null &&
+      summary.days_90_plus !== "";
+    const days90Plus = toNumber(summary.days_90_plus);
     const cards = [
       {
         label: "OVERDUE",
@@ -246,7 +254,12 @@ export default function CustomerOutstandingVsOverdueDashboard() {
       { label: "1-30 DAYS", amount: days1_30, pct: (days1_30 / totalOutstanding) * 100 },
       { label: "31-60 DAYS", amount: days31_60, pct: (days31_60 / totalOutstanding) * 100 },
       { label: "61-90 DAYS", amount: days61_90, pct: (days61_90 / totalOutstanding) * 100 },
-      { label: "90+ DAYS", amount: days90Plus, pct: (days90Plus / totalOutstanding) * 100 },
+      {
+        label: "90+ DAYS",
+        amount: days90Plus,
+        pct: (days90Plus / totalOutstanding) * 100,
+        missing: !hasDays90Plus,
+      },
     ];
     const openInv = toNumber(summary.open_invoices);
     const invoiceSplits = splitInvoicesByPct(
@@ -257,7 +270,6 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   }, [summary]);
 
   const handleBucketCardClick = (label: string) => {
-    if (label === "90+ DAYS") return;
     const bucket = summaryLabelToSortBucket(label);
     if (!bucket) return;
     setActiveSortBucket((prev) => (prev === bucket ? null : bucket));
@@ -415,16 +427,14 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         <Group gap={8} wrap="nowrap" style={{ overflowX: "auto", paddingBottom: 2, paddingLeft: 10, paddingRight: 10 }}>
           {bucketCards.map((card, idx) => {
             const sortBucket = summaryLabelToSortBucket(card.label);
-            const isDummyCard = card.label === "90+ DAYS";
             const isActive = sortBucket !== null && activeSortBucket === sortBucket;
             return (
               <Box
                 key={card.label}
-                role={isDummyCard ? undefined : "button"}
-                tabIndex={isDummyCard ? undefined : 0}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleBucketCardClick(card.label)}
                 onKeyDown={(e) => {
-                  if (isDummyCard) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     handleBucketCardClick(card.label);
@@ -441,7 +451,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     ? "0 2px 8px rgba(21, 63, 114, 0.12)"
                     : "0 1px 2px rgba(16, 24, 40, 0.04)",
                   borderTop: `3px solid ${BUCKET_TOP_COLORS[idx] ?? "#94A3B8"}`,
-                  cursor: isDummyCard ? "default" : "pointer",
+                  cursor: "pointer",
                   outline: "none",
                 }}
               >
@@ -449,7 +459,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   {card.label}
                 </Text>
                 <Text mt={4} fw={800} c="#0B1F3A" fz={isMobile ? 18 : 20} style={{ lineHeight: 1.15 }}>
-                  {formatInrInteger(card.amount)}
+                  {card.label === "90+ DAYS" && card.missing ? "-" : formatInrInteger(card.amount)}
                 </Text>
                 <Text size="10px" fw={600} c="#94A3B8" mt={4} style={{ lineHeight: 1.35 }}>
                   {toNumber(card.pct).toLocaleString("en-IN", {
@@ -563,10 +573,10 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : (
                   displayRows.map((row: CustomerOutstandingVsOverdueItem) => {
-                    const overdue61Plus = toNumber(row.days_61_plus);
+                    const days61_90 = toNumber(row.days_61_90 ?? row.days_61_plus);
                     const riskUpper = String(row.risk || "LOW").toUpperCase();
-                    const highlight60Plus =
-                      overdue61Plus > 0 && (riskUpper === "HIGH" || riskUpper === "MEDIUM");
+                    const highlight61_90 =
+                      days61_90 > 0 && (riskUpper === "HIGH" || riskUpper === "MEDIUM");
                     const rp = riskPillStyle(row.risk);
                     return (
                       <Table.Tr
@@ -648,15 +658,20 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                           <Text
                             fw={700}
                             fz={12}
-                            c={highlight60Plus ? "#DC2626" : "#0F172A"}
+                            c={highlight61_90 ? "#DC2626" : "#0F172A"}
                             style={{ fontVariantNumeric: "tabular-nums" }}
                           >
-                            {formatAmountCell(row.days_61_plus)}
+                            {formatAmountCell(row.days_61_90 ?? row.days_61_plus)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                           <Text fw={700} fz={12} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
-                            {formatAmountCell(row.days_90_plus)}
+                            {row.days_90_plus === undefined ||
+                            row.days_90_plus === null ||
+                            row.days_90_plus === "" ||
+                            toNumber(row.days_90_plus) === 0
+                              ? "-"
+                              : formatInrInteger(row.days_90_plus)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>

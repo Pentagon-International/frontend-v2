@@ -70,7 +70,7 @@ function defaultOutstandingMessage(
     `Overdue (INR): ${fmtInr(row.overdue)}`,
     `1-30 days (INR): ${fmtInr(row.days_1_30)}`,
     `31-60 days (INR): ${fmtInr(row.days_31_60)}`,
-    `61+ days (INR): ${fmtInr(row.days_61_plus)}`,
+    `61-90 days (INR): ${fmtInr(row.days_61_90 ?? row.days_61_plus)}`,
     `90+ days (INR): ${
       row.days_90_plus === undefined || row.days_90_plus === "" || row.days_90_plus === null
         ? "—"
@@ -94,7 +94,7 @@ function buildOutstandingDataTable(row: CustomerOutstandingVsOverdueItem, compan
     overdue: String(row.overdue ?? 0),
     days_1_30: String(row.days_1_30 ?? 0),
     days_31_60: String(row.days_31_60 ?? 0),
-    days_61_plus: String(row.days_61_plus ?? 0),
+    days_61_90: String(row.days_61_90 ?? row.days_61_plus ?? 0),
     days_90_plus: String(row.days_90_plus ?? ""),
     risk: String(row.risk || ""),
     open_line_count: String(row.open_line_count ?? 0),
