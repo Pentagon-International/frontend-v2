@@ -21,7 +21,6 @@ import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import {
   getCustomerOutstandingVsOverdueData,
-  getCustomerOutstandingVsOverdueSalespersonNames,
   type CustomerOutstandingVsOverdueItem,
   type CustomerOutstandingVsOverdueResponse,
 } from "../../../service/dashboard.service";
@@ -177,11 +176,6 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
   const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
   const [emailRow, setEmailRow] = useState<CustomerOutstandingVsOverdueItem | null>(null);
-  const [salesmanSearch, setSalesmanSearch] = useState(filters.salesman || "");
-  const [salesmanOptions, setSalesmanOptions] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [salesmanOptionsLoading, setSalesmanOptionsLoading] = useState(false);
   const {
     input: searchInput,
     setInput: setSearchInput,
@@ -243,35 +237,6 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     const unique = Array.from(new Set(rows.map((r) => (r.location || "").trim()).filter(Boolean)));
     return [{ value: "", label: "All locations" }, ...unique.map((v) => ({ value: v, label: v }))];
   }, [rows]);
-
-  useEffect(() => {
-    let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        setSalesmanOptionsLoading(true);
-        const response = await getCustomerOutstandingVsOverdueSalespersonNames({
-          search: salesmanSearch || "",
-        });
-        if (!active) return;
-        const fetched = Array.isArray(response?.data)
-          ? response.data
-              .map((row) => String(row.salesperson || "").trim())
-              .filter(Boolean)
-              .map((name) => ({ value: name, label: name }))
-          : [];
-        setSalesmanOptions(fetched);
-      } catch (err) {
-        console.error("Error loading reps dropdown options:", err);
-        if (active) setSalesmanOptions([]);
-      } finally {
-        if (active) setSalesmanOptionsLoading(false);
-      }
-    }, 300);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [salesmanSearch]);
 
   const customerOptions = useMemo(() => {
     const unique = Array.from(
@@ -377,23 +342,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
             </Group>
           }
           actions={
-            <Box style={{ minWidth: isMobile ? 300 : 360 }}>
+            <Box style={{ minWidth: isMobile ? 320 : 420, paddingRight: 10 }}>
               <Group align="center" gap={8} wrap="wrap" style={{ width: "100%" }}>
-                <DashboardChartSearch
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  onCommit={(v) => {
-                    commitSearch(v);
-                    setIndex(0);
-                    void fetchData();
-                  }}
-                  onClear={() => {
-                    commitSearch("");
-                    setIndex(0);
-                    void fetchData();
-                  }}
-                  placeholder="Search customer / salesperson"
-                />
                 <Button
                   size="xs"
                   radius={6}
@@ -427,24 +377,6 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 <Select
                   size="xs"
                   radius={6}
-                  searchable
-                  clearable
-                  placeholder="Search Rep"
-                  nothingFoundMessage="No salesperson found"
-                  data={salesmanOptions}
-                  value={filters.salesman || null}
-                  searchValue={salesmanSearch}
-                  onSearchChange={setSalesmanSearch}
-                  onChange={(value) => setFilters((prev) => ({ ...prev, salesman: value || "" }))}
-                  rightSection={
-                    salesmanOptionsLoading ? <Loader size={14} color="#105476" /> : undefined
-                  }
-                  style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 150px", minWidth: isMobile ? 0 : 120 }}
-                  styles={selectInputStyles}
-                />
-                <Select
-                  size="xs"
-                  radius={6}
                   data={[
                     { value: "", label: "Risk: All" },
                     { value: "HIGH", label: "Risk: HIGH" },
@@ -465,6 +397,29 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 160px", minWidth: isMobile ? 0 : 120 }}
                   styles={selectInputStyles}
                 />
+                <Box
+                  style={{
+                    width: "clamp(200px, 20vw, 280px)",
+                    minWidth: 200,
+                    flexShrink: 0,
+                  }}
+                >
+                  <DashboardChartSearch
+                    value={searchInput}
+                    onChange={setSearchInput}
+                    onCommit={(v) => {
+                      commitSearch(v);
+                      setIndex(0);
+                      void fetchData();
+                    }}
+                    onClear={() => {
+                      commitSearch("");
+                      setIndex(0);
+                      void fetchData();
+                    }}
+                    placeholder="Search customer / salesperson"
+                  />
+                </Box>
                 {/* <Button
                   size="xs"
                   radius={6}

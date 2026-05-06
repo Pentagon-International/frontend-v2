@@ -1,14 +1,12 @@
-import { useMemo } from "react";
 import { Group, Select, type SelectProps } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import {
   DateRangeInput,
   DEFAULT_ERP_LIST_THEME,
   erpToolbarSelectStyles,
 } from "../../../../components";
-import { apiCallProtected } from "../../../../api/axios";
-import { URL } from "../../../../api/serverUrls";
+import { DashboardChartSearch } from "../../../../components/DashboardChartSearch";
+import { Box } from "@mantine/core";
 
 export type EnquiryConversionPageFilters = {
   fromDate: Date | null;
@@ -51,44 +49,19 @@ export function EnquiryConversionFilters({
   filters,
   onFiltersChange,
   disabled,
+  search,
 }: {
   filters: EnquiryConversionPageFilters;
   onFiltersChange: (next: EnquiryConversionPageFilters) => void;
   disabled?: boolean;
+  search: {
+    value: string;
+    onChange: (v: string) => void;
+    onCommit: (v: string) => void;
+    onClear: () => void;
+    placeholder?: string;
+  };
 }) {
-  const { data: salespersonsData = [], isLoading: salespersonsLoading } =
-    useQuery({
-      queryKey: ["salespersons"],
-      queryFn: async () => {
-        try {
-          const response = await apiCallProtected.post(URL.salespersons, {});
-          const data = response as any;
-          return Array.isArray(data?.data) ? data.data : [];
-        } catch (error) {
-          console.error("Error fetching salespersons data:", error);
-          return [];
-        }
-      },
-      staleTime: 10 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-    });
-
-  const salespersonOptions = useMemo(() => {
-    if (!salespersonsData || !Array.isArray(salespersonsData)) {
-      return [];
-    }
-    return [
-      ...salespersonsData
-        .filter((item: any) => item?.sales_person)
-        .map((item: any) => ({
-          value: String(item.sales_person),
-          label: String(item.sales_person),
-        })),
-    ];
-  }, [salespersonsData]);
-
   const set =
     <K extends keyof EnquiryConversionPageFilters>(key: K) =>
     (value: EnquiryConversionPageFilters[K]) =>
@@ -131,19 +104,21 @@ export function EnquiryConversionFilters({
         onChange={(v) => set("service")(v || null)}
         styles={selectStyles}
       />
-      <Select
-        placeholder={salespersonsLoading ? "Loading reps..." : "All reps"}
-        size="xs"
-        w={180}
-        disabled={disabled || salespersonsLoading}
-        data={salespersonOptions}
-        searchable
-        clearable
-        nothingFoundMessage="No reps found"
-        value={filters.salesperson || null}
-        onChange={(v) => set("salesperson")(v || "")}
-        styles={selectStyles}
-      />
+      <Box
+        style={{
+          width: "clamp(200px, 20vw, 280px)",
+          minWidth: 200,
+          flexShrink: 0,
+        }}
+      >
+        <DashboardChartSearch
+          value={search.value}
+          onChange={search.onChange}
+          onCommit={search.onCommit}
+          onClear={search.onClear}
+          placeholder={search.placeholder ?? "Search customer / salesperson"}
+        />
+      </Box>
     </Group>
   );
 }

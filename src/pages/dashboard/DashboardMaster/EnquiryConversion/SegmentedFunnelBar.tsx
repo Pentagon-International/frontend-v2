@@ -27,10 +27,7 @@ function normalizeWeights(
 const ERP_FONT = "'Geist', sans-serif";
 
 /** Label alignment matched to Pentagon overview: ends out, middle centred. */
-function labelAlign(i: number, n: number): CSSProperties["textAlign"] {
-  if (n <= 1) return "center";
-  if (i === 0) return "left";
-  if (i === n - 1) return "right";
+function labelAlign(): CSSProperties["textAlign"] {
   return "center";
 }
 
@@ -47,7 +44,6 @@ export function SegmentedFunnelBar({
   gutterPx?: number;
 }) {
   const norm = normalizeWeights(segments);
-  const n = norm.length;
 
   return (
     <Box style={{ fontFamily: ERP_FONT }}>
@@ -59,7 +55,7 @@ export function SegmentedFunnelBar({
           gap: gutterPx,
         }}
       >
-        {norm.map(({ seg, pct }, idx) => (
+        {norm.map(({ seg, pct }) => (
           <Box
             key={seg.key}
             title={`${seg.label}`}
@@ -82,27 +78,35 @@ export function SegmentedFunnelBar({
             marginTop: 10,
             width: "100%",
             gap: gutterPx,
-            justifyContent: "space-between",
+            alignItems: "flex-start",
           }}
         >
-          {norm.map(({ seg, pct }, idx) => (
-            <Text
+          {norm.map(({ seg, pct }) => (
+            <Box
               key={seg.key}
-              fz={12}
-              fw={600}
-              c={enquiryConversionColors.subHeading}
               style={{
-                flex: 1,
-                minWidth: 0,
-                textAlign: labelAlign(idx, n),
-                lineHeight: 1.25,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                width: `${pct}%`,
+                minWidth: pct > 0 ? (pct > 1 ? undefined : 1) : 0,
+                flexShrink: 0,
               }}
             >
-              {seg.label}
-            </Text>
+              <Text
+                fz={12}
+                fw={600}
+                c={enquiryConversionColors.subHeading}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  textAlign: labelAlign(),
+                  lineHeight: 1.25,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {seg.label}
+              </Text>
+            </Box>
           ))}
         </Box>
       ) : null}

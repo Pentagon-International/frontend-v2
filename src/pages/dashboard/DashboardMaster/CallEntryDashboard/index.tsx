@@ -74,7 +74,7 @@ export default function CallEntryDashboardPage() {
     routeFromDate || monthStart(),
   );
   const [toDate, setToDate] = useState<Date | null>(routeToDate || new Date());
-  const [salesperson, setSalesperson] = useState<string>("all");
+  const salesperson = "all";
   const [type, setType] = useState<string>("all");
   const [repPage, setRepPage] = useState<number>(1);
   const [activityPage, setActivityPage] = useState<number>(1);
@@ -110,7 +110,7 @@ export default function CallEntryDashboardPage() {
   useEffect(() => {
     setRepPage(1);
     setActivityPage(1);
-  }, [fromDateIso, toDateIso, salesperson, type]);
+  }, [fromDateIso, toDateIso, type]);
 
   useEffect(() => {
     if (!fromDate || !toDate) {
@@ -162,17 +162,6 @@ export default function CallEntryDashboardPage() {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
-
-  const salespersonOptions = useMemo(() => {
-    const list = (data?.calls_by_rep || [])
-      .map((r) => r.salesperson)
-      .filter(Boolean);
-    const unique = Array.from(new Set(list));
-    return [
-      { value: "all", label: "All reps" },
-      ...unique.map((name) => ({ value: name, label: name })),
-    ];
-  }, [data?.calls_by_rep]);
 
   const outcomeOptions = [
     { value: "all", label: "All outcomes" },
@@ -348,26 +337,13 @@ export default function CallEntryDashboardPage() {
             </Group>
           }
           actions={
-            <Box style={{ minWidth: isMobile ? 300 : 360 }}>
+            <Box style={{ minWidth: isMobile ? 320 : 420, paddingRight: 10 }}>
               <Group
                 align="center"
                 gap={8}
                 wrap="wrap"
                 style={{ width: "100%" }}
               >
-                <DashboardChartSearch
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  onCommit={(v) => {
-                    commitSearch(v);
-                    fetchDashboard();
-                  }}
-                  onClear={() => {
-                    commitSearch("");
-                    fetchDashboard();
-                  }}
-                  placeholder="Search customer / salesperson"
-                />
                 <DateRangeInput
                   fromDate={fromDate}
                   toDate={toDate}
@@ -400,28 +376,6 @@ export default function CallEntryDashboardPage() {
                 </Button> */}
                 <Select
                   style={{
-                    flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
-                    minWidth: isMobile ? 0 : 120,
-                  }}
-                  size="xs"
-                  data={salespersonOptions}
-                  value={salesperson}
-                  onChange={(v) => setSalesperson(v || "all")}
-                  radius={6}
-                  styles={{
-                    input: {
-                      height: 30,
-                      minHeight: 30,
-                      fontSize: 11,
-                      borderColor: "#DCE6F1",
-                      color: "#4A607A",
-                      fontWeight: 500,
-                      background: "#FFFFFF",
-                    },
-                  }}
-                />
-                <Select
-                  style={{
                     flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 140px",
                     minWidth: isMobile ? 0 : 130,
                   }}
@@ -442,6 +396,27 @@ export default function CallEntryDashboardPage() {
                     },
                   }}
                 />
+                <Box
+                  style={{
+                    width: "clamp(200px, 20vw, 280px)",
+                    minWidth: 200,
+                    flexShrink: 0,
+                  }}
+                >
+                  <DashboardChartSearch
+                    value={searchInput}
+                    onChange={setSearchInput}
+                    onCommit={(v) => {
+                      commitSearch(v);
+                      fetchDashboard();
+                    }}
+                    onClear={() => {
+                      commitSearch("");
+                      fetchDashboard();
+                    }}
+                    placeholder="Search customer / salesperson"
+                  />
+                </Box>
                 {/* <Button
                   size="xs"
                   variant="filled"

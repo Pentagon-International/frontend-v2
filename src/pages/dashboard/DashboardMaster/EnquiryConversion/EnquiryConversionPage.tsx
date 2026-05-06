@@ -43,7 +43,6 @@ import {
 import { useEnquiryConversionDashboard } from "./useEnquiryConversionDashboard";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import useAuthStore from "../../../../store/authStore";
-import { DashboardChartSearch } from "../../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import { ActionIcon } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
@@ -363,22 +362,25 @@ export default function EnquiryConversionPage() {
             </Group>
           }
           actions={
-            <Box style={{ minWidth: isCompact ? 300 : 360 }}>
+            <Box style={{ minWidth: isCompact ? 300 : 360, paddingRight: 10 }}>
               <Group justify={isCompact ? "stretch" : "flex-end"} wrap="wrap" gap={8} w="100%">
-                <DashboardChartSearch
-                  value={searchInput}
-                  onChange={setSearchInput}
-                  onCommit={(v) => {
-                    commitSearch(v);
-                    refetch();
+                <EnquiryConversionFilters
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  search={{
+                    value: searchInput,
+                    onChange: setSearchInput,
+                    onCommit: (v) => {
+                      commitSearch(v);
+                      refetch();
+                    },
+                    onClear: () => {
+                      commitSearch("");
+                      refetch();
+                    },
+                    placeholder: "Search customer / salesperson",
                   }}
-                  onClear={() => {
-                    commitSearch("");
-                    refetch();
-                  }}
-                  placeholder="Search customer / salesperson"
                 />
-                <EnquiryConversionFilters filters={filters} onFiltersChange={setFilters} />
               </Group>
             </Box>
           }

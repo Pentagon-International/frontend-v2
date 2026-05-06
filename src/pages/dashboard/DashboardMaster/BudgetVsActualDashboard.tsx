@@ -25,7 +25,6 @@ import { ActionIcon } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import {
   calculateFinancialYearBudgetRangeForYear,
-  getBudgetVsActualSalespersonNames,
   getFilteredBudgetData,
 } from "../../../service/dashboard.service";
 import SalespersonMonthlyBudget from "./SalespersonMonthlyBudget";
@@ -130,10 +129,7 @@ export default function BudgetVsActualDashboard() {
     routeState.start_month || initialRange.start_month
   );
   const [endMonth, setEndMonth] = useState(routeState.end_month || initialRange.end_month);
-  const [salesperson, setSalesperson] = useState(routeState.salesperson || "");
-  const [salespersonSearch, setSalespersonSearch] = useState(routeState.salesperson || "");
-  const [salespersonOptions, setSalespersonOptions] = useState<Array<{ value: string; label: string }>>([]);
-  const [salespersonOptionsLoading, setSalespersonOptionsLoading] = useState(false);
+  const salesperson = "";
   const [mode, setMode] = useState(routeState.mode || "");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +161,6 @@ export default function BudgetVsActualDashboard() {
           index: repPageIndex,
           limit: repPageLimit,
         },
-        ...(salesperson && { salesperson }),
         ...(mode && { mode }),
       } as any);
       setResponse(data);
@@ -181,7 +176,6 @@ export default function BudgetVsActualDashboard() {
     mode,
     repPageIndex,
     repPageLimit,
-    salesperson,
     startMonth,
     type,
     committedSearch,
@@ -195,34 +189,6 @@ export default function BudgetVsActualDashboard() {
     setRepPageIndex(0);
   }, [type, company, startMonth, endMonth, mode, salesperson]);
 
-  useEffect(() => {
-    let active = true;
-    const timer = setTimeout(async () => {
-      try {
-        setSalespersonOptionsLoading(true);
-        const response = await getBudgetVsActualSalespersonNames(salespersonSearch || "");
-        if (!active) return;
-        const fetched = Array.isArray(response?.data)
-          ? response.data
-              .map((row) => String(row.salesperson || "").trim())
-              .filter(Boolean)
-              .map((name) => ({ value: name, label: name }))
-          : [];
-        setSalespersonOptions([ ...fetched]);
-      } catch (err) {
-        console.error("Error loading salesperson dropdown options:", err);
-        if (active) setSalespersonOptions([{ value: "", label: "All reps" }]);
-      } finally {
-        if (active) setSalespersonOptionsLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [salespersonSearch]);
-
   const summary = response?.summary || {};
   const repRows = response?.by_sales_rep_ytd?.rows || [];
   const monthlyTrend = response?.monthly_trend || [];
@@ -235,17 +201,13 @@ export default function BudgetVsActualDashboard() {
     return [{ value: "", label: "All modes" }, ...modes.map((m) => ({ value: m, label: m }))];
   }, [byMode]);
 
-  const filteredRepRows = useMemo(
-    () => repRows.filter((row: any) => !salesperson || row.sales_person === salesperson),
-    [repRows, salesperson]
-  );
   const repMeta = response?.by_sales_rep_ytd || {};
-  const repTotal = toNumber(repMeta.total ?? repMeta.pagination_total ?? filteredRepRows.length);
+  const repTotal = toNumber(repMeta.total ?? repMeta.pagination_total ?? repRows.length);
   const hasPrevRepPage = repPageIndex > 0;
   const hasNextRepPage =
     repTotal > 0
       ? (repPageIndex + 1) * repPageLimit < repTotal
-      : filteredRepRows.length >= repPageLimit;
+      : repRows.length >= repPageLimit;
 
   const teamSummary = useMemo(() => {
     const rowSummary = response?.by_sales_rep_ytd?.summary;
@@ -257,12 +219,12 @@ export default function BudgetVsActualDashboard() {
         achv: toNumber(rowSummary.achievement_pct),
       };
     }
-    const budget = filteredRepRows.reduce((sum: number, row: any) => sum + toNumber(row.budget), 0);
-    const actual = filteredRepRows.reduce((sum: number, row: any) => sum + toNumber(row.actual), 0);
-    const variance = filteredRepRows.reduce((sum: number, row: any) => sum + toNumber(row.variance), 0);
+    const budget = repRows.reduce((sum: number, row: any) => sum + toNumber(row.budget), 0);
+    const actual = repRows.reduce((sum: number, row: any) => sum + toNumber(row.actual), 0);
+    const variance = repRows.reduce((sum: number, row: any) => sum + toNumber(row.variance), 0);
     const achv = budget > 0 ? (actual / budget) * 100 : 0;
     return { budget, actual, variance, achv };
-  }, [filteredRepRows, response?.by_sales_rep_ytd?.summary]);
+  }, [repRows, response?.by_sales_rep_ytd?.summary]);
 
   const monthlyTrendOption = useMemo(() => {
     if (!monthlyTrend.length) {
@@ -406,22 +368,9 @@ export default function BudgetVsActualDashboard() {
             </Group>
           }
           actions={
-            <Box style={{ minWidth: isCompact ? 300 : 360 }}>
+            <Box style={{ minWidth: isCompact ? 320 : 420, paddingRight: 10 }}>
 
               <Group gap={8} wrap="wrap" style={{ width: "100%", justifyContent: isCompact ? "stretch" : "flex-end" }}>
-              <DashboardChartSearch
-                value={searchInput}
-                onChange={setSearchInput}
-                onCommit={(v) => {
-                  commitSearch(v);
-                  void fetchData();
-                }}
-                onClear={() => {
-                  commitSearch("");
-                  void fetchData();
-                }}
-                placeholder="Search customer / salesperson"
-              />
               <SegmentedControl
                 size="xs"
                 value={type}
@@ -449,28 +398,33 @@ export default function BudgetVsActualDashboard() {
                 <Select
                   size="xs"
                   radius={6}
-                  searchable
-                  clearable
-                  nothingFoundMessage="No salesperson found"
-                  data={salespersonOptions}
-                  value={salesperson || null}
-                  searchValue={salespersonSearch}
-                  onSearchChange={setSalespersonSearch}
-                  onChange={(value) => setSalesperson(value || "")}
-                  rightSection={salespersonOptionsLoading ? <Loader size={14} color="#105476" /> : undefined}
-                  style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 100px", minWidth: isCompact ? 0 : 90 }}
-                  styles={selectInputStyles}
-                  placeholder="Search Rep"
-                />
-                <Select
-                  size="xs"
-                  radius={6}
                   data={modeOptions}
                   value={mode}
                   onChange={(v) => setMode(v || "")}
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 120px", minWidth: isCompact ? 0 : 100 }}
                   styles={selectInputStyles}
                 />
+              <Box
+                style={{
+                  width: "clamp(200px, 20vw, 280px)",
+                  minWidth: 200,
+                  flexShrink: 0,
+                }}
+              >
+                <DashboardChartSearch
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onCommit={(v) => {
+                    commitSearch(v);
+                    void fetchData();
+                  }}
+                  onClear={() => {
+                    commitSearch("");
+                    void fetchData();
+                  }}
+                  placeholder="Search customer / salesperson"
+                />
+              </Box>
                 {/* <Button
                   size="xs"
                   radius={6}
@@ -716,7 +670,7 @@ export default function BudgetVsActualDashboard() {
                     </Grid>
 
                     <Stack gap={0}>
-                      {filteredRepRows.map((row: any, idx: number) => {
+                      {repRows.map((row: any, idx: number) => {
                         const budget = toNumber(row.budget);
                         const actual = toNumber(row.actual);
                         const variance = toNumber(row.variance);
