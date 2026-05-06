@@ -3,8 +3,7 @@ import {
   getBookingData,
   BookingItem,
 } from "../../../service/dashboard.service";
-import { DetailedViewTable, DateRangeInput } from "../../../components";
-import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
+import { DetailedViewTable } from "../../../components";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 
 interface BookingProps {
@@ -18,12 +17,7 @@ const Booking: React.FC<BookingProps> = ({
   fromDate: propFromDate,
   toDate: propToDate,
 }) => {
-  const {
-    input: searchInput,
-    setInput: setSearchInput,
-    committed: committedSearch,
-    commit: commitSearch,
-  } = useDashboardChartSearch();
+  const { committed: committedSearch } = useDashboardChartSearch();
   const [bookingData, setBookingData] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const isMountedRef = useRef(false);
@@ -82,19 +76,7 @@ const Booking: React.FC<BookingProps> = ({
         //   allowDeselection={true}
         //   showRangeInCalendar={false}
         // />
-        <DashboardChartSearch
-          value={searchInput}
-          onChange={setSearchInput}
-          onCommit={(v) => {
-            commitSearch(v);
-            loadBookingData(fromDate, toDate);
-          }}
-          onClear={() => {
-            commitSearch("");
-            loadBookingData(fromDate, toDate);
-          }}
-          placeholder="Search customer / salesperson"
-        />
+        undefined
       }
     />
   );

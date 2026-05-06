@@ -27,7 +27,6 @@ import {
   JobsWithoutBLReleasedItem,
 } from "../../../service/dashboard.service";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
-import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 
 const CARD_PREVIEW_ROWS = 5;
@@ -63,11 +62,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
 }) => {
   const navigate = useNavigate();
   const {
-    input: searchInput,
-    setInput: setSearchInput,
     committed: committedSearch,
-    commit: commitSearch,
-    clear: clearSearch,
   } = useDashboardChartSearch();
   const [tableView, setTableView] = useState<TableViewType>(null);
   const [pendingBookings, setPendingBookings] = useState<PendingBookingItem[]>(
@@ -127,15 +122,6 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
           Customer Service Report (Export)
         </Text>
       </Group>
-      <Box style={{ minWidth: 320 }}>
-        <DashboardChartSearch
-          value={searchInput}
-          onChange={setSearchInput}
-          onCommit={(v) => commitSearch(v)}
-          onClear={() => clearSearch()}
-          placeholder="Search customer / salesperson"
-        />
-      </Box>
     </Group>
   );
 

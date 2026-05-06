@@ -10,14 +10,11 @@ import {
   ScrollArea,
   Loader,
   UnstyledButton,
-  Tooltip,
 } from "@mantine/core";
 import {
   IconChevronRight,
   IconSearch,
-  IconPlane,
-  IconBell,
-  IconHelp,
+  IconChartBar,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -410,14 +407,14 @@ function MainSectionHeader() {
               flexShrink: 0,
             }}
           >
-            <IconPlane size={18} color="#fff" />
+            <IconChartBar size={18} color="#fff" />
           </Flex>
           <Box style={{ minWidth: 0 }}>
             <Text fw={700} size="sm" c={headerFg} lh={1.2} lineClamp={1}>
               {title.trim() || "\u00A0"}
             </Text>
             {activeSubNav && activeSubNav !== title.trim() ? (
-              <Text size={10} c={headerMuted} lh={1.2} lineClamp={1}>
+              <Text size="xs" c={headerMuted} lh={1.2} lineClamp={1}>
                 {activeSubNav}
               </Text>
             ) : null}
