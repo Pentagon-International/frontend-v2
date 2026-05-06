@@ -542,7 +542,11 @@ export interface EnquiryDrilldownQuotationService {
     gross_weight?: number;
     no_of_packages?: number;
     commodity?: string | null;
-    fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+    fcl_details?: Array<{
+      container_type?: string;
+      container_name?: string;
+      no_of_containers?: number | string;
+    }>;
   };
 }
 
@@ -567,7 +571,11 @@ export interface EnquiryDrilldownService {
   gross_weight?: string | number;
   no_of_packages?: number;
   commodity?: string | null;
-  fcl_details?: Array<{ container_type?: string; no_of_containers?: number | string }>;
+  fcl_details?: Array<{
+    container_type?: string;
+    container_name?: string;
+    no_of_containers?: number | string;
+  }>;
 }
 
 export interface EnquiryDrilldownEnquiry {

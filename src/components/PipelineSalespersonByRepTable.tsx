@@ -24,19 +24,21 @@ export interface PipelineSalespersonByRepTableProps {
   getRepSubline?: (row: PipelineSalespersonRepRow) => string | undefined;
 }
 
+const BASE_NUMBER_STYLE: React.CSSProperties = {
+  fontSize: 12,
+  fontVariantNumeric: "tabular-nums",
+};
+
 /** Potential & Pipeline — tabular numbers, centered under column titles */
 const METRIC_NUMERIC: React.CSSProperties = {
-  fontSize: 12,
+  ...BASE_NUMBER_STYLE,
   textAlign: "center",
-  fontVariantNumeric: "tabular-nums",
 };
 
 /** Shown beside compact bar (number is primary; bar is visual cue) */
 const BAR_VALUE_LABEL: React.CSSProperties = {
-  fontSize: 11,
+  ...BASE_NUMBER_STYLE,
   textAlign: "right",
-  fontVariantNumeric: "tabular-nums",
-  color: "#64748b",
   whiteSpace: "nowrap",
 };
 

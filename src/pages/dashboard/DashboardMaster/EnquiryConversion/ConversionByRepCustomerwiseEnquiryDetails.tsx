@@ -7,7 +7,6 @@ import {
   ScrollArea,
   SimpleGrid,
   Stack,
-  Table,
   Text,
 } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
@@ -20,10 +19,7 @@ import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { stageLabelFromApiStatus } from "./enquiryConversionDashboardMappers";
 import {
   firstQuoteService,
-  formatInrLakhs,
   laneFromEnquiry,
-  parseMoney,
-  primaryQuoteTotalSell,
   winProbLabel,
 } from "./customerwiseEnquiryHelpers";
 import {
@@ -62,9 +58,30 @@ function mapQuotationFilterRowToDrilldown(
           currency: String(c.currency ?? ""),
         }))
       : [];
-    const cargo = Array.isArray(q.cargo_details)
-      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
-      : undefined;
+    const cargoArr = Array.isArray(q.cargo_details)
+      ? (q.cargo_details as Array<Record<string, unknown>>)
+      : [];
+    const cargo = cargoArr[0];
+    const fcl_details =
+      cargoArr.length > 0
+        ? cargoArr.map((c) => ({
+            // quotation/filter_quotations shape:
+            // - container_type_code is the code (maps well to our container_type)
+            // - container_type is the readable label (maps well to our container_name)
+            container_type:
+              c.container_type_code == null
+                ? undefined
+                : String(c.container_type_code),
+            container_name:
+              c.container_type == null ? undefined : String(c.container_type),
+            no_of_containers:
+              typeof c.no_of_containers === "number"
+                ? c.no_of_containers
+                : c.no_of_containers == null
+                  ? undefined
+                  : String(c.no_of_containers),
+          }))
+        : undefined;
     return {
       quotation_id: String(q.quotation_id ?? ""),
       created_at: String(q.created_at ?? ""),
@@ -94,6 +111,7 @@ function mapQuotationFilterRowToDrilldown(
                 : Number(cargo?.no_of_packages ?? 0) || undefined,
             commodity:
               q.commodity == null ? null : String(q.commodity ?? ""),
+            fcl_details,
           },
         },
       ],
@@ -101,9 +119,25 @@ function mapQuotationFilterRowToDrilldown(
   });
 
   const firstQuote = quotationArr[0];
-  const firstCargo = Array.isArray(firstQuote?.cargo_details)
-    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
-    : undefined;
+  const firstCargoArr = Array.isArray(firstQuote?.cargo_details)
+    ? (firstQuote?.cargo_details as Array<Record<string, unknown>>)
+    : [];
+  const firstCargo = firstCargoArr[0];
+  const firstFclDetails =
+    firstCargoArr.length > 0
+      ? firstCargoArr.map((c) => ({
+          container_type:
+            c.container_type_code == null ? undefined : String(c.container_type_code),
+          container_name:
+            c.container_type == null ? undefined : String(c.container_type),
+          no_of_containers:
+            typeof c.no_of_containers === "number"
+              ? c.no_of_containers
+              : c.no_of_containers == null
+                ? undefined
+                : String(c.no_of_containers),
+        }))
+      : undefined;
   return {
     id: typeof row.id === "number" ? row.id : Number(row.id ?? 0) || undefined,
     enquiry_id: String(row.enquiry_id ?? ""),
@@ -136,6 +170,7 @@ function mapQuotationFilterRowToDrilldown(
               firstQuote.commodity == null
                 ? null
                 : String(firstQuote.commodity ?? ""),
+            fcl_details: firstFclDetails,
           },
         ]
       : [],
@@ -155,36 +190,30 @@ function mapQuotationFilterRowToDrilldown(
   };
 }
 
-function formatQuoteValueDisplay(e: EnquiryDrilldownEnquiry): {
-  primary: string;
-  secondary?: string;
-} {
-  const qs = firstQuoteService(e);
-  const cur = (qs?.quote_currency || "INR").toUpperCase();
-  const total = parseMoney(qs?.total_sell);
-  if (total <= 0) return { primary: "—" };
-  if (cur === "USD") {
-    const usd = total.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    return {
-      primary: `USD ${usd}`,
-      secondary: `≈ ${formatInrLakhs(total * 83)}`,
-    };
-  }
-  return {
-    primary: `${cur} ${total.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
-    secondary: `≈ ${formatInrLakhs(total)}`,
-  };
-}
-
 function cargoSummary(e: EnquiryDrilldownEnquiry): string {
   const s = e.services?.[0];
   if (!s) return "—";
-  const parts: string[] = [];
-  if (s.commodity) parts.push(String(s.commodity));
   const fcl = s.fcl_details?.[0];
-  if (fcl?.container_type && fcl?.no_of_containers != null) {
-    parts.push(`${fcl.no_of_containers} × ${fcl.container_type}`);
-  } else if (s.no_of_packages) {
+  const serviceCode = String(s.service ?? "").trim().toUpperCase();
+  const commodity = String(s.commodity ?? "").trim();
+
+  const containerLabel = String(
+    fcl?.container_name || fcl?.container_type || ""
+  ).trim();
+  const containerCount =
+    fcl?.no_of_containers == null ? "" : String(fcl.no_of_containers).trim();
+
+  // Desired display:
+  // - Air/LCL: Commodity · 4 pkg
+  // - FCL: General · 1 × 20' Container
+  if ((serviceCode === "FCL" || containerLabel) && containerCount) {
+    const commodityLabel = commodity || "General";
+    return `${commodityLabel} · ${containerCount} × ${containerLabel || "—"}`;
+  }
+
+  const parts: string[] = [];
+  if (commodity) parts.push(commodity);
+  if (s.no_of_packages != null && s.no_of_packages !== 0) {
     parts.push(`${s.no_of_packages} pkg`);
   }
   return parts.length ? parts.join(" · ") : s.service_name || s.service || "—";
@@ -271,54 +300,66 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
   salesperson,
   customerName,
 }: Props) {
-  if (!enquiry) return null;
-
-  const queryDateFrom = (
-    enquiry as EnquiryDrilldownEnquiry & { __filterDateFrom?: string }
-  ).__filterDateFrom;
-  const queryDateTo = (
-    enquiry as EnquiryDrilldownEnquiry & { __filterDateTo?: string }
-  ).__filterDateTo;
+  const enquiryId = enquiry?.enquiry_id ?? "";
+  const queryDateFrom =
+    (enquiry as (EnquiryDrilldownEnquiry & { __filterDateFrom?: string }) | null)
+      ?.__filterDateFrom ?? "";
+  const queryDateTo =
+    (enquiry as (EnquiryDrilldownEnquiry & { __filterDateTo?: string }) | null)
+      ?.__filterDateTo ?? "";
 
   const { data: apiEnquiry } = useQuery({
     queryKey: [
       "enquiryConversionQuotationFilterDetails",
-      enquiry.enquiry_id ?? "",
+      enquiryId,
       queryDateFrom ?? "",
       queryDateTo ?? "",
     ],
     queryFn: async () => {
-      const payload = {
+      // `quotation/filter_quotations/` reliably supports filtering by enquiry_id.
+      // Some environments may not support date filters here, so only include them when present.
+      const payload: { filters: Record<string, string> } = {
         filters: {
-          date_from: queryDateFrom!,
-          date_to: queryDateTo!,
-          enquiry_id: enquiry.enquiry_id,
+          enquiry_id: enquiryId,
         },
       };
+      if (queryDateFrom?.trim()) payload.filters.date_from = queryDateFrom;
+      if (queryDateTo?.trim()) payload.filters.date_to = queryDateTo;
       const res = await apiCallProtected.post(URL.quotationFilter, payload);
       // const res = await apiCallProtected.post(URL.enquiryFilter, payload);
-      const body = (res as { data?: unknown }).data as
-        | { data?: unknown[] }
+      const raw = (res as { data?: unknown }).data ?? (res as unknown);
+      const body = raw as
+        | { data?: unknown[]; results?: unknown[] }
+        | unknown[]
         | undefined;
-      const first = Array.isArray(body?.data)
-        ? (body.data?.[0] as Record<string, unknown> | undefined)
-        : undefined;
+      const list = Array.isArray(body)
+        ? body
+        : Array.isArray(body?.data)
+          ? body.data
+          : Array.isArray(body?.results)
+            ? body.results
+            : [];
+      const first =
+        Array.isArray(list) && list.length > 0
+          ? (list[0] as Record<string, unknown>)
+          : undefined;
       return first ? mapQuotationFilterRowToDrilldown(first) : null;
     },
     enabled:
       opened &&
-      !!enquiry.enquiry_id?.trim() &&
-      !!queryDateFrom?.trim() &&
-      !!queryDateTo?.trim(),
+      !!enquiryId.trim() &&
+      // Allow drawer hydration even when date range isn't provided on the enquiry payload.
+      true,
     staleTime: 20_000,
   });
+
+  if (!enquiry) return null;
 
   const displayEnquiry = apiEnquiry ?? enquiry;
 
   const qs = firstQuoteService(displayEnquiry);
   const stage = stageLabelFromApiStatus(displayEnquiry.status);
   const prob = winProbLabel(displayEnquiry.status);
-  const quoteFmt = formatQuoteValueDisplay(displayEnquiry);
   const svc0 = displayEnquiry.services?.[0];
   const modeTitle =
     svc0?.service_name ||
@@ -345,10 +386,6 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
     : qs?.valid_upto
       ? `Until ${dayjs(qs.valid_upto).format("D MMM YYYY")}`
       : "—";
-
-  const charges = qs?.charges ?? [];
-  const totalSell = primaryQuoteTotalSell(displayEnquiry);
-  const quoteCur = (qs?.quote_currency || "INR").toUpperCase();
 
   const timeline = buildTimeline(displayEnquiry);
 

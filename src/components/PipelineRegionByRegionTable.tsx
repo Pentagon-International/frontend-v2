@@ -22,17 +22,19 @@ export interface PipelineRegionByRegionTableProps {
   emptyMessage?: string;
 }
 
-const METRIC_NUMERIC: React.CSSProperties = {
+const BASE_NUMBER_STYLE: React.CSSProperties = {
   fontSize: 12,
-  textAlign: "center",
   fontVariantNumeric: "tabular-nums",
 };
 
+const METRIC_NUMERIC: React.CSSProperties = {
+  ...BASE_NUMBER_STYLE,
+  textAlign: "center",
+};
+
 const BAR_VALUE_LABEL: React.CSSProperties = {
-  fontSize: 11,
+  ...BASE_NUMBER_STYLE,
   textAlign: "right",
-  fontVariantNumeric: "tabular-nums",
-  color: "#64748b",
   whiteSpace: "nowrap",
 };
 

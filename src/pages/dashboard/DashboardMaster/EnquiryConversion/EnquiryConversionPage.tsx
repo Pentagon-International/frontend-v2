@@ -56,67 +56,26 @@ import type { EnquiryDrilldownEnquiry } from "../../../../service/dashboard.serv
 const REP_PAGE_SIZE = 5;
 const ERP_FONT_SANS = "'Geist', sans-serif";
 
-function mapQuotationFilterRowToDrilldown(
-  row: Record<string, unknown>
+function mapEnquiryFilterRowToDrilldown(
+  row: Record<string, unknown>,
+  extra?: { filterDateFrom?: string; filterDateTo?: string }
 ): EnquiryDrilldownEnquiry {
-  const quotationArr = Array.isArray(row.quotation)
-    ? (row.quotation as Array<Record<string, unknown>>)
+  const servicesArr = Array.isArray(row.services)
+    ? (row.services as Array<Record<string, unknown>>)
     : [];
-  const quotations = quotationArr.map((q) => {
-    const charges = Array.isArray(q.charges)
-      ? (q.charges as Array<Record<string, unknown>>).map((c) => ({
-          charge_name: String(c.charge_name ?? ""),
-          unit: String(c.unit ?? ""),
-          no_of_units:
-            typeof c.no_of_units === "number"
-              ? c.no_of_units
-              : Number(c.no_of_units ?? 0),
-          sell_per_unit: String(c.sell_per_unit ?? ""),
-          total_sell: String(c.total_sell ?? ""),
-          currency: String(c.currency ?? ""),
-        }))
-      : [];
-    const cargo = Array.isArray(q.cargo_details)
-      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
-      : undefined;
-    return {
-      quotation_id: String(q.quotation_id ?? ""),
-      created_at: String(q.created_at ?? ""),
-      quotation_services: [
-        {
-          total_sell: String(
-            charges.reduce((s, c) => s + Number(c.total_sell ?? 0), 0) || ""
-          ),
-          quote_currency: String(q.quote_currency ?? "INR"),
-          valid_upto: String(q.valid_upto ?? ""),
-          charges,
-          service_details: {
-            service: String(q.service_type ?? q.service_name ?? ""),
-            shipment_terms_code_read: String(q.shipment_terms_code ?? ""),
-            shipment_terms_name: String(q.shipment_terms ?? ""),
-            origin_code_read: String(q.origin_code ?? ""),
-            destination_code_read: String(q.destination_code ?? ""),
-            origin_name: String(q.origin ?? ""),
-            destination_name: String(q.destination ?? ""),
-            gross_weight:
-              typeof cargo?.gross_weight === "number"
-                ? cargo.gross_weight
-                : Number(cargo?.gross_weight ?? 0) || undefined,
-            no_of_packages:
-              typeof cargo?.no_of_packages === "number"
-                ? cargo.no_of_packages
-                : Number(cargo?.no_of_packages ?? 0) || undefined,
-            commodity:
-              q.commodity == null ? null : String(q.commodity ?? ""),
-          },
-        },
-      ],
-    };
-  });
+  const s0 = servicesArr[0];
 
-  const firstQuote = quotationArr[0];
-  const firstCargo = Array.isArray(firstQuote?.cargo_details)
-    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
+  const fclDetails = Array.isArray(s0?.fcl_details)
+    ? (s0?.fcl_details as Array<Record<string, unknown>>).map((c) => ({
+        container_type: c.container_type == null ? undefined : String(c.container_type),
+        container_name: c.container_name == null ? undefined : String(c.container_name),
+        no_of_containers:
+          typeof c.no_of_containers === "number"
+            ? c.no_of_containers
+            : c.no_of_containers == null
+              ? undefined
+              : String(c.no_of_containers),
+      }))
     : undefined;
 
   return {
@@ -126,33 +85,28 @@ function mapQuotationFilterRowToDrilldown(
     customer_address: String(row.customer_address ?? ""),
     enquiry_received_date: String(row.enquiry_received_date ?? ""),
     sales_person: String(row.sales_person ?? ""),
+    sales_coordinator: String(row.sales_coordinator ?? ""),
     status: String(row.status ?? ""),
-    services: firstQuote
+    services: s0
       ? [
           {
-            service: String(firstQuote.service_type ?? ""),
-            service_name: String(firstQuote.service_name ?? ""),
-            trade: String(firstQuote.trade ?? ""),
-            shipment_terms_code_read: String(
-              firstQuote.shipment_terms_code ?? ""
-            ),
-            shipment_terms_name: String(firstQuote.shipment_terms ?? ""),
-            origin_code_read: String(firstQuote.origin_code ?? ""),
-            destination_code_read: String(firstQuote.destination_code ?? ""),
-            origin_name: String(firstQuote.origin ?? ""),
-            destination_name: String(firstQuote.destination ?? ""),
+            service: String(s0.service ?? ""),
+            service_name: String(s0.service_name ?? ""),
+            trade: String(s0.trade ?? ""),
+            shipment_terms_code_read: String(s0.shipment_terms_code_read ?? ""),
+            shipment_terms_name: String(s0.shipment_terms_name ?? ""),
+            origin_code_read: String(s0.origin_code_read ?? ""),
+            destination_code_read: String(s0.destination_code_read ?? ""),
+            origin_name: String(s0.origin_name ?? ""),
+            destination_name: String(s0.destination_name ?? ""),
             gross_weight:
-              typeof firstCargo?.gross_weight === "number"
-                ? firstCargo.gross_weight
-                : Number(firstCargo?.gross_weight ?? 0) || undefined,
+              s0.gross_weight == null ? undefined : (s0.gross_weight as string | number),
             no_of_packages:
-              typeof firstCargo?.no_of_packages === "number"
-                ? firstCargo.no_of_packages
-                : Number(firstCargo?.no_of_packages ?? 0) || undefined,
-            commodity:
-              firstQuote.commodity == null
-                ? null
-                : String(firstQuote.commodity ?? ""),
+              typeof s0.no_of_packages === "number"
+                ? s0.no_of_packages
+                : Number(s0.no_of_packages ?? 0) || undefined,
+            commodity: s0.commodity == null ? null : String(s0.commodity ?? ""),
+            fcl_details: fclDetails,
           },
         ]
       : [],
@@ -166,8 +120,9 @@ function mapQuotationFilterRowToDrilldown(
     destination_code_list: Array.isArray(row.destination_code_list)
       ? (row.destination_code_list as string[])
       : [],
-    quotations,
-  };
+    ...(extra?.filterDateFrom ? { __filterDateFrom: extra.filterDateFrom } : null),
+    ...(extra?.filterDateTo ? { __filterDateTo: extra.filterDateTo } : null),
+  } as EnquiryDrilldownEnquiry & { __filterDateFrom?: string; __filterDateTo?: string };
 }
 
 function monthStart(): Date {
@@ -235,8 +190,8 @@ export default function EnquiryConversionPage() {
   useEffect(() => {
     setRepPage(1);
   }, [
-    filters.fromDate?.toISOString(),
-    filters.toDate?.toISOString(),
+    filters.fromDate,
+    filters.toDate,
     filters.type,
     filters.service,
     filters.salesperson,
@@ -292,13 +247,27 @@ export default function EnquiryConversionPage() {
       // const res = await apiCallProtected.post(URL.quotationFilter, payload);
       const res = await apiCallProtected.post(URL.enquiryFilter, payload);
       const body = (res as { data?: unknown }).data as
-        | { data?: unknown[] }
+        | { data?: unknown[]; results?: unknown[] }
+        | unknown[]
         | undefined;
-      const first = Array.isArray(body?.data)
-        ? (body?.data?.[0] as Record<string, unknown> | undefined)
-        : undefined;
+      const list = Array.isArray(body)
+        ? body
+        : Array.isArray(body?.data)
+          ? body?.data
+          : Array.isArray(body?.results)
+            ? body?.results
+            : [];
+      const first =
+        Array.isArray(list) && list.length > 0
+          ? (list[0] as Record<string, unknown>)
+          : undefined;
       if (first) {
-        setTopActiveDetailEnquiry(mapQuotationFilterRowToDrilldown(first));
+        setTopActiveDetailEnquiry(
+          mapEnquiryFilterRowToDrilldown(first, {
+            filterDateFrom: dayjs(filters.fromDate).format("YYYY-MM-DD"),
+            filterDateTo: dayjs(filters.toDate).format("YYYY-MM-DD"),
+          })
+        );
         return;
       }
     } catch {
