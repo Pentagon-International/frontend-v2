@@ -14,11 +14,15 @@ import {
   Text,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import ReactECharts from "echarts-for-react";
 import dayjs from "dayjs";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
+import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
+import { ActionIcon } from "@mantine/core";
+import { IconArrowLeft } from "@tabler/icons-react";
 import {
   calculateFinancialYearBudgetRangeForYear,
   getBudgetVsActualSalespersonNames,
@@ -102,12 +106,19 @@ function getCurrentFinancialYearStart(): string {
 
 export default function BudgetVsActualDashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 62em)");
   const isCompact = useMediaQuery("(max-width: 48em)");
   const user = useAuthStore((state) => state.user);
   const routeState = (location.state || {}) as RouteState;
 
   const company = routeState.company?.trim() || user?.company?.company_name || "PENTAGON INDIA";
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+  } = useDashboardChartSearch();
   const initialYear = routeState.start_month?.split("-")[0] || getCurrentFinancialYearStart();
   const initialRange = calculateFinancialYearBudgetRangeForYear(parseInt(initialYear, 10));
 
@@ -149,6 +160,7 @@ export default function BudgetVsActualDashboard() {
         company,
         start_month: startMonth,
         end_month: endMonth,
+        ...(committedSearch?.trim() && { search: committedSearch.trim() }),
         by_sales_rep_ytd: {
           index: repPageIndex,
           limit: repPageLimit,
@@ -163,7 +175,17 @@ export default function BudgetVsActualDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [company, endMonth, mode, repPageIndex, repPageLimit, salesperson, startMonth, type]);
+  }, [
+    company,
+    endMonth,
+    mode,
+    repPageIndex,
+    repPageLimit,
+    salesperson,
+    startMonth,
+    type,
+    committedSearch,
+  ]);
 
   useEffect(() => {
     void fetchData();
@@ -360,7 +382,17 @@ export default function BudgetVsActualDashboard() {
         <ERPListToolbar
           bleed={false}
           leading={
-            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight:15 }}>
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0, paddingLeft: 10, paddingRight: 15 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={() => navigate(-1)}
+              >
+                <IconArrowLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Box style={{ minWidth: 0 }}>
               {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Budget vs Actual
               </Text> */}
@@ -370,12 +402,26 @@ export default function BudgetVsActualDashboard() {
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
                 {fyLabel} · {formatCrL(summary.budget_ytd)} team target · {achYtd.toFixed(1)}% achieved YTD
               </Text>
-            </Box>
+              </Box>
+            </Group>
           }
           actions={
             <Box style={{ minWidth: isCompact ? 300 : 360 }}>
 
               <Group gap={8} wrap="wrap" style={{ width: "100%", justifyContent: isCompact ? "stretch" : "flex-end" }}>
+              <DashboardChartSearch
+                value={searchInput}
+                onChange={setSearchInput}
+                onCommit={(v) => {
+                  commitSearch(v);
+                  void fetchData();
+                }}
+                onClear={() => {
+                  commitSearch("");
+                  void fetchData();
+                }}
+                placeholder="Search customer / salesperson"
+              />
               <SegmentedControl
                 size="xs"
                 value={type}

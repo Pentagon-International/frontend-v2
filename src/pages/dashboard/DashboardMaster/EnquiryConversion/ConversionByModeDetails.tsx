@@ -17,8 +17,7 @@ import {
 import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { apiCallProtected } from "../../../../api/axios";
-import { URL } from "../../../../api/serverUrls";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import {
   getEnquiryConversionDashboardData,
   extractNumericValue,
@@ -86,122 +85,6 @@ function badgeStyleForStageLabel(label: string): { bg: string; fg: string } {
   return { bg: "#F1F5F9", fg: "#64748B" };
 }
 
-function mapQuotationFilterRowToDrilldown(
-  row: Record<string, unknown>
-): EnquiryDrilldownEnquiry {
-  const quotationArr = Array.isArray(row.quotation)
-    ? (row.quotation as Array<Record<string, unknown>>)
-    : [];
-  const quotations = quotationArr.map((q) => {
-    const charges = Array.isArray(q.charges)
-      ? (q.charges as Array<Record<string, unknown>>).map((c) => ({
-          charge_name: String(c.charge_name ?? ""),
-          unit: String(c.unit ?? ""),
-          no_of_units:
-            typeof c.no_of_units === "number"
-              ? c.no_of_units
-              : Number(c.no_of_units ?? 0),
-          sell_per_unit: String(c.sell_per_unit ?? ""),
-          total_sell: String(c.total_sell ?? ""),
-          currency: String(c.currency ?? ""),
-        }))
-      : [];
-    const cargo = Array.isArray(q.cargo_details)
-      ? (q.cargo_details[0] as Record<string, unknown> | undefined)
-      : undefined;
-    return {
-      quotation_id: String(q.quotation_id ?? ""),
-      created_at: String(q.created_at ?? ""),
-      quotation_services: [
-        {
-          total_sell: String(
-            charges.reduce(
-              (s, c) => s + Number(c.total_sell ?? 0),
-              0
-            ) || ""
-          ),
-          quote_currency: String(q.quote_currency ?? "INR"),
-          valid_upto: String(q.valid_upto ?? ""),
-          charges,
-          service_details: {
-            service: String(q.service_type ?? q.service_name ?? ""),
-            shipment_terms_code_read: String(q.shipment_terms_code ?? ""),
-            shipment_terms_name: String(q.shipment_terms ?? ""),
-            origin_code_read: String(q.origin_code ?? ""),
-            destination_code_read: String(q.destination_code ?? ""),
-            origin_name: String(q.origin ?? ""),
-            destination_name: String(q.destination ?? ""),
-            gross_weight:
-              typeof cargo?.gross_weight === "number"
-                ? cargo.gross_weight
-                : Number(cargo?.gross_weight ?? 0) || undefined,
-            no_of_packages:
-              typeof cargo?.no_of_packages === "number"
-                ? cargo.no_of_packages
-                : Number(cargo?.no_of_packages ?? 0) || undefined,
-            commodity:
-              q.commodity == null ? null : String(q.commodity ?? ""),
-          },
-        },
-      ],
-    };
-  });
-
-  const firstQuote = quotationArr[0];
-  const firstCargo = Array.isArray(firstQuote?.cargo_details)
-    ? (firstQuote?.cargo_details?.[0] as Record<string, unknown> | undefined)
-    : undefined;
-  return {
-    id: typeof row.id === "number" ? row.id : Number(row.id ?? 0) || undefined,
-    enquiry_id: String(row.enquiry_id ?? ""),
-    customer_name: String(row.customer_name ?? ""),
-    customer_address: String(row.customer_address ?? ""),
-    enquiry_received_date: String(row.enquiry_received_date ?? ""),
-    sales_person: String(row.sales_person ?? ""),
-    status: String(row.status ?? ""),
-    services: firstQuote
-      ? [
-          {
-            service: String(firstQuote.service_type ?? ""),
-            service_name: String(firstQuote.service_name ?? ""),
-            trade: String(firstQuote.trade ?? ""),
-            shipment_terms_code_read: String(firstQuote.shipment_terms_code ?? ""),
-            shipment_terms_name: String(firstQuote.shipment_terms ?? ""),
-            origin_code_read: String(firstQuote.origin_code ?? ""),
-            destination_code_read: String(firstQuote.destination_code ?? ""),
-            origin_name: String(firstQuote.origin ?? ""),
-            destination_name: String(firstQuote.destination ?? ""),
-            gross_weight:
-              typeof firstCargo?.gross_weight === "number"
-                ? firstCargo.gross_weight
-                : Number(firstCargo?.gross_weight ?? 0) || undefined,
-            no_of_packages:
-              typeof firstCargo?.no_of_packages === "number"
-                ? firstCargo.no_of_packages
-                : Number(firstCargo?.no_of_packages ?? 0) || undefined,
-            commodity:
-              firstQuote.commodity == null
-                ? null
-                : String(firstQuote.commodity ?? ""),
-          },
-        ]
-      : [],
-    origin_list: Array.isArray(row.origin_list)
-      ? (row.origin_list as string[])
-      : [],
-    destination_list: Array.isArray(row.destination_list)
-      ? (row.destination_list as string[])
-      : [],
-    origin_code_list: Array.isArray(row.origin_code_list)
-      ? (row.origin_code_list as string[])
-      : [],
-    destination_code_list: Array.isArray(row.destination_code_list)
-      ? (row.destination_code_list as string[])
-      : [],
-    quotations,
-  };
-}
-
 export function ConversionByModeDetails({
   opened,
   onClose,
@@ -211,6 +94,7 @@ export function ConversionByModeDetails({
   onOpenCustomerEnquiryList,
   onOpenEnquiryDetail,
 }: Props) {
+  const { committed: committedSearch } = useDashboardChartSearch();
   const fd = filters.fromDate;
   const td = filters.toDate;
   const modeCode = modeRow?.key?.trim();
@@ -226,16 +110,17 @@ export function ConversionByModeDetails({
       filters.salesperson.trim(),
       TOP_GAINED_INDEX,
       TOP_GAINED_LIMIT,
+      committedSearch?.trim() ?? "",
     ],
     queryFn: () =>
       getEnquiryConversionDashboardData({
         company,
         date_from: dayjs(fd!).format("DD-MM-YYYY"),
         date_to: dayjs(td!).format("DD-MM-YYYY"),
-        // type: filters.type?.trim() || null,
-        type: "GAINED",
+        type: filters.type?.trim() || null,
         service: modeCode ?? null,
         salesperson: filters.salesperson.trim() || null,
+        search: committedSearch?.trim() || null,
         top_gained_pagination: {
           index: TOP_GAINED_INDEX,
           limit: TOP_GAINED_LIMIT,
@@ -595,11 +480,6 @@ export function ConversionByModeDetails({
                         </Table.Tr>
                       ) : (
                         topCustomers.map((c) => {
-                          const wr = c.enquiries > 0 ? (c.won / c.enquiries) * 100 : 0;
-                          const wrStr =
-                            Math.abs(wr - Math.round(wr)) < 0.05
-                              ? `${Math.round(wr)}`
-                              : wr.toFixed(1);
                           const resolvedSalesperson =
                             c.salesperson?.trim() ||
                             filters.salesperson?.trim() ||

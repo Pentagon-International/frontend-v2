@@ -24,6 +24,7 @@ import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import {
   getEnquiryConversionDashboardData,
   extractNumericValue,
@@ -36,6 +37,7 @@ import {
   EnquiryConversionDrawerBack,
   EnquiryConversionDrawerHeaderSeparator,
 } from "./EnquiryConversionDrawerBack";
+import { funnelStageRowToApiType } from "./stageFunnelApiType";
 
 const NAVY = "#1E3A8A";
 const FONT =
@@ -85,17 +87,6 @@ function normalizeCcField(cc: string | string[] | null | undefined): string {
     return cleanEmailString(cc.filter(Boolean).join(", "));
   }
   return cleanEmailString(cc);
-}
-
-/** Maps funnel row label from dashboard mapper → POST body `type`. */
-export function funnelStageRowToApiType(row: StageFunnelRow | null): string | null {
-  if (!row) return null;
-  const s = row.stage.trim();
-  if (s.toLowerCase() === "active") return "Active";
-  if (s === "Quoted") return "QUOTE CREATED";
-  if (s === "Won") return "GAINED";
-  if (s === "Lost") return "LOST";
-  return "Active";
 }
 
 function displayStageTitle(row: StageFunnelRow | null): string {
@@ -176,6 +167,7 @@ export function StageFunnelDetails({
   filters,
   onRepRowClick,
 }: Props) {
+  const { committed: committedSearch } = useDashboardChartSearch();
   const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
     useDisclosure(false);
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -350,6 +342,7 @@ export function StageFunnelDetails({
       filters.service ?? "",
       filters.salesperson.trim(),
       stageRow?.stage ?? "",
+      committedSearch?.trim() ?? "",
     ],
     queryFn: () =>
       getEnquiryConversionDashboardData({
@@ -359,6 +352,7 @@ export function StageFunnelDetails({
         type: apiType,
         service: filters.service?.trim() || null,
         salesperson: filters.salesperson.trim() || null,
+        search: committedSearch?.trim() || null,
       }),
     enabled: opened && !!stageRow && !!company && !!fd && !!td,
     staleTime: 20_000,

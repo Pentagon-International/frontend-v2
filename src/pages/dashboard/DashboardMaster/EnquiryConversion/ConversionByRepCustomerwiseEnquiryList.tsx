@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import {
   extractNumericValue,
   type EnquiryConversionCustomerwiseResponse,
@@ -71,6 +72,7 @@ export function ConversionByRepCustomerwiseEnquiryList({
   customerCode,
   customerName,
 }: Props) {
+  const { committed: committedSearch } = useDashboardChartSearch();
   const fd = filters.fromDate;
   const td = filters.toDate;
   const normalizedApiType = (apiType ?? "")
@@ -95,6 +97,7 @@ export function ConversionByRepCustomerwiseEnquiryList({
       td?.toISOString() ?? "",
       apiType ?? "",
       filters.service ?? "",
+      committedSearch?.trim() ?? "",
     ],
     queryFn: async () => {
       const body: Record<string, string> = {
@@ -107,6 +110,8 @@ export function ConversionByRepCustomerwiseEnquiryList({
       if (t) body.type = t;
       const svc = filters.service?.trim();
       if (svc) body.service = svc;
+      const q = committedSearch?.trim();
+      if (q) body.search = q;
       const response = await apiCallProtected.post(
         URL.dashboard.enquiryConversion,
         body

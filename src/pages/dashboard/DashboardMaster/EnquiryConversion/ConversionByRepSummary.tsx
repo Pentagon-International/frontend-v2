@@ -24,6 +24,7 @@ import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import {
   getEnquiryConversionSalespersonStatistics,
   extractNumericValue,
@@ -105,6 +106,7 @@ export function ConversionByRepSummary({
   company,
   filters,
 }: Props) {
+  const { committed: committedSearch } = useDashboardChartSearch();
   const [customerDrawer, setCustomerDrawer] = useState<{
     code: string;
     name: string;
@@ -161,6 +163,7 @@ export function ConversionByRepSummary({
       apiType ?? "",
       fd?.toISOString() ?? "",
       td?.toISOString() ?? "",
+      committedSearch?.trim() ?? "",
     ],
     queryFn: () =>
       getEnquiryConversionSalespersonStatistics({
@@ -169,6 +172,7 @@ export function ConversionByRepSummary({
         date_from: dayjs(fd!).format("DD-MM-YYYY"),
         date_to: dayjs(td!).format("DD-MM-YYYY"),
         type: apiType,
+        search: committedSearch?.trim() || null,
       }),
     enabled: opened && !!salesperson?.trim() && !!company && !!fd && !!td,
     staleTime: 20_000,

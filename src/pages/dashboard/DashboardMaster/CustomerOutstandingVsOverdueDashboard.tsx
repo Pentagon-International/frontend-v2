@@ -14,9 +14,11 @@ import {
 } from "@mantine/core";
 import { IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
+import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import {
   getCustomerOutstandingVsOverdueData,
   getCustomerOutstandingVsOverdueSalespersonNames,
@@ -154,6 +156,7 @@ const col = {
 
 export default function CustomerOutstandingVsOverdueDashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 48em)");
   const routeState = (location.state || {}) as RouteState;
   const user = useAuthStore((state) => state.user);
@@ -179,6 +182,12 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     { value: string; label: string }[]
   >([]);
   const [salesmanOptionsLoading, setSalesmanOptionsLoading] = useState(false);
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+  } = useDashboardChartSearch();
 
   const fetchData = useCallback(async () => {
     try {
@@ -192,6 +201,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         ...(filters.salesman && { salesman: filters.salesman }),
         ...(filters.customer_name && { customer_name: filters.customer_name }),
         ...(filters.risk && { risk: filters.risk }),
+        ...(committedSearch?.trim() && { search: committedSearch.trim() }),
       });
       setResponse(data);
     } catch (err) {
@@ -200,7 +210,15 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [company, filters.customer_name, filters.location, filters.risk, filters.salesman, index]);
+  }, [
+    company,
+    filters.customer_name,
+    filters.location,
+    filters.risk,
+    filters.salesman,
+    index,
+    committedSearch,
+  ]);
 
   useEffect(() => {
     void fetchData();
@@ -333,7 +351,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         <ERPListToolbar
           bleed={false}
           leading={
-            <Box style={{ minWidth: 0, paddingLeft: 10 }}>
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0, paddingLeft: 10 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={() => navigate(-1)}
+              >
+                <IconChevronLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Box style={{ minWidth: 0 }}>
               {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Outstanding / Overdue
               </Text> */}
@@ -345,11 +373,27 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 {toNumber(summary?.open_invoices).toLocaleString("en-IN")} open invoices ·{" "}
                 {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
               </Text>
-            </Box>
+              </Box>
+            </Group>
           }
           actions={
             <Box style={{ minWidth: isMobile ? 300 : 360 }}>
               <Group align="center" gap={8} wrap="wrap" style={{ width: "100%" }}>
+                <DashboardChartSearch
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onCommit={(v) => {
+                    commitSearch(v);
+                    setIndex(0);
+                    void fetchData();
+                  }}
+                  onClear={() => {
+                    commitSearch("");
+                    setIndex(0);
+                    void fetchData();
+                  }}
+                  placeholder="Search customer / salesperson"
+                />
                 <Button
                   size="xs"
                   radius={6}

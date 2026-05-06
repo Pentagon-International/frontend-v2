@@ -72,6 +72,7 @@ import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
+import { useListFilterStore } from "../../../store/listFilterStore";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -439,14 +440,29 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // Global search state - separate input value from actual search query
-  const [searchInputValue, setSearchInputValue] = useState<string>("");
-  const [globalSearch, setGlobalSearch] = useState<string>("");
+  const persistedChartSearch = useListFilterStore(
+    (s) => s.registry["dashboard:chart-search"]?.search ?? ""
+  );
+  const [searchInputValue, setSearchInputValue] = useState<string>(
+    persistedChartSearch
+  );
+  const [globalSearch, setGlobalSearch] = useState<string>(persistedChartSearch);
   const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
 
   // Searchable dropdown states
   const [dropdownOptions, setDropdownOptions] = useState<string[]>([]);
   const [isDropdownLoading, setIsDropdownLoading] = useState<boolean>(false);
   const [debouncedSearch] = useDebouncedValue(searchInputValue, 400);
+
+  // When returning from inner pages, restore the selected dashboard search value.
+  // Do NOT clear it unless user clears manually.
+  useEffect(() => {
+    const v = String(persistedChartSearch || "").trim();
+    if (!v) return;
+    if (globalSearch.trim() === v && searchInputValue.trim() === v) return;
+    setGlobalSearch(v);
+    setSearchInputValue(v);
+  }, [persistedChartSearch, globalSearch, searchInputValue]);
 
   // Calculate current financial year start year for default selection
   const getCurrentFinancialYearStart = () => {
@@ -1668,6 +1684,7 @@ const Dashboard = () => {
         company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        search: globalSearch?.trim() || null,
       });
 
       setEnquiryConversionAggregatedData(
@@ -1747,6 +1764,7 @@ const Dashboard = () => {
   const handleSearch = useCallback(() => {
     const searchQuery = searchInputValue.trim();
     setGlobalSearch(searchQuery);
+    useListFilterStore.getState().setSearch("dashboard:chart-search", searchQuery);
   }, [searchInputValue]);
 
   // Handler for Enter key press
@@ -1917,11 +1935,8 @@ const Dashboard = () => {
       // If one fails, others can still succeed and display their data
       const results = await Promise.allSettled([
         // Use filtered API call with company name to get location data directly
-        companyName
-          ? getFilteredOutstandingData(
-              addSearchToFilters({ company: companyName })
-            )
-          : getFilteredOutstandingData({ company: companyName }),
+        // Outstanding should NOT be impacted by the dashboard search bar.
+        getFilteredOutstandingData({ company: companyName }),
         // Use filtered API call with company name for budget data
         companyName
           ? getFilteredBudgetData(
@@ -1954,6 +1969,7 @@ const Dashboard = () => {
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              search: globalSearch?.trim() || null,
             });
           }
           return null;
@@ -2194,6 +2210,7 @@ const Dashboard = () => {
           company: companyNameForEnquiry,
           date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
           date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+          search: globalSearch?.trim() || null,
         });
         setEnquiryConversionAggregatedData(
           resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
@@ -6939,6 +6956,7 @@ const Dashboard = () => {
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              search: globalSearch?.trim() || null,
             });
             setEnquiryConversionAggregatedData(
               resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
@@ -7832,10 +7850,19 @@ const Dashboard = () => {
                     onOptionSubmit={(value) => {
                       setSearchInputValue(value);
                       setGlobalSearch(value);
+                      useListFilterStore
+                        .getState()
+                        .setSearch("dashboard:chart-search", value);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && searchInputValue.trim()) {
                         setGlobalSearch(searchInputValue.trim());
+                        useListFilterStore
+                          .getState()
+                          .setSearch(
+                            "dashboard:chart-search",
+                            searchInputValue.trim()
+                          );
                       }
                     }}
                     data={dropdownOptions}
@@ -7852,6 +7879,9 @@ const Dashboard = () => {
                             onClick={() => {
                               setSearchInputValue("");
                               setGlobalSearch("");
+                              useListFilterStore
+                                .getState()
+                                .setSearch("dashboard:chart-search", "");
                               setDropdownOptions([]);
                             }}
                             size="sm"
@@ -8080,6 +8110,7 @@ const Dashboard = () => {
                               customerInteractionFromDate?.toISOString() ?? null,
                             toDate:
                               customerInteractionToDate?.toISOString() ?? null,
+                            search: globalSearch?.trim() || null,
                           },
                         })
                       }

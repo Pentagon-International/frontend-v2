@@ -162,6 +162,7 @@ export interface CustomerOutstandingVsOverdueFilters {
   salesman?: string;
   customer_name?: string;
   risk?: string;
+  search?: string;
   index?: number;
   limit?: number;
 }
@@ -833,6 +834,9 @@ export const getCustomerOutstandingVsOverdueData = async (
     if (filters.risk && filters.risk.trim()) {
       payload.risk = filters.risk.trim();
     }
+    if (filters.search && filters.search.trim()) {
+      payload.search = filters.search.trim();
+    }
     const response = await postAPICall(url, payload);
     return response as CustomerOutstandingVsOverdueResponse;
   } catch (error) {
@@ -1492,6 +1496,7 @@ export const getEnquiryConversionDashboardData = async (params: {
   company: string;
   date_from: string;
   date_to: string;
+  search?: string | null;
   type?: string | null;
   service?: string | null;
   salesperson?: string | null;
@@ -1505,6 +1510,8 @@ export const getEnquiryConversionDashboardData = async (params: {
       date_from: params.date_from,
       date_to: params.date_to,
     };
+    const search = params.search?.trim();
+    if (search) body.search = search;
     const t = params.type?.trim();
     if (t) body.type = t;
     const svc = params.service?.trim();
@@ -1540,6 +1547,7 @@ export const getEnquiryConversionSalespersonStatistics = async (params: {
   date_from: string;
   date_to: string;
   type?: string | null;
+  search?: string | null;
 }): Promise<EnquiryConversionSalespersonStatisticsResponse> => {
   try {
     const body: Record<string, string> = {
@@ -1550,6 +1558,8 @@ export const getEnquiryConversionSalespersonStatistics = async (params: {
     };
     const t = params.type?.trim();
     if (t) body.type = t;
+    const q = params.search?.trim();
+    if (q) body.search = q;
     const response = await postAPICall(
       URL.dashboard.enquiryConversion,
       body,
@@ -1573,6 +1583,7 @@ export const getEnquiryConversionCustomerwiseDetail = async (params: {
   customer_code: string;
   type?: string | null;
   service?: string | null;
+  search?: string | null;
 }): Promise<EnquiryConversionCustomerwiseResponse> => {
   try {
     const body: Record<string, string> = {
@@ -1586,6 +1597,8 @@ export const getEnquiryConversionCustomerwiseDetail = async (params: {
     if (t) body.type = t;
     const svc = params.service?.trim();
     if (svc) body.service = svc;
+    const q = params.search?.trim();
+    if (q) body.search = q;
 
     const response = await postAPICall(
       URL.dashboard.enquiryConversion,

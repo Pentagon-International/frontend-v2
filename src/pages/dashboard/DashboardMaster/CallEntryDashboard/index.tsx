@@ -18,6 +18,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DateRangeInput, ERPListToolbar } from "../../../../components";
 import { CallEntryCustomerDrawerTable } from "../../../../components";
 import useAuthStore from "../../../../store/authStore";
+import { DashboardChartSearch } from "../../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import {
   getCallEntryDashboardData,
@@ -96,6 +98,12 @@ export default function CallEntryDashboardPage() {
     ),
   );
   const isMobile = useMediaQuery("(max-width: 48em)");
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+  } = useDashboardChartSearch();
   const fromDateIso = fromDate?.toISOString() || "";
   const toDateIso = toDate?.toISOString() || "";
 
@@ -131,7 +139,7 @@ export default function CallEntryDashboardPage() {
         },
         salesperson: salesperson === "all" ? null : salesperson,
         type: type === "all" ? null : type,
-        search: null,
+        search: committedSearch || null,
       });
       setData(response);
     } catch (err) {
@@ -140,7 +148,16 @@ export default function CallEntryDashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activityPage, company, fromDate, repPage, salesperson, toDate, type]);
+  }, [
+    activityPage,
+    company,
+    fromDate,
+    repPage,
+    salesperson,
+    toDate,
+    type,
+    committedSearch,
+  ]);
 
   useEffect(() => {
     fetchDashboard();
@@ -295,7 +312,17 @@ export default function CallEntryDashboardPage() {
         <ERPListToolbar
           bleed={false}
           leading={
-            <Box style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }}>
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={() => navigate(-1)}
+              >
+                <IconArrowLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Box style={{ minWidth: 0 }}>
               {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Call Entry
               </Text> */}
@@ -316,7 +343,8 @@ export default function CallEntryDashboardPage() {
                 {data?.kpi?.total_calls || 0} calls logged · {activeRepCount}{" "}
                 reps active
               </Text>
-            </Box>
+              </Box>
+            </Group>
           }
           actions={
             <Box style={{ minWidth: isMobile ? 300 : 360 }}>
@@ -326,6 +354,19 @@ export default function CallEntryDashboardPage() {
                 wrap="wrap"
                 style={{ width: "100%" }}
               >
+                <DashboardChartSearch
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onCommit={(v) => {
+                    commitSearch(v);
+                    fetchDashboard();
+                  }}
+                  onClear={() => {
+                    commitSearch("");
+                    fetchDashboard();
+                  }}
+                  placeholder="Search customer / salesperson"
+                />
                 <DateRangeInput
                   fromDate={fromDate}
                   toDate={toDate}

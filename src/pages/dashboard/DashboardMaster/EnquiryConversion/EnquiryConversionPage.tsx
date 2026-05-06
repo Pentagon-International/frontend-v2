@@ -11,7 +11,7 @@ import {
   Alert,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { ERPListToolbar } from "../../../../components";
 import { apiCallProtected } from "../../../../api/axios";
@@ -43,6 +43,10 @@ import {
 import { useEnquiryConversionDashboard } from "./useEnquiryConversionDashboard";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
 import useAuthStore from "../../../../store/authStore";
+import { DashboardChartSearch } from "../../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../../hooks/useDashboardChartSearch";
+import { ActionIcon } from "@mantine/core";
+import { IconArrowLeft } from "@tabler/icons-react";
 import {
   EnquiryconversionSummarydetail,
   type EnquiryConversionSummaryMetricLabel,
@@ -140,10 +144,26 @@ function parseDateFromState(value: unknown): Date | null {
 
 export default function EnquiryConversionPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const isCompact = useMediaQuery("(max-width: 48em)");
   const company =
     user?.company?.company_name?.trim() || "PENTAGON INDIA";
+  const { input: searchInput, setInput: setSearchInput, committed: search, commit: commitSearch } =
+    useDashboardChartSearch();
+  const navSearch =
+    typeof (location.state as { search?: unknown } | null)?.search === "string"
+      ? String((location.state as { search?: unknown } | null)?.search || "").trim()
+      : "";
+
+  useEffect(() => {
+    // If we navigated from the dashboard with a search value,
+    // ensure the inner page applies it immediately (and triggers API payload).
+    if (navSearch && navSearch !== search) {
+      commitSearch(navSearch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navSearch]);
 
   const initialFromDate =
     parseDateFromState(
@@ -199,7 +219,7 @@ export default function EnquiryConversionPage() {
   ]);
 
   const { data, isLoading, isFetching, error, refetch } =
-    useEnquiryConversionDashboard({ company, filters });
+    useEnquiryConversionDashboard({ company, filters, search });
 
   const metrics = useMemo(() => buildEnquiryConversionMetrics(data), [data]);
   const stageRows = useMemo(
@@ -289,11 +309,37 @@ export default function EnquiryConversionPage() {
         MozOsxFontSmoothing: "grayscale",
       }}
     >
+      {isFetching ? (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.08)",
+            backdropFilter: "blur(1px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2000,
+          }}
+        >
+          <Loader color="#105476" size="md" />
+        </Box>
+      ) : null}
       <Stack gap="md">
         <ERPListToolbar
           bleed={false}
           leading={
-            <Box style={{ minWidth: 0 ,paddingLeft: 10, paddingRight: 10 }}>
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0, paddingLeft: 10, paddingRight: 10 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={() => navigate(-1)}
+              >
+                <IconArrowLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Box style={{ minWidth: 0 }}>
               {/* <Text fz={11} fw={600} c="#7B8DA5" mb={5} style={{ lineHeight: 1.35 }}>
                 Pentagon Freight › Sales › Enquiry Conversion
               </Text> */}
@@ -313,11 +359,25 @@ export default function EnquiryConversionPage() {
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
                 {subtitle}
               </Text>
-            </Box>
+              </Box>
+            </Group>
           }
           actions={
             <Box style={{ minWidth: isCompact ? 300 : 360 }}>
               <Group justify={isCompact ? "stretch" : "flex-end"} wrap="wrap" gap={8} w="100%">
+                <DashboardChartSearch
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onCommit={(v) => {
+                    commitSearch(v);
+                    refetch();
+                  }}
+                  onClear={() => {
+                    commitSearch("");
+                    refetch();
+                  }}
+                  placeholder="Search customer / salesperson"
+                />
                 <EnquiryConversionFilters filters={filters} onFiltersChange={setFilters} />
               </Group>
             </Box>
