@@ -202,6 +202,7 @@ export default function CallEntryDashboardPage() {
         date_from: dayjs(fromDate).format("DD-MM-YYYY"),
         date_to: dayjs(toDate).format("DD-MM-YYYY"),
         salesperson: salespersonName,
+        search: committedSearch?.trim() || "",
       });
       setCustomerWise(response);
     } catch (err) {

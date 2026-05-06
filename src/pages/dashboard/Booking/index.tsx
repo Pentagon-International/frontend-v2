@@ -4,20 +4,26 @@ import {
   BookingItem,
 } from "../../../service/dashboard.service";
 import { DetailedViewTable, DateRangeInput } from "../../../components";
+import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 
 interface BookingProps {
   onBack?: () => void;
-  globalSearch?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }
 
 const Booking: React.FC<BookingProps> = ({
   onBack,
-  globalSearch,
   fromDate: propFromDate,
   toDate: propToDate,
 }) => {
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+  } = useDashboardChartSearch();
   const [bookingData, setBookingData] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const isMountedRef = useRef(false);
@@ -31,7 +37,7 @@ const Booking: React.FC<BookingProps> = ({
       setLoading(true);
       // console.log("Loading booking data with dates:", { from, to });
 
-      const response = await getBookingData(from, to, globalSearch);
+      const response = await getBookingData(from, to, committedSearch);
       // console.log("Booking data loaded:", response);
       setBookingData(response.data || []);
     } catch (error) {
@@ -50,7 +56,7 @@ const Booking: React.FC<BookingProps> = ({
     // Load with dates from props
     loadBookingData(fromDate, toDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromDate, toDate, globalSearch]);
+  }, [fromDate, toDate, committedSearch]);
 
   return (
     <DetailedViewTable
@@ -76,7 +82,19 @@ const Booking: React.FC<BookingProps> = ({
         //   allowDeselection={true}
         //   showRangeInCalendar={false}
         // />
-        undefined
+        <DashboardChartSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          onCommit={(v) => {
+            commitSearch(v);
+            loadBookingData(fromDate, toDate);
+          }}
+          onClear={() => {
+            commitSearch("");
+            loadBookingData(fromDate, toDate);
+          }}
+          placeholder="Search customer / salesperson"
+        />
       }
     />
   );

@@ -24,6 +24,7 @@ import {
 interface OutstandingVsOverdueCardProps {
   company: string;
   onViewAll?: () => void;
+  globalSearch?: string;
 }
 
 const toNumber = (value: string | number | undefined | null): number => {
@@ -47,6 +48,7 @@ const progressColors = ["#22c55e", "#84cc16", "#f59e0b", "#fb923c", "#ef4444"];
 const OutstandingVsOverdueCard = ({
   company,
   onViewAll,
+  globalSearch,
 }: OutstandingVsOverdueCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] =
@@ -62,6 +64,7 @@ const OutstandingVsOverdueCard = ({
         company,
         index,
         limit,
+        ...(globalSearch?.trim() && { search: globalSearch.trim() }),
       });
       setResponse(data);
     } catch (error) {
@@ -70,7 +73,7 @@ const OutstandingVsOverdueCard = ({
     } finally {
       setIsLoading(false);
     }
-  }, [company, index, limit]);
+  }, [company, index, limit, globalSearch]);
 
   useEffect(() => {
     void fetchCardData();

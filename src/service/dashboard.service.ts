@@ -2341,6 +2341,7 @@ export const getCustomerInteractionStatusSummary = async (
     period?: string;
     date_from?: string;
     date_to?: string;
+    search?: string;
   }
 ): Promise<CustomerInteractionStatusSummary> => {
   try {
@@ -3252,10 +3253,13 @@ export const getPendingJobsData = async (
 
 /** Event payload for job-list-by-event API (caller sends from page) */
 export interface JobListEventPayload {
-  event_name: string;
   service_type: string;
-  operator: string;
-  for_invoice:boolean;
+  /** Required for event-based queries (e.g. BL Released). */
+  event_name?: string;
+  /** Required for event-based queries (e.g. operator: "not_equal"). */
+  operator?: string;
+  /** Used by "invoice not raised" flow; when omitted, treated as false. */
+  for_invoice?: boolean;
 }
 
 /** Job-list-by-event API: payload (event_name, service_type, operator) is passed from caller; date/search from filters */
@@ -3273,10 +3277,10 @@ export const getJobListByEventData = async (
       operator: string;
       for_invoice: boolean;
     } = {
-      event_name: eventPayload.event_name,
+      event_name: eventPayload.event_name ?? "",
       service_type: eventPayload.service_type,
-      operator: eventPayload.operator,
-      for_invoice: eventPayload.for_invoice
+      operator: eventPayload.operator ?? "",
+      for_invoice: eventPayload.for_invoice ?? false,
     };
     if (filters.date_from) payload.date_from = filters.date_from;
     if (filters.date_to) payload.date_to = filters.date_to;

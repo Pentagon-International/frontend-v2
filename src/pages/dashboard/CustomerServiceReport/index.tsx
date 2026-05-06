@@ -27,6 +27,8 @@ import {
   JobsWithoutBLReleasedItem,
 } from "../../../service/dashboard.service";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
+import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 
 const CARD_PREVIEW_ROWS = 5;
 const TABLE_PAGE_SIZE = 10;
@@ -51,17 +53,22 @@ const INVOICE_NOT_RAISED_PAYLOAD = {
 type TableViewType = null | "pending-bookings" | "pending-jobs" | "jobs-without-bl" | "pod-not-updated" | "invoice-not-raised";
 
 interface CustomerServiceReportProps {
-  globalSearch?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }
 
 const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
-  globalSearch,
   fromDate,
   toDate,
 }) => {
   const navigate = useNavigate();
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+    clear: clearSearch,
+  } = useDashboardChartSearch();
   const [tableView, setTableView] = useState<TableViewType>(null);
   const [pendingBookings, setPendingBookings] = useState<PendingBookingItem[]>(
     [],
@@ -92,11 +99,45 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     return {
       ...(fromDate && { date_from: dayjs(fromDate).format("YYYY-MM-DD") }),
       ...(toDate && { date_to: dayjs(toDate).format("YYYY-MM-DD") }),
-      ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+      ...(committedSearch?.trim() && { search: committedSearch.trim() }),
       index: 0,
       limit: CARD_PREVIEW_ROWS,
     };
-  }, [fromDate, toDate, globalSearch]);
+  }, [fromDate, toDate, committedSearch]);
+
+  const headerBar = (
+    <Group justify="space-between" align="center" mb="md" wrap="wrap">
+      <Group gap="xs" align="center">
+        <Button
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={() => navigate(-1)}
+          variant="outline"
+          size="xs"
+          color="#105476"
+          style={{ fontFamily: "Inter" }}
+        >
+          Back
+        </Button>
+        <Text
+          size="md"
+          fw={600}
+          c="#111827"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          Customer Service Report (Export)
+        </Text>
+      </Group>
+      <Box style={{ minWidth: 320 }}>
+        <DashboardChartSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          onCommit={(v) => commitSearch(v)}
+          onClear={() => clearSearch()}
+          placeholder="Search customer / salesperson"
+        />
+      </Box>
+    </Group>
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -251,11 +292,11 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     () => ({
       ...(fromDate && { date_from: dayjs(fromDate).format("YYYY-MM-DD") }),
       ...(toDate && { date_to: dayjs(toDate).format("YYYY-MM-DD") }),
-      ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+      ...(committedSearch?.trim() && { search: committedSearch.trim() }),
       index: tablePageIndex * tablePageSize,
       limit: tablePageSize,
     }),
-    [fromDate, toDate, globalSearch, tablePageIndex, tablePageSize],
+    [fromDate, toDate, committedSearch, tablePageIndex, tablePageSize],
   );
 
   useEffect(() => {
@@ -297,7 +338,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
     tableView,
     fromDate,
     toDate,
-    globalSearch,
+    committedSearch,
     tablePageIndex,
     tablePageSize,
   ]);
@@ -801,6 +842,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
           flex: 1,
         }}
       >
+        {headerBar}
         <Group justify="space-between" align="center" mb="md" wrap="nowrap" style={{ flexShrink: 0 }}>
           <Text size="md" fw={500} c="#424242" style={{ fontFamily: "Inter, sans-serif" }}>
             {title}
@@ -851,6 +893,7 @@ const CustomerServiceReport: React.FC<CustomerServiceReportProps> = ({
 
   return (
     <Box pb={20}>
+      {headerBar}
       <Grid>
         <Grid.Col span={6}>
           <Card

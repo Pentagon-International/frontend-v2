@@ -1,6 +1,7 @@
 import OutstandingVsOverdueCard from "./OutstandingVsOverdueCard";
 
 interface OutstandingSectionProps {
+  globalSearch?: string;
   drillLevel: 0 | 1 | 2;
   handleBack: () => void | Promise<void>;
   selectedMetric: "outstanding" | "overdue";
@@ -30,11 +31,16 @@ interface OutstandingSectionProps {
 const OutstandingSection = ({
   selectedCompany,
   handleOutstandingViewAll,
+  globalSearch,
 }: OutstandingSectionProps) => {
   const company = selectedCompany || "PENTAGON INDIA";
 
   return (
-    <OutstandingVsOverdueCard company={company} onViewAll={handleOutstandingViewAll} />
+    <OutstandingVsOverdueCard
+      company={company}
+      onViewAll={handleOutstandingViewAll}
+      globalSearch={globalSearch}
+    />
   );
 };
 

@@ -1424,6 +1424,7 @@ const Dashboard = () => {
         company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        search: globalSearch?.trim() || "",
       });
 
       setCustomerInteractionData(data);
@@ -1955,10 +1956,12 @@ const Dashboard = () => {
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              search: globalSearch?.trim() || "",
             })
           : getCustomerInteractionStatusSummary({
               company: companyName,
               period: customerInteractionPeriod,
+              search: globalSearch?.trim() || "",
             }),
         // Enquiry conversion overview — POST enquiry/enquiryconversion/ only (needs date range)
         (async () => {
@@ -8157,6 +8160,7 @@ const Dashboard = () => {
                     }}
                   >
                     <OutstandingSection
+                      globalSearch={globalSearch}
                       drillLevel={drillLevel}
                       handleBack={handleBack}
                       selectedMetric={selectedMetric}
@@ -8274,7 +8278,6 @@ const Dashboard = () => {
           <Box px={DASH_MAIN_PAD_X}>
             <Booking
               key={tabsRefreshKey}
-              globalSearch={globalSearch}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
             />
@@ -8288,7 +8291,6 @@ const Dashboard = () => {
           <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
             <CustomerServiceReport
               key={tabsRefreshKey}
-              globalSearch={globalSearch}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
             />
@@ -8302,7 +8304,6 @@ const Dashboard = () => {
           <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
             <CustomerServiceImportReport
               key={tabsRefreshKey}
-              globalSearch={globalSearch}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
             />

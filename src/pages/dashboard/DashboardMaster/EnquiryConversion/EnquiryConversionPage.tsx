@@ -309,7 +309,7 @@ export default function EnquiryConversionPage() {
         MozOsxFontSmoothing: "grayscale",
       }}
     >
-      {isFetching ? (
+      {isFetching && !!data ? (
         <Box
           style={{
             position: "fixed",
