@@ -31,6 +31,7 @@ type AgingOutstandingFormValues = {
   branch_code: string | null;
   account_id: string | null;
   account_code: string;
+  subledger_code: string;
   account_name: string;
 };
 
@@ -191,6 +192,7 @@ export default function AgingOutstanding() {
       branch_code: scopedDefaultBranchCode,
       account_id: null,
       account_code: "",
+      subledger_code: "",
       account_name: "",
     },
   });
@@ -251,6 +253,9 @@ export default function AgingOutstanding() {
 
     if (form.values.account_code?.trim()) {
       filters.account_code = form.values.account_code.trim();
+    }
+    if (form.values.subledger_code?.trim()) {
+      filters.subledger_code = form.values.subledger_code.trim();
     }
 
     if (branchScopeMode === "country" && form.values.country_id) {
@@ -396,6 +401,7 @@ export default function AgingOutstanding() {
                 if (!value || !originalData) {
                   form.setFieldValue("account_id", null);
                   form.setFieldValue("account_code", "");
+                  form.setFieldValue("subledger_code", "");
                   form.setFieldValue("account_name", "");
                   return;
                 }
@@ -405,6 +411,13 @@ export default function AgingOutstanding() {
                   originalData.gl_account_code !== undefined &&
                     originalData.gl_account_code !== null
                     ? String(originalData.gl_account_code)
+                    : "",
+                );
+                form.setFieldValue(
+                  "subledger_code",
+                  (originalData as { sl_code?: unknown })?.sl_code !== undefined &&
+                    (originalData as { sl_code?: unknown })?.sl_code !== null
+                    ? String((originalData as { sl_code?: unknown })?.sl_code)
                     : "",
                 );
                 form.setFieldValue(

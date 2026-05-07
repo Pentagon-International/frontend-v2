@@ -190,6 +190,8 @@ type AdjustmentRow = {
 
 type InvoiceCombinedItem = {
   id?: number;
+  /** Primary key of invoice when document type is INV */
+  doc_id?: number;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -218,10 +220,15 @@ const fetchOutstandingAllocations = async (payload: {
     API_HEADER,
   );
   const res = response as
-    | { data?: InvoiceCombinedItem[] }
+    | { data?: unknown }
     | InvoiceCombinedItem[];
-  const data = Array.isArray(res) ? res : res?.data;
-  return Array.isArray(data) ? data : [];
+  const raw = Array.isArray(res) ? res : res?.data;
+  if (Array.isArray(raw)) return raw as InvoiceCombinedItem[];
+  if (raw && typeof raw === "object") {
+    const nested = (raw as { data?: unknown }).data;
+    if (Array.isArray(nested)) return nested as InvoiceCombinedItem[];
+  }
+  return [];
 };
 
 /** Receipt row from list API (filter/receipt) - used for View/Edit and Create Reversal from Receipt Master.
@@ -514,6 +521,8 @@ export default function ReceiptCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
+  const [isOpeningInvoiceFromModal, setIsOpeningInvoiceFromModal] =
+    useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -1038,6 +1047,61 @@ export default function ReceiptCreate({
     });
   };
 
+  const openInvoiceFromAllocationRow = async (inv: InvoiceCombinedItem) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "INV") return;
+
+    const docIdRaw = inv.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Invoice not found",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.invoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "").trim().toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setInvoiceModalOpen(false);
+      // Prevent loader overlap with Invoice page loader.
+      setIsOpeningInvoiceFromModal(false);
+      navigate(`/air/import-job/invoice/${mode}/${docId}`);
+    } catch (e: unknown) {
+      console.error("Failed to open invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open invoice details.",
+      });
+      setIsOpeningInvoiceFromModal(false);
+    }
+  };
+
   const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
@@ -1124,7 +1188,12 @@ export default function ReceiptCreate({
             : totalNum != null && invRoe != null
               ? clampAmount(totalNum * invRoe)
               : totalNum,
-        invoice_id: inv.id != null ? Number(inv.id) : null,
+        invoice_id:
+          inv.doc_id != null
+            ? Number(inv.doc_id)
+            : inv.id != null
+              ? Number(inv.id)
+              : null,
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -2796,11 +2865,35 @@ export default function ReceiptCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{
+              title: { fontWeight: 600, color: "#105476" },
+              body: { position: "relative" },
+            }}
           >
+            {isOpeningInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading documents...
@@ -2818,7 +2911,7 @@ export default function ReceiptCreate({
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
                       <Table.Th>Document Number</Table.Th>
-                      <Table.Th>Document Doc Type</Table.Th>
+                      <Table.Th>Document Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                     </Table.Tr>
@@ -2832,7 +2925,30 @@ export default function ReceiptCreate({
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
+                        <Table.Td>
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "INV" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() => void openInvoiceFromAllocationRow(inv)}
+                              title="Open invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">{inv.document_no ?? "—"}</Text>
+                          )}
+                        </Table.Td>
                         <Table.Td>
                           {String(
                             inv.day_book_document_type ??
