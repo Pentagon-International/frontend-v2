@@ -72,6 +72,7 @@ import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
+import CustomerServiceDashboard from "./CustomerServiceDashboard";
 import { useListFilterStore } from "../../../store/listFilterStore";
 
 interface AggregatedData {
@@ -7796,7 +7797,19 @@ const Dashboard = () => {
                 >
                   CS Import
                 </Button>
-              </Box>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service-dashboard"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service-dashboard")}
+                >
+                  CS Dashboard
+                </Button>
+              </Box> 
 
               <Box
                 style={{
@@ -7950,6 +7963,7 @@ const Dashboard = () => {
           <Tabs.Tab value="booking">Booking</Tabs.Tab>
           <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
           <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
+          <Tabs.Tab value="customer-service-dashboard">Customer Service Dashboard</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel
@@ -8306,6 +8320,25 @@ const Dashboard = () => {
               key={tabsRefreshKey}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
+            />
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel
+          value="customer-service-dashboard"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box
+            px={DASH_MAIN_PAD_X}
+            pb="md"
+            style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+          >
+            <CustomerServiceDashboard
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+              globalSearch={globalSearch}
             />
           </Box>
         </Tabs.Panel>

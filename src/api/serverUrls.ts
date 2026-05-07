@@ -204,6 +204,10 @@ export const URL = {
     pipelineReportProduct: "pipeline/dashboard/product/",
     expected: "expected/",
     booking: "customer-service-shipment/formatted-list/",
+    customerServiceDashboardSummary:
+      "customer-service-shipment/dashboard-summary/",
+    customerServiceDashboardShipments:
+      "customer-service-shipment/dashboard-shipments/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",
