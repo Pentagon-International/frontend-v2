@@ -6,7 +6,6 @@ import {
   Button,
   createTheme,
   Grid,
-  Group,
   MantineProvider,
   rem,
   Stack,
@@ -15,7 +14,6 @@ import {
 } from "@mantine/core";
 import {
   IconBook2,
-  IconCoin,
   IconFilter,
   IconInfoCircle,
   IconSearch,
@@ -38,6 +36,7 @@ import {
   ERPListTableLoading,
   SearchableSelect,
   SingleDateInput,
+  ToastNotification,
   erpListDataRowProps,
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
@@ -163,6 +162,17 @@ function formatDateYYYYMMDD(date: Date | null): string {
   return `${y}-${m}-${d}`;
 }
 
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 /** Same Geist + density as Air Export Booking list screens. */
 const V0_FONT_SANS = "'Geist', sans-serif";
 const v0RootTypographyShell = {
@@ -238,6 +248,15 @@ type FilterFormValues = {
   location: string | null | undefined;
 };
 
+type AppliedFilterSummary = {
+  date_from: string;
+  date_to: string;
+  account_code: string;
+  subledger_code?: string;
+  location?: string;
+  account_name?: string;
+};
+
 const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   fromDate: yup.date().nullable().required("From date is required"),
   toDate: yup.date().nullable().required("To date is required"),
@@ -296,8 +315,12 @@ export default function SubledgerEnquiry() {
   } | null>(null);
   const [resultTotal, setResultTotal] = useState<number | null>(null);
   const [isFetchingRows, setIsFetchingRows] = useState(false);
+  const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [showFilters, setShowFilters] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilterSummary | null>(
+    null,
+  );
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -321,8 +344,8 @@ export default function SubledgerEnquiry() {
     validateInputOnBlur: true,
   });
 
-  const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
+  const selectedAccountName = selectedAccount?.account_name ?? "";
 
   const { user } = useAuthStore();
 
@@ -449,11 +472,15 @@ export default function SubledgerEnquiry() {
 
     try {
       const trimmedLocation = values.location?.trim();
+      const date_from = formatDateYYYYMMDD(values.fromDate);
+      const date_to = formatDateYYYYMMDD(values.toDate);
+      const account_code = String(values.accountCode);
       const payload = {
         filters: {
-          date_from: formatDateYYYYMMDD(values.fromDate),
-          date_to: formatDateYYYYMMDD(values.toDate),
-          account_code: String(values.accountCode),
+          date_from,
+          date_to,
+          account_code,
+          ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
         },
       };
@@ -479,6 +506,14 @@ export default function SubledgerEnquiry() {
             ? response.closing_balance
             : null,
       });
+      setAppliedFilters({
+        date_from,
+        date_to,
+        account_code,
+        ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
+        ...(trimmedLocation ? { location: trimmedLocation } : {}),
+        ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
+      });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
     } catch {
       setRows([]);
@@ -488,7 +523,79 @@ export default function SubledgerEnquiry() {
     } finally {
       setIsFetchingRows(false);
     }
-  }, []);
+  }, [selectedAccountName, selectedSlCode]);
+
+  const downloadSubledgerCsv = useCallback(async () => {
+    if (!appliedFilters) return;
+    setIsDownloadingCsv(true);
+    try {
+      const payload = {
+        filters: {
+          date_from: appliedFilters.date_from,
+          date_to: appliedFilters.date_to,
+          account_code: appliedFilters.account_code,
+          ...(appliedFilters.subledger_code
+            ? { subledger_code: appliedFilters.subledger_code }
+            : {}),
+          ...(appliedFilters.location ? { location: appliedFilters.location } : {}),
+          csv: true,
+        },
+      };
+
+      const response = (await postAPICall(URL.subledgerEnquiry, payload, {
+        ...API_HEADER,
+        responseType: "blob",
+      })) as { data?: Blob };
+
+      const blob =
+        response?.data instanceof Blob
+          ? response.data
+          : (response as unknown as Blob);
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("Empty response from server");
+      }
+
+      // If server returns JSON error in a blob, surface it.
+      const head = await blob.slice(0, 256).text();
+      const headTrim = head.trimStart();
+      if (headTrim.startsWith("{") || headTrim.startsWith("[")) {
+        const fullText = await blob.text();
+        let parsed: { detail?: unknown; message?: unknown; error?: unknown };
+        try {
+          parsed = JSON.parse(fullText) as typeof parsed;
+        } catch {
+          throw new Error(fullText.slice(0, 500) || "Invalid response from server");
+        }
+        const raw = parsed.detail ?? parsed.message ?? parsed.error ?? fullText;
+        const msg = Array.isArray(raw)
+          ? raw.map(String).join(", ")
+          : typeof raw === "string"
+            ? raw
+            : JSON.stringify(raw);
+        throw new Error(msg || "CSV download failed");
+      }
+
+      const stamp = dayjs().format("YYYYMMDD-HHmmss");
+      downloadBlob(blob, `subledger-enquiry-${stamp}.csv`);
+      ToastNotification({ type: "success", message: "CSV downloaded" });
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: Blob } };
+      let message = err?.message || "Failed to download CSV";
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text();
+          const parsed = JSON.parse(text) as { detail?: string; message?: string };
+          message = parsed.detail || parsed.message || text || message;
+        } catch {
+          /* keep default message */
+        }
+      }
+      ToastNotification({ type: "error", message });
+    } finally {
+      setIsDownloadingCsv(false);
+    }
+  }, [appliedFilters]);
 
   const handleSearch = form.onSubmit(runSubledgerEnquiry);
 
@@ -508,19 +615,22 @@ export default function SubledgerEnquiry() {
     setFetchError("");
     setSearchQuery("");
     setPagination({ pageIndex: 0, pageSize: 25 });
+    setAppliedFilters(null);
   };
 
-  const openingBalanceLabel =
-    enquirySummary && typeof enquirySummary.opening_balance === "number"
-      ? formatAmount(enquirySummary.opening_balance)
-      : null;
-
-  const closingBalanceLabel =
-    enquirySummary && typeof enquirySummary.closing_balance === "number"
-      ? formatAmount(enquirySummary.closing_balance)
-      : null;
-
-  const openingBalanceLabelDisplay = openingBalanceLabel ?? "—";
+  const appliedFilterItems = useMemo(() => {
+    if (!appliedFilters) return [];
+    const items: Array<{ key: string; value: string }> = [];
+    if (appliedFilters.date_from) items.push({ key: "From", value: appliedFilters.date_from });
+    if (appliedFilters.date_to) items.push({ key: "To", value: appliedFilters.date_to });
+    if (appliedFilters.account_name)
+      items.push({ key: "Account Name", value: appliedFilters.account_name });
+    if (appliedFilters.account_code)
+      items.push({ key: "Account Code", value: appliedFilters.account_code });
+    if (appliedFilters.subledger_code)
+      items.push({ key: "SL Code", value: appliedFilters.subledger_code });
+    return items;
+  }, [appliedFilters]);
 
   return (
     <MantineProvider theme={subledgerV0MantineTheme}>
@@ -547,6 +657,35 @@ export default function SubledgerEnquiry() {
                   value={listTotalCount}
                   label="Total"
                 />
+                {appliedFilterItems.length > 0 ? (
+                  <Text
+                    size="xs"
+                    c={muted}
+                    style={{
+                      fontFamily: erpTheme.fontSans,
+                      maxWidth: 720,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={appliedFilterItems
+                      .map((i) => `${i.key}: ${i.value}`)
+                      .filter(Boolean)
+                      .join(" | ")}
+                  >
+                    {appliedFilterItems.map((item, idx) => (
+                      <span key={`${item.key}-${idx}`}>
+                        <Text component="span" inherit fw={600}>
+                          {item.key}:
+                        </Text>{" "}
+                        <Text component="span" inherit fw={400}>
+                          {item.value}
+                        </Text>
+                        {idx < appliedFilterItems.length - 1 ? " | " : ""}
+                      </span>
+                    ))}
+                  </Text>
+                ) : null}
                 {/* <ERPListStatPill
                   theme={erpTheme}
                   icon={<IconCoin size={14} color="#059669" />}
@@ -633,6 +772,19 @@ export default function SubledgerEnquiry() {
                   menuStyles={v0MenuStyles}
                   classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                 />
+                {rows.length > 0 && (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconBook2 size={14} />}
+                    onClick={() => void downloadSubledgerCsv()}
+                    loading={isDownloadingCsv}
+                    disabled={isDownloadingCsv || isFetchingRows || !appliedFilters}
+                  >
+                    Download
+                  </Button>
+                )}
                 <Button
                   variant="default"
                   size="xs"
