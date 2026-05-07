@@ -508,7 +508,7 @@ export default function OverseasPaymentMaster() {
                       setStoreFilters(LIST_KEY, appliedFilters);
                       setStoreSearch(LIST_KEY, search);
                       setShouldRestore(LIST_KEY, true);
-                      navigate("/payment/view", { state: row.original })
+                      navigate("/overseas-payment/view", { state: row.original })
                     }
                     }
                   >
@@ -530,7 +530,7 @@ export default function OverseasPaymentMaster() {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/payment/edit", { state: row.original });
+                        navigate("/overseas-payment/edit", { state: row.original });
                       }}
                     >
                       <Group gap="sm">
@@ -552,7 +552,7 @@ export default function OverseasPaymentMaster() {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/payment/reversal/create", {
+                        navigate("/overseas-payment/reversal/create", {
                           state: row.original,
                         })
                       }}

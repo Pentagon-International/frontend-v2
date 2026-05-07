@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Badge,
@@ -57,7 +57,9 @@ import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
+import { useDebouncedValue } from "@mantine/hooks";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   TariffMasterListNativeTable,
   type TariffListColumn,
@@ -80,6 +82,8 @@ type FilterState = {
   valid_from: Date | null;
   valid_to: Date | null;
 };
+
+const LIST_KEY = "ORIGIN_MASTER";
 
 export default function OriginMaster() {
   const navigate = useNavigate();
@@ -131,6 +135,7 @@ export default function OriginMaster() {
 
   // Add local search state
   const [localSearchTerm, setLocalSearchTerm] = useState("");
+  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 500);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -161,6 +166,12 @@ export default function OriginMaster() {
     valid_from: null,
     valid_to: null,
   });
+  const hasRestoredFromStore = useRef(false);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearStoreFilters = useListFilterStore((s) => s.clearFilters);
+  const clearStoreSearch = useListFilterStore((s) => s.clearSearch);
+  const clearStoreAllExcept = useListFilterStore((s) => s.clearAllExcept);
 
   // Service options - simple list like EnquiryMaster
   const serviceOptions = useMemo(
@@ -176,9 +187,9 @@ export default function OriginMaster() {
   const {
     data: originVal = [],
     isLoading: isOriginLoading,
-    refetch: refetchOrigin,
+    isFetching: isOriginFetching,
   } = useQuery({
-    queryKey: ["origin", currentOriginCode, currentPage, pageSize],
+    queryKey: ["origin", currentOriginCode, currentPage, pageSize, debouncedSearch],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
@@ -187,6 +198,7 @@ export default function OriginMaster() {
         if (currentOriginCode) {
           requestBody.filters.origin_code = currentOriginCode;
         }
+        if (debouncedSearch.trim()) requestBody.filters.search = debouncedSearch.trim();
 
         const response = await apiCallProtected.post(
           `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
@@ -218,29 +230,35 @@ export default function OriginMaster() {
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: false,
-    enabled: false, // Don't run automatically - we'll trigger it manually
+    enabled:
+      hasSearched &&
+      !filtersApplied &&
+      debouncedSearch.trim() === "" &&
+      Boolean(currentOriginCode),
   });
 
   // Separate query for filtered data - only runs when filters are applied
   const {
     data: filteredOriginData = [],
     isLoading: filteredOriginLoading,
-    refetch: refetchFilteredOrigin,
+    isFetching: filteredOriginFetching,
   } = useQuery({
     queryKey: [
       "filteredOrigin",
       filtersApplied,
       appliedFilters,
       currentOriginCode,
+      debouncedSearch,
       currentPage,
       pageSize,
     ],
     queryFn: async () => {
       try {
-        if (!filtersApplied) return [];
+        const hasSearch = debouncedSearch.trim() !== "";
+        if (!filtersApplied && !hasSearch) return [];
 
         const payload: any = {};
 
@@ -258,6 +276,7 @@ export default function OriginMaster() {
         if (appliedFilters.valid_to)
           payload.valid_to = dayjs(appliedFilters.valid_to).format("YYYY-MM-DD");
 
+        if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
         if (Object.keys(payload)?.length === 0) return [];
 
         const requestBody = { filters: payload };
@@ -290,23 +309,50 @@ export default function OriginMaster() {
         return [];
       }
     },
-    enabled: false, // Don't run automatically - only when Apply Filters is clicked
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    enabled: hasSearched && Boolean(currentOriginCode) && (filtersApplied || debouncedSearch.trim() !== ""),
+    staleTime: 0,
+    gcTime: 0,
   });
 
-  // Trigger initial fetch when page mounts with saved origin
   useEffect(() => {
-    if (currentOriginName) {
-      setHasSearched(true);
-      refetchOrigin();
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    const restored = useListFilterStore.getState().getState(LIST_KEY);
+    if (restored?.shouldRestore) {
+      const restoredFilters = (restored.filters as FilterState) || null;
+      if (restoredFilters) {
+        filterForm.setValues(restoredFilters);
+        setAppliedFilters(restoredFilters);
+        setFiltersApplied(
+          Boolean(
+            restoredFilters.carrier_name ||
+              restoredFilters.service ||
+              restoredFilters.valid_from ||
+              restoredFilters.valid_to,
+          ),
+        );
+      }
+      if (typeof restored.search === "string") setLocalSearchTerm(restored.search);
+      setCurrentPage(1);
+      void queryClient.invalidateQueries({ queryKey: ["origin"] });
+      void queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
     }
-  }, []); // Run only once on mount
+  }, [filterForm, queryClient]);
+
+  useEffect(() => {
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   // Determine which data to display
   const displayData = useMemo(() => {
     // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
+    if (filtersApplied || debouncedSearch.trim() !== "") {
       console.log("Displaying filtered data:", filteredOriginData);
       return filteredOriginData;
     }
@@ -314,50 +360,20 @@ export default function OriginMaster() {
     return originVal;
   }, [originVal, filteredOriginData, filtersApplied]);
 
-  // Filter data based on local search term (client-side search on displayed data)
-  const filteredOriginDataForDisplay = useMemo<Origin[]>(() => {
-    if (!localSearchTerm.trim()) {
-      return displayData as Origin[];
-    }
-
-    const searchLower = localSearchTerm.toLowerCase();
-
-    return (displayData as Origin[]).filter((item) => {
-      // Search in tariff charges for carrier and charge details
-      const tariffCharges = item.tariff_charges || [];
-
-      // Check if any tariff charge matches the search criteria
-      const chargeMatches = tariffCharges.some((charge: any) => {
-        const carrierName = charge.carrier_name?.toLowerCase() || "";
-        return carrierName.includes(searchLower);
-      });
-
-      // Search in other fields
-      const originName = item.origin_name?.toLowerCase() || "";
-      const validFrom = item.valid_from?.toLowerCase() || "";
-      const validTo = item.valid_to?.toLowerCase() || "";
-      const status = item.status?.toLowerCase() || "";
-      const service = (item.service || "").toLowerCase();
-
-      // Check if search term matches any of these fields
-      return (
-        chargeMatches ||
-        originName.includes(searchLower) ||
-        validFrom.includes(searchLower) ||
-        validTo.includes(searchLower) ||
-        status.includes(searchLower) ||
-        service.includes(searchLower)
-      );
-    });
-  }, [displayData, localSearchTerm]);
-
   // Loading state
   const isLoading = useMemo(() => {
-    if (filtersApplied) {
-      return filteredOriginLoading;
+    if (filtersApplied || debouncedSearch.trim() !== "") {
+      return filteredOriginLoading || filteredOriginFetching;
     }
-    return isOriginLoading;
-  }, [isOriginLoading, filteredOriginLoading, filtersApplied]);
+    return isOriginLoading || isOriginFetching;
+  }, [
+    isOriginLoading,
+    isOriginFetching,
+    filteredOriginLoading,
+    filteredOriginFetching,
+    filtersApplied,
+    debouncedSearch,
+  ]);
 
   const erpTheme: ErpListTheme = {
     border: DEFAULT_ERP_LIST_THEME.border,
@@ -370,6 +386,11 @@ export default function OriginMaster() {
     fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
   };
   const { border, fg, fontSans, primary, muted } = erpTheme;
+  const preserveListState = useCallback(() => {
+    setStoreFilters(LIST_KEY, appliedFilters);
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+  }, [appliedFilters, localSearchTerm, setStoreFilters, setStoreSearch]);
 
   const renderOriginActions = useCallback(
     (row: Origin) => (
@@ -382,11 +403,12 @@ export default function OriginMaster() {
         <Menu.Dropdown>
           <Box px={10} py={5}>
             <UnstyledButton
-              onClick={() =>
+              onClick={() => {
+                preserveListState();
                 navigate("/tariff/origin/create", {
                   state: { ...row, actionType: "view" },
-                })
-              }
+                });
+              }}
             >
               <Group gap="sm">
                 <IconEyeSpark size={16} style={{ color: primary }} />
@@ -399,11 +421,12 @@ export default function OriginMaster() {
               <Menu.Divider />
               <Box px={10} py={5}>
                 <UnstyledButton
-                  onClick={() =>
+                  onClick={() => {
+                    preserveListState();
                     navigate("/tariff/origin/create", {
                       state: { ...row, actionType: "edit" },
-                    })
-                  }
+                    });
+                  }}
                 >
                   <Group gap="sm">
                     <IconEdit size={16} style={{ color: primary }} />
@@ -416,7 +439,7 @@ export default function OriginMaster() {
         </Menu.Dropdown>
       </Menu>
     ),
-    [navigate, user?.is_staff, primary]
+    [navigate, user?.is_staff, primary, preserveListState]
   );
 
   const originListColumns = useMemo<TariffListColumn<Origin>[]>(
@@ -518,16 +541,10 @@ export default function OriginMaster() {
       localStorage.setItem("origin-current-name", originDisplayName);
       localStorage.setItem("origin-current-code", selectedOriginData.code);
 
-      // Invalidate and refetch data with new origin name using filter API
-      // Use setTimeout to ensure state update has propagated
-      await queryClient.invalidateQueries({ queryKey: ["origin"] });
-      setTimeout(async () => {
-        await refetchOrigin();
-      }, 100);
-
       setShowOriginModal(false); // Close the modal
       setIsChangeOriginMode(false); // Reset change mode
       setHasSearched(true); // Mark that user has searched
+      setCurrentPage(1);
       ToastNotification({
         type: "success",
         message: `Loading origins for: ${originDisplayName}`,
@@ -603,7 +620,7 @@ export default function OriginMaster() {
 
         // Invalidate and refetch unfiltered data
         await queryClient.invalidateQueries({ queryKey: ["origin"] });
-        await refetchOrigin();
+        clearStoreFilters(LIST_KEY);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
@@ -621,14 +638,15 @@ export default function OriginMaster() {
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
+      setStoreFilters(LIST_KEY, { ...filterForm.values });
+      setStoreSearch(LIST_KEY, localSearchTerm);
+      setCurrentPage(1);
 
       // Enable the filtered query and refetch
       await queryClient.invalidateQueries({
         queryKey: ["filteredOrigin"],
       });
       setShowFilters(false);
-
-      await refetchFilteredOrigin();
 
       console.log("Filters applied successfully");
     } catch (error) {
@@ -639,7 +657,6 @@ export default function OriginMaster() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setLocalSearchTerm("");
     setFiltersApplied(false); // Reset filters applied state
 
     // Reset applied filters state
@@ -652,13 +669,12 @@ export default function OriginMaster() {
 
     // Clear display values
     setCarrierDisplayValue(null);
+    clearStoreFilters(LIST_KEY);
 
     // Invalidate queries and refetch unfiltered data
     await queryClient.invalidateQueries({ queryKey: ["origin"] });
     await queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
     await queryClient.removeQueries({ queryKey: ["filteredOrigin"] }); // Remove filtered data from cache
-    await refetchOrigin();
-
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
@@ -677,16 +693,6 @@ export default function OriginMaster() {
       setCurrentPage(totalPages);
     }
   }, [totalRecords, pageSize, currentPage]);
-
-  // Refetch data when pagination changes
-  useEffect(() => {
-    if (filtersApplied) {
-      void refetchFilteredOrigin();
-    } else {
-      void refetchOrigin();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, pageSize]);
 
   return (
     <>
@@ -843,7 +849,13 @@ export default function OriginMaster() {
                           variant="transparent"
                           size="sm"
                           aria-label="Clear search"
-                          onClick={() => setLocalSearchTerm("")}
+                          onClick={() => {
+                            setLocalSearchTerm("");
+                            clearStoreSearch(LIST_KEY);
+                            setCurrentPage(1);
+                            void queryClient.invalidateQueries({ queryKey: ["origin"] });
+                            void queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
+                          }}
                           style={{ cursor: "pointer" }}
                         >
                           <IconX size={16} />
@@ -891,7 +903,10 @@ export default function OriginMaster() {
                       size="xs"
                       leftSection={<IconPlus size={14} />}
                       styles={erpToolbarPrimaryButtonStyles(erpTheme)}
-                      onClick={() => navigate("/tariff/origin/create")}
+                      onClick={() => {
+                        preserveListState();
+                        navigate("/tariff/origin/create");
+                      }}
                     >
                       Create New
                     </Button>
@@ -1025,7 +1040,7 @@ export default function OriginMaster() {
                     Select an origin port in the dialog to load tariff lines for that location.
                   </Text>
                 </Center>
-              ) : isLoading || filteredOriginLoading ? (
+              ) : isLoading ? (
                 <ERPListTableLoading theme={erpTheme} message="Loading origin data…" />
               ) : (displayData as Origin[]).length === 0 ? (
                 <Center py="xl" style={{ backgroundColor: erpTheme.cardBg, flex: 1 }}>
@@ -1051,11 +1066,11 @@ export default function OriginMaster() {
                 >
                   <TariffMasterListNativeTable
                     theme={erpTheme}
-                    rows={filteredOriginDataForDisplay}
+                    rows={displayData as Origin[]}
                     getRowKey={(row) => String(row.id)}
                     getSno={(_row, index) => (currentPage - 1) * pageSize + index + 1}
                     columns={originListColumns}
-                    isEmpty={filteredOriginDataForDisplay.length === 0}
+                    isEmpty={(displayData as Origin[]).length === 0}
                     emptyIcon={<IconMapPin size={24} color={erpTheme.muted} />}
                     emptyTitle="No origin lines match your search"
                     renderActions={renderOriginActions}

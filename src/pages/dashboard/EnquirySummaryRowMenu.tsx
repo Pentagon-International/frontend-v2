@@ -44,6 +44,8 @@ export type EnquiryRowMenuContext = {
   };
   /** Shown in the "Edit …" item (default "Enquiry"). */
   editRecordLabel?: string;
+  /** List page to return from Get Rate (default `/enquiry`). */
+  getRateReturnPath?: string;
 };
 
 type Props = {
@@ -181,7 +183,10 @@ export function EnquirySummaryRowMenu({ row, opened, onOpenChange, ctx, menuStyl
           <UnstyledButton
             onClick={() => {
               onOpenChange(false);
-              preserveAndNavigate(ctx, "/get-rate", { ...row });
+              preserveAndNavigate(ctx, "/get-rate", {
+                ...row,
+                returnToListPath: ctx.getRateReturnPath ?? "/enquiry",
+              });
             }}
           >
             <Group gap="sm">

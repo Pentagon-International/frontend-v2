@@ -53,6 +53,7 @@ import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
 
@@ -237,6 +238,7 @@ type FilterFormValues = {
   accountCode: string | null;
   location: string | null | undefined;
 };
+const LIST_KEY = "SUBLEDGER_ENQUIRY";
 
 const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   fromDate: yup.date().nullable().required("From date is required"),
@@ -297,18 +299,26 @@ export default function SubledgerEnquiry() {
   const [resultTotal, setResultTotal] = useState<number | null>(null);
   const [isFetchingRows, setIsFetchingRows] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const [submittedFilters, setSubmittedFilters] = useState<FilterFormValues | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<Record<SubledgerColumnKey, boolean>>(
     () => buildDefaultSubledgerColumnVisibility(),
   );
 
   const dateFormat = useDateFormat();
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearStoreFilters = useListFilterStore((s) => s.clearFilters);
+  const clearStoreSearch = useListFilterStore((s) => s.clearSearch);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
   const form = useForm<FilterFormValues>({
     initialValues: {
       fromDate: null,
@@ -354,17 +364,7 @@ export default function SubledgerEnquiry() {
     return v.length > 0 ? v : ENTRY_COLUMNS;
   }, [visibleColumns]);
 
-  const filteredRows = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
-      ENTRY_COLUMNS.some((col) => {
-        const v = r[col.key];
-        if (v === null || v === undefined) return false;
-        return String(v).toLowerCase().includes(q);
-      }),
-    );
-  }, [rows, debouncedSearch]);
+  const filteredRows = useMemo(() => rows, [rows]);
 
   const pagedRows = useMemo(() => {
     const start = pagination.pageIndex * pagination.pageSize;
@@ -443,7 +443,7 @@ export default function SubledgerEnquiry() {
     });
   }, [user]);
 
-  const runSubledgerEnquiry = useCallback(async (values: FilterFormValues) => {
+  const runSubledgerEnquiry = useCallback(async (values: FilterFormValues, activeSearch = "") => {
     setFetchError("");
     setIsFetchingRows(true);
 
@@ -454,6 +454,7 @@ export default function SubledgerEnquiry() {
           date_from: formatDateYYYYMMDD(values.fromDate),
           date_to: formatDateYYYYMMDD(values.toDate),
           account_code: String(values.accountCode),
+          ...(activeSearch.trim() ? { search: activeSearch.trim() } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
         },
       };
@@ -490,25 +491,58 @@ export default function SubledgerEnquiry() {
     }
   }, []);
 
-  const handleSearch = form.onSubmit(runSubledgerEnquiry);
+  const handleSearch = form.onSubmit((vals) => runSubledgerEnquiry(vals, searchQuery));
 
   const applySearch = () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
-    void runSubledgerEnquiry(form.values);
+    setSubmittedFilters(form.values);
+    setStoreFilters(LIST_KEY, form.values);
+    setStoreSearch(LIST_KEY, searchQuery);
+    void runSubledgerEnquiry(form.values, searchQuery);
     setShowFilters(false);
   };
 
   const clearAllFilters = () => {
     form.reset();
     setSelectedAccount(null);
+    setSubmittedFilters(null);
     setRows([]);
     setEnquirySummary(null);
     setResultTotal(null);
     setFetchError("");
     setSearchQuery("");
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
     setPagination({ pageIndex: 0, pageSize: 25 });
   };
+
+  useEffect(() => {
+    clearAllExcept(LIST_KEY);
+    const stored = getState(LIST_KEY);
+    if (stored?.shouldRestore) {
+      const restoredFilters = (stored.filters as FilterFormValues | undefined) ?? null;
+      if (restoredFilters) {
+        form.setValues(restoredFilters);
+        setSubmittedFilters(restoredFilters);
+        const accountCode = restoredFilters.accountCode;
+        if (accountCode) {
+          setSelectedAccount({
+            id: restoredFilters.accountId ? Number(restoredFilters.accountId) : undefined,
+            gl_account_code: String(accountCode),
+            account_name: "",
+          });
+        }
+      }
+      if (typeof stored.search === "string") setSearchQuery(stored.search);
+      setShouldRestore(LIST_KEY, false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!submittedFilters) return;
+    void runSubledgerEnquiry(submittedFilters, debouncedSearch);
+  }, [debouncedSearch]);
 
   const openingBalanceLabel =
     enquirySummary && typeof enquirySummary.opening_balance === "number"

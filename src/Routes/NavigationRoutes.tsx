@@ -406,10 +406,13 @@ const NavigationRoutes = () => {
         <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice-rcm" element={<SupplierInvoiceRCMMaster />} />
         <Route path="/supplier-invoice-rcm/create" element={<SupplierInvoiceRCMCreate />} />
+        <Route path="/supplier-invoice-rcm/view" element={<SupplierInvoiceRCMCreate />} />
+        <Route path="/supplier-invoice-rcm/edit" element={<SupplierInvoiceRCMCreate />} />
         <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
+        <Route path="/supplier-invoice-rcm/reversal/create" element={<SupplierInvoiceReversal />} />
         <Route path="/journal-voucher" element={<JournalVoucherMaster />} />
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />
         <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />

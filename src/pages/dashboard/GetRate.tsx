@@ -1058,16 +1058,18 @@ const GetRate = () => {
                     onClick={() => {
                       // Restore filter state if preserved
                       const preserveFilters = (location.state as any)?.preserveFilters;
+                      const returnToListPath =
+                        (location.state as any)?.returnToListPath || "/enquiry";
 
                       if (preserveFilters) {
-                        navigate("/enquiry", {
+                        navigate(returnToListPath, {
                           state: {
                             restoreFilters: preserveFilters,
                             refreshData: true,
                           },
                         });
                       } else {
-                        navigate("/enquiry", {
+                        navigate(returnToListPath, {
                           state: { refreshData: true },
                         });
                       }
