@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Button,
   Group,
@@ -15,6 +15,7 @@ import {
   Grid,
   MantineProvider,
   Select,
+  TextInput,
 } from "@mantine/core";
 import {
   IconDotsVertical,
@@ -26,10 +27,14 @@ import {
   IconArrowRight,
   IconCircleX,
   IconScale,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDebouncedValue } from "@mantine/hooks";
 import { postAPICall } from "../../service/postApiCall";
+import { useListFilterStore } from "../../store/listFilterStore";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import {
@@ -174,11 +179,26 @@ type ImportToExportListQueryResult = {
   summary?: ImportToExportListSummary;
 };
 
+const LIST_KEY = "OCEAN_IMPORT_TO_EXPORT_BOOKING";
+
+type PersistedI2EFilters = {
+  statusFilter?: string;
+  pageIndex?: number;
+  pageSize?: number;
+};
+
 function OceanImportToExportBooking() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const theme = DEFAULT_ERP_LIST_THEME;
   const { muted, fg, primary, headerBg, fontSans } = theme;
+
+  const getStoreState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
   const [selectedBooking, setSelectedBooking] =
@@ -187,6 +207,9 @@ function OceanImportToExportBooking() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [isRestoring, setIsRestoring] = useState(true);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     booking: true,
     date: true,
@@ -198,16 +221,52 @@ function OceanImportToExportBooking() {
 
   const dateFormat = useDateFormat();
 
-  const { data: listResponse, isLoading, error } = useQuery<ImportToExportListQueryResult>({
-    queryKey: ["ocean-import-to-export-bookings", statusFilter, pageIndex, pageSize],
+  // Restore filters/search/page from the global store on navigation back.
+  useEffect(() => {
+    const stored = getStoreState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const f = stored.filters as PersistedI2EFilters;
+      if (typeof f.statusFilter === "string") setStatusFilter(f.statusFilter);
+      if (typeof f.pageIndex === "number" && f.pageIndex >= 0) setPageIndex(f.pageIndex);
+      if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
+  }, [location.key]);
+
+  const { data: listResponse, isLoading, isFetching, error } = useQuery<ImportToExportListQueryResult>({
+    queryKey: [
+      "ocean-import-to-export-bookings",
+      statusFilter,
+      pageIndex,
+      pageSize,
+      debouncedSearch,
+    ],
+    enabled: !isRestoring && search === debouncedSearch,
     queryFn: async (): Promise<ImportToExportListQueryResult> => {
       try {
         const offset = pageIndex * pageSize;
+        const trimmedSearch = debouncedSearch.trim();
         const payload = {
           filters: {
             import_to_export: true,
             service: ["FCL", "LCL"],
             reference: statusFilter === "completed",
+            ...(trimmedSearch ? { search: trimmedSearch } : {}),
           },
         };
         const response = (await postAPICall(
@@ -252,6 +311,20 @@ function OceanImportToExportBooking() {
       setPageIndex(maxPageIndex);
     }
   }, [totalRecords, pageSize, pageIndex]);
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPageIndex((prev) => (prev === 0 ? prev : 0));
+  }, [debouncedSearch, isRestoring]);
 
   const listSummary = listResponse?.summary;
   const stats = useMemo(() => {
@@ -320,6 +393,15 @@ function OceanImportToExportBooking() {
       await queryClient.invalidateQueries({
         queryKey: ["ocean-import-to-export-bookings"],
       });
+
+      const persisted: PersistedI2EFilters = {
+        statusFilter,
+        pageIndex,
+        pageSize,
+      };
+      setStoreFilters(LIST_KEY, persisted);
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
 
       navigate("/SeaExport/export-booking", {
         state: { refreshData: true },
@@ -790,13 +872,50 @@ function OceanImportToExportBooking() {
               ),
               actions: (
                 <>
+                  <TextInput
+                    size="xs"
+                    w={220}
+                    placeholder="Search…"
+                    value={search}
+                    onChange={(e) => setSearch(e.currentTarget.value)}
+                    leftSection={<IconSearch size={14} />}
+                    rightSection={
+                      search ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => setSearch("")}
+                          aria-label="Clear search"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: theme.fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        minHeight: 32,
+                      },
+                    }}
+                  />
                   <Select
                     size="xs"
                     w={140}
                     value={statusFilter}
                     onChange={(v) => {
-                      setStatusFilter(v === "completed" ? "completed" : "pending");
+                      const next = v === "completed" ? "completed" : "pending";
+                      setStatusFilter(next);
                       setPageIndex(0);
+                      const persisted: PersistedI2EFilters = {
+                        statusFilter: next,
+                        pageIndex: 0,
+                        pageSize,
+                      };
+                      setStoreFilters(LIST_KEY, persisted);
+                      setStoreSearch(LIST_KEY, search);
                     }}
                     data={[
                       { value: "pending", label: "Pending" },
@@ -833,7 +952,7 @@ function OceanImportToExportBooking() {
                     Error loading import-to-export bookings. Please try again.
                   </Text>
                 </Box>
-              ) : isLoading ? (
+              ) : isRestoring || isLoading || isFetching ? (
                 <ERPListTableLoading
                   theme={theme}
                   message="Loading import-to-export bookings…"
