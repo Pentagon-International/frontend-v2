@@ -362,6 +362,7 @@ function LeadList() {
   const {
     data: leadData = [],
     isLoading: leadLoading,
+    isFetching: leadFetching,
     refetch: refetchLeads,
   } = useQuery({
     queryKey: ["leads"],
@@ -410,6 +411,7 @@ function LeadList() {
   const {
     data: filteredLeadData = [],
     isLoading: filteredLeadLoading,
+    isFetching: filteredLeadFetching,
     refetch: refetchFilteredLeads,
   } = useQuery({
     queryKey: [
@@ -1002,8 +1004,9 @@ function LeadList() {
     }
   }, [totalRecords, pageSize, pageIndex]);
 
-  const isTableDataLoading = (leadLoading || filteredLeadLoading) && displayData.length === 0;
-  const filterApplyBusy = leadLoading || filteredLeadLoading;
+  const isTableDataLoading =
+    leadLoading || leadFetching || filteredLeadLoading || filteredLeadFetching;
+  const filterApplyBusy = isTableDataLoading;
 
   return (
     <>

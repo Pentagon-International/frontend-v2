@@ -2278,6 +2278,7 @@ function RFQMaster() {
         editRecord: moduleCreatePath,
       },
       editRecordLabel: moduleLabel,
+      getRateReturnPath: moduleListPath,
     }),
     [
       navigate,
@@ -2297,15 +2298,13 @@ function RFQMaster() {
       cancellingEnquiryId,
       moduleCreatePath,
       moduleLabel,
+      moduleListPath,
     ],
   );
 
-  const isSummaryTableDataLoading =
-    !showPreviewTable && tableLoading && tableData.length === 0;
+  const isSummaryTableDataLoading = !showPreviewTable && tableLoading;
   const isPreviewListDataLoading =
-    showPreviewTable &&
-    isPreviewLoading &&
-    (tablePreviewData?.data?.length ?? 0) === 0;
+    showPreviewTable && isPreviewLoading;
 
   return (
     <>

@@ -6,7 +6,7 @@ export default function OceanImportDsr() {
     <OceanDsrBase
       title="Ocean Import DSR"
       endpoint={URL.oceanImportDsr}
-      serviceType="Import"
+      serviceType="import"
     />
   );
 }

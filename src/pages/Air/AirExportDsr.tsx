@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Loader, Text, Button, TextInput, Menu, Checkbox } from "@mantine/core";
+import { Box, Flex, Group, Text, Button, TextInput, Menu, Checkbox, ActionIcon } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
 import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
+import { useDebouncedValue } from "@mantine/hooks";
+import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../api/axios";
 import { URL } from "../../api/serverUrls";
 import SingleDateInput from "../../components/SingleDateInput";
@@ -11,11 +13,24 @@ import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
 import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
 import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
+import { ERPListTableLoading } from "../../components/ERPListPage/ERPListTableLoading";
 import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
 import { erpToolbarOutlineButtonStyles } from "../../components";
+import { useListFilterStore } from "../../store/listFilterStore";
+
+const LIST_KEY = "AIR_EXPORT_DSR";
+
+type PersistedDsrFilters = {
+  date_from: string | null;
+  date_to: string | null;
+  page: number;
+  pageSize: number;
+};
 
 function buildListUrl(offset: number, limit: number): string {
-  return `${URL.airExportBooked}?index=${offset}&limit=${limit}`;
+  // Air Import & Export DSR share the same endpoint; service_type in the payload
+  // distinguishes between them.
+  return `${URL.airImportBooked}?index=${offset}&limit=${limit}`;
 }
 
 const DSR_PRIMARY = "#105476";
@@ -82,6 +97,14 @@ function asString(v: unknown): string {
 }
 
 export default function AirExportDsr() {
+  const location = useLocation();
+  const getStoreState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
   const [fromDate, setFromDate] = useState<Date | null>(() => dayjs().startOf("month").toDate());
   const [toDate, setToDate] = useState<Date | null>(() => dayjs().toDate());
   const [rows, setRows] = useState<Row[]>([]);
@@ -91,13 +114,47 @@ export default function AirExportDsr() {
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
     Object.fromEntries(COLUMNS.map((column) => [column.key, true])) as Record<ColumnKey, boolean>
   );
+  const [isRestoring, setIsRestoring] = useState(true);
   const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
+
+  // Restore filters/search from global store on mount
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    const stored = getStoreState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+    const f = stored?.filters as PersistedDsrFilters | undefined;
+    if (f && typeof f === "object") {
+      const restoredFrom = f.date_from ? dayjs(f.date_from, "YYYY-MM-DD").toDate() : null;
+      const restoredTo = f.date_to ? dayjs(f.date_to, "YYYY-MM-DD").toDate() : null;
+      if (restoredFrom) setFromDate(restoredFrom);
+      if (restoredTo) setToDate(restoredTo);
+      setDraftFromDate(restoredFrom ?? null);
+      setDraftToDate(restoredTo ?? null);
+      if (typeof f.page === "number" && f.page > 0) setPage(f.page);
+      if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
+    }
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchData = useCallback(async () => {
     try {
@@ -108,10 +165,12 @@ export default function AirExportDsr() {
       const currentPage = Math.max(1, Math.trunc(Number(page)) || 1);
       const offset = (currentPage - 1) * size;
       const listUrl = buildListUrl(offset, size);
-      const payload = {
+      const payload: Record<string, string> = {
+        service_type: "export",
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
       };
+      if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
 
       const response = await apiCallProtected.post(listUrl, payload);
       const body = response as { data?: Record<string, unknown>[]; total?: number; count?: number };
@@ -169,25 +228,35 @@ export default function AirExportDsr() {
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, page, pageSize]);
+  }, [fromDate, toDate, page, pageSize, debouncedSearch]);
 
   useEffect(() => setPage(1), [fromDate, toDate]);
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored page.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPage(1);
+  }, [debouncedSearch, isRestoring]);
+
+  useEffect(() => {
+    if (isRestoring) return;
     void fetchData();
-  }, [fetchData]);
+  }, [fetchData, isRestoring]);
 
   const onFieldChange = useCallback((identity: string, field: ColumnKey, value: string) => {
     setRows((prev) => prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)));
   }, []);
 
-  const filteredRows = rows.filter((row) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return COLUMNS.some((column) => {
-      if (!visibleColumns[column.key]) return false;
-      return String(row[column.key] ?? "").toLowerCase().includes(q);
-    });
-  });
+  // Search is now applied server-side via the API payload; render rows directly.
+  const filteredRows = rows;
 
   const submitUpdates = useCallback(async () => {
     try {
@@ -217,7 +286,10 @@ export default function AirExportDsr() {
         toast("No changes to submit");
         return;
       }
-      await apiCallProtected.patch(URL.airExportBooked, { updates });
+      await apiCallProtected.patch(URL.airImportBooked, {
+        service_type: "export",
+        updates,
+      });
       toast.success("Air export DSR updated");
       void fetchData();
     } catch (error) {
@@ -250,7 +322,26 @@ export default function AirExportDsr() {
         ),
         actions: (
           <>
-            <TextInput size="xs" leftSection={<IconSearch size={14} />} placeholder="Search..." value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={220} />
+            <TextInput
+              size="xs"
+              leftSection={<IconSearch size={14} />}
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                ) : null
+              }
+              w={220}
+            />
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
                 <Button
@@ -290,8 +381,30 @@ export default function AirExportDsr() {
         footer: (
           <ERPListFilterActionsFooter
             theme={theme}
-            onClear={() => { setDraftFromDate(dayjs().startOf("month").toDate()); setDraftToDate(dayjs().toDate()); }}
-            onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate); setPage(1); setShowFilters(false); }}
+            onClear={() => {
+              const defFrom = dayjs().startOf("month").toDate();
+              const defTo = dayjs().toDate();
+              setDraftFromDate(defFrom);
+              setDraftToDate(defTo);
+              setFromDate(defFrom);
+              setToDate(defTo);
+              setPage(1);
+              clearAllStore(LIST_KEY);
+            }}
+            onApply={() => {
+              setFromDate(draftFromDate);
+              setToDate(draftToDate);
+              setPage(1);
+              setShowFilters(false);
+              const persisted: PersistedDsrFilters = {
+                date_from: draftFromDate ? dayjs(draftFromDate).format("YYYY-MM-DD") : null,
+                date_to: draftToDate ? dayjs(draftToDate).format("YYYY-MM-DD") : null,
+                page: 1,
+                pageSize,
+              };
+              setStoreFilters(LIST_KEY, persisted);
+              setStoreSearch(LIST_KEY, search);
+            }}
           />
         ),
         children: (
@@ -322,8 +435,8 @@ export default function AirExportDsr() {
         ),
         children: (
           <Box style={TABLE_BODY}>
-            {isLoading ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Loader size="sm" color={DSR_PRIMARY} /></Flex>
+            {isRestoring || isLoading ? (
+              <ERPListTableLoading theme={theme} message="Loading air export DSR..." />
             ) : filteredRows.length === 0 ? (
               <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this criteria.</Text></Flex>
             ) : (

@@ -33,6 +33,7 @@ import { apiCallProtected } from "../../../api/axios";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import FormTextInput from "../../../components/FormTextInput";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   MantineReactTable,
   type MRT_ColumnDef,
@@ -69,6 +70,7 @@ type Filters = {
   date_to: Date | null;
   status: "" | "POSTED" | "UNPOSTED";
 };
+const LIST_KEY = "DEBIT_CREDIT_NOTE_NON_TRADE_MASTER";
 
 export default function DebitCreditNoteNonTradeMaster() {
   const navigate = useNavigate();
@@ -89,6 +91,13 @@ export default function DebitCreditNoteNonTradeMaster() {
     date_to: dayjs().toDate(),
   });
   const [appliedFilters, setAppliedFilters] = useState<Filters>(draftFilters);
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearStoreFilters = useListFilterStore((s) => s.clearFilters);
+  const clearStoreSearch = useListFilterStore((s) => s.clearSearch);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const index = (paginationCurrentPage - 1) * paginationPageSize;
   const buildFiltersPayload = useMemo(() => {
@@ -233,14 +242,17 @@ export default function DebitCreditNoteNonTradeMaster() {
               <Menu.Dropdown>
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() =>
+                    onClick={() => {
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
                       navigate(
                         `/debit-credit-note-non-trade/view/${String(
                           row.original?.id ?? "",
                         )}`,
                         { state: { data: row.original } },
-                      )
-                    }
+                      );
+                    }}
                   >
                     <Group gap="sm">
                       <IconEye size={16} style={{ color: "#105476" }} />
@@ -251,14 +263,17 @@ export default function DebitCreditNoteNonTradeMaster() {
                 {isUnposted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
-                      onClick={() =>
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, appliedFilters);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
                         navigate(
                           `/debit-credit-note-non-trade/edit/${String(
                             row.original?.id ?? "",
                           )}`,
                           { state: { data: row.original } },
-                        )
-                      }
+                        );
+                      }}
                     >
                       <Group gap="sm">
                         <IconEdit size={16} style={{ color: "#105476" }} />
@@ -273,7 +288,7 @@ export default function DebitCreditNoteNonTradeMaster() {
         },
       },
     ],
-    [index, navigate],
+    [index, navigate, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore],
   );
 
   const table = useMantineReactTable({
@@ -390,6 +405,8 @@ export default function DebitCreditNoteNonTradeMaster() {
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
     setPaginationCurrentPage(1);
     setShowFilters(false);
   };
@@ -406,9 +423,25 @@ export default function DebitCreditNoteNonTradeMaster() {
     setDraftFilters(reset);
     setAppliedFilters(reset);
     setSearch("");
+    clearStoreFilters(LIST_KEY);
+    clearStoreSearch(LIST_KEY);
     setPaginationCurrentPage(1);
     setShowFilters(false);
   };
+
+  useEffect(() => {
+    clearAllExcept(LIST_KEY);
+    const stored = getState(LIST_KEY);
+    if (stored?.shouldRestore) {
+      const restoredFilters = (stored.filters as Filters | undefined) ?? null;
+      if (restoredFilters) {
+        setDraftFilters(restoredFilters);
+        setAppliedFilters(restoredFilters);
+      }
+      if (typeof stored.search === "string") setSearch(stored.search);
+      setShouldRestore(LIST_KEY, false);
+    }
+  }, []);
 
   return (
     <Card
@@ -513,7 +546,12 @@ export default function DebitCreditNoteNonTradeMaster() {
                   },
                 },
               }}
-              onClick={() => navigate("/debit-credit-note-non-trade/create")}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/debit-credit-note-non-trade/create");
+              }}
             >
               Create New
             </Button>

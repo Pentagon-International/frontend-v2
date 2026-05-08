@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Box,
@@ -53,7 +53,9 @@ import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
+import { useDebouncedValue } from "@mantine/hooks";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   TariffMasterListNativeTable,
   type TariffListColumn,
@@ -79,6 +81,8 @@ type FilterState = {
   valid_to: Date | null;
 };
 
+const LIST_KEY = "FREIGHT_MASTER";
+
 export default function Freight() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -87,6 +91,7 @@ export default function Freight() {
 
   // Add local search state
   const [localSearchTerm, setLocalSearchTerm] = useState("");
+  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 500);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -124,6 +129,12 @@ export default function Freight() {
     valid_from: null,
     valid_to: null,
   });
+  const hasRestoredFromStore = useRef(false);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearStoreFilters = useListFilterStore((s) => s.clearFilters);
+  const clearStoreSearch = useListFilterStore((s) => s.clearSearch);
+  const clearStoreAllExcept = useListFilterStore((s) => s.clearAllExcept);
 
   // Service options - simple list like EnquiryMaster
   const serviceOptions = useMemo(
@@ -139,12 +150,14 @@ export default function Freight() {
   const {
     data: freightVal = [],
     isLoading: isFreightLoading,
+    isFetching: isFreightFetching,
     refetch: refetchFreight,
   } = useQuery({
-    queryKey: ["freight", currentPage, pageSize],
+    queryKey: ["freight", currentPage, pageSize, debouncedSearch],
     queryFn: async () => {
       try {
         const requestBody: { filters: any } = { filters: {} };
+        if (debouncedSearch.trim()) requestBody.filters.search = debouncedSearch.trim();
 
         const response = await apiCallProtected.post(
           `${URL.filter_freight}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
@@ -178,25 +191,27 @@ export default function Freight() {
     staleTime: 0,
     gcTime: 0,
     refetchOnWindowFocus: false,
-    enabled: true, // Enable to run automatically on mount
+    enabled: !filtersApplied && debouncedSearch.trim() === "",
   });
 
   // Separate query for filtered data - only runs when filters are applied with pagination
   const {
     data: filteredFreightData = [],
     isLoading: filteredFreightLoading,
-    refetch: refetchFilteredFreight,
+    isFetching: filteredFreightFetching,
   } = useQuery({
     queryKey: [
       "filteredFreight",
       filtersApplied,
       appliedFilters,
+      debouncedSearch,
       currentPage,
       pageSize,
     ],
     queryFn: async () => {
       try {
-        if (!filtersApplied) return [];
+        const hasSearch = debouncedSearch.trim() !== "";
+        if (!filtersApplied && !hasSearch) return [];
 
         const payload: any = {};
 
@@ -213,6 +228,7 @@ export default function Freight() {
             "YYYY-MM-DD"
           );
 
+        if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
         if (Object.keys(payload)?.length === 0) return [];
 
         const requestBody = { filters: payload };
@@ -245,7 +261,7 @@ export default function Freight() {
         return [];
       }
     },
-    enabled: false, // Don't run automatically - only when Apply Filters is clicked
+    enabled: filtersApplied || debouncedSearch.trim() !== "",
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
@@ -253,7 +269,7 @@ export default function Freight() {
   // Determine which data to display
   const displayData = useMemo(() => {
     // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
+    if (filtersApplied || debouncedSearch.trim() !== "") {
       console.log("Displaying filtered data:", filteredFreightData);
       return Array.isArray(filteredFreightData) ? filteredFreightData : [];
     }
@@ -261,52 +277,55 @@ export default function Freight() {
     return Array.isArray(freightVal) ? freightVal : [];
   }, [freightVal, filteredFreightData, filtersApplied]);
 
-  // Filter data based on local search term (client-side search on displayed data)
-  const filteredFreightDataForDisplay = useMemo<Freight[]>(() => {
-    if (!localSearchTerm.trim()) {
-      return displayData as Freight[];
-    }
-
-    const searchLower = localSearchTerm.toLowerCase();
-
-    return (displayData as Freight[]).filter((item) => {
-      // Search in tariff charges for carrier and charge details
-      const tariffCharges = item.tariff_charges || [];
-
-      // Check if any tariff charge matches the search criteria
-      const chargeMatches = tariffCharges.some((charge: any) => {
-        const chargeName = charge.charge_name?.toLowerCase() || "";
-        return chargeName.includes(searchLower);
-      });
-
-      // Search in other fields
-      const originName = item.origin_name?.toLowerCase() || "";
-      const destinationName = item.destination_name?.toLowerCase() || "";
-      const validFrom = item.valid_from?.toLowerCase() || "";
-      const validTo = item.valid_to?.toLowerCase() || "";
-      const status = item.status?.toLowerCase() || "";
-      const service = (item.service || "").toLowerCase();
-
-      // Check if search term matches any of these fields
-      return (
-        chargeMatches ||
-        originName.includes(searchLower) ||
-        destinationName.includes(searchLower) ||
-        validFrom.includes(searchLower) ||
-        validTo.includes(searchLower) ||
-        status.includes(searchLower) ||
-        service.includes(searchLower)
-      );
-    });
-  }, [displayData, localSearchTerm]);
-
   // Loading state
   const isLoading = useMemo(() => {
-    if (filtersApplied) {
-      return filteredFreightLoading;
+    if (filtersApplied || debouncedSearch.trim() !== "") {
+      return filteredFreightLoading || filteredFreightFetching;
     }
-    return isFreightLoading;
-  }, [isFreightLoading, filteredFreightLoading, filtersApplied]);
+    return isFreightLoading || isFreightFetching;
+  }, [
+    isFreightLoading,
+    isFreightFetching,
+    filteredFreightLoading,
+    filteredFreightFetching,
+    filtersApplied,
+    debouncedSearch,
+  ]);
+
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    const restored = useListFilterStore.getState().getState(LIST_KEY);
+    if (restored?.shouldRestore) {
+      const restoredFilters = (restored.filters as FilterState) || null;
+      if (restoredFilters) {
+        filterForm.setValues(restoredFilters);
+        setAppliedFilters(restoredFilters);
+        setFiltersApplied(
+          Boolean(
+            restoredFilters.origin ||
+              restoredFilters.destination ||
+              restoredFilters.service ||
+              restoredFilters.valid_from ||
+              restoredFilters.valid_to,
+          ),
+        );
+      }
+      if (typeof restored.search === "string") {
+        setLocalSearchTerm(restored.search);
+      }
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
+    }
+  }, [filterForm]);
+
+  useEffect(() => {
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const erpTheme: ErpListTheme = {
     border: DEFAULT_ERP_LIST_THEME.border,
@@ -319,6 +338,11 @@ export default function Freight() {
     fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
   };
   const { border, fg, fontSans, primary, muted } = erpTheme;
+  const preserveListState = useCallback(() => {
+    setStoreFilters(LIST_KEY, appliedFilters);
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+  }, [appliedFilters, localSearchTerm, setStoreFilters, setStoreSearch]);
 
   const renderFreightActions = useCallback(
     (row: Freight) => (
@@ -331,11 +355,12 @@ export default function Freight() {
         <Menu.Dropdown>
           <Box px={10} py={5}>
             <UnstyledButton
-              onClick={() =>
+              onClick={() => {
+                preserveListState();
                 navigate("/tariff/freight/create", {
                   state: { ...row, actionType: "view" },
-                })
-              }
+                });
+              }}
             >
               <Group gap="sm">
                 <IconEye size={16} style={{ color: primary }} />
@@ -348,11 +373,12 @@ export default function Freight() {
               <Menu.Divider />
               <Box px={10} py={5}>
                 <UnstyledButton
-                  onClick={() =>
+                  onClick={() => {
+                    preserveListState();
                     navigate("/tariff/freight/create", {
                       state: { ...row, actionType: "edit" },
-                    })
-                  }
+                    });
+                  }}
                 >
                   <Group gap="sm">
                     <IconEdit size={16} style={{ color: primary }} />
@@ -365,7 +391,7 @@ export default function Freight() {
         </Menu.Dropdown>
       </Menu>
     ),
-    [navigate, user?.is_staff, primary]
+    [navigate, user?.is_staff, primary, preserveListState]
   );
 
   const freightListColumns = useMemo<TariffListColumn<Freight>[]>(
@@ -481,6 +507,7 @@ export default function Freight() {
 
         // Reset to first page
         setCurrentPage(1);
+        clearStoreFilters(LIST_KEY);
 
         // Invalidate and refetch unfiltered data
         await queryClient.invalidateQueries({ queryKey: ["freight"] });
@@ -503,6 +530,10 @@ export default function Freight() {
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
+      setStoreFilters(LIST_KEY, {
+        ...filterForm.values,
+      });
+      setStoreSearch(LIST_KEY, localSearchTerm);
 
       // Reset to first page when applying filters
       setCurrentPage(1);
@@ -513,8 +544,6 @@ export default function Freight() {
       });
       setShowFilters(false);
 
-      await refetchFilteredFreight();
-
       console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
@@ -524,7 +553,6 @@ export default function Freight() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setLocalSearchTerm("");
     setFiltersApplied(false); // Reset filters applied state
 
     // Reset applied filters state
@@ -542,6 +570,7 @@ export default function Freight() {
 
     // Reset to first page
     setCurrentPage(1);
+    clearStoreFilters(LIST_KEY);
 
     // Invalidate queries and refetch unfiltered data
     await queryClient.invalidateQueries({ queryKey: ["freight"] });
@@ -567,16 +596,6 @@ export default function Freight() {
       setCurrentPage(totalPages);
     }
   }, [totalRecords, pageSize, currentPage]);
-
-  // Refetch data when pagination changes
-  useEffect(() => {
-    if (filtersApplied) {
-      refetchFilteredFreight();
-    } else {
-      refetchFreight();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, pageSize]);
 
   return (
     <>
@@ -658,7 +677,10 @@ export default function Freight() {
                       size="xs"
                       leftSection={<IconPlus size={14} />}
                       styles={erpToolbarPrimaryButtonStyles(erpTheme)}
-                      onClick={() => navigate("/tariff/freight/create")}
+                      onClick={() => {
+                        preserveListState();
+                        navigate("/tariff/freight/create");
+                      }}
                     >
                       Create New
                     </Button>
@@ -823,13 +845,13 @@ export default function Freight() {
                 >
                   <TariffMasterListNativeTable
                     theme={erpTheme}
-                    rows={filteredFreightDataForDisplay}
+                    rows={displayData as Freight[]}
                     getRowKey={(row) => String(row.id)}
                     getSno={(_row, index) =>
                       (currentPage - 1) * pageSize + index + 1
                     }
                     columns={freightListColumns}
-                    isEmpty={filteredFreightDataForDisplay.length === 0}
+                    isEmpty={(displayData as Freight[]).length === 0}
                     emptyIcon={<IconTruck size={24} color={erpTheme.muted} />}
                     emptyTitle="No freight records"
                     renderActions={renderFreightActions}

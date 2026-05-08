@@ -6039,11 +6039,7 @@ function ImportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() =>
-              navigate("/SeaExport/import-job", {
-                state: { refreshData: true },
-              })
-            }
+            onClick={() => navigate("/SeaExport/import-job")}
           >
             Back to List
           </Button>

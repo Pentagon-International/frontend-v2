@@ -365,7 +365,7 @@ import {
   export default function SupplierInvoiceCreate({
     isReversal = false,
     titleOverride,
-    backPath = "/supplier-invoice",
+  backPath = "/supplier-invoice-rcm",
   }: SupplierInvoiceCreateProps = {}) {
     const navigate = useNavigate();
     const location = useLocation();

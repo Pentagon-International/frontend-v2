@@ -543,7 +543,7 @@ function SupplierInvoiceRCMMaster() {
                       setStoreFilters(LIST_KEY, appliedFilters);
                       setStoreSearch(LIST_KEY, search);
                       setShouldRestore(LIST_KEY, true);
-                      navigate("/supplier-invoice/view", {
+                      navigate("/supplier-invoice-rcm/view", {
                         state: row.original,
                       });
                     }}
@@ -566,7 +566,7 @@ function SupplierInvoiceRCMMaster() {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/supplier-invoice/edit", {
+                        navigate("/supplier-invoice-rcm/edit", {
                           state: row.original,
                         });
                       }}
@@ -590,7 +590,7 @@ function SupplierInvoiceRCMMaster() {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/supplier-invoice/reversal/create", {
+                        navigate("/supplier-invoice-rcm/reversal/create", {
                           state: row.original,
                         });
                       }}

@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Loader, Text, Button, TextInput, Menu, Checkbox } from "@mantine/core";
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { Box, Group, Text, Button, TextInput, Menu, Checkbox, ActionIcon } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
 import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
+import { useLocation } from "react-router-dom";
+import { useDebouncedValue } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import SingleDateInput from "../../components/SingleDateInput";
 import FormTextInput from "../../components/FormTextInput";
@@ -10,8 +12,10 @@ import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
 import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
 import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
+import { ERPListTableLoading } from "../../components/ERPListPage/ERPListTableLoading";
 import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
 import { erpToolbarOutlineButtonStyles } from "../../components";
+import { useListFilterStore } from "../../store/listFilterStore";
 
 const DSR_PRIMARY = "#105476";
 const DSR_BORDER = "#e2e8f0";
@@ -51,6 +55,13 @@ type ColumnKey = (typeof COLUMNS)[number]["key"];
 type Row = Record<ColumnKey, string> & { __source?: Record<string, unknown> };
 type EditableKey = "etd" | "eta" | "remark";
 
+type PersistedDsrFilters = {
+  date_from?: string | null;
+  date_to?: string | null;
+  page?: number;
+  pageSize?: number;
+};
+
 function getIdentity(source: unknown): string {
   const src = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
   const bookingId = src["booking_id"] ?? "";
@@ -72,10 +83,23 @@ function asString(v: unknown): string {
 type Props = {
   title: string;
   endpoint: string;
-  serviceType: "Import" | "Export";
+  serviceType: "import" | "export";
 };
 
 export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
+  const location = useLocation();
+  const LIST_KEY = useMemo(
+    () => `OCEAN_${serviceType.toUpperCase()}_DSR`,
+    [serviceType],
+  );
+
+  const getStoreState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
   const [fromDate, setFromDate] = useState<Date | null>(() => dayjs().startOf("month").toDate());
   const [toDate, setToDate] = useState<Date | null>(() => dayjs().toDate());
   const [rows, setRows] = useState<Row[]>([]);
@@ -85,15 +109,55 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
+  const [isRestoring, setIsRestoring] = useState(true);
   const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
     Object.fromEntries(COLUMNS.map((c) => [c.key, true])) as Record<ColumnKey, boolean>,
   );
 
+  // Restore filters/search/page from the global store on navigation back.
+  useEffect(() => {
+    const stored = getStoreState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const f = stored.filters as PersistedDsrFilters;
+      const fd = f.date_from ? dayjs(f.date_from, "YYYY-MM-DD") : null;
+      const td = f.date_to ? dayjs(f.date_to, "YYYY-MM-DD") : null;
+      if (fd?.isValid()) {
+        setFromDate(fd.toDate());
+        setDraftFromDate(fd.toDate());
+      }
+      if (td?.isValid()) {
+        setToDate(td.toDate());
+        setDraftToDate(td.toDate());
+      }
+      if (typeof f.page === "number" && f.page > 0) setPage(f.page);
+      if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
+  }, [location.key]);
+
   const fetchData = useCallback(async () => {
+    if (isRestoring) return;
+    if (search !== debouncedSearch) return;
     try {
       setIsLoading(true);
       if (!fromDate || !toDate) return;
@@ -102,11 +166,15 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
       const offset = (currentPage - 1) * size;
       const listUrl = `${endpoint}?index=${offset}&limit=${size}`;
 
-      const response = await apiCallProtected.post(listUrl, {
+      const trimmedSearch = debouncedSearch.trim();
+      const payload: Record<string, unknown> = {
         service_type: serviceType,
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
-      });
+      };
+      if (trimmedSearch) payload.search = trimmedSearch;
+
+      const response = await apiCallProtected.post(listUrl, payload);
       const body = response as { data?: Record<string, unknown>[]; total?: number; count?: number };
       const list = Array.isArray(body.data) ? body.data : [];
       setTotalRecords(typeof body.total === "number" ? body.total : typeof body.count === "number" ? body.count : list.length);
@@ -148,9 +216,33 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, page, pageSize, endpoint, serviceType, title]);
+  }, [
+    fromDate,
+    toDate,
+    page,
+    pageSize,
+    endpoint,
+    serviceType,
+    title,
+    debouncedSearch,
+    search,
+    isRestoring,
+  ]);
 
-  useEffect(() => setPage(1), [fromDate, toDate]);
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored page.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPage((prev) => (prev === 1 ? prev : 1));
+  }, [debouncedSearch, isRestoring]);
+
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -158,15 +250,6 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const onFieldChange = useCallback((identity: string, field: ColumnKey, value: string) => {
     setRows((prev) => prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)));
   }, []);
-
-  const filteredRows = rows.filter((row) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return COLUMNS.some((column) => {
-      if (!visibleColumns[column.key]) return false;
-      return String(row[column.key] ?? "").toLowerCase().includes(q);
-    });
-  });
 
   const summary = {
     total: rows.length,
@@ -229,7 +312,26 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         ),
         actions: (
           <>
-            <TextInput size="xs" leftSection={<IconSearch size={14} />} placeholder="Search..." value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={220} />
+            <TextInput
+              size="xs"
+              leftSection={<IconSearch size={14} />}
+              rightSection={
+                search ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size="sm"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                ) : null
+              }
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              w={220}
+            />
             <Menu shadow="md" width={220} position="bottom-end">
               <Menu.Target>
                 <Button
@@ -269,8 +371,31 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         footer: (
           <ERPListFilterActionsFooter
             theme={theme}
-            onClear={() => { setDraftFromDate(dayjs().startOf("month").toDate()); setDraftToDate(dayjs().toDate()); }}
-            onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate); setPage(1); setShowFilters(false); }}
+            onClear={() => {
+              const defFrom = dayjs().startOf("month").toDate();
+              const defTo = dayjs().toDate();
+              setDraftFromDate(defFrom);
+              setDraftToDate(defTo);
+              setFromDate(defFrom);
+              setToDate(defTo);
+              setSearch("");
+              setPage(1);
+              clearAllStore(LIST_KEY);
+            }}
+            onApply={() => {
+              setFromDate(draftFromDate);
+              setToDate(draftToDate);
+              setPage(1);
+              setShowFilters(false);
+              const persisted: PersistedDsrFilters = {
+                date_from: draftFromDate ? dayjs(draftFromDate).format("YYYY-MM-DD") : null,
+                date_to: draftToDate ? dayjs(draftToDate).format("YYYY-MM-DD") : null,
+                page: 1,
+                pageSize,
+              };
+              setStoreFilters(LIST_KEY, persisted);
+              setStoreSearch(LIST_KEY, search);
+            }}
             applyLabel="Apply Filters"
           />
         ),
@@ -305,10 +430,12 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         ),
         children: (
           <Box style={TABLE_BODY}>
-            {isLoading ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Loader size="sm" color={DSR_PRIMARY} /></Flex>
-            ) : filteredRows.length === 0 ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this criteria.</Text></Flex>
+            {isRestoring || isLoading ? (
+              <ERPListTableLoading theme={theme} message={`Loading ${title}…`} />
+            ) : rows.length === 0 ? (
+              <Box style={{ minHeight: 200, display: "flex", justifyContent: "center", alignItems: "center" }}>
+                <Text size="sm" c="dimmed">No data available for this criteria.</Text>
+              </Box>
             ) : (
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 1760 }}>
                 <thead>
@@ -321,7 +448,7 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRows.map((row, rowIndex) => {
+                  {rows.map((row, rowIndex) => {
                     const identity = getIdentity(row.__source) || `row-${row.sr_no}-${rowIndex}`;
                     return (
                       <tr key={identity}>

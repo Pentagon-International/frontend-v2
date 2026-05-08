@@ -1648,7 +1648,7 @@ function CallEntry() {
   );
 
   const filterApplyBusy = callEntryLoading || filteredCallEntryLoading;
-  const isTableDataLoading = displayData.length === 0 && isLoading;
+  const isTableDataLoading = isLoading;
 
   return (
     <>

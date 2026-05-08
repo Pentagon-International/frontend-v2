@@ -2334,12 +2334,9 @@ function EnquiryMaster() {
     [summaryVisibleColumns],
   );
 
-  const isSummaryTableDataLoading =
-    !showPreviewTable && tableLoading && tableData.length === 0;
+  const isSummaryTableDataLoading = !showPreviewTable && tableLoading;
   const isPreviewListDataLoading =
-    showPreviewTable &&
-    isPreviewLoading &&
-    (tablePreviewData?.data?.length ?? 0) === 0;
+    showPreviewTable && isPreviewLoading;
 
   return (
     <>

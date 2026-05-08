@@ -433,6 +433,7 @@ function PotentialCustomers() {
   const {
     data: potentialCustomersData = [],
     isLoading: potentialCustomersLoading,
+    isFetching: potentialCustomersFetching,
   } = useQuery({
     queryKey: ["potentialCustomers", statusFilter, currentPage, pageSize],
     queryFn: async () => {
@@ -580,6 +581,7 @@ function PotentialCustomers() {
   const {
     data: filteredPotentialCustomersData = [],
     isLoading: filteredPotentialCustomersLoading,
+    isFetching: filteredPotentialCustomersFetching,
   } = useQuery({
     queryKey: [
       "filteredPotentialCustomers",
@@ -896,12 +898,14 @@ function PotentialCustomers() {
   // Loading state
   const isLoading = useMemo(() => {
     if (filtersApplied || debouncedSearch.trim() !== "") {
-      return filteredPotentialCustomersLoading;
+      return filteredPotentialCustomersLoading || filteredPotentialCustomersFetching;
     }
-    return potentialCustomersLoading;
+    return potentialCustomersLoading || potentialCustomersFetching;
   }, [
     potentialCustomersLoading,
+    potentialCustomersFetching,
     filteredPotentialCustomersLoading,
+    filteredPotentialCustomersFetching,
     filtersApplied,
     debouncedSearch,
   ]);

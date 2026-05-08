@@ -201,6 +201,7 @@ const fetchInvoiceCalculateGstBreakup = async (payload: {
 type ChargeItem = {
   id?: number | null; // primary key from API when editing existing charge
   charge_id: number | null; // id from charge master (value when selecting charge)
+  charge_code?: string; // e.g. ISC / IGST (from API)
   charge_name: string; // display label for charge
   shipment_id?: string; // per-charge shipment id (when from job level, from corresponding HAWB)
   shipper_id?: string; // per-charge shipper id/code (from corresponding HAWB)
@@ -217,6 +218,10 @@ type ChargeItem = {
   amount_in_local: number | null; // Auto-calculated as: amount * roe
   tax_code: string; // sac_code from get-effective-sac / payload
   dr_cr: "Cr" | "Dr"; // Dr/Cr for charge row, default "Cr"
+  is_tax_row?: boolean; // appended tax row during POST; don't fetch/calc GST for this row
+  igst_rate?: number | null;
+  cgst_rate?: number | null;
+  sgst_rate?: number | null;
 };
 
 type InvoiceFormData = {
@@ -816,6 +821,9 @@ function InvoiceCreate({
 
   // Populate form from house (HAWB) state: shipper/Bill To/address and house charges → invoice charges
   useEffect(() => {
+    // After POST, we rehydrate charges from API response. Avoid re-applying the initial
+    // navigation (house) charges, which would overwrite the response values.
+    if (invoiceIsPosted || isPosting) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const isAgent =
@@ -1367,9 +1375,25 @@ function InvoiceCreate({
       fapiao_no: invoiceData.fapiao_no ?? "",
       charges:
         invoiceData.charges && invoiceData.charges.length > 0
-          ? invoiceData.charges.map((c: any) => ({
+          ? invoiceData.charges.map((c: any) => {
+              const chargeCodeUpper = String(c.charge_code ?? "")
+                .trim()
+                .toUpperCase();
+              const isTaxRow =
+                chargeCodeUpper === "IGST" ||
+                chargeCodeUpper === "CGST" ||
+                chargeCodeUpper === "SGST";
+
+              const parseNullableNumber = (v: unknown): number | null => {
+                if (v == null || v === "") return null;
+                const n = typeof v === "number" ? v : parseFloat(String(v));
+                return Number.isFinite(n) ? n : null;
+              };
+
+              return {
               id: c.id != null ? Number(c.id) : null,
               charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+                charge_code: c.charge_code ?? "",
               charge_name: c.charge_name ?? "",
               shipment_id: c.shipment_id
                 ? String(c.shipment_id)
@@ -1450,7 +1474,12 @@ function InvoiceCreate({
                 (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
                   ? "Dr"
                   : chargeDefaultDrCr,
-            }))
+                is_tax_row: isTaxRow,
+                igst_rate: parseNullableNumber(c.igst_rate),
+                cgst_rate: parseNullableNumber(c.cgst_rate),
+                sgst_rate: parseNullableNumber(c.sgst_rate),
+              };
+            })
           : form.values.charges.length > 0
             ? form.values.charges
             : [
@@ -1489,8 +1518,10 @@ function InvoiceCreate({
         idx,
         sac: String(c.tax_code || "").trim(),
         localAmount: c.amount_in_local,
+        isTaxRow: c.is_tax_row === true,
       }))
-      .filter((x) => x.sac !== "");
+      // For appended tax rows, we still want to *display* SAC code but must NOT fetch GST rates.
+      .filter((x) => x.sac !== "" && !x.isTaxRow);
 
     if (sacs.length === 0) {
       // Clear loading states if no SAC codes are present
@@ -1591,6 +1622,32 @@ function InvoiceCreate({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.state, form.values.charges]);
+
+  // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
+  useEffect(() => {
+    const taxRowIndices = (form.values.charges || [])
+      .map((c, idx) => (c.is_tax_row === true ? idx : -1))
+      .filter((idx) => idx >= 0);
+
+    if (taxRowIndices.length === 0) return;
+
+    setGstRatesByChargeIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = null;
+      });
+      return next;
+    });
+
+    setGstRatesLoadingByIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = false;
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.charges]);
 
   // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
   const chargeAmountPerUnits = form.values.charges
@@ -2245,6 +2302,7 @@ function InvoiceCreate({
       // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
       let sacWiseTotals: Array<{
         sac_code?: string;
+        charge_name?: string;
         charge_id?: number;
         total_amount?: number;
         rate?: number;
@@ -2259,11 +2317,22 @@ function InvoiceCreate({
           })) as typeof gstBreakup;
         }
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-        taxes = sacWiseTotals.map((row) => ({
-          tax_code: row.sac_code ?? "",
-          rate: row.rate ?? 0,
-          amount: row.total_amount ?? 0,
-        }));
+        taxes = sacWiseTotals
+          .filter((row) => {
+            const name = String(row.charge_name ?? "")
+              .trim()
+              .toUpperCase();
+            const rate = Number(row.rate ?? 0);
+            // If tax rate is 0%, do not send IGST/CGST/SGST in payload.
+            if ((name === "IGST" || name === "CGST" || name === "SGST") && rate <= 0)
+              return false;
+            return true;
+          })
+          .map((row) => ({
+            tax_code: row.sac_code ?? "",
+            rate: row.rate ?? 0,
+            amount: row.total_amount ?? 0,
+          }));
       }
 
       const topRoe =
@@ -2387,7 +2456,21 @@ function InvoiceCreate({
       // Agent invoice: no tax charges in payload. Customer invoice: append tax rows from sac_wise_totals
       const taxCharges = isAgentPost
         ? []
-        : sacWiseTotals.map((row) => {
+        : sacWiseTotals
+            .filter((row) => {
+              const name = String(row.charge_name ?? "")
+                .trim()
+                .toUpperCase();
+              const rate = Number(row.rate ?? 0);
+              // If tax rate is 0%, do not include IGST/CGST/SGST rows in charge payload.
+              if (
+                (name === "IGST" || name === "CGST" || name === "SGST") &&
+                rate <= 0
+              )
+                return false;
+              return true;
+            })
+            .map((row) => {
             const amt = clampAmount(row.total_amount ?? 0) ?? 0;
             const amountInLocal = clampAmount(amt * topRoe) ?? 0;
             return {
@@ -2401,7 +2484,15 @@ function InvoiceCreate({
               amount: amt,
               amount_in_local: amountInLocal,
               amount_in_header: amountInLocal,
+              // This row is itself a tax amount entry. Keep SAC code visible, but do NOT fetch/calc GST.
               tax_code: row.sac_code ?? "",
+              is_tax_row: true,
+              igst_rate: null,
+              cgst_rate: null,
+              sgst_rate: null,
+              igst: null,
+              cgst: null,
+              sgst: null,
               Dr_Cr: "Cr",
             };
           });
@@ -2495,7 +2586,7 @@ function InvoiceCreate({
           status: response.status ?? "POSTED",
         });
         setInvoiceIsPosted(true);
-        // Re-render charges from POST response (includes tax rows) for view mode
+        // After POST, display charges exactly as returned by API.
         if (response.charges && Array.isArray(response.charges)) {
           const mappedCharges: ChargeItem[] = response.charges.map((c) => {
             const noOfUnit =
@@ -2534,6 +2625,25 @@ function InvoiceCreate({
                   ? parseFloat(c.amount_in_header)
                   : c.amount_in_header
                 : null;
+
+            const chargeCodeUpper = String(
+              (c as { charge_code?: string | null }).charge_code ?? "",
+            )
+              .trim()
+              .toUpperCase();
+            const isTaxRow =
+              (c as { is_tax_row?: boolean | null }).is_tax_row === true ||
+              chargeCodeUpper === "IGST" ||
+              chargeCodeUpper === "CGST" ||
+              chargeCodeUpper === "SGST" ||
+              // Heuristic fallback for tax-only line items
+              ((c.unit_id == null || String(c.unit_id).trim() === "") &&
+                (noOfUnit == null || noOfUnit === 0) &&
+                (amountPerUnit == null || amountPerUnit === 0) &&
+                ((c as any).igst_rate == null ||
+                  (c as any).cgst_rate == null ||
+                  (c as any).sgst_rate == null));
+
             return {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
@@ -2564,8 +2674,28 @@ function InvoiceCreate({
               tax_code:
                 c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
               dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
+              is_tax_row: isTaxRow,
+              igst_rate: (() => {
+                const raw = (c as any).igst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              cgst_rate: (() => {
+                const raw = (c as any).cgst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              sgst_rate: (() => {
+                const raw = (c as any).sgst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
             };
           });
+
           form.setFieldValue("charges", mappedCharges);
         }
         ToastNotification({
@@ -2633,9 +2763,20 @@ function InvoiceCreate({
     }
   };
 
-  const headerSameState = Object.values(gstRatesByChargeIndex).find(
-    (rates) => rates?.same_state !== undefined,
-  )?.same_state;
+  const headerSameState = (() => {
+    const fromFetchedRates = Object.values(gstRatesByChargeIndex).find(
+      (rates) => rates?.same_state !== undefined,
+    )?.same_state;
+    if (fromFetchedRates !== undefined) return fromFetchedRates;
+
+    // Fallback for cases where rates haven't been fetched yet (or were skipped for tax rows):
+    // infer intra/inter state from non-tax rows' returned rates (from POST response mapping).
+    const nonTax = (form.values.charges || []).filter((c) => c.is_tax_row !== true);
+    if (nonTax.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0))
+      return true;
+    if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    return undefined;
+  })();
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -3855,6 +3996,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="CGST"
                           value={(() => {
+                          const code = String(charge.charge_code ?? "")
+                            .trim()
+                            .toUpperCase();
+                          if (
+                            charge.is_tax_row === true ||
+                            code === "IGST" ||
+                            code === "CGST" ||
+                            code === "SGST"
+                          )
+                            return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -3897,6 +4048,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="SGST"
                           value={(() => {
+                          const code = String(charge.charge_code ?? "")
+                            .trim()
+                            .toUpperCase();
+                          if (
+                            charge.is_tax_row === true ||
+                            code === "IGST" ||
+                            code === "CGST" ||
+                            code === "SGST"
+                          )
+                            return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -3940,6 +4101,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="IGST"
                           value={(() => {
+                          const code = String(charge.charge_code ?? "")
+                            .trim()
+                            .toUpperCase();
+                          if (
+                            charge.is_tax_row === true ||
+                            code === "IGST" ||
+                            code === "CGST" ||
+                            code === "SGST"
+                          )
+                            return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
