@@ -2302,6 +2302,7 @@ function InvoiceCreate({
       // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
       let sacWiseTotals: Array<{
         sac_code?: string;
+        charge_name?: string;
         charge_id?: number;
         total_amount?: number;
         rate?: number;
@@ -2316,11 +2317,22 @@ function InvoiceCreate({
           })) as typeof gstBreakup;
         }
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-        taxes = sacWiseTotals.map((row) => ({
-          tax_code: row.sac_code ?? "",
-          rate: row.rate ?? 0,
-          amount: row.total_amount ?? 0,
-        }));
+        taxes = sacWiseTotals
+          .filter((row) => {
+            const name = String(row.charge_name ?? "")
+              .trim()
+              .toUpperCase();
+            const rate = Number(row.rate ?? 0);
+            // If tax rate is 0%, do not send IGST/CGST/SGST in payload.
+            if ((name === "IGST" || name === "CGST" || name === "SGST") && rate <= 0)
+              return false;
+            return true;
+          })
+          .map((row) => ({
+            tax_code: row.sac_code ?? "",
+            rate: row.rate ?? 0,
+            amount: row.total_amount ?? 0,
+          }));
       }
 
       const topRoe =
@@ -2444,7 +2456,21 @@ function InvoiceCreate({
       // Agent invoice: no tax charges in payload. Customer invoice: append tax rows from sac_wise_totals
       const taxCharges = isAgentPost
         ? []
-        : sacWiseTotals.map((row) => {
+        : sacWiseTotals
+            .filter((row) => {
+              const name = String(row.charge_name ?? "")
+                .trim()
+                .toUpperCase();
+              const rate = Number(row.rate ?? 0);
+              // If tax rate is 0%, do not include IGST/CGST/SGST rows in charge payload.
+              if (
+                (name === "IGST" || name === "CGST" || name === "SGST") &&
+                rate <= 0
+              )
+                return false;
+              return true;
+            })
+            .map((row) => {
             const amt = clampAmount(row.total_amount ?? 0) ?? 0;
             const amountInLocal = clampAmount(amt * topRoe) ?? 0;
             return {

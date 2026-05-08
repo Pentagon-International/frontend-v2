@@ -1065,6 +1065,18 @@ export default function ReceiptCreate({
       return;
     }
 
+    // Open the tab immediately (popup blockers allow this on user gesture).
+    // Never navigate away from the Receipt page.
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the invoice in a new tab.",
+      });
+      return;
+    }
+
     try {
       setIsOpeningInvoiceFromModal(true);
       const res = await apiCallProtected.get(
@@ -1088,16 +1100,29 @@ export default function ReceiptCreate({
         : "";
       const mode = statusUpper === "POSTED" ? "view" : "edit";
 
-      setInvoiceModalOpen(false);
-      // Prevent loader overlap with Invoice page loader.
       setIsOpeningInvoiceFromModal(false);
-      navigate(`/air/import-job/invoice/${mode}/${docId}`);
+      const invoicePath = `/invoice/${mode}/${docId}`;
+      const invoiceUrl = new window.URL(
+        invoicePath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = invoiceUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
     } catch (e: unknown) {
       console.error("Failed to open invoice", e);
       ToastNotification({
         type: "error",
         message: "Unable to open invoice details.",
       });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
       setIsOpeningInvoiceFromModal(false);
     }
   };
@@ -2962,15 +2987,11 @@ export default function ReceiptCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.document_amount != null
-                            ? typeof inv.document_amount === "number"
-                              ? inv.document_amount.toFixed(2)
-                              : String(inv.document_amount)
-                            : inv.total != null
-                              ? typeof inv.total === "number"
-                                ? inv.total.toFixed(2)
-                                : String(inv.total)
-                              : "—"}
+                          {inv.amount != null
+                            ? typeof inv.amount === "number"
+                              ? inv.amount.toFixed(2)
+                              : String(inv.amount)
+                            : "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}
