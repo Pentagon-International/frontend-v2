@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, type CSSProperties } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Alert,
   ActionIcon,
@@ -8,7 +8,6 @@ import {
   Grid,
   MantineProvider,
   rem,
-  Stack,
   Text,
   TextInput,
 } from "@mantine/core";
@@ -20,7 +19,12 @@ import {
   IconTable,
   IconX,
 } from "@tabler/icons-react";
-import type { MRT_PaginationState } from "mantine-react-table";
+import {
+  MantineReactTable,
+  useMantineReactTable,
+  type MRT_ColumnDef,
+  type MRT_PaginationState,
+} from "mantine-react-table";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import * as yup from "yup";
@@ -37,14 +41,9 @@ import {
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
-  erpListDataRowProps,
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
-  erpListTableElementStyle,
-  erpListTdCellToneStyle,
-  erpListThStyle,
   erpToolbarOutlineButtonStyles,
-  ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme, ErpListBodyCellTone } from "../../../components";
@@ -99,20 +98,74 @@ type EntryColumn = {
 const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "sno", label: "S.No.", span: 0.4 },
   { key: "location", label: "Location", span: 0.65 },
-  { key: "day_book_code", label: "Day Book", span: 0.65 },
-  { key: "day_book_type", label: "Doc Type", span: 0.65 },
+  { key: "day_book_code", label: "Day Book", span: 0.85 },
+  { key: "day_book_type", label: "Type", span: 0.65 },
   { key: "document_no", label: "Doc No", span: 1.25 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
   { key: "service", label: "Service", span: 0.55 },
   { key: "job_id", label: "Job Id", span: 0.95 },
   { key: "shipment_no", label: "Shipment No", span: 1.0 },
-  { key: "debit_local_amount", label: "Debit", span: 0.75 },
-  { key: "credit_local_amount", label: "Credit", span: 0.75 },
+  { key: "debit_local_amount", label: "Debit", span: 0.95 },
+  { key: "credit_local_amount", label: "Credit", span: 0.95 },
   { key: "narration", label: "Narration", span: 1 },
-  { key: "amount", label: "Amount", span: 0.75 },
+  { key: "amount", label: "Amount", span: 0.95 },
   { key: "closing_balance", label: "Closing Bal", span: 0.8 },
 ];
+
+function entryColumnId(col: MRT_ColumnDef<SubledgerEntryRow>): string {
+  if (col.id) return col.id;
+  if ("accessorKey" in col && col.accessorKey) return String(col.accessorKey);
+  return "";
+}
+
+function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
+  // Keep early identifier columns compact (Receipt list-like density).
+  switch (key) {
+    case "sno":
+      return 60;
+    case "location":
+      return 80;
+    case "day_book_code":
+      return 80;
+    case "day_book_type":
+      return 80;
+    case "document_no":
+      return 140;
+    case "date_document":
+    case "due_date":
+      return 130;
+    case "service":
+      return 80;
+    case "job_id":
+      return 130;
+    case "shipment_no":
+      return 130;
+    case "debit_local_amount":
+    case "credit_local_amount":
+    case "amount":
+      return 120;
+    case "closing_balance":
+      return 120;
+    case "narration":
+      return 120;
+    default:
+      return 140;
+  }
+}
+
+function subledgerCellAlign(
+  key: keyof SubledgerEntryRow,
+): "left" | "center" | "right" {
+  // User request: align debit/credit/amount values properly (center align).
+  if (
+    key === "debit_local_amount" ||
+    key === "credit_local_amount" ||
+    key === "amount"
+  )
+    return "center";
+  return subledgerThTextAlign(key);
+}
 
 function formatAmount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -234,7 +287,10 @@ const SUBLEDGER_FILTER_SELECT_CLASSNAMES = {
 
 type SubledgerColumnKey = (typeof ENTRY_COLUMNS)[number]["key"];
 
-const buildDefaultSubledgerColumnVisibility = (): Record<SubledgerColumnKey, boolean> =>
+const buildDefaultSubledgerColumnVisibility = (): Record<
+  SubledgerColumnKey,
+  boolean
+> =>
   Object.fromEntries(ENTRY_COLUMNS.map((c) => [c.key, true])) as Record<
     SubledgerColumnKey,
     boolean
@@ -265,7 +321,9 @@ const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   location: yup.string().nullable().optional(),
 });
 
-function subledgerColumnTone(key: keyof SubledgerEntryRow): ErpListBodyCellTone {
+function subledgerColumnTone(
+  key: keyof SubledgerEntryRow,
+): ErpListBodyCellTone {
   if (key === "date_document" || key === "due_date") return "muted";
   if (
     key === "debit_local_amount" ||
@@ -278,32 +336,8 @@ function subledgerColumnTone(key: keyof SubledgerEntryRow): ErpListBodyCellTone 
   return "default";
 }
 
-function subledgerThTextAlign(
-  key: keyof SubledgerEntryRow,
-): "left" | "right" {
+function subledgerThTextAlign(key: keyof SubledgerEntryRow): "left" | "right" {
   return subledgerColumnTone(key) === "numeric" ? "right" : "left";
-}
-
-function subledgerTdStyle(
-  theme: ErpListTheme,
-  key: keyof SubledgerEntryRow,
-): CSSProperties {
-  const tone = subledgerColumnTone(key);
-  const base = erpListTdCellToneStyle(theme, tone);
-  if (key === "narration") {
-    return {
-      ...base,
-      maxWidth: 280,
-      whiteSpace: "normal",
-      verticalAlign: "top",
-      color: theme.fg,
-      fontSize: 14,
-    };
-  }
-  if (tone === "default") {
-    return { ...base, color: theme.fg, fontSize: 14 };
-  }
-  return base;
 }
 
 export default function SubledgerEnquiry() {
@@ -318,18 +352,17 @@ export default function SubledgerEnquiry() {
   const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [showFilters, setShowFilters] = useState(true);
-  const [appliedFilters, setAppliedFilters] = useState<AppliedFilterSummary | null>(
-    null,
-  );
+  const [appliedFilters, setAppliedFilters] =
+    useState<AppliedFilterSummary | null>(null);
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
-  const [visibleColumns, setVisibleColumns] = useState<Record<SubledgerColumnKey, boolean>>(
-    () => buildDefaultSubledgerColumnVisibility(),
-  );
+  const [visibleColumns, setVisibleColumns] = useState<
+    Record<SubledgerColumnKey, boolean>
+  >(() => buildDefaultSubledgerColumnVisibility());
 
   const dateFormat = useDateFormat();
   const form = useForm<FilterFormValues>({
@@ -397,7 +430,10 @@ export default function SubledgerEnquiry() {
   const listTotalCount = resultTotal ?? rows.length;
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pagination.pageSize));
+    const totalPages = Math.max(
+      1,
+      Math.ceil(filteredRows.length / pagination.pageSize),
+    );
     const maxPageIndex = totalPages - 1;
     if (pagination.pageIndex > maxPageIndex) {
       setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
@@ -466,64 +502,67 @@ export default function SubledgerEnquiry() {
     });
   }, [user]);
 
-  const runSubledgerEnquiry = useCallback(async (values: FilterFormValues) => {
-    setFetchError("");
-    setIsFetchingRows(true);
+  const runSubledgerEnquiry = useCallback(
+    async (values: FilterFormValues) => {
+      setFetchError("");
+      setIsFetchingRows(true);
 
-    try {
-      const trimmedLocation = values.location?.trim();
-      const date_from = formatDateYYYYMMDD(values.fromDate);
-      const date_to = formatDateYYYYMMDD(values.toDate);
-      const account_code = String(values.accountCode);
-      const payload = {
-        filters: {
+      try {
+        const trimmedLocation = values.location?.trim();
+        const date_from = formatDateYYYYMMDD(values.fromDate);
+        const date_to = formatDateYYYYMMDD(values.toDate);
+        const account_code = String(values.accountCode);
+        const payload = {
+          filters: {
+            date_from,
+            date_to,
+            account_code,
+            ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
+            ...(trimmedLocation ? { location: trimmedLocation } : {}),
+          },
+        };
+
+        const response = (await postAPICall(
+          URL.subledgerEnquiry,
+          payload,
+          API_HEADER,
+        )) as SubledgerEnquiryResponse;
+
+        const list = Array.isArray(response?.data) ? response.data : [];
+        setRows(list);
+        setResultTotal(
+          typeof response?.total === "number" ? response.total : list.length,
+        );
+        setEnquirySummary({
+          opening_balance:
+            typeof response?.opening_balance === "number"
+              ? response.opening_balance
+              : null,
+          closing_balance:
+            typeof response?.closing_balance === "number"
+              ? response.closing_balance
+              : null,
+        });
+        setAppliedFilters({
           date_from,
           date_to,
           account_code,
           ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
-        },
-      };
-
-      const response = (await postAPICall(
-        URL.subledgerEnquiry,
-        payload,
-        API_HEADER,
-      )) as SubledgerEnquiryResponse;
-
-      const list = Array.isArray(response?.data) ? response.data : [];
-      setRows(list);
-      setResultTotal(
-        typeof response?.total === "number" ? response.total : list.length,
-      );
-      setEnquirySummary({
-        opening_balance:
-          typeof response?.opening_balance === "number"
-            ? response.opening_balance
-            : null,
-        closing_balance:
-          typeof response?.closing_balance === "number"
-            ? response.closing_balance
-            : null,
-      });
-      setAppliedFilters({
-        date_from,
-        date_to,
-        account_code,
-        ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
-        ...(trimmedLocation ? { location: trimmedLocation } : {}),
-        ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
-      });
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    } catch {
-      setRows([]);
-      setEnquirySummary(null);
-      setResultTotal(null);
-      setFetchError("Unable to fetch subledger data. Please try again.");
-    } finally {
-      setIsFetchingRows(false);
-    }
-  }, [selectedAccountName, selectedSlCode]);
+          ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
+        });
+        setPagination((p) => ({ ...p, pageIndex: 0 }));
+      } catch {
+        setRows([]);
+        setEnquirySummary(null);
+        setResultTotal(null);
+        setFetchError("Unable to fetch subledger data. Please try again.");
+      } finally {
+        setIsFetchingRows(false);
+      }
+    },
+    [selectedAccountName, selectedSlCode],
+  );
 
   const downloadSubledgerCsv = useCallback(async () => {
     if (!appliedFilters) return;
@@ -537,7 +576,9 @@ export default function SubledgerEnquiry() {
           ...(appliedFilters.subledger_code
             ? { subledger_code: appliedFilters.subledger_code }
             : {}),
-          ...(appliedFilters.location ? { location: appliedFilters.location } : {}),
+          ...(appliedFilters.location
+            ? { location: appliedFilters.location }
+            : {}),
           csv: true,
         },
       };
@@ -564,7 +605,9 @@ export default function SubledgerEnquiry() {
         try {
           parsed = JSON.parse(fullText) as typeof parsed;
         } catch {
-          throw new Error(fullText.slice(0, 500) || "Invalid response from server");
+          throw new Error(
+            fullText.slice(0, 500) || "Invalid response from server",
+          );
         }
         const raw = parsed.detail ?? parsed.message ?? parsed.error ?? fullText;
         const msg = Array.isArray(raw)
@@ -585,7 +628,10 @@ export default function SubledgerEnquiry() {
       if (data instanceof Blob) {
         try {
           const text = await data.text();
-          const parsed = JSON.parse(text) as { detail?: string; message?: string };
+          const parsed = JSON.parse(text) as {
+            detail?: string;
+            message?: string;
+          };
           message = parsed.detail || parsed.message || text || message;
         } catch {
           /* keep default message */
@@ -621,8 +667,10 @@ export default function SubledgerEnquiry() {
   const appliedFilterItems = useMemo(() => {
     if (!appliedFilters) return [];
     const items: Array<{ key: string; value: string }> = [];
-    if (appliedFilters.date_from) items.push({ key: "From", value: appliedFilters.date_from });
-    if (appliedFilters.date_to) items.push({ key: "To", value: appliedFilters.date_to });
+    if (appliedFilters.date_from)
+      items.push({ key: "From", value: appliedFilters.date_from });
+    if (appliedFilters.date_to)
+      items.push({ key: "To", value: appliedFilters.date_to });
     if (appliedFilters.account_name)
       items.push({ key: "Account Name", value: appliedFilters.account_name });
     if (appliedFilters.account_code)
@@ -657,6 +705,7 @@ export default function SubledgerEnquiry() {
                   value={listTotalCount}
                   label="Total"
                 />
+
                 {appliedFilterItems.length > 0 ? (
                   <Text
                     size="xs"
@@ -674,13 +723,21 @@ export default function SubledgerEnquiry() {
                       .join(" | ")}
                   >
                     {appliedFilterItems.map((item, idx) => (
-                      <span key={`${item.key}-${idx}`}>
-                        <Text component="span" inherit fw={600}>
+                      <span
+                        key={`${item.key}-${idx}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "baseline",
+                          gap: 4,
+                          fontFamily: erpTheme.fontSans,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, fontFamily: erpTheme.fontSans }}>
                           {item.key}:
-                        </Text>{" "}
-                        <Text component="span" inherit fw={400}>
+                        </span>{" "}
+                        <span style={{ fontWeight: 400, fontFamily: erpTheme.fontSans }}>
                           {item.value}
-                        </Text>
+                        </span>
                         {idx < appliedFilterItems.length - 1 ? " | " : ""}
                       </span>
                     ))}
@@ -780,7 +837,9 @@ export default function SubledgerEnquiry() {
                     leftSection={<IconBook2 size={14} />}
                     onClick={() => void downloadSubledgerCsv()}
                     loading={isDownloadingCsv}
-                    disabled={isDownloadingCsv || isFetchingRows || !appliedFilters}
+                    disabled={
+                      isDownloadingCsv || isFetchingRows || !appliedFilters
+                    }
                   >
                     Download
                   </Button>
@@ -834,7 +893,10 @@ export default function SubledgerEnquiry() {
                         classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                         styles={{
                           ...SUBLEDGER_FILTER_UNIFIED_STYLES,
-                          input: { ...SUBLEDGER_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                          input: {
+                            ...SUBLEDGER_FILTER_UNIFIED_STYLES.input,
+                            minHeight: 32,
+                          },
                         }}
                       />
                     </Box>
@@ -859,13 +921,16 @@ export default function SubledgerEnquiry() {
                         classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                         styles={{
                           ...SUBLEDGER_FILTER_UNIFIED_STYLES,
-                          input: { ...SUBLEDGER_FILTER_UNIFIED_STYLES.input, minHeight: 32 },
+                          input: {
+                            ...SUBLEDGER_FILTER_UNIFIED_STYLES.input,
+                            minHeight: 32,
+                          },
                         }}
                       />
                     </Box>
                   </Grid.Col>
 
-                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Grid.Col span={{ base: 12, sm: 12, md: 8, xl: 4 }}>
                     <Box
                       style={{
                         display: "flex",
@@ -891,7 +956,9 @@ export default function SubledgerEnquiry() {
                           const glName = String(item.gl_name ?? "").trim();
                           return {
                             value: id,
-                            label: [name, gl, glName].filter(Boolean).join(" - "),
+                            label: [name, gl, glName]
+                              .filter(Boolean)
+                              .join(" - "),
                           };
                         }}
                         displayValue={selectedAccount?.account_name ?? ""}
@@ -917,7 +984,8 @@ export default function SubledgerEnquiry() {
                           );
                           setSelectedAccount({
                             id:
-                              originalData.id !== undefined && originalData.id !== null
+                              originalData.id !== undefined &&
+                              originalData.id !== null
                                 ? Number(originalData.id)
                                 : undefined,
                             gl_account_code:
@@ -940,7 +1008,13 @@ export default function SubledgerEnquiry() {
                           ...erpListGeistSelectClassNames,
                           ...SUBLEDGER_FILTER_SELECT_CLASSNAMES,
                         }}
-                        styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
+                        styles={{
+                          ...SUBLEDGER_FILTER_UNIFIED_STYLES,
+                          input: {
+                            ...SUBLEDGER_FILTER_UNIFIED_STYLES.input,
+                            minHeight: 32,
+                          },
+                        }}
                       />
                     </Box>
                   </Grid.Col>
@@ -965,7 +1039,9 @@ export default function SubledgerEnquiry() {
                         value={form.values.location}
                         dropdownZIndex={1100}
                         searchable={false}
-                        onChange={(value) => form.setFieldValue("location", value)}
+                        onChange={(value) =>
+                          form.setFieldValue("location", value)
+                        }
                         size="xs"
                         classNames={erpListGeistSelectClassNames}
                         styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
@@ -978,14 +1054,19 @@ export default function SubledgerEnquiry() {
           }}
           table={{
             footer:
-              !isFetchingRows && !(rows.length === 0 && enquirySummary === null) ? (
+              !isFetchingRows &&
+              !(rows.length === 0 && enquirySummary === null) ? (
                 <ERPListPaginationFooter
                   theme={erpTheme}
                   totalRecords={filteredRows.length}
                   pageIndex={pagination.pageIndex}
                   pageSize={pagination.pageSize}
-                  onPageIndexChange={(i) => setPagination((p) => ({ ...p, pageIndex: i }))}
-                  onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
+                  onPageIndexChange={(i) =>
+                    setPagination((p) => ({ ...p, pageIndex: i }))
+                  }
+                  onPageSizeChange={(size) =>
+                    setPagination({ pageIndex: 0, pageSize: size })
+                  }
                   selectClassNames={SUBLEDGER_FILTER_SELECT_CLASSNAMES}
                 />
               ) : undefined,
@@ -1015,127 +1096,20 @@ export default function SubledgerEnquiry() {
                     hint="Open filters, choose an account and date range, then run Search"
                   />
                 ) : (
-                  <Box
-                    style={{ minWidth: 1100, paddingBottom: 8 }}
-                    className={ERP_LIST_GEIST_ROOT_CLASS}
-                  >
-                    <table
-                      style={{
-                        ...erpListTableElementStyle(erpTheme),
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        fontSize: 14,
-                        backgroundColor: cardBg,
-                      }}
-                    >
-                      <thead>
-                        <tr>
-                          {visibleEntryColumns.map((col) => (
-                            <th
-                              key={col.key}
-                              style={erpListThStyle(erpTheme, {
-                                textAlign: subledgerThTextAlign(col.key),
-                              })}
-                            >
-                              {col.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={Math.max(visibleEntryColumns.length, 1)}
-                              style={{
-                                padding: 60,
-                                textAlign: "center",
-                                borderBottom: `1px solid ${border}`,
-                              }}
-                            >
-                              <Stack align="center" gap="md">
-                                <Box
-                                  style={{
-                                    width: 48,
-                                    height: 48,
-                                    borderRadius: "50%",
-                                    backgroundColor: ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <IconTable size={24} color={muted} />
-                                </Box>
-                                <Box>
-                                  <Text
-                                    fw={500}
-                                    c={fg}
-                                    style={{ fontFamily: erpTheme.fontSans }}
-                                  >
-                                    No subledger entries found
-                                  </Text>
-                                  <Text
-                                    size="sm"
-                                    c={muted}
-                                    mt={4}
-                                    style={{ fontFamily: erpTheme.fontSans }}
-                                  >
-                                    Try adjusting your search or filters
-                                  </Text>
-                                </Box>
-                              </Stack>
-                            </td>
-                          </tr>
-                        ) : filteredRows.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={Math.max(visibleEntryColumns.length, 1)}
-                              style={{
-                                padding: 60,
-                                textAlign: "center",
-                                borderBottom: `1px solid ${border}`,
-                              }}
-                            >
-                              <Stack align="center" gap="md">
-                                <Text fw={500} c={fg} style={{ fontFamily: erpTheme.fontSans }}>
-                                  No entries match your search
-                                </Text>
-                                <Text size="sm" c={muted} style={{ fontFamily: erpTheme.fontSans }}>
-                                  Clear the toolbar search or try different keywords
-                                </Text>
-                              </Stack>
-                            </td>
-                          </tr>
-                        ) : (
-                          pagedRows.map((row, index) => {
-                            const rowInteraction = erpListDataRowProps(erpTheme);
-                            return (
-                              <tr
-                                key={`${row.sno ?? index}-${row.document_no ?? index}`}
-                                style={rowInteraction.style}
-                                onMouseEnter={rowInteraction.onMouseEnter}
-                                onMouseLeave={rowInteraction.onMouseLeave}
-                              >
-                                {visibleEntryColumns.map((col) => (
-                                  <td
-                                    key={col.key}
-                                    style={subledgerTdStyle(erpTheme, col.key)}
-                                  >
-                                    {formatSubledgerCell(
-                                      col.key,
-                                      row[col.key],
-                                      dateFormat,
-                                    ) || "—"}
-                                  </td>
-                                ))}
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </Box>
+                  <SubledgerTable
+                    theme={erpTheme}
+                    borderColor={border}
+                    backgroundColor={cardBg}
+                    mutedColor={muted}
+                    headerBg={erpTheme.headerBg}
+                    fgColor={fg}
+                    dateFormat={dateFormat}
+                    entryColumns={visibleEntryColumns}
+                    rows={pagedRows}
+                    rowCount={filteredRows.length}
+                    pagination={pagination}
+                    onPaginationChange={setPagination}
+                  />
                 )}
               </>
             ),
@@ -1143,5 +1117,151 @@ export default function SubledgerEnquiry() {
         />
       </Box>
     </MantineProvider>
+  );
+}
+
+function SubledgerTable(props: {
+  theme: ErpListTheme;
+  borderColor: string;
+  backgroundColor: string;
+  headerBg: string;
+  mutedColor: string;
+  fgColor: string;
+  dateFormat: unknown;
+  entryColumns: EntryColumn[];
+  rows: SubledgerEntryRow[];
+  rowCount: number;
+  pagination: MRT_PaginationState;
+  onPaginationChange: (
+    updater:
+      | MRT_PaginationState
+      | ((prev: MRT_PaginationState) => MRT_PaginationState),
+  ) => void;
+}) {
+  const {
+    theme,
+    borderColor,
+    backgroundColor,
+    headerBg,
+    mutedColor,
+    dateFormat,
+    entryColumns,
+    rows,
+    rowCount,
+    pagination,
+    onPaginationChange,
+  } = props;
+
+  const allColumns = useMemo<MRT_ColumnDef<SubledgerEntryRow>[]>(
+    () =>
+      ENTRY_COLUMNS.map((c) => ({
+        id: String(c.key),
+        accessorKey: String(c.key),
+        header: c.label,
+        size: subledgerMrtColumnSize(c.key),
+        minSize: Math.min(subledgerMrtColumnSize(c.key), 120),
+        maxSize: c.key === "narration" ? 520 : undefined,
+        grow: false,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<unknown>();
+          return formatSubledgerCell(c.key, value, dateFormat) || "—";
+        },
+      })),
+    [dateFormat],
+  );
+
+  const visibleColumns = useMemo(
+    () =>
+      allColumns.filter((col) => {
+        const id = entryColumnId(col);
+        return entryColumns.some((c) => String(c.key) === id);
+      }),
+    [allColumns, entryColumns],
+  );
+
+  const table = useMantineReactTable({
+    columns: visibleColumns,
+    data: rows,
+    enableColumnFilters: false,
+    enablePagination: true,
+    enableTopToolbar: false,
+    enableColumnActions: false,
+    enableSorting: false,
+    enableBottomToolbar: false,
+    enableStickyHeader: true,
+    layoutMode: "grid",
+    manualPagination: true,
+    onPaginationChange,
+    rowCount,
+    state: { pagination },
+    mantineTableProps: {
+      striped: false,
+      highlightOnHover: true,
+      withTableBorder: false,
+      withColumnBorders: false,
+    },
+    mantinePaperProps: {
+      shadow: "none",
+      p: 0,
+      radius: 0,
+      withBorder: false,
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        backgroundColor: "transparent",
+      },
+    },
+    mantineTableBodyCellProps: ({ column }) => {
+      const key = column.id as keyof SubledgerEntryRow;
+      const tone = subledgerColumnTone(key);
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: theme.fontSans,
+          color: tone === "muted" ? mutedColor : mutedColor,
+          backgroundColor,
+          textAlign: subledgerCellAlign(key),
+          borderBottom: `1px solid ${borderColor}`,
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      const key = column.id as keyof SubledgerEntryRow;
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: theme.fontSans,
+          color: mutedColor,
+          backgroundColor: headerBg,
+          borderBottom: `1px solid ${borderColor}`,
+          textAlign: subledgerCellAlign(key),
+          whiteSpace: "nowrap",
+        },
+      };
+    },
+    mantineTableContainerProps: {
+      style: {
+        height: "100%",
+        flexGrow: 1,
+        minHeight: 0,
+        position: "relative",
+        overflow: "auto",
+      },
+    },
+  });
+
+  return (
+    <Box
+      style={{ minWidth: 1100, paddingBottom: 8 }}
+      className={ERP_LIST_GEIST_ROOT_CLASS}
+    >
+      <MantineReactTable table={table} />
+    </Box>
   );
 }
