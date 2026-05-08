@@ -360,6 +360,10 @@ const NavigationRoutes = () => {
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
         <Route path="/job-ledger" element={<JobLedger />} />
+        {/* Generic invoice routes (shared component across modules) */}
+        <Route path="/invoice" element={<InvoiceCreate />} />
+        <Route path="/invoice/edit/:id" element={<InvoiceCreate />} />
+        <Route path="/invoice/view/:id" element={<InvoiceCreate />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
         <Route path="/receipt/view" element={<ReceiptCreate />} />

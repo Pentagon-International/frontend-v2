@@ -233,72 +233,82 @@ const customerValidationSchema = yup.object({
     .oneOf(["true", "false"], "Please select a valid option"),
 });
 
+const addressItemSchema = yup.object({
+  // customer_location: yup.string().required("Location is required"),
+  address_type: yup
+    .string()
+    .required("Address type is required")
+    .oneOf(
+      ["Primary", "Secondary", "Billing", "Shipping"],
+      "Please select a valid address type",
+    ),
+  address: yup
+    .string()
+    .required("Address is required")
+    .min(5, "Address must be at least 5 characters")
+    .max(500, "Address must not exceed 500 characters"),
+  country: yup
+    .string()
+    .required("Country is required")
+    .min(2, "Country must be at least 2 characters")
+    .max(50, "Country must not exceed 50 characters"),
+  phone_no: yup
+    .string()
+    .matches(
+      /^$|^[\d\s\-+()]+$/,
+      "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
+    )
+    .max(20, "Phone number must not exceed 20 characters"),
+  mobile_no: yup.string().required("Mobile number is required"),
+  email: yup
+    .string()
+    .email("Please enter a valid email address")
+    .required("Email is required")
+    .max(100, "Email must not exceed 100 characters"),
+  trn_no: yup.string().optional().max(30, "TRN No must not exceed 30 characters"),
+  validity_date: yup.string().nullable().optional(),
+  pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
+  gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
+  tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
+  arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
+  uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
+  gst_registration_status: yup.string().optional(),
+  composite_regular: yup
+    .string()
+    .optional()
+    .oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
+  sez: yup.boolean().optional(),
+  msme: yup.boolean().optional(),
+  latitude: yup
+    .number()
+    .optional()
+    .min(-90, "Latitude must be between -90 and 90")
+    .max(90, "Latitude must be between -90 and 90"),
+  longitude: yup
+    .number()
+    .optional()
+    .min(-180, "Longitude must be between -180 and 180")
+    .max(180, "Longitude must be between -180 and 180"),
+});
+
 const addressValidationSchema = yup.object({
+  addresses_data: yup.array().of(addressItemSchema).min(1, "At least one address is required"),
+});
+
+const addressValidationSchemaCreate = yup.object({
   addresses_data: yup
     .array()
     .of(
-      yup.object({
-        // customer_location: yup
-        //   .string()
-        //   .required("Location is required")
-        //   .min(2, "Location must be at least 2 characters")
-        //   .max(100, "Location must not exceed 100 characters"),
-        address_type: yup
+      addressItemSchema.shape({
+        // PAN/GST mandatory during create when these fields exist in UI.
+        pan_no: yup
           .string()
-          .required("Address type is required")
-          .oneOf(
-            ["Primary", "Secondary", "Billing", "Shipping"],
-            "Please select a valid address type",
-          ),
-        address: yup
+          .required("PAN No is required")
+          .max(20, "PAN must not exceed 20 characters"),
+        gst_id: yup
           .string()
-          .required("Address is required")
-          .min(5, "Address must be at least 5 characters")
-          .max(500, "Address must not exceed 500 characters"),
-        country: yup
-          .string()
-          .required("Country is required")
-          .min(2, "Country must be at least 2 characters")
-          .max(50, "Country must not exceed 50 characters"),
-        phone_no: yup
-          .string()
-          .matches(
-            /^$|^[\d\s\-+()]+$/,
-            "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
-          )
-          .max(20, "Phone number must not exceed 20 characters"), // Optional - lanline number
-        mobile_no: yup
-          .string()
-          .required("Mobile number is required"),
-        email: yup
-          .string()
-          .email("Please enter a valid email address")
-          .required("Email is required")
-          .max(100, "Email must not exceed 100 characters"),
-        trn_no: yup
-          .string()
-          .optional()
-          .max(30, "TRN No must not exceed 30 characters"),
-        validity_date: yup.string().nullable().optional(),
-        pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
-        gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
-        tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
-        arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
-        uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
-        gst_registration_status: yup.string().optional(),
-        composite_regular: yup.string().optional().oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
-        sez: yup.boolean().optional(),
-        msme: yup.boolean().optional(),
-        latitude: yup
-          .number()
-          .optional()
-          .min(-90, "Latitude must be between -90 and 90")
-          .max(90, "Latitude must be between -90 and 90"),
-        longitude: yup
-          .number()
-          .optional()
-          .min(-180, "Longitude must be between -180 and 180")
-          .max(180, "Longitude must be between -180 and 180"),
+          .required("GST No is required")
+          .max(20, "GST No must not exceed 20 characters"),
       }),
     )
     .min(1, "At least one address is required"),
@@ -1347,8 +1357,10 @@ function CustomerCreate() {
         },
       ],
     },
-    // Only apply validation in edit mode, not in view mode
-    validate: isViewMode ? undefined : yupResolver(addressValidationSchema),
+    // Create: PAN/GST mandatory (when fields exist). Edit: keep previous optional behavior.
+    validate: isViewMode
+      ? undefined
+      : yupResolver(isCreateMode ? addressValidationSchemaCreate : addressValidationSchema),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,
