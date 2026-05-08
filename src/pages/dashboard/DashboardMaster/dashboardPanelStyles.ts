@@ -1,7 +1,9 @@
 import type { CSSProperties } from "react";
+import { erpListGeistRootTypography } from "../../../components";
 
-/** Shared shell for Sales dashboard widgets (ERP-style consistency). */
+/** Shared shell for Sales dashboard widgets — Geist rhythm aligned with AirExportBookingMaster. */
 export const dashboardPanelShell: CSSProperties = {
+  ...erpListGeistRootTypography,
   background: "#ffffff",
   border: "1px solid #E2E8F0",
   borderRadius: "12px",
@@ -36,17 +38,19 @@ export const dashboardPanelBody: CSSProperties = {
 };
 
 export const dashboardPanelTitleStyle: CSSProperties = {
+  fontFamily: "Geist",
   fontSize: "14px",
-  fontWeight: 600,
+  fontWeight: "550",
   color: "#0F172A",
-  letterSpacing: "0.02em",
   lineHeight: 1.3,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 export const dashboardViewAllStyle: CSSProperties = {
+  fontFamily: erpListGeistRootTypography.fontFamily,
+  fontSize: 14,
+  fontWeight: 500,
+  WebkitFontSmoothing: erpListGeistRootTypography.WebkitFontSmoothing,
+  MozOsxFontSmoothing: erpListGeistRootTypography.MozOsxFontSmoothing,
   textDecoration: "underline",
   cursor: "pointer",
   whiteSpace: "nowrap",

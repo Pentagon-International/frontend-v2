@@ -15,6 +15,7 @@ import {
   Button,
   Textarea,
   SimpleGrid,
+  MantineProvider,
 } from "@mantine/core";
 import { IconSearch, IconX, IconSend } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -61,7 +62,13 @@ import {
   extractNumericValue,
   extractEnquiryConversionOverviewMeta,
 } from "../../../service/dashboard.service";
-import { DetailedViewTable, DateRangeInput } from "../../../components";
+import {
+  DetailedViewTable,
+  DateRangeInput,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistMantineTheme,
+  erpListGeistRootTypography,
+} from "../../../components";
 import dayjs from "dayjs";
 import CustomerInteractionStatus from "./CustomerInteractionStatus";
 import CallEntrySection from "./CallEntrySection";
@@ -118,7 +125,7 @@ const dashSegmentTabActive = {
   root: {
     height: 32,
     fontSize: 12,
-    fontWeight: 700,
+    fontWeight: 600,
     color: "#0F172A",
     backgroundColor: "#ffffff",
     border: "none",
@@ -132,7 +139,7 @@ const dashSegmentTabActive = {
       backgroundColor: "#ffffff",
     },
   },
-  label: { fontWeight: 700 },
+  label: { fontWeight: 600 },
 } as const;
 
 const dashToolbarSearchInputStyles = {
@@ -7682,22 +7689,22 @@ const Dashboard = () => {
   ]);
 
   return (
-    <Box
-      mx={{ base: -16, sm: -24 }}
-      pb="xs"
-      pt={0}
-      h="calc(100vh - 95px)"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        boxSizing: "border-box",
-        backgroundColor: DASH_PAGE_BG,
-        minWidth: 0,
-        fontFamily: DASH_TOOLBAR_FONT,
-        WebkitFontSmoothing: "antialiased",
-        MozOsxFontSmoothing: "grayscale",
-      }}
-    >
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        mx={{ base: -16, sm: -24 }}
+        pb="xs"
+        pt={0}
+        h="calc(100vh - 95px)"
+        style={{
+          ...erpListGeistRootTypography,
+          display: "flex",
+          flexDirection: "column",
+          boxSizing: "border-box",
+          backgroundColor: DASH_PAGE_BG,
+          minWidth: 0,
+        }}
+      >
       {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
       {!showDetailedView && (
         <Box
@@ -7773,7 +7780,7 @@ const Dashboard = () => {
                 >
                   Booking
                 </Button>
-                <Button
+                {/* <Button
                   variant="transparent"
                   size="xs"
                   styles={
@@ -7796,7 +7803,7 @@ const Dashboard = () => {
                   onClick={() => setActiveTab("customer-service-import")}
                 >
                   CS Import
-                </Button>
+                </Button> */}
                 <Button
                   variant="transparent"
                   size="xs"
@@ -8362,6 +8369,17 @@ const Dashboard = () => {
         }
         size="lg"
         centered
+        classNames={{
+          content: ERP_LIST_GEIST_ROOT_CLASS,
+          body: ERP_LIST_GEIST_ROOT_CLASS,
+          header: ERP_LIST_GEIST_ROOT_CLASS,
+          inner: ERP_LIST_GEIST_ROOT_CLASS,
+        }}
+        styles={{
+          content: { ...erpListGeistRootTypography },
+          body: { ...erpListGeistRootTypography },
+          header: { ...erpListGeistRootTypography },
+        }}
         overlayProps={{
           backgroundOpacity: 0.55,
           blur: 3,
@@ -8438,6 +8456,7 @@ const Dashboard = () => {
         </Stack>
       </Modal>
     </Box>
+    </MantineProvider>
   );
 };
 

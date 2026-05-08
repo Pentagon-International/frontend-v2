@@ -205,7 +205,7 @@ export const URL = {
     expected: "expected/",
     booking: "customer-service-shipment/formatted-list/",
     customerServiceDashboardSummary:
-      "customer-service-shipment/dashboard-summary/",
+      "pipeline/dashboard-cs/",
     customerServiceDashboardShipments:
       "customer-service-shipment/dashboard-shipments/",
     gainedQuotationsWithoutBooking:

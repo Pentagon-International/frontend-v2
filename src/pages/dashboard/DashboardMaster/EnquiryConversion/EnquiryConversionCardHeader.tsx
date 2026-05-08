@@ -35,14 +35,15 @@ export function EnquiryConversionCardHeader({
       >
         <Text
           fz={{ base: 16, sm: 17 }}
-          fw={700}
+          fw={600}
           c={enquiryConversionColors.heading}
           lh={1.25}
           style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            letterSpacing: "-0.01em",
+            fontFamily: "Geist",
+            fontSize: "14px",
+            fontWeight: "550",
+            color: "#0F172A",
+            lineHeight: 1.3,
           }}
         >
           {title}

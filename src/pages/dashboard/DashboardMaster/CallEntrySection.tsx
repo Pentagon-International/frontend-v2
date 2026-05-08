@@ -59,18 +59,19 @@ const CallEntrySection = ({
 }: CallEntrySectionProps) => {
   return (
     <Box style={dashboardPanelShell}>
-      <Box style={dashboardPanelHeaderBand}>
-        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
-          <Group gap="sm" align="center" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-            <UnstyledButton
+                  <UnstyledButton
               type="button"
               onClick={() =>
                 openDashboard(onOpenCallEntryDashboard, handleCallEntryViewAll)
               }
-              style={{ textAlign: "left" }}
+              style={{ textAlign: "left" ,}}
             >
-              <Text style={dashboardPanelTitleStyle}>Call Entry Activity</Text>
-            </UnstyledButton>
+      {/* <Box style={dashboardPanelHeaderBand}> */}
+        {/* <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%"> */}
+          <Group  align="center" wrap="nowrap" justify="space-between" style={{ flex: 1, minWidth: 0 , fontFamily: "Geist", fontWeight: "550", }}>
+              <Box style={{ flex: 1, minWidth: 0 , marginTop: -20, }}>
+              <Text style={[dashboardPanelTitleStyle,]}>Call Entry Activity</Text>
+              </Box>
             <UnstyledButton
               type="button"
               onClick={() =>
@@ -79,7 +80,7 @@ const CallEntrySection = ({
               aria-label="Open call entry details"
               style={{
                 ...headerArrowButtonSx,
-                marginTop: 0,
+                marginTop: -10,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = "#105476";
@@ -111,8 +112,8 @@ const CallEntrySection = ({
               </Box>
             )}
           </Group>
-        </Group>
-      </Box>
+        {/* </Group> */}
+      {/* </Box> */}
 
       <Box style={dashboardPanelBody}>
         <CallEntryActivity
@@ -120,6 +121,7 @@ const CallEntrySection = ({
           isLoading={isLoadingCallEntry}
         />
       </Box>
+      </UnstyledButton>
     </Box>
   );
 };

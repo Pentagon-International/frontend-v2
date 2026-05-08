@@ -576,6 +576,7 @@ export interface EnquiryDrilldownService {
     container_type?: string;
     container_name?: string;
     no_of_containers?: number | string;
+    gross_weight?: number | string;
   }>;
 }
 

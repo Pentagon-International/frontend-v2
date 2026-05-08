@@ -139,7 +139,7 @@ const OutstandingVsOverdueCard = ({
     >
       <Box style={dashboardPanelHeaderBand}>
         <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
-          <Group gap={8} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={8} wrap="nowrap" justify="space-between" style={{ flex: 1, minWidth: 0 , fontFamily: "Geist", fontWeight: "550", }}>
             <Text style={dashboardPanelTitleStyle}>Outstanding vs Overdue</Text>
             <UnstyledButton
               type="button"

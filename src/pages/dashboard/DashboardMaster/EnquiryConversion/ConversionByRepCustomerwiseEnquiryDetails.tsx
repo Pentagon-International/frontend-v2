@@ -220,7 +220,15 @@ function cargoSummary(e: EnquiryDrilldownEnquiry): string {
 }
 
 function weightLabel(e: EnquiryDrilldownEnquiry): string {
-  const w = e.services?.[0]?.gross_weight;
+  let w: number | string | null = null;
+  if (e.services?.[0]?.service === "FCL") {
+    console.log( "FFFFFF:" ,e.services?.[0]?.fcl_details?.[0]?.gross_weight);
+     w = (e.services?.[0]?.fcl_details?.[0]?.gross_weight ?? 0);
+  }
+  else
+  {
+     w = e.services?.[0]?.gross_weight ?? 0;
+  }
   if (w == null || w === "") return "—";
   const n = typeof w === "number" ? w : parseFloat(String(w));
   if (!Number.isFinite(n)) return "—";
