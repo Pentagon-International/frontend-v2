@@ -2611,6 +2611,40 @@ function QuotationCreate({
     currentServiceId,
   ]);
 
+  // Default charge currency for newly added charge rows:
+  // use the currently selected quote currency (branch currency proxy),
+  // otherwise fall back to user's currency, else INR.
+  const defaultChargeCurrencyCode =
+    quotationForm.values.quote_currency_country_code ||
+    userCurrencyCode ||
+    "INR";
+
+  // Keep charges currency in sync for *new/blank* rows only.
+  useEffect(() => {
+    const nextCurrency = defaultChargeCurrencyCode;
+    if (!nextCurrency) return;
+    const current = dynamicForm.values.charges;
+    if (!Array.isArray(current) || current.length === 0) return;
+
+    const updated = current.map((c) => {
+      const cur = String(c.currency_country_code ?? "").trim();
+      if (cur) return c; // preserve existing/older charges as received
+      return {
+        ...c,
+        currency_country_code: nextCurrency,
+        roe: getRoeValue(nextCurrency),
+      };
+    });
+
+    const changed = updated.some(
+      (c, i) =>
+        c.currency_country_code !== current[i]?.currency_country_code ||
+        String(c.roe) !== String(current[i]?.roe),
+    );
+    if (changed) dynamicForm.setValues({ charges: updated });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultChargeCurrencyCode]);
+
   // Service selection handler - defined after data is available
   const handleServiceSelect = useCallback(
     (index: number) => {
@@ -5425,8 +5459,17 @@ function QuotationCreate({
                                   onClick={() =>
                                     dynamicForm.insertListItem("charges", {
                                       charge_name: "",
-                                      currency_country_code: "",
-                                      roe: 1,
+                                      currency_country_code:
+                                        quotationForm.values
+                                          .quote_currency_country_code ||
+                                        userCurrencyCode ||
+                                        "INR",
+                                      roe: getRoeValue(
+                                        quotationForm.values
+                                          .quote_currency_country_code ||
+                                          userCurrencyCode ||
+                                          "INR",
+                                      ),
                                       unit: "",
                                       no_of_units: "",
                                       sell_per_unit: "",
@@ -6660,8 +6703,17 @@ function QuotationCreate({
                               onClick={() =>
                                 dynamicForm.insertListItem("charges", {
                                   charge_name: "",
-                                  currency_country_code: "",
-                                  roe: 1,
+                                  currency_country_code:
+                                    quotationForm.values
+                                      .quote_currency_country_code ||
+                                    userCurrencyCode ||
+                                    "INR",
+                                  roe: getRoeValue(
+                                    quotationForm.values
+                                      .quote_currency_country_code ||
+                                      userCurrencyCode ||
+                                      "INR",
+                                  ),
                                   unit: "",
                                   no_of_units: "",
                                   sell_per_unit: "",
