@@ -75,12 +75,10 @@ export const CollapsibleNav = ({
   const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;
 
   // now compute isActive (depends on opened)
-  const isActive =
-    activeNav === label ||
-    (activeNav === "Transportation" &&
-      (label === "Air" || label === "Ocean")) ||
-    hasActiveChild ||
-    opened;
+  // Note: For "Air" and "Ocean", we deliberately rely on `hasActiveChild`
+  // (which inspects activeSubNav prefixes) rather than `activeNav === "Transportation"`
+  // — otherwise both collapsibles light up together for any Transportation sub-page.
+  const isActive = activeNav === label || hasActiveChild || opened;
 
   // refs for positioning flyout in collapsed mode
   const navRef = useRef<HTMLDivElement | null>(null);

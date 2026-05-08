@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   Group,
@@ -42,6 +42,8 @@ import {
   IconPlaneDeparture,
   IconPlaneArrival,
   IconMapPin,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -847,6 +849,7 @@ function AirExportBookingMaster() {
   const setStoreSearch = useListFilterStore((s) => s.setSearch);
   const setStoreDisplayValues = useListFilterStore((s) => s.setDisplayValues);
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
@@ -935,6 +938,7 @@ function AirExportBookingMaster() {
   const {
     data: exportShipmentsResponse,
     isLoading,
+    isFetching,
     refetch: refetchExportShipments,
   } = useQuery<AirExportListQueryResult>({
     queryKey: ["air-export-booking/filter/", pageIndex, pageSize, filtersApplied,
@@ -1071,7 +1075,21 @@ function AirExportBookingMaster() {
     [visibleColumns],
   );
 
-  const isDataLoading = isRestoring || isLoading;
+  const isDataLoading = isRestoring || isLoading || isFetching;
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Use a ref to skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPageIndex((prev) => (prev === 0 ? prev : 0));
+  }, [debouncedSearch, isRestoring]);
 
   // ---- restore state ----
   useEffect(() => {
@@ -1105,7 +1123,7 @@ function AirExportBookingMaster() {
   }, [location.key]);
 
   // ---- persist & navigate ----
-  const persistListAndNavigate = useCallback(() => {
+  const persistListState = useCallback(() => {
     const persisted: PersistedListFilters = {
       booking_id: filterForm.values.booking_id, enquiry_id: filterForm.values.enquiry_id,
       customer: filterForm.values.customer, service: filterForm.values.service,
@@ -1117,8 +1135,12 @@ function AirExportBookingMaster() {
     setStoreDisplayValues(LIST_KEY, { customer: customerDisplayName, origin: originDisplayName, destination: destinationDisplayName });
     setStoreSearch(LIST_KEY, searchQuery);
     setShouldRestore(LIST_KEY, true);
+  }, [filterForm.values, filtersApplied, showFilters, pageIndex, customerDisplayName, originDisplayName, destinationDisplayName, searchQuery, setStoreFilters, setStoreDisplayValues, setStoreSearch, setShouldRestore]);
+
+  const persistListAndNavigate = useCallback(() => {
+    persistListState();
     navigate("./create");
-  }, [filterForm.values, filtersApplied, showFilters, pageIndex, customerDisplayName, originDisplayName, destinationDisplayName, searchQuery, navigate, setStoreFilters, setStoreDisplayValues, setStoreSearch, setShouldRestore]);
+  }, [persistListState, navigate]);
 
   // ---- refetch effects ----
   useEffect(() => {
@@ -1184,6 +1206,25 @@ function AirExportBookingMaster() {
     } else {
       setPageIndex(0);
       setFiltersApplied(true);
+      const persisted: PersistedListFilters = {
+        booking_id: v.booking_id,
+        enquiry_id: v.enquiry_id,
+        customer: v.customer,
+        service: v.service,
+        origin: v.origin,
+        destination: v.destination,
+        date: v.date ? dayjs(v.date).format("YYYY-MM-DD") : null,
+        filtersApplied: true,
+        showFilters: false,
+        pageIndex: 0,
+      };
+      setStoreFilters(LIST_KEY, persisted);
+      setStoreDisplayValues(LIST_KEY, {
+        customer: customerDisplayName,
+        origin: originDisplayName,
+        destination: destinationDisplayName,
+      });
+      setStoreSearch(LIST_KEY, searchQuery);
       ToastNotification({ type: "success", message: "Filters applied" });
     }
     setShowFilters(false);
@@ -1198,6 +1239,7 @@ function AirExportBookingMaster() {
     setOriginDisplayName(null);
     setDestinationDisplayName(null);
     setShowFilters(false);
+    clearAllStore(LIST_KEY);
     queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
     ToastNotification({ type: "success", message: "Filters cleared" });
   };
@@ -1316,11 +1358,11 @@ function AirExportBookingMaster() {
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconEye size={14} />} disabled={isCancel}
-            onClick={() => { if (!isCancel) navigate("./edit", { state: { job: row } }); }}>
+            onClick={() => { if (!isCancel) { persistListState(); navigate("./edit", { state: { job: row } }); } }}>
             View Details
           </Menu.Item>
           <Menu.Item leftSection={<IconEdit size={14} />} disabled={isCancel}
-            onClick={() => { if (!isCancel) navigate("./edit", { state: { job: row } }); }}>
+            onClick={() => { if (!isCancel) { persistListState(); navigate("./edit", { state: { job: row } }); } }}>
             Edit Booking
           </Menu.Item>
           {/* <Menu.Item leftSection={<IconCopy size={14} />}
@@ -1505,6 +1547,35 @@ function AirExportBookingMaster() {
                   items={columnToggleItems}
                   menuStyles={v0MenuStyles}
                   classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                />
+                <FormTextInput
+                  placeholder="Search..."
+                  leftSection={<IconSearch size={14} />}
+                  rightSection={
+                    searchQuery ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={() => setSearchQuery("")}
+                        aria-label="Clear search"
+                      >
+                        <IconX size={14} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  w={220}
+                  size="xs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  styles={{
+                    input: {
+                      height: 32,
+                      minHeight: 32,
+                      fontSize: 12,
+                      borderColor: border,
+                      fontFamily: V0_FONT_SANS,
+                    },
+                  }}
                 />
                 <Button
                   variant="default"

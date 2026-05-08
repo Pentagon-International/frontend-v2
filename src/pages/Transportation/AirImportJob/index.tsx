@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import type { MRT_PaginationState } from "mantine-react-table";
 import {
   Group,
@@ -8,7 +8,6 @@ import {
   Box,
   Menu,
   ActionIcon,
-  Loader,
   Modal,
   Grid,
   TextInput,
@@ -386,7 +385,24 @@ function AirImportJobMaster() {
     }
   }, [totalRecords, pageSize, pageIndex]);
 
-  const isLoading = importJobFetching || importJobLoading || isInitialLoad;
+  const isLoading =
+    isRestoring || importJobFetching || importJobLoading || isInitialLoad;
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+  }, [debouncedSearch, isRestoring]);
 
   const handleConfirmCancel = async () => {
     if (!cancelConfirmRow) return;
@@ -773,27 +789,6 @@ function AirImportJobMaster() {
               <ERPListTableLoading theme={theme} message="Loading air import jobs…" />
             ) : (
               <Box style={{ position: "relative", flex: 1, minHeight: 0 }}>
-                {importJobFetching && importJobData.length > 0 ? (
-                  <Box
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      backgroundColor: "rgba(255, 255, 255, 0.8)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 10,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Stack align="center" gap="md">
-                      <Loader size="lg" color={primary} />
-                      <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
-                        Refreshing…
-                      </Text>
-                    </Stack>
-                  </Box>
-                ) : null}
                 <table style={erpListBookingMasterTableStyle(theme)}>
                   <thead>
                     <tr>

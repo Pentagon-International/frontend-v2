@@ -77,6 +77,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/air/import-to-export-booking")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Import to Export Booking");
+    } else if (path.startsWith("/air/import-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Air import DSR");
+    } else if (path.startsWith("/air/export-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Air export DSR");
     } else if (path.startsWith("/air")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Export Job Generation"); // Default
@@ -107,6 +113,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport/import-to-export-booking")) {
       setActiveNav("Transportation");
       setActiveSubNav("Ocean Import to Export Booking");
+    } else if (path.startsWith("/SeaExport/import-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Ocean Import DSR");
+    } else if (path.startsWith("/SeaExport/export-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Ocean Export DSR");
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Job Generation"); // Default to FCL

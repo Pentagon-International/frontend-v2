@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -9,11 +9,9 @@ import {
   Group,
   Button,
   Text,
-  Stack,
   Box,
   Menu,
   ActionIcon,
-  Loader,
   Modal,
   Badge,
   Grid,
@@ -406,7 +404,24 @@ function AirExportJobMaster() {
     [exportJobData, pagination.pageIndex, pagination.pageSize]
   );
 
-  const isDataLoading = isRestoring || exportJobLoading || isInitialLoad;
+  const isDataLoading =
+    isRestoring || exportJobLoading || exportJobFetching || isInitialLoad;
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+  }, [debouncedSearch, isRestoring]);
 
   /** Aligned with `AirExportBookingMaster` list table (padding, palette, route column). */
   const border = "#e2e8f0";
@@ -1112,41 +1127,7 @@ function AirExportJobMaster() {
                 title="No jobs found"
               />
             ) : (
-              <div
-                style={{
-                  position: "relative",
-                  flex: 1,
-                  minHeight: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                {exportJobFetching && !isDataLoading && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "rgba(255, 255, 255, 0.8)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 10,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Stack align="center" gap="md">
-                      <Loader size="lg" color={primary} />
-                      <Text c="dimmed" size="sm" style={{ fontFamily: V0_FONT_SANS }}>
-                        Refreshing data...
-                      </Text>
-                    </Stack>
-                  </div>
-                )}
-                <MantineReactTable table={table} />
-              </div>
+              <MantineReactTable table={table} />
             ),
           }}
         />

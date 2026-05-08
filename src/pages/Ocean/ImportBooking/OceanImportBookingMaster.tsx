@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   ActionIcon,
   Box,
@@ -328,6 +328,7 @@ function OceanImportBookingMaster() {
   const setStoreSearch = useListFilterStore((s) => s.setSearch);
   const setStoreDisplayValues = useListFilterStore((s) => s.setDisplayValues);
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
@@ -654,7 +655,7 @@ function OceanImportBookingMaster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
   }, [location.key]);
 
-  const persistListAndNavigate = useCallback(() => {
+  const persistListState = useCallback(() => {
     const persisted: PersistedListFilters = {
       booking_id: filterForm.values.booking_id,
       enquiry_id: filterForm.values.enquiry_id,
@@ -677,7 +678,6 @@ function OceanImportBookingMaster() {
     });
     setStoreSearch(LIST_KEY, searchQuery);
     setShouldRestore(LIST_KEY, true);
-    navigate("./create");
   }, [
     filterForm.values,
     filtersApplied,
@@ -687,14 +687,32 @@ function OceanImportBookingMaster() {
     originDisplayName,
     destinationDisplayName,
     searchQuery,
-    navigate,
     setStoreFilters,
     setStoreDisplayValues,
     setStoreSearch,
     setShouldRestore,
   ]);
 
-  const isDataLoading = isRestoring || isLoading;
+  const persistListAndNavigate = useCallback(() => {
+    persistListState();
+    navigate("./create");
+  }, [persistListState, navigate]);
+
+  const isDataLoading = isRestoring || isLoading || isFetching;
+
+  // Reset to first page whenever the search term changes (after debounce).
+  // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
+  const lastDebouncedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    if (lastDebouncedSearchRef.current === null) {
+      lastDebouncedSearchRef.current = debouncedSearch;
+      return;
+    }
+    if (lastDebouncedSearchRef.current === debouncedSearch) return;
+    lastDebouncedSearchRef.current = debouncedSearch;
+    setPageIndex((prev) => (prev === 0 ? prev : 0));
+  }, [debouncedSearch, isRestoring]);
 
   useEffect(() => {
     if (!isApplyingFilters) return;
@@ -782,6 +800,28 @@ function OceanImportBookingMaster() {
       setPageIndex(0);
       setFiltersApplied(true);
       setIsApplyingFilters(true);
+
+      const persisted: PersistedListFilters = {
+        booking_id: formValues.booking_id,
+        enquiry_id: formValues.enquiry_id,
+        customer: formValues.customer,
+        service: formValues.service,
+        origin: formValues.origin,
+        destination: formValues.destination,
+        date: formValues.date
+          ? dayjs(formValues.date).format("YYYY-MM-DD")
+          : null,
+        filtersApplied: true,
+        showFilters: false,
+        pageIndex: 0,
+      };
+      setStoreFilters(LIST_KEY, persisted);
+      setStoreDisplayValues(LIST_KEY, {
+        customer: customerDisplayName,
+        origin: originDisplayName,
+        destination: destinationDisplayName,
+      });
+      setStoreSearch(LIST_KEY, searchQuery);
     } catch (error) {
       ToastNotification({
         type: "error",
@@ -823,6 +863,7 @@ function OceanImportBookingMaster() {
       setCustomerDisplayName(null);
       setOriginDisplayName(null);
       setDestinationDisplayName(null);
+      clearAllStore(LIST_KEY);
       await queryClient.invalidateQueries({
         queryKey: ["ocean-import-booking/filter/"],
       });
@@ -879,6 +920,7 @@ function OceanImportBookingMaster() {
                 disabled={isCancel}
                 onClick={() => {
                   if (!isCancel) {
+                    persistListState();
                     navigate(`./edit`, {
                       state: { job: row },
                     });
@@ -914,7 +956,7 @@ function OceanImportBookingMaster() {
         </Menu>
       );
     },
-    [navigate],
+    [navigate, persistListState],
   );
 
   const border = DEFAULT_ERP_LIST_THEME.border;
