@@ -194,6 +194,8 @@ import {
     document_date?: string;
     due_date?: string;
     total?: number | string;
+    document_amount?: number | string;
+    amount?: number | string;
     amount_in_local?: number | string;
     daybook_id?: number | string;
     day_book_id?: number | string;
@@ -201,6 +203,7 @@ import {
     day_book_type?: string;
     currency_id?: number | string;
     currency_code?: string;
+    roe?: number | string;
     [key: string]: unknown;
   };
   
@@ -261,6 +264,8 @@ import {
       amount?: string | number;
       local_amount?: string | number;
       dr_cr?: string;
+      is_tds_calcualted_record?: boolean;
+      is_tds_calculated_record?: boolean;
     }>;
     allocations?: Array<{
       id?: number;
@@ -315,7 +320,10 @@ import {
     supporting_documents: SupportingDocument[];
   };
   
-  const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+  const getDefaultDetailRow = (
+    localCurrency: string,
+    forReversal = false,
+  ): DetailRow => ({
     subledger_id: null,
     account_code: "",
     customer_code: "",
@@ -325,7 +333,7 @@ import {
     roe: 1,
     amount: null,
     local_amount: null,
-    dr_cr: "Cr",
+    dr_cr: forReversal ? "Dr" : "Cr",
   });
   
   const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -449,6 +457,40 @@ import {
     const n = parseFloat(String(amountInLocal).trim());
     return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
   }
+
+  /** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
+  function firstNonEmptyString(
+    ...candidates: Array<string | number | null | undefined>
+  ): string {
+    for (const c of candidates) {
+      if (c == null) continue;
+      const s = String(c).trim();
+      if (s !== "") return s;
+    }
+    return "";
+  }
+
+  function isPartyTdsCalculatedRecord(p: {
+    is_tds_calcualted_record?: unknown;
+    is_tds_calculated_record?: unknown;
+  }): boolean {
+    const raw =
+      p.is_tds_calcualted_record ?? p.is_tds_calculated_record;
+    if (raw === true || raw === 1) return true;
+    if (raw === false || raw === 0) return false;
+    const s = String(raw ?? "").trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  }
+
+  function receiptPartyDrCrToSide(
+    drCr: string | undefined | null,
+  ): "Dr" | "Cr" {
+    return String(drCr ?? "").trim().toLowerCase() === "dr" ? "Dr" : "Cr";
+  }
+
+  function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
+    return side === "Dr" ? "Cr" : "Dr";
+  }
   
   type ReceiptCreateProps = {
     titleOverride?: string;
@@ -541,7 +583,7 @@ import {
         branch: "",
         cheque_no: "",
         cheque_date: null,
-        details: [getDefaultDetailRow(localCurrency)],
+        details: [getDefaultDetailRow(localCurrency, _isReversal)],
         adjustments: [getDefaultAdjustmentRow(localCurrency)],
         supporting_documents: [] as SupportingDocument[],
       },
@@ -688,8 +730,7 @@ import {
       const parties = Array.isArray(receiptFromState.parties)
         ? receiptFromState.parties
         : [];
-      // Party details: subledger_name = UI label (Account Name), subledger_code = value sent in payload. Set both for every row.
-      // Receipt Reversal: party Dr/Cr default is "Dr". Receipt Create: use source or "Cr".
+      // Party details: same as ReceiptCreate (reversal create: Dr, or flip receipt Dr/Cr for TDS rows).
       const details: DetailRow[] =
         parties.length > 0
           ? parties.map((p) => ({
@@ -704,10 +745,14 @@ import {
               amount: parseNum(p.amount),
               local_amount: parseNum(p.local_amount),
               dr_cr: _isReversal
-                ? ("Dr" as const)
+                ? isReversalEditOrView
+                  ? receiptPartyDrCrToSide(p.dr_cr)
+                  : isPartyTdsCalculatedRecord(p)
+                    ? flipDrCr(receiptPartyDrCrToSide(p.dr_cr))
+                    : ("Dr" as const)
                 : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
             }))
-          : [getDefaultDetailRow(localCurrency)];
+          : [getDefaultDetailRow(localCurrency, _isReversal)];
   
       const allocations = receiptFromState.allocations;
       const adjustments: AdjustmentRow[] =
@@ -831,41 +876,41 @@ import {
       }
     }, [form.values.currency, localCurrency, userCountryCode]);
   
-    // When party details Local Amount changes: set header Local Amount = sum(party details), header Amount = header Local Amount / header ROE (same idea as party: adj local → party local, party amount = party local/roe)
-    const partyLocalAmountsSnapshot = form.values.details
-      .map((d) => d.local_amount ?? "")
+    // When party details change: header amount = Σ(Cr) − Σ(Dr) (same as ReceiptCreate)
+    const partyNetSnapshot = form.values.details
+      .map(
+        (d) =>
+          `${d.dr_cr}|${d.amount ?? ""}|${d.local_amount ?? ""}|${d.roe ?? ""}`,
+      )
       .join(";");
     useEffect(() => {
-      const sum = (form.values.details ?? []).reduce(
-        (s, d) =>
-          s +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      );
-      const headerLocal = clampAmount(sum);
+      const details = form.values.details ?? [];
+      const netAmount = details.reduce((s, d) => {
+        const sign = d.dr_cr === "Dr" ? -1 : 1;
+        const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+        return s + sign * amt;
+      }, 0);
+      const headerAmount = clampAmount(netAmount);
       const roeVal = form.values.roe;
-      const derivedHeaderAmount =
-        headerLocal != null &&
+      const headerLocal =
+        headerAmount != null &&
         roeVal != null &&
         Number.isFinite(roeVal) &&
         roeVal !== 0
-          ? clampAmount(headerLocal / roeVal)
+          ? clampAmount(headerAmount * roeVal)
           : null;
+
+      if (form.values.amount !== headerAmount) {
+        form.setFieldValue("amount", headerAmount);
+      }
       if (form.values.local_amount !== headerLocal) {
         form.setFieldValue("local_amount", headerLocal);
       }
-      if (
-        derivedHeaderAmount != null &&
-        form.values.amount !== derivedHeaderAmount
-      ) {
-        form.setFieldValue("amount", derivedHeaderAmount);
-      }
-    }, [partyLocalAmountsSnapshot]);
-  
-    // Header: when user changes ROE or Amount, set Local Amount = Amount × ROE (same as party details; header not forced to party sum)
+    }, [partyNetSnapshot, form.values.roe]);
+
+    // Header: keep local_amount aligned with amount only when no party rows exist
     useEffect(() => {
+      if ((form.values.details ?? []).length > 0) return;
       const amt = form.values.amount;
       const roeVal = form.values.roe;
       const local =
@@ -947,7 +992,7 @@ import {
   
     const addDetailRow = () => {
       setLoadedDetails(null);
-      form.insertListItem("details", getDefaultDetailRow(localCurrency));
+      form.insertListItem("details", getDefaultDetailRow(localCurrency, _isReversal));
     };
   
     const removeDetailRow = (idx: number) => {
@@ -1050,19 +1095,31 @@ import {
             ? parseDocumentDate(inv.document_date as string)
             : null;
         const totalNum =
-          typeof inv.total === "number"
-            ? inv.total
-            : typeof inv.total === "string"
-              ? parseFloat(inv.total) || null
-              : null;
-        const localTotalNum =
-          inv.local_total != null
-            ? typeof inv.local_total === "number"
-              ? inv.local_total
-              : typeof inv.local_total === "string"
-                ? parseFloat(inv.local_total) || null
+          inv.amount != null
+            ? typeof inv.amount === "number"
+              ? inv.amount
+              : typeof inv.amount === "string"
+                ? parseFloat(inv.amount) || null
                 : null
-            : null;
+            : typeof inv.total === "number"
+              ? inv.total
+              : typeof inv.total === "string"
+                ? parseFloat(inv.total) || null
+                : null;
+        const localTotalNum =
+          inv.amount_in_local != null
+            ? typeof inv.amount_in_local === "number"
+              ? inv.amount_in_local
+              : typeof inv.amount_in_local === "string"
+                ? parseFloat(inv.amount_in_local) || null
+                : null
+            : inv.local_total != null
+              ? typeof inv.local_total === "number"
+                ? inv.local_total
+                : typeof inv.local_total === "string"
+                  ? parseFloat(inv.local_total) || null
+                  : null
+              : null;
         const invRoe =
           inv.roe != null
             ? typeof inv.roe === "number"
@@ -1128,6 +1185,19 @@ import {
       values: ReceiptFormValues,
       options: { status?: string } = {},
     ) => {
+      const rawAdjustments = values.adjustments ?? [];
+      const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+        const hasAmounts =
+          (a.adj_local_amount != null &&
+            Number.isFinite(a.adj_local_amount) &&
+            a.adj_local_amount !== 0) ||
+          (a.adj_curr_amount != null &&
+            Number.isFinite(a.adj_curr_amount) &&
+            a.adj_curr_amount !== 0);
+        const hasDocument = (a.document_no ?? "").trim() !== "";
+        return hasAmounts || hasDocument;
+      });
+
       const dayBookId = Number(values.daybook_id) || 0;
       const currencyId =
         currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1147,7 +1217,7 @@ import {
         branch: values.branch ?? "",
         cheque_no: values.cheque_no ?? "",
         chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-        dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
+        dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
         parties: (values.details ?? []).map((d) => ({
           ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
           subledger_code: d.customer_code ?? "",
@@ -1158,11 +1228,8 @@ import {
           local_amount: d.local_amount ?? 0,
           dr_cr: (d.dr_cr ?? "Cr").toString(),
         })),
-        allocations: (values.adjustments ?? []).map((a) => ({
+        allocations: nonEmptyAdjustments.map((a) => ({
           ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
-          ...(a.invoice_id != null && a.invoice_id > 0
-            ? { invoice_id: a.invoice_id }
-            : {}),
           location: a.location ?? "",
           subledger_code: a.subledger ?? "",
           day_book_id: Number(a.daybook_id) || 0,
@@ -1180,7 +1247,7 @@ import {
       return base;
     };
   
-    /** Build payload for reverse-receipt API. Uses DD-MM-YYYY for dates. No account_code. For create (POST) omit id. */
+    /** Same as domestic reverse-receipt payload; multipart still sets is_agent separately. */
     const buildReversalPayload = (
       values: ReceiptFormValues,
       options?: {
@@ -1190,11 +1257,25 @@ import {
         detailsOverride?: DetailRow[];
       },
     ) => {
+      const rawAdjustments = values.adjustments ?? [];
+      const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+        const hasAmounts =
+          (a.adj_local_amount != null &&
+            Number.isFinite(a.adj_local_amount) &&
+            a.adj_local_amount !== 0) ||
+          (a.adj_curr_amount != null &&
+            Number.isFinite(a.adj_curr_amount) &&
+            a.adj_curr_amount !== 0);
+        const hasDocument = (a.document_no ?? "").trim() !== "";
+        return hasAmounts || hasDocument;
+      });
       const dayBookId = Number(values.daybook_id) || 0;
       const currencyId =
         currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
-      const receiptNo =
-        options?.receiptNo ?? sourceReceiptNoForReversalRef.current ?? "";
+      const receiptNo = firstNonEmptyString(
+        options?.receiptNo,
+        sourceReceiptNoForReversalRef.current,
+      );
       const status = (options?.status ?? "UNPOSTED").toString().toUpperCase();
       const isUpdate = options?.reversalId != null && options.reversalId > 0;
       const details = options?.detailsOverride ?? values.details ?? [];
@@ -1214,8 +1295,7 @@ import {
         branch: values.branch ?? "",
         cheque_no: values.cheque_no ?? "",
         chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-        dr_cr: (receiptFromState?.dr_cr ?? "Cr").toString(),
-        // Party: label = customer_display (subledger_name from list / customer_name from search); payload = subledger_code (customer_code)
+        dr_cr: "Cr",
         parties: details.map((d) => ({
           subledger_code: d.customer_code ?? "",
           narration: d.narration ?? "",
@@ -1223,9 +1303,9 @@ import {
           roe: d.roe ?? 0,
           amount: d.amount ?? 0,
           local_amount: d.local_amount ?? 0,
-          dr_cr: (d.dr_cr ?? "Dr").toString(),
+          dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "Dr").toString(),
         })),
-        allocations: (values.adjustments ?? []).map((a) => ({
+        allocations: nonEmptyAdjustments.map((a) => ({
           location: a.location ?? "",
           subledger_code: a.subledger ?? "",
           day_book_id: Number(a.daybook_id) || 0,
@@ -1233,6 +1313,9 @@ import {
           document_no: a.document_no ?? "",
           document_date: formatDateDDMMYYYY(a.doc_date),
           currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
+          ...(a.invoice_id != null && a.invoice_id > 0
+            ? { invoice_id: a.invoice_id }
+            : {}),
           adj_curr_amount: a.adj_curr_amount ?? 0,
           adj_local_amount: a.adj_local_amount ?? 0,
         })),
@@ -1318,56 +1401,46 @@ import {
     };
   
     const handleSubmit = async (values: ReceiptFormValues) => {
-      // const partyLocalTotal =
-      //   (values.details ?? []).reduce(
-      //     (sum, d) =>
-      //       sum +
-      //       (d.local_amount != null && Number.isFinite(d.local_amount)
-      //         ? d.local_amount
-      //         : 0),
-      //     0,
-      //   ) ?? 0;
-      // const adjLocalTotal =
-      //   (values.adjustments ?? []).reduce(
-      //     (sum, a) =>
-      //       sum +
-      //       (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-      //         ? a.adj_local_amount
-      //         : 0),
-      //     0,
-      //   ) ?? 0;
-      // if (partyLocalTotal > adjLocalTotal) {
-      //   ToastNotification({
-      //     type: "error",
-      //     message:
-      //       "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
-      //   });
-      //   return;
-      // }
+      const hasAdjustments = (values.adjustments ?? []).some((a) => {
+        const hasAmounts =
+          (a.adj_local_amount != null &&
+            Number.isFinite(a.adj_local_amount) &&
+            a.adj_local_amount !== 0) ||
+          (a.adj_curr_amount != null &&
+            Number.isFinite(a.adj_curr_amount) &&
+            a.adj_curr_amount !== 0);
+        const hasDocument = (a.document_no ?? "").trim() !== "";
+        return hasAmounts || hasDocument;
+      });
 
-      const partyAmountTotal =
-        (values.details ?? []).reduce(
-          (sum, d) =>
-            sum +
-            (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-          0,
-        ) ?? 0;
-      const adjCurrTotal =
-        (values.adjustments ?? []).reduce(
-          (sum, a) =>
-            sum +
-            (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-              ? a.adj_curr_amount
-              : 0),
-          0,
-        ) ?? 0;
-      if (partyAmountTotal > adjCurrTotal) {
-        ToastNotification({
-          type: "error",
-          message:
-            "The total Amount of Party Details cannot exceed the total Adj Curr Amount of the Adjustments section.",
-        });
-        return;
+      if (hasAdjustments) {
+        const partyLocalTotal =
+          (values.details ?? []).reduce(
+            (sum, d) =>
+              sum +
+              (d.local_amount != null && Number.isFinite(d.local_amount)
+                ? d.local_amount
+                : 0),
+            0,
+          ) ?? 0;
+        const adjLocalTotal =
+          (values.adjustments ?? []).reduce(
+            (sum, a) =>
+              sum +
+              (a.adj_local_amount != null &&
+              Number.isFinite(a.adj_local_amount)
+                ? a.adj_local_amount
+                : 0),
+            0,
+          ) ?? 0;
+        if (partyLocalTotal < adjLocalTotal) {
+          ToastNotification({
+            type: "error",
+            message:
+              "The total Local Amount of Receipt cannot be less than the total Local Amount of Invoice.",
+          });
+          return;
+        }
       }
       setIsSubmitting(true);
       try {
@@ -1399,9 +1472,15 @@ import {
             if (res?.id != null) {
               setReverseReceiptSaveResponse((prev) => ({
                 id: prev!.id,
-                receipt_no: res.receipt_no ?? prev?.receipt_no ?? "",
-                reverse_receipt_no:
-                  res.reverse_receipt_no ?? prev?.reverse_receipt_no ?? "",
+                receipt_no: firstNonEmptyString(
+                  sourceReceiptNoForReversalRef.current,
+                  res.receipt_no,
+                  prev?.receipt_no,
+                ),
+                reverse_receipt_no: firstNonEmptyString(
+                  res.reverse_receipt_no,
+                  prev?.reverse_receipt_no,
+                ),
                 status: res.status != null ? String(res.status) : "UNPOSTED",
               }));
 
@@ -1451,8 +1530,11 @@ import {
             if (data?.id != null) {
               setReverseReceiptSaveResponse({
                 id: Number(data.id),
-                receipt_no: data.receipt_no ?? "",
-                reverse_receipt_no: data.reverse_receipt_no ?? "",
+                receipt_no: firstNonEmptyString(
+                  sourceReceiptNoForReversalRef.current,
+                  data.receipt_no,
+                ),
+                reverse_receipt_no: firstNonEmptyString(data.reverse_receipt_no),
                 status: data.status != null ? String(data.status) : "UNPOSTED",
               });
 
@@ -2497,7 +2579,8 @@ import {
                               onChange={(v) =>
                                 form.setFieldValue(
                                   `details.${idx}.dr_cr`,
-                                  (v as "Cr" | "Dr") ?? "Cr",
+                                  (v as "Cr" | "Dr") ??
+                                    (_isReversal ? "Dr" : "Cr"),
                                 )
                               }
                               styles={partyFieldStyles}
@@ -2728,6 +2811,20 @@ import {
                                   newLocal,
                                 );
                               }
+                              const effectiveAdjustments =
+                                form.values.adjustments.map((a, i) =>
+                                  i === idx
+                                    ? {
+                                        ...a,
+                                        adj_curr_amount: newCurr,
+                                        adj_local_amount:
+                                          newLocal ?? a.adj_local_amount,
+                                      }
+                                    : a,
+                                );
+                              syncPartyDetailsFromAllocations(
+                                effectiveAdjustments,
+                              );
                             }}
                             decimalScale={2}
                             max={AMOUNT_MAX}
@@ -2831,6 +2928,7 @@ import {
                         <Table.Th>Invoice Number</Table.Th>
                         <Table.Th>Document Date</Table.Th>
                         <Table.Th>Document Amount</Table.Th>
+                        <Table.Th>Outstanding Amount</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -2850,7 +2948,12 @@ import {
                           </Table.Td>
                           <Table.Td>
                             {formatOutstandingDocumentAmountInLocal(
-                              inv.amount_in_local,
+                              inv.document_amount,
+                            )}
+                          </Table.Td>
+                          <Table.Td>
+                            {formatOutstandingDocumentAmountInLocal(
+                              inv.amount,
                             )}
                           </Table.Td>
                         </Table.Tr>

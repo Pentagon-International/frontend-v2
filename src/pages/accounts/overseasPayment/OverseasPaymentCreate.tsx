@@ -2627,6 +2627,7 @@ export default function OverseasPaymentCreate({
                       <Table.Th>Document Doc Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2655,7 +2656,12 @@ export default function OverseasPaymentCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(
-                            inv.amount_in_local,
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.amount,
                           )}
                         </Table.Td>
                       </Table.Tr>

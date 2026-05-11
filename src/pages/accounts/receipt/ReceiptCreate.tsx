@@ -274,6 +274,8 @@ type ReceiptListItem = {
     amount?: string | number;
     local_amount?: string | number;
     dr_cr?: string;
+    is_tds_calcualted_record?: boolean;
+    is_tds_calculated_record?: boolean;
   }>;
   allocations?: Array<{
     id?: number;
@@ -328,7 +330,10 @@ type ReceiptFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
-const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+const getDefaultDetailRow = (
+  localCurrency: string,
+  forReversal = false,
+): DetailRow => ({
   subledger_id: null,
   account_code: "",
   customer_code: "",
@@ -338,7 +343,7 @@ const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   roe: 1,
   amount: null,
   local_amount: null,
-  dr_cr: "Cr",
+  dr_cr: forReversal ? "Dr" : "Cr",
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -475,6 +480,29 @@ function firstNonEmptyString(
   return "";
 }
 
+/** List API uses `is_tds_calcualted_record` (typo); accept both spellings. */
+function isPartyTdsCalculatedRecord(p: {
+  is_tds_calcualted_record?: unknown;
+  is_tds_calculated_record?: unknown;
+}): boolean {
+  const raw =
+    p.is_tds_calcualted_record ?? p.is_tds_calculated_record;
+  if (raw === true || raw === 1) return true;
+  if (raw === false || raw === 0) return false;
+  const s = String(raw ?? "").trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
+
+function receiptPartyDrCrToSide(
+  drCr: string | undefined | null,
+): "Dr" | "Cr" {
+  return String(drCr ?? "").trim().toLowerCase() === "dr" ? "Dr" : "Cr";
+}
+
+function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
 type ReceiptCreateProps = {
   titleOverride?: string;
   backPath?: string;
@@ -568,7 +596,7 @@ export default function ReceiptCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
-      details: [getDefaultDetailRow(localCurrency)],
+      details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
     },
@@ -716,7 +744,7 @@ export default function ReceiptCreate({
       ? receiptFromState.parties
       : [];
     // Party details: subledger_name = UI label (Account Name), subledger_code = value sent in payload. Set both for every row.
-    // Receipt Reversal: party Dr/Cr default is "Dr". Receipt Create: use source or "Cr".
+    // Reversal create (from receipt): normal party Dr; TDS row (is_tds_calcualted_record) flips receipt Dr/Cr. Edit/view: saved values.
     const details: DetailRow[] =
       parties.length > 0
         ? parties.map((p) => ({
@@ -732,10 +760,14 @@ export default function ReceiptCreate({
             amount: parseNum(p.amount),
             local_amount: parseNum(p.local_amount),
             dr_cr: _isReversal
-              ? ("Dr" as const)
+              ? isReversalEditOrView
+                ? receiptPartyDrCrToSide(p.dr_cr)
+                : isPartyTdsCalculatedRecord(p)
+                  ? flipDrCr(receiptPartyDrCrToSide(p.dr_cr))
+                  : ("Dr" as const)
               : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
           }))
-        : [getDefaultDetailRow(localCurrency)];
+        : [getDefaultDetailRow(localCurrency, _isReversal)];
 
     const allocations = receiptFromState.allocations;
     const adjustments: AdjustmentRow[] =
@@ -986,7 +1018,7 @@ export default function ReceiptCreate({
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency));
+    form.insertListItem("details", getDefaultDetailRow(localCurrency, _isReversal));
   };
 
   const removeDetailRow = (idx: number) => {
@@ -1329,7 +1361,7 @@ export default function ReceiptCreate({
     return base;
   };
 
-  /** Build payload for reverse-receipt API. Uses DD-MM-YYYY for dates. No account_code. For create (POST) omit id. */
+  /** Reverse-receipt payload: header dr_cr is always Cr (do not inherit source receipt). Party dr_cr from form, default Dr. DD-MM-YYYY dates. */
   const buildReversalPayload = (
     values: ReceiptFormValues,
     options?: {
@@ -1377,8 +1409,8 @@ export default function ReceiptCreate({
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-      dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
-      // Party: label = customer_display (subledger_name from list / customer_name from search); payload = subledger_code (customer_code)
+      dr_cr: "Cr",
+      // Party: label = customer_display; payload = subledger_code. dr_cr from UI (default Dr for reversal rows).
       parties: details.map((d) => ({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
@@ -1386,7 +1418,7 @@ export default function ReceiptCreate({
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr ?? "Dr").toString(),
+        dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "Dr").toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
@@ -1396,6 +1428,9 @@ export default function ReceiptCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
+        ...(a.invoice_id != null && a.invoice_id > 0
+          ? { invoice_id: a.invoice_id }
+          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
@@ -2576,7 +2611,8 @@ export default function ReceiptCreate({
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.dr_cr`,
-                                (v as "Cr" | "Dr") ?? "Cr",
+                                (v as "Cr" | "Dr") ??
+                                  (_isReversal ? "Dr" : "Cr"),
                               )
                             }
                             styles={partyFieldStyles}
@@ -2949,6 +2985,7 @@ export default function ReceiptCreate({
                       <Table.Th>Document Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2998,7 +3035,12 @@ export default function ReceiptCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(
-                            inv.amount_in_local,
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.amount,
                           )}
                         </Table.Td>
                       </Table.Tr>
