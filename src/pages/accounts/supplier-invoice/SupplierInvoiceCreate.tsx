@@ -817,7 +817,8 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("currency_id", defaultBranchCurrencyId);
     }
     // Don't overwrite charges_data in view/edit — they were loaded from list state
-    if (isViewMode || isEditMode) return;
+    // Don't touch reversal rows programmatically — amounts must mirror source so difference_amount stays 0
+    if (isViewMode || isEditMode || isReversal) return;
     // Set local currency on charge rows that don't have currency_id (including first row)
     const charges = form.values.charges_data;
     const next = charges.map((c) =>
@@ -835,11 +836,12 @@ export default function SupplierInvoiceCreate({
     isEditMode,
   ]);
 
-  // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes
+  // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes (not for supplier reversal — preserve API figures)
   const chargesAmountRoeKey = form.values.charges_data
     .map((c) => `${c.amount}-${c.roe}`)
     .join(",");
   useEffect(() => {
+    if (isReversal) return;
     const charges = form.values.charges_data;
     let changed = false;
     const next = charges.map((c) => {
@@ -850,9 +852,9 @@ export default function SupplierInvoiceCreate({
       return { ...c, amount_in_local: local };
     });
     if (changed) form.setFieldValue("charges_data", next);
-  }, [chargesAmountRoeKey]);
+  }, [chargesAmountRoeKey, isReversal]);
 
-  // Auto-calc Inv/Crn Amount = sum of breakup amounts
+  // Auto-calc Inv/Crn Amount = sum of breakup amounts (skipped for reversal — totals come from server)
   const invCrnCalcKey = [
     form.values.taxable_amount,
     form.values.non_taxable_amount,
@@ -861,6 +863,7 @@ export default function SupplierInvoiceCreate({
     form.values.igst_amount,
   ].join("|");
   useEffect(() => {
+    if (isReversal) return;
     const inv =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
@@ -872,13 +875,14 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invCrnCalcKey]);
+  }, [invCrnCalcKey, isReversal]);
 
-  // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved
+  // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved (skipped for reversal)
   const chargesNetKey = form.values.charges_data
     .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
     .join(",");
   useEffect(() => {
+    if (isReversal) return;
     const charges = form.values.charges_data ?? [];
     const netLocal = round2(
       charges.reduce((acc, row) => {
@@ -898,7 +902,7 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount]);
+  }, [chargesNetKey, form.values.Inv_crn_amount, isReversal]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
