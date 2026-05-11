@@ -453,6 +453,16 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
   return d ? d.toLocaleDateString() : "—";
 }
 
+function formatOutstandingDocumentAmountInLocal(
+  amountInLocal: number | string | null | undefined,
+): string {
+  if (amountInLocal == null || amountInLocal === "") return "—";
+  if (typeof amountInLocal === "number")
+    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+  const n = parseFloat(String(amountInLocal).trim());
+  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+}
+
 /** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
 function firstNonEmptyString(
   ...candidates: Array<string | number | null | undefined>
@@ -2987,11 +2997,9 @@ export default function ReceiptCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.amount != null
-                            ? typeof inv.amount === "number"
-                              ? inv.amount.toFixed(2)
-                              : String(inv.amount)
-                            : "—"}
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.amount_in_local,
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     ))}

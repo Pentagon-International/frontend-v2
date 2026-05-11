@@ -194,6 +194,7 @@ import {
     document_date?: string;
     due_date?: string;
     total?: number | string;
+    amount_in_local?: number | string;
     daybook_id?: number | string;
     day_book_id?: number | string;
     daybook_name?: string;
@@ -437,6 +438,16 @@ import {
   function formatDocumentDateDisplay(value: string | null | undefined): string {
     const d = parseDocumentDate(value);
     return d ? d.toLocaleDateString() : "—";
+  }
+
+  function formatOutstandingDocumentAmountInLocal(
+    amountInLocal: number | string | null | undefined,
+  ): string {
+    if (amountInLocal == null || amountInLocal === "") return "—";
+    if (typeof amountInLocal === "number")
+      return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+    const n = parseFloat(String(amountInLocal).trim());
+    return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
   }
   
   type ReceiptCreateProps = {
@@ -2819,7 +2830,7 @@ import {
                         <Table.Th style={{ width: 40 }}></Table.Th>
                         <Table.Th>Invoice Number</Table.Th>
                         <Table.Th>Document Date</Table.Th>
-                        <Table.Th>Total</Table.Th>
+                        <Table.Th>Document Amount</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -2838,11 +2849,9 @@ import {
                             )}
                           </Table.Td>
                           <Table.Td>
-                            {inv.total != null
-                              ? typeof inv.total === "number"
-                                ? inv.total.toFixed(2)
-                                : String(inv.total)
-                              : "—"}
+                            {formatOutstandingDocumentAmountInLocal(
+                              inv.amount_in_local,
+                            )}
                           </Table.Td>
                         </Table.Tr>
                       ))}

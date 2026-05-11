@@ -300,7 +300,7 @@ const addressValidationSchemaCreate = yup.object({
     .array()
     .of(
       addressItemSchema.shape({
-        // PAN/GST mandatory during create when these fields exist in UI.
+        // PAN/GST mandatory during create for Indian app users only (same condition as GST UI block).
         pan_no: yup
           .string()
           .required("PAN No is required")
@@ -463,6 +463,7 @@ const AddressCard = memo(
     isVendorMasterRoute,
     isDubaiUser,
     isIndiaUser,
+    panGstRequired,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -486,6 +487,7 @@ const AddressCard = memo(
     isVendorMasterRoute: boolean;
     isDubaiUser: boolean;
     isIndiaUser: boolean;
+    panGstRequired: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -783,6 +785,7 @@ const AddressCard = memo(
             <Grid.Col span={4}>
               <TextInput
                 label="PAN No"
+                withAsterisk={panGstRequired && !isViewMode}
                 placeholder="Enter PAN number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
@@ -791,6 +794,7 @@ const AddressCard = memo(
             <Grid.Col span={4}>
               <TextInput
                 label="GST No"
+                withAsterisk={panGstRequired && !isViewMode}
                 placeholder="Enter GST number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
@@ -1357,10 +1361,14 @@ function CustomerCreate() {
         },
       ],
     },
-    // Create: PAN/GST mandatory (when fields exist). Edit: keep previous optional behavior.
+    // Create: PAN/GST mandatory only for Indian app users (GST section visible). Foreign users omit these fields.
     validate: isViewMode
       ? undefined
-      : yupResolver(isCreateMode ? addressValidationSchemaCreate : addressValidationSchema),
+      : yupResolver(
+          isCreateMode && isIndiaUser
+            ? addressValidationSchemaCreate
+            : addressValidationSchema,
+        ),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,
@@ -2922,12 +2930,13 @@ function CustomerCreate() {
               <Stack>
                 {addressForm.values.addresses_data.map((_, index) => (
                   <AddressCard
-                    key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ""}-${addressStateRestored}`}
+                    key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
                     index={index}
                     isViewMode={isViewMode}
                     isVendorMasterRoute={isVendorMasterRoute}
                     isDubaiUser={isDubaiUser}
                     isIndiaUser={isIndiaUser}
+                    panGstRequired={isCreateMode && isIndiaUser}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}
