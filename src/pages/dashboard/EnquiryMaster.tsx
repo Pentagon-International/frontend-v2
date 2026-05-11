@@ -122,6 +122,16 @@ const enquiryPortDisplayFormat = (item: any) => ({
 const SERVICE_HEADER_FILTER_OPTIONS = ["FCL", "LCL", "AIR"];
 
 /**
+ * Trade option list rendered inside the same compound editor on the right.
+ * Mirrors the advanced filter section's Trade `Select` exactly so the same
+ * payload values (`"Import"` / `"Export"`) flow into `filters.trade`.
+ */
+const TRADE_HEADER_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "Import", label: "Import" },
+  { value: "Export", label: "Export" },
+];
+
+/**
  * Payload returned by `ServiceHeaderFilterInput.onCommit`.
  *
  * Both slots are always sent. The parent forwards `service` to `filters.service`
@@ -165,31 +175,29 @@ function ServiceHeaderFilterInput({
   onCommit: (next: ServiceHeaderCommitPayload) => void;
 }) {
   const [localService, setLocalService] = useState<string | null>(serviceValue);
-  const [localTrade, setLocalTrade] = useState<string>(tradeValue ?? "");
+  const [localTrade, setLocalTrade] = useState<string | null>(tradeValue);
 
   // Hydrate from upstream whenever the committed filters change.
   useEffect(() => {
     setLocalService(serviceValue);
   }, [serviceValue]);
   useEffect(() => {
-    setLocalTrade(tradeValue ?? "");
+    setLocalTrade(tradeValue);
   }, [tradeValue]);
 
   const commit = useCallback(() => {
-    const trimmedTrade = localTrade.trim();
     onCommit({
       service: localService,
-      trade: trimmedTrade.length > 0 ? trimmedTrade : null,
+      trade: localTrade,
     });
   }, [localService, localTrade, onCommit]);
 
   // True while the user has *uncommitted* changes vs the upstream filter
-  // state (i.e. they have typed / picked something but not pressed tick yet).
+  // state (i.e. they have picked something but not pressed tick yet).
   const isModified =
-    localService !== serviceValue || localTrade !== (tradeValue ?? "");
+    localService !== serviceValue || localTrade !== tradeValue;
   // True when the upstream filter already holds a service or trade value.
-  const hasCommittedFilters =
-    serviceValue != null || (tradeValue ?? "").trim().length > 0;
+  const hasCommittedFilters = serviceValue != null || tradeValue != null;
   // Show the clear (X) button instead of the tick (✓) when the column is
   // already filtered AND the user has not yet started editing. The moment the
   // user makes any change, the button flips back to the tick (commit) state.
@@ -197,7 +205,7 @@ function ServiceHeaderFilterInput({
 
   const clearAll = useCallback(() => {
     setLocalService(null);
-    setLocalTrade("");
+    setLocalTrade(null);
     onCommit({ service: null, trade: null });
   }, [onCommit]);
 
@@ -260,19 +268,17 @@ function ServiceHeaderFilterInput({
           flexShrink: 0,
         }}
       />
-      <TextInput
+      <Select
         size="xs"
         placeholder="Trade"
+        data={TRADE_HEADER_FILTER_OPTIONS}
         value={localTrade}
-        onChange={(e) => setLocalTrade(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit();
-          }
-        }}
+        onChange={(val) => setLocalTrade(val)}
+        clearable
+        searchable
         variant="unstyled"
         autoFocus={autoFocus}
+        comboboxProps={{ zIndex: 1000 }}
         styles={{
           ...innerInputStyles,
           input: { ...innerInputStyles.input, paddingLeft: 8, paddingRight: 4 },
