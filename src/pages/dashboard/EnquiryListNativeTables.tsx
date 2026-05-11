@@ -1,7 +1,34 @@
-import { Badge, Box, Group, Stack, Text, Tooltip } from "@mantine/core";
-import type { ReactNode } from "react";
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Center,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  TextInput,
+  Tooltip,
+  UnstyledButton,
+} from "@mantine/core";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import dayjs from "dayjs";
-import { IconArrowRight, IconFileText, IconPackage } from "@tabler/icons-react";
+import {
+  IconArrowRight,
+  IconFileText,
+  IconFilter,
+  IconFilterFilled,
+  IconPackage,
+  IconX,
+} from "@tabler/icons-react";
 import type { ErpListTheme } from "../../components/ERPListPage/erpListTheme";
 import {
   erpListDataRowProps,
@@ -15,21 +42,382 @@ import {
 import { EnquirySummaryRowMenu, type EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
 import type { PreviewColDef } from "./EnquiryListPreviewBuild";
 
+/**
+ * Header column-filter keys supported by both the Summary and the Detailed list.
+ * The values are bound to the parent's existing filter / previewFilter state so we never duplicate state.
+ */
+export type EnquiryHeaderFilterKey =
+  | "enquiry_id"
+  | "customer_name"
+  | "sales_person"
+  | "service"
+  | "trade"
+  | "origin"
+  | "destination"
+  | "status"
+  | "reference_no";
+
+export type EnquiryHeaderFilterValues = Record<EnquiryHeaderFilterKey, string>;
+
+/** Context passed to a header column's custom input renderer. */
+export type EnquiryHeaderInputContext = {
+  /** Whether the input should auto-focus when mounted (always `true` for now). */
+  autoFocus: boolean;
+  /**
+   * Imperatively collapse the cell back to display mode (e.g. immediately after
+   * an option is picked from a `SearchableSelect` or `Select`). When the cell
+   * already collapses on blur this is optional.
+   */
+  onClose: () => void;
+};
+
+export type EnquiryHeaderRenderInput = (ctx: EnquiryHeaderInputContext) => ReactNode;
+
+export type EnquiryHeaderFiltersProp = {
+  values: EnquiryHeaderFilterValues;
+  onChange: (key: EnquiryHeaderFilterKey, value: string) => void;
+  /**
+   * Optional per-column custom input. When provided, used INSTEAD of the
+   * default `TextInput` once the user clicks the column header to enter edit
+   * mode. The parent typically supplies a `SearchableSelect` (customer / port)
+   * or `Select` (status / service / trade / sales person) here so the column
+   * filters mirror the advanced filter section -- which keeps the API payload
+   * shape identical (e.g. customer_code instead of free text).
+   */
+  renderInput?: Partial<Record<EnquiryHeaderFilterKey, EnquiryHeaderRenderInput>>;
+  /**
+   * Optional per-column formatter for the collapsed header label. Useful when
+   * the underlying filter value is a code (e.g. `INMAA`) but a friendlier label
+   * (e.g. `Chennai (INMAA)`) is available from a sibling display-value cache.
+   */
+  displayFormatter?: Partial<Record<EnquiryHeaderFilterKey, (value: string) => string>>;
+};
+
+/** Identifies which column header is currently in "edit" mode (`service` and `route` are dual-input cells). */
+type SummaryEditingColumn =
+  | "enquiry_id"
+  | "customer_name"
+  | "sales_person"
+  | "service"
+  | "route"
+  | "status"
+  | "reference_no"
+  | null;
+
+type PreviewEditingColumn = string | null;
+
+const HEADER_FILTER_TEXTINPUT_STYLES = {
+  input: {
+    height: 26,
+    minHeight: 26,
+    fontSize: 12,
+    paddingLeft: 8,
+    paddingRight: 24,
+  },
+} as const;
+
+function HeaderFilterInput({
+  value,
+  onChange,
+  placeholder = "Filter...",
+  ariaLabel,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+  autoFocus?: boolean;
+}) {
+  return (
+    <TextInput
+      size="xs"
+      value={value}
+      onChange={(e) => onChange(e.currentTarget.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      autoFocus={autoFocus}
+      styles={HEADER_FILTER_TEXTINPUT_STYLES}
+      rightSection={
+        value ? (
+          <ActionIcon
+            variant="transparent"
+            size="xs"
+            color="gray"
+            onMouseDown={(e) => {
+              // Prevent the input from blurring before our handler can fire
+              e.preventDefault();
+            }}
+            onClick={() => onChange("")}
+            aria-label={`Clear ${ariaLabel}`}
+          >
+            <IconX size={12} />
+          </ActionIcon>
+        ) : null
+      }
+    />
+  );
+}
+
+/**
+ * Route-column header label.
+ *
+ * - When neither side is filtered: shows the plain column name `"Route"`
+ *   (identical look to every other unfiltered header).
+ * - When at least one side is filtered: shows the raw filter CODES in the
+ *   same `ORIGIN → DESTINATION` shape used inside the body cells (see
+ *   `erpListRouteListCell`) -- intentionally codes only, never the resolved
+ *   port names, so the header stays compact even when the user picked the
+ *   long "City Name (CODE)" labels from the SearchableSelect. Any missing
+ *   side falls back to `"—"` to match the body's "missing value" fallback.
+ *
+ * Clicking the label opens the inline route editor, exactly like the existing
+ * `FilterableHeaderLabel`. Filtered state also shows the small `IconFilterFilled`
+ * indicator on the far right so it visually matches the other column headers.
+ */
+function FilterableRouteHeaderLabel({
+  originCode,
+  destinationCode,
+  onClick,
+  theme,
+  label = "Route",
+}: {
+  originCode: string;
+  destinationCode: string;
+  onClick: () => void;
+  theme: ErpListTheme;
+  label?: string;
+}) {
+  const o = originCode.trim();
+  const d = destinationCode.trim();
+  const isFiltered = o.length > 0 || d.length > 0;
+
+  const baseButtonStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    width: "100%",
+    fontFamily: theme.fontSans,
+    fontWeight: 500,
+    cursor: "pointer",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    minWidth: 0,
+  };
+
+  // Unfiltered -> render exactly like `FilterableHeaderLabel` so the header
+  // reads as the plain column name "Route" with an ellipsis if it ever needs
+  // to truncate.
+  if (!isFiltered) {
+    return (
+      <UnstyledButton
+        onClick={onClick}
+        className="erp-header-filter-fade"
+        style={baseButtonStyle}
+        title="Click to filter"
+      >
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {label}
+        </span>
+      </UnstyledButton>
+    );
+  }
+
+  // Filtered -> show codes only ("INMAA → JFK"), matching the body cell.
+  const left = o || "—";
+  const right = d || "—";
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={baseButtonStyle}
+      title={`Filter: ${left} → ${right}\nClick to edit`}
+    >
+      <span
+        style={{
+          flexShrink: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          color: o ? theme.primary : undefined,
+          fontWeight: o ? 600 : 500,
+        }}
+      >
+        {left}
+      </span>
+      <IconArrowRight
+        size={12}
+        color={theme.muted}
+        style={{ flexShrink: 0 }}
+      />
+      <span
+        style={{
+          flexShrink: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          color: d ? theme.fg : undefined,
+        }}
+      >
+        {right}
+      </span>
+      <IconFilterFilled
+        size={14}
+        color={theme.muted}
+        style={{  marginLeft: 6 }}
+      />
+    </UnstyledButton>
+  );
+}
+
+/** Renders the original header label (or the active filter value) as a clickable button that opens the edit input. */
+function FilterableHeaderLabel({
+  label,
+  filterDisplay,
+  onClick,
+  theme,
+  align = "left",
+}: {
+  label: string;
+  filterDisplay: string;
+  onClick: () => void;
+  theme: ErpListTheme;
+  align?: "left" | "center" | "right";
+}) {
+  const isFiltered = filterDisplay.length > 0;
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        fontFamily: theme.fontSans,
+        // color: isFiltered ? theme.fg : theme.muted,
+        fontWeight: 500,
+        // fontSize: 14,
+        cursor: "pointer",
+        textAlign: align,
+        justifyContent:
+          align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        minWidth: 0,
+      }}
+      title={isFiltered ? `Filter: ${filterDisplay}\nClick to edit` : `Click to filter`}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+          // flex: 1,
+        }}
+        >
+        {isFiltered ? filterDisplay : label}
+      </span>
+      {isFiltered && (
+        <IconFilterFilled size={14} color={theme.muted} />
+      )}
+    </UnstyledButton>
+  );
+}
+
+/**
+ * Container around the edit input(s). Auto-focuses the first input on mount,
+ * collapses on Escape, and collapses on blur once focus leaves all inputs in
+ * this cell (so the user can tab between dual inputs without flicker).
+ */
+function FilterableHeaderEdit({
+  onCollapse,
+  children,
+}: {
+  /**
+   * Must use the functional-set form (`setState((cur) => cur === me ? null : cur)`)
+   * so a click on another header that switches the editing column does not get
+   * stomped by this collapse handler.
+   */
+  onCollapse: () => void;
+  children: ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleBlur = useCallback(
+    (_e: ReactFocusEvent) => {
+      // Defer the focus check so a click that lands on another input in the
+      // same cell (Tab / X-clear) does not falsely trigger a collapse.
+      setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (!container.contains(document.activeElement)) {
+          onCollapse();
+        }
+      }, 0);
+    },
+    [onCollapse],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCollapse();
+      }
+    },
+    [onCollapse],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="erp-header-filter-fade"
+      style={{ width: "100%", minWidth: 0 }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function formatServiceTradeDisplay(service: string, trade: string): string {
+  const s = service.trim();
+  const t = trade.trim();
+  if (s && t) return `${s} - ${t}`;
+  return s || t;
+}
+
+function formatRouteDisplay(origin: string, destination: string): string {
+  const o = origin.trim();
+  const d = destination.trim();
+  if (o && d) return `${o} → ${d}`;
+  return o || d;
+}
+
 /** Enquiry tables: wider ID & Service (single-line clamp); Reference No uses shared widths below. */
-const ENQUIRY_COL_ID_MIN = 230;
-const ENQUIRY_COL_SERVICE_MIN = 110;
-const ENQUIRY_COL_SALES_PERSON_MIN = 128;
+const ENQUIRY_COL_ID_MIN = 200;
+const ENQUIRY_COL_SERVICE_MIN = 180;
+const ENQUIRY_COL_SALES_PERSON_MIN = 115;
 const ENQUIRY_COL_REFERENCE_TH_MIN = 92;
 const ENQUIRY_COL_REFERENCE_TD_MAX = 126;
 const ENQUIRY_COL_REFERENCE_TABLE_WIDTH = "9%";
 /** Detailed list Route: min width + nowrap so origin → dest stays on one line; full value in tooltip. */
 const ENQUIRY_COL_ROUTE_DETAILED_MIN = 330;
 /** Summary list Route: room for code pairs on one line; names in tooltip. */
-const ENQUIRY_COL_ROUTE_SUMMARY_MIN = 170;
+const ENQUIRY_COL_ROUTE_SUMMARY_MIN = 200;
 /** Route column tooltips (summary + detailed) — max width of the floating label. */
 const ENQUIRY_ROUTE_TOOLTIP_MAX_WIDTH = 300;
 /** Summary list: avoid `lineClamp` ellipsis when many columns squeeze auto table layout (DD-MM-YYYY + padding). */
-const ENQUIRY_SUMMARY_DATE_COL_MIN = 120;
+const ENQUIRY_SUMMARY_DATE_COL_MIN = 100;
 
 /** Normalize API values into string arrays so route rows pair by index (or stay a single segment). */
 function routePairValuesAsArrays(originVal: unknown, destVal: unknown): { oa: string[]; da: string[] } {
@@ -267,6 +655,22 @@ type SummaryTableProps = {
   actionsOpenKey: string | number | null;
   onActionsKeyChange: (key: string | number | null) => void;
   menuDropdownClassName?: string;
+  /**
+   * Optional inline column header filters. When provided, a second header row is rendered
+   * underneath the existing labels. Values and handlers MUST be bound to the parent page's
+   * existing filter state so the advanced filters panel and these header filters stay in sync
+   * via a single source of truth (no client-side row filtering happens here).
+   */
+  headerFilters?: EnquiryHeaderFiltersProp;
+  /**
+   * When true, the table keeps its `<thead>` (and therefore the click-to-edit
+   * header filters) mounted but renders a centered loader inside `<tbody>`
+   * instead of the data rows. This avoids unmounting the table -- and losing
+   * the open header-filter editor -- whenever a refetch is in flight.
+   */
+  loading?: boolean;
+  /** Optional message shown below the loader spinner (defaults to "Loading…"). */
+  loadingMessage?: string;
 };
 
 function rowKey(r: SummaryRow, index: number) {
@@ -286,6 +690,9 @@ export function EnquirySummaryNativeTable({
   actionsOpenKey,
   onActionsKeyChange,
   menuDropdownClassName,
+  headerFilters,
+  loading = false,
+  loadingMessage = "Loading…",
 }: SummaryTableProps) {
   const { fg, fontSans, muted, primary } = theme;
   const visibleCount =
@@ -301,18 +708,169 @@ export function EnquirySummaryNativeTable({
     (visible.remark ? 1 : 0) +
     1;
 
+  // Which column is currently in "edit" mode. Only meaningful when headerFilters is provided.
+  const [editingColumn, setEditingColumn] = useState<SummaryEditingColumn>(null);
+
+  const openEditor = useCallback(
+    (col: NonNullable<SummaryEditingColumn>) => {
+      if (!headerFilters) return;
+      setEditingColumn(col);
+    },
+    [headerFilters],
+  );
+
+  // IMPORTANT: use a functional setter so a fast click on another header that
+  // already switched the editing column does not get clobbered by this collapse.
+  const makeCollapse = useCallback(
+    (col: NonNullable<SummaryEditingColumn>) => () => {
+      setEditingColumn((cur) => (cur === col ? null : cur));
+    },
+    [],
+  );
+
+  // Localised value pulls (default empty string so the component is safe when
+  // `headerFilters` is omitted -- e.g. when this table is rendered from RFQMaster).
+  const v = headerFilters?.values;
+  const enquiryIdVal = v?.enquiry_id ?? "";
+  const customerVal = v?.customer_name ?? "";
+  const salesPersonVal = v?.sales_person ?? "";
+  const serviceVal = v?.service ?? "";
+  const tradeVal = v?.trade ?? "";
+  const originVal = v?.origin ?? "";
+  const destinationVal = v?.destination ?? "";
+  const statusVal = v?.status ?? "";
+  const referenceNoVal = v?.reference_no ?? "";
+
+  // Look up the (optional) renderer + display formatter for a single column.
+  const customInput = (key: EnquiryHeaderFilterKey) =>
+    headerFilters?.renderInput?.[key];
+  const formatDisplay = (key: EnquiryHeaderFilterKey, raw: string) =>
+    raw ? headerFilters?.displayFormatter?.[key]?.(raw) ?? raw : "";
+
   return (
     <table style={erpListTableElementStyle(theme)}>
       <thead>
-        <tr>
+        <tr style={{height:52.4}}>
           {visible.sno && <th style={erpListThStyle(theme)}>S.No</th>}
           {visible.enquiry_id && (
-            <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_ID_MIN }}>Enquiry ID</th>
+            <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_ID_MIN }}>
+              {headerFilters && editingColumn === "enquiry_id" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("enquiry_id")}>
+                  {customInput("enquiry_id")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("enquiry_id"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={enquiryIdVal}
+                      onChange={(val) => headerFilters.onChange("enquiry_id", val)}
+                      ariaLabel="Filter Enquiry ID"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Enquiry ID"
+                  filterDisplay={formatDisplay("enquiry_id", enquiryIdVal)}
+                  onClick={() => openEditor("enquiry_id")}
+                  theme={theme}
+                />
+              ) : (
+                "Enquiry ID"
+              )}
+            </th>
           )}
-          {visible.customer_name && <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Customer</th>}
-          {visible.sales_person && <th style={erpListThStyle(theme)}>Sales Person</th>}
+          {visible.customer_name && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 180 }}>
+              {headerFilters && editingColumn === "customer_name" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("customer_name")}>
+                  {customInput("customer_name")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("customer_name"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={customerVal}
+                      onChange={(val) => headerFilters.onChange("customer_name", val)}
+                      ariaLabel="Filter Customer"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Customer"
+                  filterDisplay={formatDisplay("customer_name", customerVal)}
+                  onClick={() => openEditor("customer_name")}
+                  theme={theme}
+                />
+              ) : (
+                "Customer"
+              )}
+            </th>
+          )}
+          {visible.sales_person && (
+            <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_SALES_PERSON_MIN }}>
+              {headerFilters && editingColumn === "sales_person" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("sales_person")}>
+                  {customInput("sales_person")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("sales_person"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={salesPersonVal}
+                      onChange={(val) => headerFilters.onChange("sales_person", val)}
+                      ariaLabel="Filter Sales Person"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Sales Person"
+                  filterDisplay={formatDisplay("sales_person", salesPersonVal)}
+                  onClick={() => openEditor("sales_person")}
+                  theme={theme}
+                />
+              ) : (
+                "Sales Person"
+              )}
+            </th>
+          )}
           {visible.service && (
-            <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_SERVICE_MIN }}>Service</th>
+            <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_SERVICE_MIN }}>
+              {headerFilters && editingColumn === "service" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("service")}>
+                  {/* Service column header now exposes a single combined editor
+                      (Autocomplete with FCL/LCL/AIR + free text + tick) instead
+                      of the previous two side-by-side inputs. The trade filter
+                      is still editable via the advanced filter drawer. */}
+                  {customInput("service")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("service"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={serviceVal}
+                      onChange={(val) => headerFilters.onChange("service", val)}
+                      placeholder="Service"
+                      ariaLabel="Filter Service"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Service"
+                  filterDisplay={formatServiceTradeDisplay(
+                    formatDisplay("service", serviceVal),
+                    formatDisplay("trade", tradeVal),
+                  )}
+                  onClick={() => openEditor("service")}
+                  theme={theme}
+                />
+              ) : (
+                "Service"
+              )}
+            </th>
           )}
           {visible.route && (
             <th
@@ -322,12 +880,76 @@ export function EnquirySummaryNativeTable({
                 minWidth: ENQUIRY_COL_ROUTE_SUMMARY_MIN,
               }}
             >
-              Route
+              {headerFilters && editingColumn === "route" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("route")}>
+                  <Group gap={4} wrap="nowrap" align="center">
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      {customInput("origin")?.({
+                        autoFocus: true,
+                        onClose: makeCollapse("route"),
+                      }) ?? (
+                        <HeaderFilterInput
+                          value={originVal}
+                          onChange={(val) => headerFilters.onChange("origin", val)}
+                          placeholder="Origin"
+                          ariaLabel="Filter Origin"
+                          autoFocus
+                        />
+                      )}
+                    </Box>
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      {customInput("destination")?.({
+                        autoFocus: false,
+                        onClose: makeCollapse("route"),
+                      }) ?? (
+                        <HeaderFilterInput
+                          value={destinationVal}
+                          onChange={(val) => headerFilters.onChange("destination", val)}
+                          placeholder="Destination"
+                          ariaLabel="Filter Destination"
+                        />
+                      )}
+                    </Box>
+                  </Group>
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableRouteHeaderLabel
+                  originCode={originVal}
+                  destinationCode={destinationVal}
+                  onClick={() => openEditor("route")}
+                  theme={theme}
+                />
+              ) : (
+                "Route"
+              )}
             </th>
           )}
           {visible.status && (
-            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 140 }}>
-              Status
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 100, maxWidth: 100 }}>
+              {headerFilters && editingColumn === "status" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("status")}>
+                  {customInput("status")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("status"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={statusVal}
+                      onChange={(val) => headerFilters.onChange("status", val)}
+                      ariaLabel="Filter Status"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Status"
+                  filterDisplay={formatDisplay("status", statusVal)}
+                  onClick={() => openEditor("status")}
+                  theme={theme}
+                />
+              ) : (
+                "Status"
+              )}
             </th>
           )}
           {visible.date && (
@@ -350,7 +972,30 @@ export function EnquirySummaryNativeTable({
                 width: ENQUIRY_COL_REFERENCE_TABLE_WIDTH,
               }}
             >
-              Reference No
+              {headerFilters && editingColumn === "reference_no" ? (
+                <FilterableHeaderEdit onCollapse={makeCollapse("reference_no")}>
+                  {customInput("reference_no")?.({
+                    autoFocus: true,
+                    onClose: makeCollapse("reference_no"),
+                  }) ?? (
+                    <HeaderFilterInput
+                      value={referenceNoVal}
+                      onChange={(val) => headerFilters.onChange("reference_no", val)}
+                      ariaLabel="Filter Reference No"
+                      autoFocus
+                    />
+                  )}
+                </FilterableHeaderEdit>
+              ) : headerFilters ? (
+                <FilterableHeaderLabel
+                  label="Reference No"
+                  filterDisplay={formatDisplay("reference_no", referenceNoVal)}
+                  onClick={() => openEditor("reference_no")}
+                  theme={theme}
+                />
+              ) : (
+                "Reference No"
+              )}
             </th>
           )}
           {visible.remark && <th style={erpListThStyle(theme)}>Remark</th>}
@@ -358,7 +1003,20 @@ export function EnquirySummaryNativeTable({
         </tr>
       </thead>
       <tbody>
-        {rows.length === 0 ? (
+        {loading ? (
+          <tr>
+            <td colSpan={visibleCount} style={{ padding: 0 }}>
+              <Center py={80} style={{ backgroundColor: theme.cardBg }}>
+                <Stack align="center" gap="md">
+                  <Loader size="lg" color={theme.primary} />
+                  <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
+                    {loadingMessage}
+                  </Text>
+                </Stack>
+              </Center>
+            </td>
+          </tr>
+        ) : rows.length === 0 ? (
           <tr>
             <td colSpan={visibleCount} style={{ padding: 60, textAlign: "center" }}>
               <Stack align="center" gap="md">
@@ -485,7 +1143,7 @@ export function EnquirySummaryNativeTable({
                       ...erpListTdPaddingStyle(),
                       whiteSpace: "nowrap",
                       verticalAlign: "middle",
-                      minWidth: 140,
+                      minWidth: 100,
                     }}
                   >
                     <Tooltip
@@ -580,7 +1238,66 @@ type PreviewTableProps = {
   data: Record<string, unknown>[];
   dateFormat: string;
   getStatusBadge: (s: string | undefined | null) => { label: string; color: string };
+  /**
+   * Optional inline column header filters for the Detailed table. Bound to the parent's
+   * existing previewFilters state so the advanced filters panel + restore flows stay in sync
+   * (single source of truth, no client-side filtering, no duplicate state).
+   */
+  headerFilters?: EnquiryHeaderFiltersProp;
+  /**
+   * When true, the table keeps its `<thead>` (and therefore the click-to-edit
+   * header filters) mounted but renders a centered loader inside `<tbody>`
+   * instead of the data rows. This avoids unmounting the table -- and losing
+   * the open header-filter editor -- whenever a refetch is in flight.
+   */
+  loading?: boolean;
+  /** Optional message shown below the loader spinner (defaults to "Loading…"). */
+  loadingMessage?: string;
 };
+
+/**
+ * Maps a Detailed-list column to the header-filter key it should expose, or `null` when
+ * the column is not user-searchable from the header (e.g. sno, enquiry date, totals, remark).
+ */
+function previewColumnFilterKeys(col: PreviewColDef):
+  | { single: EnquiryHeaderFilterKey }
+  | { dual: [EnquiryHeaderFilterKey, EnquiryHeaderFilterKey]; placeholders: [string, string] }
+  | null {
+  if (col.kind === "service") {
+    return {
+      dual: ["service", "trade"],
+      placeholders: ["Service", "Trade"],
+    };
+  }
+  if (col.kind === "route") {
+    return {
+      dual: ["origin", "destination"],
+      placeholders: ["Origin", "Destination"],
+    };
+  }
+  switch (col.key) {
+    case "enquiry_id":
+      return { single: "enquiry_id" };
+    case "customer_name":
+      return { single: "customer_name" };
+    case "sales_person":
+      return { single: "sales_person" };
+    case "service":
+      return { single: "service" };
+    case "trade":
+      return { single: "trade" };
+    case "origin":
+      return { single: "origin" };
+    case "destination":
+      return { single: "destination" };
+    case "status":
+      return { single: "status" };
+    case "reference_no":
+      return { single: "reference_no" };
+    default:
+      return null;
+  }
+}
 
 function previewColumnThMinWidth(col: PreviewColDef): number {
   if (col.kind === "sno") return 70;
@@ -595,32 +1312,202 @@ function previewColumnThMinWidth(col: PreviewColDef): number {
 /**
  * Detailed (preview) list: same table chrome as {@link AirExportBookingMaster} — no sticky columns, `10px 14px` cells, `Text` for values.
  */
-export function EnquiryPreviewNativeTable({ theme, columns, data, dateFormat, getStatusBadge }: PreviewTableProps) {
+export function EnquiryPreviewNativeTable({
+  theme,
+  columns,
+  data,
+  dateFormat,
+  getStatusBadge,
+  headerFilters,
+  loading = false,
+  loadingMessage = "Loading…",
+}: PreviewTableProps) {
   const { fg, fontSans, muted, primary } = theme;
+
+  // Which column id is currently in "edit" mode. Only meaningful when headerFilters is provided.
+  const [editingColumn, setEditingColumn] = useState<PreviewEditingColumn>(null);
+
+  const openEditor = useCallback(
+    (colId: string) => {
+      if (!headerFilters) return;
+      setEditingColumn(colId);
+    },
+    [headerFilters],
+  );
+
+  // Use a functional setter so a fast click on a different header that already
+  // switched the editing column is not undone by this collapse.
+  const makeCollapse = useCallback(
+    (colId: string) => () => {
+      setEditingColumn((cur) => (cur === colId ? null : cur));
+    },
+    [],
+  );
+
   return (
     <Box style={{ overflow: "auto" }}>
       <table style={erpListTableElementStyle(theme)}>
         <thead>
           <tr>
-            {columns.map((col) => (
-              <th
-                key={col.id}
-                style={{
-                  ...erpListThStyle(theme),
-                  minWidth: previewColumnThMinWidth(col),
-                  ...(col.key === "reference_no"
-                    ? { maxWidth: ENQUIRY_COL_REFERENCE_TD_MAX, width: ENQUIRY_COL_REFERENCE_TABLE_WIDTH }
-                    : {}),
-                  ...(col.kind === "route" ? { whiteSpace: "nowrap" as const } : {}),
-                }}
-              >
-                {col.header}
-              </th>
-            ))}
+            {columns.map((col) => {
+              const thStyle: CSSProperties = {
+                ...erpListThStyle(theme),
+                minWidth: previewColumnThMinWidth(col),
+                ...(col.key === "reference_no"
+                  ? { maxWidth: ENQUIRY_COL_REFERENCE_TD_MAX, width: ENQUIRY_COL_REFERENCE_TABLE_WIDTH }
+                  : {}),
+                ...(col.kind === "route" ? { whiteSpace: "nowrap" as const } : {}),
+              };
+
+              const mapping = headerFilters ? previewColumnFilterKeys(col) : null;
+
+              // Not filterable -> render the original header text as-is (RFQ + non-filter columns).
+              if (!headerFilters || !mapping) {
+                return (
+                  <th key={col.id} style={thStyle}>
+                    {col.header}
+                  </th>
+                );
+              }
+
+              const isEditing = editingColumn === col.id;
+              const customInputFn = (key: EnquiryHeaderFilterKey) =>
+                headerFilters.renderInput?.[key];
+              const formatDisplay = (key: EnquiryHeaderFilterKey, raw: string) =>
+                raw ? headerFilters.displayFormatter?.[key]?.(raw) ?? raw : "";
+
+              if ("dual" in mapping) {
+                const [k1, k2] = mapping.dual;
+                const [p1, p2] = mapping.placeholders;
+                const v1 = headerFilters.values[k1] ?? "";
+                const v2 = headerFilters.values[k2] ?? "";
+
+                /*
+                 * Service column now exposes a single combined editor (the
+                 * Autocomplete with FCL/LCL/AIR + free text + tick provided
+                 * by the parent via `renderInput.service`). The Route column
+                 * keeps the existing dual origin/destination layout.
+                 */
+                const renderSingleService = col.kind === "service";
+
+                return (
+                  <th key={col.id} style={thStyle}>
+                    {isEditing ? (
+                      <FilterableHeaderEdit onCollapse={makeCollapse(col.id)}>
+                        {renderSingleService ? (
+                          customInputFn(k1)?.({
+                            autoFocus: true,
+                            onClose: makeCollapse(col.id),
+                          }) ?? (
+                            <HeaderFilterInput
+                              value={v1}
+                              onChange={(val) => headerFilters.onChange(k1, val)}
+                              placeholder={p1}
+                              ariaLabel={`Filter ${p1}`}
+                              autoFocus
+                            />
+                          )
+                        ) : (
+                          <Group gap={4} wrap="nowrap" align="center">
+                            <Box style={{ flex: 1, minWidth: 0 }}>
+                              {customInputFn(k1)?.({
+                                autoFocus: true,
+                                onClose: makeCollapse(col.id),
+                              }) ?? (
+                                <HeaderFilterInput
+                                  value={v1}
+                                  onChange={(val) => headerFilters.onChange(k1, val)}
+                                  placeholder={p1}
+                                  ariaLabel={`Filter ${p1}`}
+                                  autoFocus
+                                />
+                              )}
+                            </Box>
+                            <Box style={{ flex: 1, minWidth: 0 }}>
+                              {customInputFn(k2)?.({
+                                autoFocus: false,
+                                onClose: makeCollapse(col.id),
+                              }) ?? (
+                                <HeaderFilterInput
+                                  value={v2}
+                                  onChange={(val) => headerFilters.onChange(k2, val)}
+                                  placeholder={p2}
+                                  ariaLabel={`Filter ${p2}`}
+                                />
+                              )}
+                            </Box>
+                          </Group>
+                        )}
+                      </FilterableHeaderEdit>
+                    ) : col.kind === "route" ? (
+                      <FilterableRouteHeaderLabel
+                        originCode={v1}
+                        destinationCode={v2}
+                        onClick={() => openEditor(col.id)}
+                        theme={theme}
+                        label={col.header}
+                      />
+                    ) : (
+                      <FilterableHeaderLabel
+                        label={col.header}
+                        filterDisplay={formatServiceTradeDisplay(
+                          formatDisplay(k1, v1),
+                          formatDisplay(k2, v2),
+                        )}
+                        onClick={() => openEditor(col.id)}
+                        theme={theme}
+                      />
+                    )}
+                  </th>
+                );
+              }
+
+              const key = mapping.single;
+              const value = headerFilters.values[key] ?? "";
+              return (
+                <th key={col.id} style={thStyle}>
+                  {isEditing ? (
+                    <FilterableHeaderEdit onCollapse={makeCollapse(col.id)}>
+                      {customInputFn(key)?.({
+                        autoFocus: true,
+                        onClose: makeCollapse(col.id),
+                      }) ?? (
+                        <HeaderFilterInput
+                          value={value}
+                          onChange={(val) => headerFilters.onChange(key, val)}
+                          ariaLabel={`Filter ${col.header}`}
+                          autoFocus
+                        />
+                      )}
+                    </FilterableHeaderEdit>
+                  ) : (
+                    <FilterableHeaderLabel
+                      label={col.header}
+                      filterDisplay={formatDisplay(key, value)}
+                      onClick={() => openEditor(col.id)}
+                      theme={theme}
+                    />
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {data.length === 0 ? (
+          {loading ? (
+            <tr>
+              <td colSpan={Math.max(1, columns.length)} style={{ padding: 0 }}>
+                <Center py={80} style={{ backgroundColor: theme.cardBg }}>
+                  <Stack align="center" gap="md">
+                    <Loader size="lg" color={theme.primary} />
+                    <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
+                      {loadingMessage}
+                    </Text>
+                  </Stack>
+                </Center>
+              </td>
+            </tr>
+          ) : data.length === 0 ? (
             <tr>
               <td colSpan={Math.max(1, columns.length)} style={{ padding: 60, textAlign: "center" }}>
                 <Stack align="center" gap="md">

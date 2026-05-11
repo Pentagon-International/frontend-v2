@@ -23,7 +23,7 @@ export type ErpListThOptions = {
  */
 export function erpListThStyle(theme: ErpListTheme, options?: ErpListThOptions): CSSProperties {
   return {
-    padding: "10px 10px",
+    padding: "6px 10px",
     textAlign: options?.textAlign ?? "left",
     fontWeight: 500,
     fontSize: 14,
@@ -37,7 +37,7 @@ export function erpListThStyle(theme: ErpListTheme, options?: ErpListThOptions):
 
 /** Padding-only body cell (row border lives on `<tr>`). */
 export function erpListTdPaddingStyle(): CSSProperties {
-  return { padding: "10px 14px" };
+  return { padding: "10px" };
 }
 
 /**

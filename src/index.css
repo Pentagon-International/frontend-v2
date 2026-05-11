@@ -138,3 +138,23 @@ body {
 .air-export-booking-geist-root .air-export-geist-mono {
   font-family: 'Geist Mono', monospace !important;
 }
+
+/* ─── Native table header click-to-edit filters (Enquiry / RFQ shared) ──
+ * Smooth fade when toggling between the column header label and its inline
+ * edit input. The animation runs each time the element is freshly mounted
+ * (label -> input or input -> label), so the swap no longer snaps.
+ */
+@keyframes erpHeaderFilterFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.erp-header-filter-fade {
+  animation: erpHeaderFilterFadeIn 160ms ease-out;
+}

@@ -15,6 +15,7 @@ import {
   MantineProvider,
 } from "@mantine/core";
 import {
+  IconCheck,
   IconDotsVertical,
   IconEdit,
   IconEye,
@@ -53,7 +54,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   DEFAULT_ERP_LIST_THEME,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
@@ -80,6 +80,10 @@ import { buildPreviewColumnDescriptors } from "./EnquiryListPreviewBuild";
 import {
   EnquiryPreviewNativeTable,
   EnquirySummaryNativeTable,
+  type EnquiryHeaderFilterKey,
+  type EnquiryHeaderFilterValues,
+  type EnquiryHeaderFiltersProp,
+  type EnquiryHeaderRenderInput,
   type EnquirySummaryVisibleColumns,
 } from "./EnquiryListNativeTables";
 import type { EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
@@ -88,8 +92,257 @@ import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFi
 const LIST_KEY = "ENQUIRY_MASTER";
 const DETAILED_LIST_KEY = "ENQUIRY_MASTER_DETAILED";
 
+/**
+ * Stable `displayFormat` references for the `SearchableSelect`s that consume
+ * the customer / port masters.
+ *
+ * IMPORTANT: keep these at MODULE scope (not inline `{...}` literals in JSX).
+ *
+ * `SearchableSelect` internally memoises its fetcher with `displayFormat` in
+ * the dependency array, so an inline closure (a new reference on every parent
+ * render) makes the fetch effect re-run on every render -- which causes the
+ * customer-master / port-master API to be re-hit while the user is searching.
+ * By making these references stable, the API is hit only once per debounced
+ * search term as intended.
+ */
+const enquiryCustomerDisplayFormat = (item: any) => ({
+  value: String(item.customer_code),
+  label: String(item.customer_name),
+});
+
+const enquiryPortDisplayFormat = (item: any) => ({
+  value: String(item.port_code),
+  label: `${item.port_name} (${item.port_code})`,
+});
+
+/**
+ * Service suggestion list rendered inside the compound Service column header
+ * editor (`ServiceHeaderFilterInput`). Picks here populate `filters.service`.
+ */
+const SERVICE_HEADER_FILTER_OPTIONS = ["FCL", "LCL", "AIR"];
+
+/**
+ * Payload returned by `ServiceHeaderFilterInput.onCommit`.
+ *
+ * Both slots are always sent. The parent forwards `service` to `filters.service`
+ * and `trade` to `filters.trade`, so the API payload carries them as two
+ * independent fields exactly like the advanced filter section does.
+ */
+type ServiceHeaderCommitPayload = {
+  service: string | null;
+  trade: string | null;
+};
+
+/**
+ * Compound header-filter editor for the Service column.
+ *
+ * Visually it looks like a SINGLE bordered input, but internally it is composed
+ * of two independent Mantine controls inside the same `<div>`:
+ *   - a `Select` with FCL / LCL / AIR options on the left (drives `service`),
+ *   - a `TextInput` for free-text trade search on the right (drives `trade`),
+ *   - a thin divider between them, and
+ *   - a tick (`IconCheck`) ActionIcon at the end that commits both slots.
+ *
+ * Each control owns its own local state, so typing / picking never touches the
+ * upstream filter state (and therefore never triggers a refetch). Only clicking
+ * the tick (or pressing Enter inside the trade input) fires `onCommit`, which
+ * sends `service` and `trade` independently. This matches the existing API
+ * payload shape -- the filter builder already maps `filters.service` and
+ * `filters.trade` to separate request fields.
+ *
+ * The component is hydrated from `serviceValue` / `tradeValue` whenever those
+ * props change externally (advanced filter edits, store restore, etc.).
+ */
+function ServiceHeaderFilterInput({
+  autoFocus,
+  serviceValue,
+  tradeValue,
+  onCommit,
+}: {
+  autoFocus: boolean;
+  serviceValue: string | null;
+  tradeValue: string | null;
+  onCommit: (next: ServiceHeaderCommitPayload) => void;
+}) {
+  const [localService, setLocalService] = useState<string | null>(serviceValue);
+  const [localTrade, setLocalTrade] = useState<string>(tradeValue ?? "");
+
+  // Hydrate from upstream whenever the committed filters change.
+  useEffect(() => {
+    setLocalService(serviceValue);
+  }, [serviceValue]);
+  useEffect(() => {
+    setLocalTrade(tradeValue ?? "");
+  }, [tradeValue]);
+
+  const commit = useCallback(() => {
+    const trimmedTrade = localTrade.trim();
+    onCommit({
+      service: localService,
+      trade: trimmedTrade.length > 0 ? trimmedTrade : null,
+    });
+  }, [localService, localTrade, onCommit]);
+
+  // True while the user has *uncommitted* changes vs the upstream filter
+  // state (i.e. they have typed / picked something but not pressed tick yet).
+  const isModified =
+    localService !== serviceValue || localTrade !== (tradeValue ?? "");
+  // True when the upstream filter already holds a service or trade value.
+  const hasCommittedFilters =
+    serviceValue != null || (tradeValue ?? "").trim().length > 0;
+  // Show the clear (X) button instead of the tick (✓) when the column is
+  // already filtered AND the user has not yet started editing. The moment the
+  // user makes any change, the button flips back to the tick (commit) state.
+  const showClearMode = hasCommittedFilters && !isModified;
+
+  const clearAll = useCallback(() => {
+    setLocalService(null);
+    setLocalTrade("");
+    onCommit({ service: null, trade: null });
+  }, [onCommit]);
+
+  const handleActionClick = useCallback(() => {
+    if (showClearMode) {
+      clearAll();
+    } else {
+      commit();
+    }
+  }, [showClearMode, clearAll, commit]);
+
+  // Unstyled inner controls -- the outer Box is the only thing with a border /
+  // background, so the two controls read as a single compound input.
+  const innerInputStyles = {
+    input: {
+      border: "none",
+      backgroundColor: "transparent",
+      height: 26,
+      minHeight: 26,
+      paddingTop: 0,
+      paddingBottom: 0,
+    },
+  } as const;
+
+  return (
+    <Box
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0,
+        width: "100%",
+        height: 28,
+        background: "#fff",
+        border: "1px solid var(--mantine-color-default-border, #E2E8F0)",
+        borderRadius: 4,
+        overflow: "hidden",
+      }}
+    >
+      <Select
+        size="xs"
+        placeholder="Svc"
+        data={SERVICE_HEADER_FILTER_OPTIONS}
+        value={localService}
+        onChange={(val) => setLocalService(val)}
+        clearable
+        variant="unstyled"
+        comboboxProps={{ zIndex: 1000 }}
+        styles={{
+          ...innerInputStyles,
+          input: { ...innerInputStyles.input, paddingLeft: 8, paddingRight: 4 },
+        }}
+        style={{ flex: "0 0 70px", minWidth: 0 }}
+      />
+      <Box
+        aria-hidden
+        style={{
+          width: 1,
+          height: 18,
+          background: "#E2E8F0",
+          flexShrink: 0,
+        }}
+      />
+      <TextInput
+        size="xs"
+        placeholder="Trade"
+        value={localTrade}
+        onChange={(e) => setLocalTrade(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        variant="unstyled"
+        autoFocus={autoFocus}
+        styles={{
+          ...innerInputStyles,
+          input: { ...innerInputStyles.input, paddingLeft: 8, paddingRight: 4 },
+        }}
+        style={{ flex: 1, minWidth: 0 }}
+      />
+      <ActionIcon
+        size="sm"
+        variant="filled"
+        color={showClearMode ? "red" : "blue"}
+        onClick={handleActionClick}
+        // Keep the editor open until the click handler runs (avoids the
+        // FilterableHeaderEdit blur from collapsing the editor before the
+        // commit / clear action fires).
+        onMouseDown={(e) => e.preventDefault()}
+        aria-label={
+          showClearMode
+            ? "Clear service / trade filter"
+            : "Apply service / trade filter"
+        }
+        title={showClearMode ? "Clear filter" : "Apply"}
+        style={{ flexShrink: 0, marginRight: 2 }}
+      >
+        {showClearMode ? <IconX size={14} /> : <IconCheck size={14} />}
+      </ActionIcon>
+    </Box>
+  );
+}
+
 /** Equal width for sub-header KPI tiles (Total, Active, … Lost). */
-const ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX = 100;
+const ENQUIRY_SUBHEADER_STAT_PILL_WIDTH_PX = 82;
+
+/**
+ * Static mapping from Detailed-view API column header text -> our internal
+ * key. MUST stay at module scope (not inline `{...}` in JSX / component body):
+ * an inline literal would be a new object reference on every render, which
+ * would cascade into `previewLayout` regenerating each render -> the
+ * `previewColumnVisibility` effect firing every render -> a new state object
+ * -> another render. (That cascade is what produced the 40k+ render storm.)
+ */
+const PREVIEW_COLUMN_TO_KEY_MAP: Record<string, string> = {
+  "Enquiry ID": "enquiry_id",
+  "Sales Person": "sales_person",
+  "Enquiry Date": "enquiry_date",
+  Trade: "trade",
+  Shipment: "shipment",
+  "Customer Name": "customer_name",
+  Location: "location",
+  Service: "service",
+  Origin: "origin",
+  Destination: "destination",
+  "Cargo Details": "cargo_details",
+  "Total Cost": "total_cost",
+  "Total Sell": "total_sell",
+  Profit: "profit",
+  Status: "status",
+  Remark: "service_remark",
+  "Reference No": "reference_no",
+};
+
+/**
+ * Stable empty `previewResult` shape used as a fallback before the detailed
+ * query has resolved. Kept at module scope so `tablePreviewData` keeps the same
+ * reference between renders while `previewResult` is still `undefined`.
+ */
+const EMPTY_PREVIEW_RESULT: { columns: unknown[]; data: unknown[]; total: number } = {
+  columns: [],
+  data: [],
+  total: 0,
+};
 
 /** Normalized key for matching API `summary.status_counts` (handles spaces / case). */
 function normalizeEnquiryStatusKey(s: string): string {
@@ -289,25 +542,10 @@ function EnquiryMaster() {
   /** Last settled detailed-list total — footer + page clamp while fetching a new page (RQ cache miss). */
   const detailedListTotalBaselineRef = useRef(0);
 
-  const previewColumnToKeyMap: Record<string, string> = {
-    "Enquiry ID": "enquiry_id",
-    "Sales Person": "sales_person",
-    "Enquiry Date": "enquiry_date",
-    Trade: "trade",
-    Shipment: "shipment",
-    "Customer Name": "customer_name",
-    Location: "location",
-    Service: "service",
-    Origin: "origin",
-    Destination: "destination",
-    "Cargo Details": "cargo_details",
-    "Total Cost": "total_cost",
-    "Total Sell": "total_sell",
-    Profit: "profit",
-    Status: "status",
-    Remark: "service_remark",
-    "Reference No": "reference_no",
-  };
+  // `PREVIEW_COLUMN_TO_KEY_MAP` is declared at module scope (see top of file)
+  // so this reference is stable across renders -- crucial for keeping
+  // `previewLayout` / `previewColumnVisibility` from regenerating each render.
+  const previewColumnToKeyMap = PREVIEW_COLUMN_TO_KEY_MAP;
 
   const openPreview = async () => {
     try {
@@ -561,6 +799,149 @@ function EnquiryMaster() {
     },
     [],
   );
+
+  // ── Column header filters ─────────────────────────────────────────────────
+  // Strictly NON-INVASIVE: the column header filter inputs live on top of the
+  // existing `filters` / `previewFilters` states. They DO NOT introduce any
+  // new payload structure, client-side filtering, separate React Query, search
+  // path, or store keys. A monotonic tick is incremented only when the user
+  // edits a header input — a debounced effect (further below) uses that tick
+  // to invoke the EXISTING `refetchSummary` / `refetchPreview`, exactly the
+  // way the Apply button does today. Advanced filter inputs DO NOT bump this
+  // tick, so their existing behaviour (commit-on-Apply) is fully preserved.
+  const [headerFilterTick, setHeaderFilterTick] = useState(0);
+  const [debouncedHeaderFilterTick] = useDebouncedValue(headerFilterTick, 1000);
+  const lastHandledHeaderFilterTickRef = useRef(0);
+
+  const handleSummaryHeaderFilterChange = useCallback(
+    (key: EnquiryHeaderFilterKey, value: string) => {
+      const next = value;
+      switch (key) {
+        case "enquiry_id":
+          updateFilter("enquiry_id", next || null);
+          break;
+        case "customer_name":
+          // Header column maps to filters.customer_code (per spec).
+          updateFilter("customer_code", next || null);
+          // Clear the SearchableSelect's label cache so the advanced panel
+          // reflects whatever the user typed in the header (single source of truth).
+          setCustomerDisplayValue(null);
+          break;
+        case "sales_person":
+          updateFilter("sales_person", next || null);
+          break;
+        case "service":
+          updateFilter("service", next || null);
+          break;
+        case "trade":
+          updateFilter("trade", next || null);
+          break;
+        case "origin":
+          updateFilter("origin_code", next || null);
+          setOriginDisplayValue(null);
+          break;
+        case "destination":
+          updateFilter("destination_code", next || null);
+          setDestinationDisplayValue(null);
+          break;
+        case "status":
+          // Empty header value === "no status filter" — match the existing
+          // "ALL" sentinel that buildFilterPayload already understands.
+          updateFilter("status", next ? next : "ALL");
+          break;
+        case "reference_no":
+          updateFilter("reference_no", next || null);
+          break;
+      }
+      setListCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [updateFilter],
+  );
+
+  const handlePreviewHeaderFilterChange = useCallback(
+    (key: EnquiryHeaderFilterKey, value: string) => {
+      const next = value;
+      switch (key) {
+        case "enquiry_id":
+          updatePreviewFilter("enquiry_id", next || null);
+          break;
+        case "customer_name":
+          updatePreviewFilter("customer_name", next || null);
+          setPreviewCustomerDisplayValue(null);
+          break;
+        case "sales_person":
+          updatePreviewFilter("sales_person", next || null);
+          break;
+        case "service":
+          updatePreviewFilter("service", next || null);
+          break;
+        case "trade":
+          updatePreviewFilter("trade", next || null);
+          break;
+        case "origin":
+          updatePreviewFilter("origin_name", next || null);
+          setPreviewOriginDisplayValue(null);
+          break;
+        case "destination":
+          updatePreviewFilter("destination_name", next || null);
+          setPreviewDestinationDisplayValue(null);
+          break;
+        case "status":
+          updatePreviewFilter("status", next ? next : "ALL");
+          break;
+        case "reference_no":
+          updatePreviewFilter("reference_no", next || null);
+          break;
+      }
+      setPreviewCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [updatePreviewFilter],
+  );
+
+  const summaryHeaderFilterValues: EnquiryHeaderFilterValues = useMemo(
+    () => ({
+      enquiry_id: filters.enquiry_id ?? "",
+      customer_name: filters.customer_code ?? "",
+      sales_person: filters.sales_person ?? "",
+      service: filters.service ?? "",
+      trade: filters.trade ?? "",
+      origin: filters.origin_code ?? "",
+      destination: filters.destination_code ?? "",
+      // Hide the "ALL" sentinel in the header input — empty box === "all".
+      status:
+        !filters.status || filters.status === "ALL" ? "" : filters.status,
+      reference_no: filters.reference_no ?? "",
+    }),
+    [filters],
+  );
+
+  const previewHeaderFilterValues: EnquiryHeaderFilterValues = useMemo(
+    () => ({
+      enquiry_id: previewFilters.enquiry_id ?? "",
+      customer_name: previewFilters.customer_name ?? "",
+      sales_person: previewFilters.sales_person ?? "",
+      service: previewFilters.service ?? "",
+      trade: previewFilters.trade ?? "",
+      origin: previewFilters.origin_name ?? "",
+      destination: previewFilters.destination_name ?? "",
+      status:
+        !previewFilters.status || previewFilters.status === "ALL"
+          ? ""
+          : previewFilters.status,
+      reference_no: previewFilters.reference_no ?? "",
+    }),
+    [previewFilters],
+  );
+
+  // NOTE: `summaryHeaderFiltersProp` and `previewHeaderFiltersProp` are built
+  // further below (after `salespersonOptions` / `serviceOptions` / etc. are
+  // declared) so the header column inputs can mirror the advanced filter
+  // section (SearchableSelect for customer / port, Select for service /
+  // trade / sales person / status). The bare `values` + `onChange` would not
+  // be enough to render those richer inputs.
+
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [debounced] = useDebouncedValue(searchQuery, 500);
@@ -884,11 +1265,509 @@ function EnquiryMaster() {
     [],
   );
 
+  // The ERP list theme is a static reshape of DEFAULT_ERP_LIST_THEME.
+  //
+  // IMPORTANT: `useMemo` with an empty dependency array keeps the SAME object
+  // reference across every render. Without this stability, the header-column
+  // `renderInput` / `displayFormatter` memos below (which list `erpTheme` as a
+  // dependency) would regenerate on every parent render, which would in turn
+  // produce a fresh `summaryHeaderFiltersProp` / `previewHeaderFiltersProp`
+  // every render, force the native tables to receive new props every render
+  // and cause them to re-render needlessly -- the exact churn the user asked
+  // us to prevent when they "click any column header".
+  const erpTheme = useMemo<ErpListTheme>(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
+  const { border, muted, fg, primary, fontSans } = erpTheme;
+
+  // ── Header column custom inputs ──────────────────────────────────────────
+  // Mirrors the advanced filter section so the column header inputs (visible
+  // only when a user clicks a header) send the SAME payload shape -- e.g.
+  // a customer pick from the header sets `filters.customer_code` (not free
+  // text), exactly like the advanced filter SearchableSelect would.
+
+  const summaryHeaderRenderInput = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, EnquiryHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_code", "customer_name"]}
+          displayFormat={enquiryCustomerDisplayFormat}
+          value={filters.customer_code}
+          displayValue={customerDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("customer_code", value || null);
+            setCustomerDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("customer_name", value || null);
+              setPreviewCustomerDisplayValue(selectedData?.label || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search origin"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={enquiryPortDisplayFormat}
+          value={filters.origin_code}
+          displayValue={originDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("origin_code", value || null);
+            setOriginDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("origin_name", value || null);
+              setPreviewOriginDisplayValue(selectedData?.label || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search destination"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={enquiryPortDisplayFormat}
+          value={filters.destination_code}
+          displayValue={destinationDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("destination_code", value || null);
+            setDestinationDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("destination_name", value || null);
+              setPreviewDestinationDisplayValue(selectedData?.label || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={filters.sales_person}
+          onChange={(value) => {
+            updateFilter("sales_person", value || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("sales_person", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <ServiceHeaderFilterInput
+          autoFocus={autoFocus}
+          serviceValue={filters.service}
+          tradeValue={filters.trade}
+          onCommit={(next) => {
+            updateFilter("service", next.service);
+            updateFilter("trade", next.trade);
+            if (showPreviewTable) {
+              updatePreviewFilter("service", next.service);
+              updatePreviewFilter("trade", next.trade);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            onClose();
+          }}
+        />
+      ),
+      trade: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Trade"
+          searchable
+          clearable
+          size="xs"
+          data={tradeOptions}
+          value={filters.trade}
+          onChange={(value) => {
+            updateFilter("trade", value || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("trade", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={statusOptions}
+          value={filters.status}
+          onChange={(value) => {
+            updateFilter("status", value || "ALL");
+            if (showPreviewTable) {
+              updatePreviewFilter("status", value || "ALL");
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filters.customer_code,
+      filters.origin_code,
+      filters.destination_code,
+      filters.sales_person,
+      filters.service,
+      filters.trade,
+      filters.status,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      serviceOptions,
+      tradeOptions,
+      statusOptions,
+      showPreviewTable,
+      erpTheme,
+      updateFilter,
+      updatePreviewFilter,
+    ],
+  );
+
+  /**
+   * Translates the underlying *code* held in summary state into the
+   * user-friendly *label* that the SearchableSelect / Select dropdown showed
+   * when the value was originally picked, so the collapsed column header reads
+   * `Chennai (INMAA)` instead of just `INMAA`, `Active` instead of `ACTIVE`,
+   * etc.
+   */
+  const summaryHeaderDisplayFormatter = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => customerDisplayValue ?? raw,
+      origin: (raw) => originDisplayValue ?? raw,
+      destination: (raw) => destinationDisplayValue ?? raw,
+      status: (raw) =>
+        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+    }),
+    [
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      statusOptions,
+    ],
+  );
+
+  const summaryHeaderFiltersProp: EnquiryHeaderFiltersProp = useMemo(
+    () => ({
+      values: summaryHeaderFilterValues,
+      onChange: handleSummaryHeaderFilterChange,
+      renderInput: summaryHeaderRenderInput,
+      displayFormatter: summaryHeaderDisplayFormatter,
+    }),
+    [
+      summaryHeaderFilterValues,
+      handleSummaryHeaderFilterChange,
+      summaryHeaderRenderInput,
+      summaryHeaderDisplayFormatter,
+    ],
+  );
+
+  const previewHeaderRenderInput = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, EnquiryHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_code", "customer_name"]}
+          displayFormat={enquiryCustomerDisplayFormat}
+          value={previewFilters.customer_name}
+          displayValue={previewCustomerDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("customer_name", value || null);
+            setPreviewCustomerDisplayValue(selectedData?.label || null);
+            // Keep summary state in sync (matches the advanced section behaviour).
+            updateFilter("customer_code", value || null);
+            setCustomerDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search origin"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={enquiryPortDisplayFormat}
+          value={previewFilters.origin_name}
+          displayValue={previewOriginDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("origin_name", value || null);
+            setPreviewOriginDisplayValue(selectedData?.label || null);
+            updateFilter("origin_code", value || null);
+            setOriginDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search destination"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={enquiryPortDisplayFormat}
+          value={previewFilters.destination_name}
+          displayValue={previewDestinationDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("destination_name", value || null);
+            setPreviewDestinationDisplayValue(selectedData?.label || null);
+            updateFilter("destination_code", value || null);
+            setDestinationDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={previewFilters.sales_person}
+          onChange={(value) => {
+            updatePreviewFilter("sales_person", value || null);
+            updateFilter("sales_person", value || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <ServiceHeaderFilterInput
+          autoFocus={autoFocus}
+          serviceValue={previewFilters.service}
+          tradeValue={previewFilters.trade}
+          onCommit={(next) => {
+            updatePreviewFilter("service", next.service);
+            updatePreviewFilter("trade", next.trade);
+            updateFilter("service", next.service);
+            updateFilter("trade", next.trade);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            onClose();
+          }}
+        />
+      ),
+      trade: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Trade"
+          searchable
+          clearable
+          size="xs"
+          data={tradeOptions}
+          value={previewFilters.trade}
+          onChange={(value) => {
+            updatePreviewFilter("trade", value || null);
+            updateFilter("trade", value || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={statusOptions}
+          value={previewFilters.status}
+          onChange={(value) => {
+            updatePreviewFilter("status", value || "ALL");
+            updateFilter("status", value || "ALL");
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      previewFilters.customer_name,
+      previewFilters.origin_name,
+      previewFilters.destination_name,
+      previewFilters.sales_person,
+      previewFilters.service,
+      previewFilters.trade,
+      previewFilters.status,
+      previewCustomerDisplayValue,
+      previewOriginDisplayValue,
+      previewDestinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      serviceOptions,
+      tradeOptions,
+      statusOptions,
+      erpTheme,
+      updateFilter,
+      updatePreviewFilter,
+    ],
+  );
+
+  const previewHeaderDisplayFormatter = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => previewCustomerDisplayValue ?? raw,
+      origin: (raw) => previewOriginDisplayValue ?? raw,
+      destination: (raw) => previewDestinationDisplayValue ?? raw,
+      status: (raw) =>
+        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+    }),
+    [
+      previewCustomerDisplayValue,
+      previewOriginDisplayValue,
+      previewDestinationDisplayValue,
+      statusOptions,
+    ],
+  );
+
+  const previewHeaderFiltersProp: EnquiryHeaderFiltersProp = useMemo(
+    () => ({
+      values: previewHeaderFilterValues,
+      onChange: handlePreviewHeaderFilterChange,
+      renderInput: previewHeaderRenderInput,
+      displayFormatter: previewHeaderDisplayFormatter,
+    }),
+    [
+      previewHeaderFilterValues,
+      handlePreviewHeaderFilterChange,
+      previewHeaderRenderInput,
+      previewHeaderDisplayFormatter,
+    ],
+  );
+
   // No separate search queries – search is merged into the main payloads
 
   // Choose which data set to show in tables (no client-side filtering of rows)
   const tableData = summaryResult?.data || [];
-  const tablePreviewData = previewResult || { columns: [], data: [], total: 0 };
+  // Use a module-level fallback so the reference is stable while the detailed
+  // query is still pending. An inline `{...}` here would mint a new object on
+  // every render and force `previewLayout` (and its memoized consumers) to
+  // regenerate -- this was contributing to the table re-render storm.
+  const tablePreviewData = previewResult || EMPTY_PREVIEW_RESULT;
 
   const summaryListTotalRecords = summaryResult?.total ?? listTotalRecords;
 
@@ -937,6 +1816,32 @@ function EnquiryMaster() {
     previewPageSize,
     previewCurrentPage,
   ]);
+
+  /**
+   * Column-header filter auto refetch.
+   *
+   * Fires ONLY when the user actually edits a header filter input (tick is bumped
+   * in the header onChange handlers). The Advanced filter section, restore flows,
+   * dashboard initial filters, global search and pagination DO NOT touch this tick,
+   * so this effect cannot interfere with their existing behaviour.
+   *
+   * Reuses the EXISTING `refetchSummary` / `refetchPreview` which in turn use the
+   * EXISTING `buildFilterPayload` / `buildPreviewListFilterPayload`, so header
+   * values automatically flow through the same payload, pagination, and search merge.
+   */
+  useEffect(() => {
+    if (debouncedHeaderFilterTick === 0) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick) return;
+    lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
+
+    if (showPreviewTable) {
+      setPreviewFiltersApplied(true);
+      void Promise.all([refetchPreview(), refetchSummary()]);
+    } else {
+      setFiltersApplied(true);
+      void refetchSummary();
+    }
+  }, [debouncedHeaderFilterTick, showPreviewTable, refetchSummary, refetchPreview]);
 
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
@@ -2223,18 +3128,6 @@ function EnquiryMaster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewCurrentPage, previewPageSize, showPreviewTable]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
-  const { border, muted, fg, primary, fontSans } = erpTheme;
-
   const previewLayout = useMemo(
     () => buildPreviewColumnDescriptors(tablePreviewData, previewColumnToKeyMap),
     [tablePreviewData, previewColumnToKeyMap],
@@ -2248,6 +3141,16 @@ function EnquiryMaster() {
   );
   useEffect(() => {
     setPreviewColumnVisibility((prev) => {
+      // Detect new columns first so unchanged states return the SAME reference
+      // (no spurious re-renders cascading through the table).
+      let hasNew = false;
+      for (const c of previewLayout.columns) {
+        if (prev[c.id] === undefined) {
+          hasNew = true;
+          break;
+        }
+      }
+      if (!hasNew) return prev;
       const next = { ...prev };
       for (const c of previewLayout.columns) {
         if (next[c.id] === undefined) next[c.id] = true;
@@ -2348,38 +3251,33 @@ function EnquiryMaster() {
             toolbar={{
               leading: (
                 <>
-                  <Group gap={6} wrap="nowrap" align="center">
-                    <Button
-                      size="xs"
-                      variant={!showPreviewTable ? "filled" : "default"}
-                      styles={
-                        !showPreviewTable
-                          ? erpToolbarPrimaryButtonStyles(erpTheme)
-                          : erpToolbarOutlineButtonStyles(erpTheme)
+                  <Select
+                    size="xs"
+                    data={[
+                      { value: "summary", label: "Summary" },
+                      { value: "detailed", label: "Detailed" },
+                    ]}
+                    value={showPreviewTable ? "detailed" : "summary"}
+                    onChange={(val) => {
+                      if (!val) return;
+                      if (val === "summary" && showPreviewTable) {
+                        void closePreview();
+                      } else if (val === "detailed" && !showPreviewTable) {
+                        void openPreview();
                       }
-                      leftSection={<IconList size={14} />}
-                      onClick={() => {
-                        if (showPreviewTable) void closePreview();
-                      }}
-                    >
-                      Summary
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant={showPreviewTable ? "filled" : "default"}
-                      styles={
-                        showPreviewTable
-                          ? erpToolbarPrimaryButtonStyles(erpTheme)
-                          : erpToolbarOutlineButtonStyles(erpTheme)
-                      }
-                      leftSection={<IconFileText size={14} />}
-                      onClick={() => {
-                        if (!showPreviewTable) void openPreview();
-                      }}
-                    >
-                      Detailed
-                    </Button>
-                  </Group>
+                    }}
+                    allowDeselect={false}
+                    leftSection={
+                      showPreviewTable ? (
+                        <IconFileText size={14} />
+                      ) : (
+                        <IconList size={14} />
+                      )
+                    }
+                    comboboxProps={{ zIndex: 1000 }}
+                    styles={{ input: { width: 130, fontWeight: 500 } }}
+                    aria-label="Switch between Summary and Detailed list view"
+                  />
                   {(location.state?.returnToDashboard || returnToDashboardRef.current) && (
                     <Button
                       size="xs"
@@ -2465,11 +3363,6 @@ function EnquiryMaster() {
                     />
                   </Group>
                 </>
-              ),
-              secondary: (
-                <Text size="xs" c={muted} style={{ fontFamily: fontSans }}>
-                  {showPreviewTable ? "Detailed list" : "Summary list"}
-                </Text>
               ),
               actions: (
                 <>
@@ -2642,10 +3535,7 @@ function EnquiryMaster() {
                     placeholder="Select Service"
                     apiEndpoint={URL.customer}
                     searchFields={["customer_code", "customer_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
+                    displayFormat={enquiryCustomerDisplayFormat}
                     value={filters.customer_code}
                     displayValue={customerDisplayValue}
                     onChange={(value, selectedData) => {
@@ -2676,10 +3566,7 @@ function EnquiryMaster() {
                     placeholder="Type Origin Code"
                     apiEndpoint={URL.portMaster}
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={enquiryPortDisplayFormat}
                     value={filters.origin_code}
                     displayValue={originDisplayValue}
                     onChange={(value, selectedData) => {
@@ -2708,10 +3595,7 @@ function EnquiryMaster() {
                     placeholder="Type destination code"
                     apiEndpoint={URL.portMaster}
                     searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: any) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
+                    displayFormat={enquiryPortDisplayFormat}
                     value={filters.destination_code}
                     displayValue={destinationDisplayValue}
                     onChange={(value, selectedData) => {
@@ -2945,27 +3829,25 @@ function EnquiryMaster() {
                   }}
                 />
               ),
+              // Always render the native table so its `<thead>` (column filters)
+              // and the pagination footer stay visible during a refetch. The
+              // loader is rendered INSIDE `<tbody>` via the `loading` prop,
+              // which also preserves any open header-filter editor across
+              // refetches (it lives in the table component's state).
               children: showPreviewTable ? (
-                isPreviewListDataLoading ? (
-                  <ERPListTableLoading
-                    theme={erpTheme}
-                    message={
-                      isRefreshingData ? "Updating detailed list…" : "Loading detailed enquiries…"
-                    }
-                  />
-                ) : (
-                  <EnquiryPreviewNativeTable
-                    theme={erpTheme}
-                    columns={visiblePreviewColumns}
-                    data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
-                    dateFormat={dateFormat}
-                    getStatusBadge={getStatusBadge}
-                  />
-                )
-              ) : isSummaryTableDataLoading ? (
-                <ERPListTableLoading
+                <EnquiryPreviewNativeTable
                   theme={erpTheme}
-                  message={isRefreshingData ? "Updating enquiries…" : "Loading enquiries…"}
+                  columns={visiblePreviewColumns}
+                  data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
+                  dateFormat={dateFormat}
+                  getStatusBadge={getStatusBadge}
+                  headerFilters={previewHeaderFiltersProp}
+                  loading={isPreviewListDataLoading}
+                  loadingMessage={
+                    isRefreshingData
+                      ? "Updating detailed list…"
+                      : "Loading detailed enquiries…"
+                  }
                 />
               ) : (
                 <EnquirySummaryNativeTable
@@ -2978,6 +3860,11 @@ function EnquiryMaster() {
                   actionsOpenKey={summaryActionsMenuKey}
                   onActionsKeyChange={setSummaryActionsMenuKey}
                   menuDropdownClassName={ERP_LIST_GEIST_ROOT_CLASS}
+                  headerFilters={summaryHeaderFiltersProp}
+                  loading={isSummaryTableDataLoading}
+                  loadingMessage={
+                    isRefreshingData ? "Updating enquiries…" : "Loading enquiries…"
+                  }
                 />
               ),
             }}
