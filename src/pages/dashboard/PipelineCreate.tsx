@@ -379,7 +379,11 @@ function PipelineCreate() {
       applyMonthlyIfBlank("newProfiles", idx),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frequencyOptions]);
+  }, [
+    frequencyOptions,
+    profilingForm.values.profiles.length,
+    profilingForm.values.newProfiles.length,
+  ]);
 
   useEffect(() => {
     if (routerLocation.state) {
@@ -450,6 +454,9 @@ function PipelineCreate() {
   }, [routerLocation.state]);
 
   const handleAddNewProfile = () => {
+    const monthly = frequencyOptions.find(
+      (o) => String(o.label ?? "").trim().toUpperCase() === "MONTHLY",
+    );
     profilingForm.insertListItem("newProfiles", {
       date: null,
       service: "",
@@ -459,8 +466,8 @@ function PipelineCreate() {
       destination_name: "",
       destination_code: "",
       no_of_shipments: "",
-      frequency_name: "",
-      frequency_id: "",
+      frequency_name: monthly?.label ?? "",
+      frequency_id: monthly?.value ?? "",
       volume: "",
       profit: "",
       pipeline_shipments: "",
