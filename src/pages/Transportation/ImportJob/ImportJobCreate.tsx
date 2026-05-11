@@ -656,6 +656,16 @@ function ImportJobCreate() {
           }
         }
 
+        const mblFlat = mblData as Record<string, unknown>;
+        const stateMbl = (location.state?.mblDetails ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const shipperNest =
+          mblFlat.shipper && typeof mblFlat.shipper === "object"
+            ? (mblFlat.shipper as Record<string, unknown>)
+            : undefined;
+
         mblDetailsForm.setValues({
           service: mblData.service || "",
           origin_agent:
@@ -693,23 +703,105 @@ function ImportJobCreate() {
             mblData.igm_date && dayjs(mblData.igm_date).isValid()
               ? dayjs(mblData.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
-          shipper_id: location.state?.mblDetails?.shipper_id || "",
-          shipper_name: String(mblData.shipper_name || ""),
-          shipper_email: String(mblData.shipper_email || ""),
-          shipper_address_id: location.state?.mblDetails?.shipper_address_id || "",
-          shipper_address: String(mblData.shipper_address || ""),
-          consignee_id: location.state?.mblDetails?.consignee_id || "",
-          consignee_name: String(mblData.consignee_name || ""),
-          consignee_email: String(mblData.consignee_email || ""),
-          consignee_address_id:
-            location.state?.mblDetails?.consignee_address_id || "",
-          consignee_address: String(mblData.consignee_address || ""),
-          carrier_agent_id: location.state?.mblDetails?.carrier_agent_id || "",
-          carrier_agent_name: String(mblData.carrier_agent_name || ""),
-          carrier_agent_email: String(mblData.carrier_agent_email || ""),
-          carrier_agent_address_id:
-            location.state?.mblDetails?.carrier_agent_address_id || "",
-          carrier_agent_address: String(mblData.carrier_agent_address || ""),
+          shipper_id: String(
+            mblFlat.shipper_id ??
+              shipperNest?.id ??
+              stateMbl.shipper_id ??
+              "",
+          ),
+          shipper_name: String(
+            mblFlat.shipper_name ??
+              shipperNest?.customer_name ??
+              shipperNest?.name ??
+              stateMbl.shipper_name ??
+              "",
+          ),
+          shipper_email: String(
+            mblFlat.shipper_email ??
+              shipperNest?.email ??
+              stateMbl.shipper_email ??
+              "",
+          ),
+          shipper_address_id: String(
+            mblFlat.shipper_address_id ?? stateMbl.shipper_address_id ?? "",
+          ),
+          shipper_address: String(
+            mblFlat.shipper_address ??
+              shipperNest?.address ??
+              stateMbl.shipper_address ??
+              "",
+          ),
+          consignee_id: String(
+            (mblData as { consignee_id?: unknown }).consignee_id ??
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.id as string | number | undefined
+              ) ??
+              stateMbl.consignee_id ??
+              "",
+          ),
+          consignee_name: String(
+            mblData.consignee_name ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.customer_name as string | undefined
+              ) ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.name as string | undefined
+              ) ||
+              stateMbl.consignee_name ||
+              "",
+          ),
+          consignee_email: String(
+            mblData.consignee_email ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.email as string | undefined
+              ) ||
+              stateMbl.consignee_email ||
+              "",
+          ),
+          consignee_address_id: String(
+            mblFlat.consignee_address_id ??
+              stateMbl.consignee_address_id ??
+              "",
+          ),
+          consignee_address: String(
+            mblData.consignee_address ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.address as string | undefined
+              ) ||
+              stateMbl.consignee_address ||
+              "",
+          ),
+          carrier_agent_id: String(
+            (mblData as { carrier_agent_id?: unknown }).carrier_agent_id ??
+              stateMbl.carrier_agent_id ??
+              "",
+          ),
+          carrier_agent_name: String(
+            mblData.carrier_agent_name ||
+              stateMbl.carrier_agent_name ||
+              "",
+          ),
+          carrier_agent_email: String(
+            mblData.carrier_agent_email ||
+              stateMbl.carrier_agent_email ||
+              "",
+          ),
+          carrier_agent_address_id: String(
+            (mblData as { carrier_agent_address_id?: unknown })
+              .carrier_agent_address_id ??
+              stateMbl.carrier_agent_address_id ??
+              "",
+          ),
+          carrier_agent_address: String(
+            mblData.carrier_agent_address ||
+              stateMbl.carrier_agent_address ||
+              "",
+          ),
         });
 
         // Populate Carrier Details using setValues
@@ -767,6 +859,17 @@ function ImportJobCreate() {
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
+              agent_code: house.agent_code ? String(house.agent_code) : "",
+              agent_state_id:
+                house.agent_state_id !== null &&
+                house.agent_state_id !== undefined
+                  ? String(house.agent_state_id)
+                  : "",
+              shipper_code: house.shipper_code ? String(house.shipper_code) : "",
+              shipper_id:
+                house.shipper_id !== null && house.shipper_id !== undefined
+                  ? String(house.shipper_id)
+                  : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
@@ -776,9 +879,23 @@ function ImportJobCreate() {
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
                 : "",
-              shipper_state_id: house.shipper_state_id
-                ? String(house.shipper_state_id)
+              shipper_state_id:
+                house.shipper_state_id !== null &&
+                house.shipper_state_id !== undefined
+                  ? String(house.shipper_state_id)
+                  : "",
+              shipper_gst_id:
+                house.shipper_gst_id !== null &&
+                house.shipper_gst_id !== undefined
+                  ? String(house.shipper_gst_id)
+                  : "",
+              consignee_code: house.consignee_code
+                ? String(house.consignee_code)
                 : "",
+              consignee_id:
+                house.consignee_id !== null && house.consignee_id !== undefined
+                  ? String(house.consignee_id)
+                  : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
                 : "",
@@ -788,6 +905,16 @@ function ImportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
+              consignee_state_id:
+                house.consignee_state_id !== null &&
+                house.consignee_state_id !== undefined
+                  ? String(house.consignee_state_id)
+                  : "",
+              consignee_gst_id:
+                house.consignee_gst_id !== null &&
+                house.consignee_gst_id !== undefined
+                  ? String(house.consignee_gst_id)
+                  : "",
               notify1_customer_name: (house.notify1_customer_name)
                 ? String(house.notify1_customer_name)
                 : "",
@@ -3921,6 +4048,7 @@ function ImportJobCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <SearchableSelect
+                  key={`ocean-import-party-shipper-${partyDetailsForm.values.shipper_id}:${partyDetailsForm.values.shipper_name ?? "_"}`}
                   size="sm"
                   label="Shipper Name"
                   dropdownZIndex={10}

@@ -686,6 +686,17 @@ function ExportJobCreate() {
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
+              agent_code: house.agent_code ? String(house.agent_code) : "",
+              agent_state_id:
+                house.agent_state_id !== null &&
+                house.agent_state_id !== undefined
+                  ? String(house.agent_state_id)
+                  : "",
+              shipper_code: house.shipper_code ? String(house.shipper_code) : "",
+              shipper_id:
+                house.shipper_id !== null && house.shipper_id !== undefined
+                  ? String(house.shipper_id)
+                  : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
@@ -695,6 +706,23 @@ function ExportJobCreate() {
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
                 : "",
+              shipper_state_id:
+                house.shipper_state_id !== null &&
+                house.shipper_state_id !== undefined
+                  ? String(house.shipper_state_id)
+                  : "",
+              shipper_gst_id:
+                house.shipper_gst_id !== null &&
+                house.shipper_gst_id !== undefined
+                  ? String(house.shipper_gst_id)
+                  : "",
+              consignee_code: house.consignee_code
+                ? String(house.consignee_code)
+                : "",
+              consignee_id:
+                house.consignee_id !== null && house.consignee_id !== undefined
+                  ? String(house.consignee_id)
+                  : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
                 : "",
@@ -704,6 +732,16 @@ function ExportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
+              consignee_state_id:
+                house.consignee_state_id !== null &&
+                house.consignee_state_id !== undefined
+                  ? String(house.consignee_state_id)
+                  : "",
+              consignee_gst_id:
+                house.consignee_gst_id !== null &&
+                house.consignee_gst_id !== undefined
+                  ? String(house.consignee_gst_id)
+                  : "",
               notify_customer1_name:
                 (house.notify1_customer_name ?? house.notify_customer1_name)
                   ? String(

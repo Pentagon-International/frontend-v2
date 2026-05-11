@@ -162,12 +162,11 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
 };
 
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
-  const maxVal = 99999999.99;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
-  return rounded;
+  if (value === null || value === undefined)
+    return value === undefined ? null : null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
 }
 
 type ChargeItem = {
@@ -1684,6 +1683,7 @@ function InvoiceReverse() {
           <Grid>
             <Grid.Col span={4}>
               <SearchableSelect
+                key={`invoice-reverse-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
                 placeholder="Type customer name"
                 apiEndpoint={URL.allCustomers}
