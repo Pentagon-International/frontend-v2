@@ -2780,6 +2780,15 @@ console.log("currentQuotation: ", currentQuotation);
                     menuStyles={erpListGeistMenuDropdownStyles}
                     classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                   />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
                   {user?.is_staff && (
                     <DownloadComponent
                       columns={downloadColumns}
@@ -2790,15 +2799,6 @@ console.log("currentQuotation: ", currentQuotation);
                       expandQuotations={false}
                     />
                   )}
-                  <Button
-                    variant="default"
-                    size="xs"
-                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
-                    leftSection={<IconFilter size={14} />}
-                    onClick={() => setShowFilters((s) => !s)}
-                  >
-                    {showFilters ? "Hide filters" : "Filters"}
-                  </Button>
                 </>
               ),
             }}

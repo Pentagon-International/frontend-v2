@@ -254,6 +254,8 @@ function LeadList() {
   const [showFilters, setShowFilters] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [serverPaginated, setServerPaginated] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<LeadVisibleColumns>(DEFAULT_LEAD_VISIBLE_COLUMNS);
 
   // Modal state for remark conversation
@@ -359,38 +361,49 @@ function LeadList() {
   }, [location.state?.returnToDashboard, location.state?.dashboardState, location.state?.fromDashboard]);
 
   // Fetch lead data with React Query - initial load (no filters, no search)
+  // Pagination params (index/limit) are sent to the API so the backend can paginate when supported.
   const {
     data: leadData = [],
     isLoading: leadLoading,
     isFetching: leadFetching,
     refetch: refetchLeads,
   } = useQuery({
-    queryKey: ["leads"],
+    queryKey: ["leads", pageIndex, pageSize],
     queryFn: async () => {
       try {
         // Initial payload - empty filters (not wrapped in filters object)
-        const requestBody: { assigned_to: string; status: string } = {
+        const requestBody: { assigned_to: string; status: string; search: string } = {
           assigned_to: "",
           status: "",
+          search: "",
         };
 
+        const offset = pageIndex * pageSize;
         const response = await apiCallProtected.post(
-          URL.leadFilter,
+          `${URL.leadFilter}?index=${offset}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
 
+        let list: LeadData[] = [];
         // Handle response - API returns { status: true, data: [...], message: "..." }
         if (data?.status === true && Array.isArray(data.data)) {
-          return data.data;
+          list = data.data;
         } else if (data && Array.isArray(data.data)) {
-          return data.data;
+          list = data.data;
         } else if (data && Array.isArray(data.results)) {
-          return data.results;
+          list = data.results;
         }
-        return [];
+
+        const rawTotal = data?.total ?? data?.count ?? data?.data_count ?? data?.total_count;
+        const total = typeof rawTotal === "number" ? rawTotal : list.length;
+        setTotalRecords(total);
+        setServerPaginated(total > list.length);
+        return list;
       } catch (error) {
         console.error("Error fetching lead data:", error);
+        setTotalRecords(0);
+        setServerPaginated(false);
         ToastNotification({
           type: "error",
           message: "Error fetching leads. Please try again.",
@@ -408,6 +421,8 @@ function LeadList() {
   });
 
   // Separate query for filtered data - with filters and search
+  // queryKey includes pageIndex/pageSize so page changes refetch with the new offset.
+  // Pagination params (index/limit) are sent in the API URL alongside filters/search in the payload.
   const {
     data: filteredLeadData = [],
     isLoading: filteredLeadLoading,
@@ -417,6 +432,8 @@ function LeadList() {
     queryKey: [
       "filteredLeads",
       buildLeadPayload, // Includes search when present - queryKey change auto-triggers refetch
+      pageIndex,
+      pageSize,
     ],
     queryFn: async () => {
       try {
@@ -426,23 +443,32 @@ function LeadList() {
 
         const requestBody = filterPayload; // Not wrapped in 'filters' object
 
+        const offset = pageIndex * pageSize;
         const response = await apiCallProtected.post(
-          URL.leadFilter,
+          `${URL.leadFilter}?index=${offset}&limit=${pageSize}`,
           requestBody
         );
         const data = response as any;
 
+        let list: LeadData[] = [];
         // Handle response - API returns { status: true, data: [...], message: "..." }
         if (data?.status === true && Array.isArray(data.data)) {
-          return data.data;
+          list = data.data;
         } else if (data && Array.isArray(data.data)) {
-          return data.data;
+          list = data.data;
         } else if (data && Array.isArray(data.results)) {
-          return data.results;
+          list = data.results;
         }
-        return [];
+
+        const rawTotal = data?.total ?? data?.count ?? data?.data_count;
+        const total = typeof rawTotal === "number" ? rawTotal : list.length;
+        setTotalRecords(total);
+        setServerPaginated(total > list.length);
+        return list;
       } catch (error) {
         console.error("Error fetching filtered lead data:", error);
+        setTotalRecords(0);
+        setServerPaginated(false);
         ToastNotification({
           type: "error",
           message: "Error fetching leads. Please try again.",
@@ -928,19 +954,24 @@ function LeadList() {
       (l: LeadData) => l.status === "Contacted" || l.status === "Qualified",
     ).length;
     return {
-      total: list.length,
+      total: serverPaginated ? totalRecords : list.length,
       new: list.filter((l: LeadData) => l.status === "New").length,
       inPipeline,
       converted: list.filter((l: LeadData) => l.status === "Converted").length,
     };
-  }, [displayData]);
+  }, [displayData, serverPaginated, totalRecords]);
 
-  const totalRecords = displayData.length;
+  // When the backend honors index/limit pagination we display the response as-is.
+  // Otherwise we fall back to client-side slicing so behavior is unchanged.
+  const effectiveTotalRecords = serverPaginated
+    ? totalRecords
+    : displayData.length;
 
   const pagedRows = useMemo(() => {
+    if (serverPaginated) return displayData;
     const start = pageIndex * pageSize;
     return displayData.slice(start, start + pageSize);
-  }, [displayData, pageIndex, pageSize]);
+  }, [displayData, pageIndex, pageSize, serverPaginated]);
 
   const erpTheme: ErpListTheme = {
     border: DEFAULT_ERP_LIST_THEME.border,
@@ -993,16 +1024,40 @@ function LeadList() {
     [visibleColumns],
   );
 
+  // Reset to first page when filters/search change. Use a ref to skip the initial
+  // render and any restore-driven update so we don't clobber a restored pageIndex.
+  const lastBuildLeadPayloadRef = useRef<any>(null);
   useEffect(() => {
+    if (lastBuildLeadPayloadRef.current === null) {
+      lastBuildLeadPayloadRef.current = buildLeadPayload;
+      return;
+    }
+    if (lastBuildLeadPayloadRef.current === buildLeadPayload) return;
+    lastBuildLeadPayloadRef.current = buildLeadPayload;
     setPageIndex(0);
   }, [buildLeadPayload]);
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(Math.max(0, totalRecords) / pageSize));
+    const totalPages = Math.max(
+      1,
+      Math.ceil(Math.max(0, effectiveTotalRecords) / pageSize),
+    );
     if (pageIndex > totalPages - 1) {
       setPageIndex(Math.max(0, totalPages - 1));
     }
-  }, [totalRecords, pageSize, pageIndex]);
+  }, [effectiveTotalRecords, pageSize, pageIndex]);
+
+  // Refetch the unfiltered query when page/pageSize change and no filters/search are applied.
+  // (The filtered query auto-refetches via its queryKey.)
+  const initialPaginationMountRef = useRef(true);
+  useEffect(() => {
+    if (initialPaginationMountRef.current) {
+      initialPaginationMountRef.current = false;
+      return;
+    }
+    if (filtersApplied || debounced.trim()) return;
+    refetchLeads();
+  }, [pageIndex, pageSize, filtersApplied, debounced, refetchLeads]);
 
   const isTableDataLoading =
     leadLoading || leadFetching || filteredLeadLoading || filteredLeadFetching;
@@ -1186,11 +1241,14 @@ function LeadList() {
               footer: (
                 <ERPListPaginationFooter
                   theme={erpTheme}
-                  totalRecords={totalRecords}
+                  totalRecords={effectiveTotalRecords}
                   pageIndex={pageIndex}
                   pageSize={pageSize}
                   onPageIndexChange={setPageIndex}
-                  onPageSizeChange={setPageSize}
+                  onPageSizeChange={(size) => {
+                    setPageIndex(0);
+                    setPageSize(size);
+                  }}
                   pageSizeOptions={["10", "15", "25", "50"]}
                   selectClassNames={{
                     dropdown: ERP_LIST_GEIST_ROOT_CLASS,

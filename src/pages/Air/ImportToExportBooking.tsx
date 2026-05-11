@@ -1,11 +1,10 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   Button,
   Group,
   Text,
   ActionIcon,
   Menu,
-  UnstyledButton,
   Modal,
   Divider,
   Badge,
@@ -15,7 +14,6 @@ import {
   Grid,
   MantineProvider,
   Select,
-  TextInput,
 } from "@mantine/core";
 import {
   IconDotsVertical,
@@ -26,17 +24,28 @@ import {
   IconClock,
   IconX,
   IconSearch,
+  IconScale,
+  IconCircleX,
+  IconFilter,
+  IconPlus,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
+import { useForm } from "@mantine/form";
 import { useListFilterStore } from "../../store/listFilterStore";
 import { postAPICall } from "../../service/postApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import {
   ToastNotification,
+  SearchableSelect,
+  SingleDateInput,
+  BookingMasterListTable,
+  DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  getBookingRowPW,
   ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
@@ -47,51 +56,96 @@ import {
   erpListGeistRootTypography,
   erpListGeistMenuDropdownStyles,
   erpListGeistSelectClassNames,
+  erpToolbarOutlineButtonStyles,
   erpToolbarSelectStyles,
-  erpListTableElementStyle,
-  erpListThStyle,
-  erpListTdCellToneStyle,
-  erpListDataRowProps,
-  erpListStickyActionThStyle,
-  erpListStickyActionTdStyle,
+  type BookingMasterTableRowModel,
+  type BookingMasterVisibleColumns,
 } from "../../components";
+import FormTextInput from "../../components/FormTextInput";
 import { ERP_LIST_GEIST_MONO_CLASS } from "../../components/ERPListPage";
-import useDateFormat from "../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 
+const I2E_FILTER_UNIFIED_STYLES = {
+  label: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    fontWeight: 500,
+    color: DEFAULT_ERP_LIST_THEME.muted,
+    lineHeight: 1.25,
+    marginBottom: 6,
+    display: "block" as const,
+    minHeight: 15,
+  },
+  input: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+    height: 32,
+    minHeight: 32,
+    borderColor: DEFAULT_ERP_LIST_THEME.border,
+  },
+  dropdown: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+  option: {
+    fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
+    fontSize: 12,
+  },
+} as const;
+
 type ImportToExportBookingData = {
   id: number;
+  sno?: number;
   shipment_code: string;
+  enquiry_id?: string | null;
+  service_type?: string;
+  import_to_export?: boolean;
+  reference?: unknown;
   date: string;
   service: string;
   customer_name: string;
-  customer_code_read: string;
+  customer_code?: string;
+  customer_code_read?: string;
   origin_name: string;
-  origin_code_read: string;
+  origin_code?: string;
+  origin_code_read?: string;
   destination_name: string;
-  destination_code_read: string;
+  destination_code?: string;
+  destination_code_read?: string;
   customer_service_name: string;
+  status?: string;
   freight?: string;
   routed?: string;
   routed_by?: string;
   shipment_terms_name?: string;
   shipment_terms_code_read?: string;
   carrier_name?: string;
+  carrier_code?: string | null;
   eta?: string;
   etd?: string;
+  ata?: string | null;
+  atd?: string | null;
+  actual_pickup_date?: string | null;
+  actual_delivery_date?: string | null;
   vessel_name?: string;
   voyage_no?: string;
+  mawb_no?: string | null;
+  carrier_booking_no?: string | null;
   shipper_name?: string;
   consignee_name?: string;
   forwarder_name?: string;
   destination_agent_name?: string;
   billing_customer_name?: string;
   notify_customer_name?: string;
+  notify1_customer_name?: string;
+  notify2_customer_name?: string;
   cha_name?: string;
+  cha?: string;
   is_hazardous?: boolean;
   commodity_description?: string | null;
   marks_no?: string | null;
+  houseno?: string | null;
   pickup_location?: string;
   pickup_from_name?: string;
   planned_pickup_date?: string;
@@ -102,10 +156,24 @@ type ImportToExportBookingData = {
   created_by_name?: string;
   is_direct?: boolean;
   is_coload?: boolean;
+  events?: Array<Record<string, unknown>>;
+  last_milestone?: string | null;
+  last_milestone_date?: string | null;
+  last_milestone_time?: string | null;
+  route_milestones?: Array<{
+    code: string;
+    label: string;
+    date?: string | null;
+    time?: string | null;
+    active?: boolean;
+    note?: string;
+    source?: unknown;
+  }>;
   cargo_details?: Array<{
     id: number;
     container_type_name: string;
     no_of_containers: number;
+    no_of_packages?: number;
     gross_weight: string;
   }>;
   routing_details?: Array<{
@@ -128,22 +196,20 @@ type ImportToExportBookingData = {
   }>;
 };
 
-type VisibleColumnsState = {
-  booking: boolean;
-  date: boolean;
-  service: boolean;
-  customer: boolean;
-  origin: boolean;
-  destination: boolean;
-  customer_service: boolean;
-};
-
 /** `summary` on `customerServiceShipmentFilter` (totals are filter-scoped). */
 type ImportToExportListSummary = {
+  total_shipments?: number;
   status_counts?: {
-    active?: number;
+    booked?: number;
+    received?: number;
+    generated?: number;
     closed?: number;
     cancel?: number;
+    pending?: number;
+  };
+  totals?: {
+    pcs?: number;
+    weight_kg?: number;
   };
 };
 
@@ -151,28 +217,123 @@ type ImportToExportListQueryResult = {
   data: ImportToExportBookingData[];
   total: number;
   summary?: ImportToExportListSummary;
+  count: number;
+  index: number;
+  limit: number;
+  total_pagination: number;
+};
+
+type FilterState = {
+  booking_id: string | null;
+  enquiry_id: string | null;
+  customer: string | null;
+  origin: string | null;
+  destination: string | null;
+  date: Date | null;
 };
 
 const LIST_KEY = "AIR_IMPORT_TO_EXPORT_BOOKING";
 
 type PersistedI2EFilters = {
   statusFilter: string;
+  booking_id: string | null;
+  enquiry_id: string | null;
+  customer: string | null;
+  origin: string | null;
+  destination: string | null;
+  date: string | null;
+  filtersApplied: boolean;
+  showFilters: boolean;
   pageIndex: number;
   pageSize: number;
 };
+
+function airI2ERowToTableModel(
+  r: ImportToExportBookingData,
+  index: number,
+  pageIndex: number,
+  pageSize: number,
+): BookingMasterTableRowModel<ImportToExportBookingData> {
+  const pw = getBookingRowPW(r.cargo_details);
+  const mawb =
+    (r.mawb_no && String(r.mawb_no).trim()) ||
+    (r.carrier_booking_no && String(r.carrier_booking_no).trim()) ||
+    "";
+  const flight =
+    (r.voyage_no && r.voyage_no.trim()) ||
+    r.routing_details?.[0]?.flight_no?.trim() ||
+    "";
+  return {
+    raw: r,
+    id: r.id,
+    sno: typeof r.sno === "number" ? r.sno : pageIndex * pageSize + index + 1,
+    milestone: {
+      status: r.status,
+      events: r.events ?? null,
+      actual_delivery_date: r.actual_delivery_date ?? null,
+      ata: r.ata ?? null,
+      atd: r.atd ?? null,
+      etd: r.etd ?? null,
+      eta: r.eta ?? null,
+      actual_pickup_date: r.actual_pickup_date ?? null,
+      mawb_no: r.mawb_no ?? null,
+      carrier_booking_no: r.carrier_booking_no ?? null,
+      origin_name: r.origin_name,
+      origin_code_read: r.origin_code_read,
+      origin_code: r.origin_code ?? null,
+      destination_name: r.destination_name,
+      destination_code_read: r.destination_code_read,
+      destination_code: r.destination_code ?? null,
+      date: r.date,
+      last_milestone: r.last_milestone ?? null,
+      last_milestone_date: r.last_milestone_date ?? null,
+      last_milestone_time: r.last_milestone_time ?? null,
+      route_milestones: r.route_milestones,
+    },
+    shipment_code: r.shipment_code,
+    enquiry_id: r.enquiry_id,
+    houseno: r.houseno ?? "",
+    date: r.date,
+    customer_name: r.customer_name,
+    originCode: r.origin_code_read || r.origin_code || "",
+    destCode: r.destination_code_read || r.destination_code || "",
+    status: r.status,
+    mawb,
+    flight,
+    pieces: pw.pieces,
+    weight: pw.weight,
+    customer_service_name: r.customer_service_name,
+  };
+}
+
+function normalizeI2EListMilestonesFromApi(
+  r: ImportToExportBookingData,
+): ImportToExportBookingData {
+  return {
+    ...r,
+    last_milestone: r.last_milestone ?? null,
+    last_milestone_date: r.last_milestone_date ?? null,
+    last_milestone_time: r.last_milestone_time ?? null,
+    route_milestones: Array.isArray(r.route_milestones) ? r.route_milestones : undefined,
+  };
+}
 
 function AirImportToExportBooking() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const theme = DEFAULT_ERP_LIST_THEME;
-  const { muted, fg, primary, headerBg, fontSans } = theme;
+  const { muted, fg, primary, headerBg, fontSans, border } = theme;
 
   const getStoreState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
   const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const setStoreDisplayValues = useListFilterStore((s) => s.setDisplayValues);
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
   const [selectedBooking, setSelectedBooking] =
@@ -181,20 +342,30 @@ function AirImportToExportBooking() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
-    booking: true,
-    date: true,
-    service: true,
-    customer: true,
-    origin: true,
-    destination: true,
-    customer_service: true,
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<BookingMasterVisibleColumns>({
+    ...DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
   });
+  const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(null);
+  const [originDisplayName, setOriginDisplayName] = useState<string | null>(null);
+  const [destinationDisplayName, setDestinationDisplayName] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
-  const [isRestoring, setIsRestoring] = useState(true);
 
-  const dateFormat = useDateFormat();
+  const filterForm = useForm<FilterState>({
+    initialValues: {
+      booking_id: null,
+      enquiry_id: null,
+      customer: null,
+      origin: null,
+      destination: null,
+      date: null,
+    },
+  });
 
   // Restore state from global store on mount
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -215,6 +386,22 @@ function AirImportToExportBooking() {
       if (typeof f.statusFilter === "string") setStatusFilter(f.statusFilter);
       if (typeof f.pageIndex === "number" && f.pageIndex >= 0) setPageIndex(f.pageIndex);
       if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
+      setShowFilters(Boolean(f.showFilters));
+      setFiltersApplied(Boolean(f.filtersApplied));
+      filterForm.setValues({
+        booking_id: f.booking_id ?? null,
+        enquiry_id: f.enquiry_id ?? null,
+        customer: f.customer ?? null,
+        origin: f.origin ?? null,
+        destination: f.destination ?? null,
+        date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
+      });
+    }
+    const dv = stored?.displayValues;
+    if (dv) {
+      setCustomerDisplayName(dv.customer ?? null);
+      setOriginDisplayName(dv.origin ?? null);
+      setDestinationDisplayName(dv.destination ?? null);
     }
 
     clearAllExcept(LIST_KEY);
@@ -223,51 +410,115 @@ function AirImportToExportBooking() {
   }, [location.key]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  const { data: listResponse, isLoading, isFetching, error } = useQuery<ImportToExportListQueryResult>({
-    queryKey: ["import-to-export-bookings", statusFilter, pageIndex, pageSize, debouncedSearch],
-    enabled: !isRestoring && search === debouncedSearch,
-    queryFn: async (): Promise<ImportToExportListQueryResult> => {
-      try {
-        const offset = pageIndex * pageSize;
-        const trimmedSearch = debouncedSearch.trim();
-        const payload = {
-          filters: {
-            import_to_export: true,
-            service: "AIR",
-            // reference: statusFilter === "completed",
-            ...(trimmedSearch ? { search: trimmedSearch } : {}),
-          },
-        };
+  const buildFilterPayload = () => {
+    const values = filterForm.values;
+    const payload: Record<string, string> = {};
+    if (values.booking_id?.trim()) payload.shipment_code = values.booking_id.trim();
+    if (values.enquiry_id?.trim()) payload.enquiry_id = values.enquiry_id.trim();
+    if (values.customer) payload.customer_code = values.customer;
+    if (values.origin) payload.origin_code = values.origin;
+    if (values.destination) payload.destination_code = values.destination;
+    if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
+    return payload;
+  };
 
-        const response = (await postAPICall(
-          `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`,
-          payload,
-          API_HEADER
-        )) as Record<string, unknown>;
+  const buildRequestFilters = (searchValue: string): Record<string, unknown> => {
+    const extra: Record<string, unknown> = {};
+    if (filtersApplied) Object.assign(extra, buildFilterPayload());
+    const trimmed = searchValue.trim();
+    if (trimmed) extra.search = trimmed;
+    return extra;
+  };
 
-        const list: ImportToExportBookingData[] = Array.isArray(response.data)
-          ? (response.data as ImportToExportBookingData[])
-          : [];
+  const { data: listResponse, isLoading, isFetching, isError } =
+    useQuery<ImportToExportListQueryResult>({
+      queryKey: [
+        "air-import-to-export-bookings",
+        statusFilter,
+        pageIndex,
+        pageSize,
+        filtersApplied,
+        filtersApplied ? JSON.stringify(filterForm.values) : "-",
+        debouncedSearch,
+      ],
+      enabled: !isRestoring && search === debouncedSearch,
+      queryFn: async (): Promise<ImportToExportListQueryResult> => {
+        try {
+          const offset = pageIndex * pageSize;
+          const extra = buildRequestFilters(debouncedSearch);
+          const payload = {
+            filters: {
+              import_to_export: true,
+              service: "AIR",
+              reference: statusFilter === "completed",
+              ...extra,
+            },
+          };
 
-        const total = getBookingShipmentFilterListTotal(response, list, offset);
-        setTotalRecords(total);
+          const response = (await postAPICall(
+            `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`,
+            payload,
+            API_HEADER,
+          )) as Record<string, unknown>;
 
-        const rawSummary = response?.summary;
-        const summary: ImportToExportListSummary | undefined =
-          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
-            ? (rawSummary as ImportToExportListSummary)
-            : undefined;
+          let list: ImportToExportBookingData[] = [];
+          if (Array.isArray(response.data)) {
+            list = (response.data as ImportToExportBookingData[]).map(
+              normalizeI2EListMilestonesFromApi,
+            );
+          }
 
-        return { data: list, total, summary };
-      } catch {
-        setTotalRecords(0);
-        return { data: [], total: 0, summary: undefined };
-      }
-    },
-    staleTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-  });
+          const listTotal = getBookingShipmentFilterListTotal(response, list, offset);
+          const rawSummary = response.summary;
+          const summary: ImportToExportListSummary | undefined =
+            rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+              ? (rawSummary as ImportToExportListSummary)
+              : undefined;
+          const summaryTotal = summary?.total_shipments;
+          const total =
+            typeof summaryTotal === "number" && !Number.isNaN(summaryTotal)
+              ? summaryTotal
+              : listTotal;
+          setTotalRecords(total);
+
+          const countRaw = response.count;
+          const count =
+            typeof countRaw === "number" && !Number.isNaN(countRaw)
+              ? countRaw
+              : list.length;
+          const totalPaginationRaw = response.total_pagination;
+          const totalPagination =
+            typeof totalPaginationRaw === "number" && !Number.isNaN(totalPaginationRaw)
+              ? totalPaginationRaw
+              : 0;
+
+          return {
+            data: list,
+            total,
+            summary,
+            count,
+            index: (response.index as number) ?? pageIndex,
+            limit: (response.limit as number) ?? pageSize,
+            total_pagination: totalPagination,
+          };
+        } catch (err) {
+          console.error("Error fetching air import-to-export bookings:", err);
+          setTotalRecords(0);
+          return {
+            data: [],
+            total: 0,
+            summary: undefined,
+            count: 0,
+            index: pageIndex,
+            limit: pageSize,
+            total_pagination: 0,
+          };
+        }
+      },
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+      refetchOnMount: true,
+    });
 
   const displayData: ImportToExportBookingData[] = listResponse?.data ?? [];
 
@@ -293,43 +544,205 @@ function AirImportToExportBooking() {
     setPageIndex(0);
   }, [debouncedSearch, isRestoring]);
 
+  // Toast feedback once the filter request completes.
+  useEffect(() => {
+    if (!isApplyingFilters) return;
+    if (isFetching) return;
+    setIsApplyingFilters(false);
+    if (isError) {
+      ToastNotification({ type: "error", message: "Error applying filters" });
+      return;
+    }
+    ToastNotification({ type: "success", message: "Filters applied successfully" });
+  }, [isApplyingFilters, isFetching, isError]);
+
+  const tableRowModels = useMemo(
+    () => displayData.map((r, i) => airI2ERowToTableModel(r, i, pageIndex, pageSize)),
+    [displayData, pageIndex, pageSize],
+  );
+
   const listSummary = listResponse?.summary;
   const stats = useMemo(() => {
-    const sc = listSummary?.status_counts;
-    if (sc) {
+    const rows = displayData;
+    const fromRows = () => {
+      let totalPieces = 0;
+      let totalWeight = 0;
+      rows.forEach((r) => {
+        const pw = getBookingRowPW(r.cargo_details);
+        totalPieces += pw.pieces;
+        totalWeight += pw.weight;
+      });
+      return { totalPieces, totalWeight };
+    };
+
+    if (listSummary) {
+      const fallback = fromRows();
       return {
-        total: totalRecords,
-        active: sc.active ?? 0,
-        closed: sc.closed ?? 0,
-        cancel: sc.cancel ?? 0,
+        total: listSummary.total_shipments ?? totalRecords,
+        booked: listSummary.status_counts?.booked ?? 0,
+        received: listSummary.status_counts?.received ?? 0,
+        generated: listSummary.status_counts?.generated ?? 0,
+        canceled: listSummary.status_counts?.cancel ?? 0,
+        totalPieces: listSummary.totals?.pcs ?? fallback.totalPieces,
+        totalWeight: listSummary.totals?.weight_kg ?? fallback.totalWeight,
       };
     }
+
+    const st = (s: string | undefined) => (s || "").toUpperCase();
+    const { totalPieces, totalWeight } = fromRows();
     return {
       total: totalRecords,
-      active: 0,
-      closed: 0,
-      cancel: 0,
+      booked: rows.filter((r) => st(r.status) === "BOOKED").length,
+      received: rows.filter((r) => st(r.status) === "RECEIVED").length,
+      generated: rows.filter((r) => st(r.status) === "GENERATED").length,
+      canceled: rows.filter((r) =>
+        st(r.status) === "CANCEL" || st(r.status) === "CANCELED" || st(r.status) === "CANCELLED"
+      ).length,
+      totalPieces,
+      totalWeight,
     };
-  }, [listSummary, totalRecords]);
+  }, [displayData, listSummary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
-        id: String(key),
-        label: String(key).replace(/_/g, " "),
-        checked: visibleColumns[key],
-        onToggle: () =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: !prev[key],
-          })),
-      })),
+      (Object.keys(visibleColumns) as (keyof BookingMasterVisibleColumns)[])
+        .filter((k) => k !== "service")
+        .map((key) => ({
+          id: String(key),
+          label: String(key),
+          checked: Boolean(visibleColumns[key]),
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        })),
     [visibleColumns],
   );
+
+  const persistListState = useCallback(() => {
+    const persisted: PersistedI2EFilters = {
+      statusFilter,
+      booking_id: filterForm.values.booking_id,
+      enquiry_id: filterForm.values.enquiry_id,
+      customer: filterForm.values.customer,
+      origin: filterForm.values.origin,
+      destination: filterForm.values.destination,
+      date: filterForm.values.date
+        ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+        : null,
+      filtersApplied,
+      showFilters,
+      pageIndex,
+      pageSize,
+    };
+    setStoreFilters(LIST_KEY, persisted);
+    setStoreDisplayValues(LIST_KEY, {
+      customer: customerDisplayName,
+      origin: originDisplayName,
+      destination: destinationDisplayName,
+    });
+    setStoreSearch(LIST_KEY, search);
+    setShouldRestore(LIST_KEY, true);
+  }, [
+    statusFilter,
+    filterForm.values,
+    filtersApplied,
+    showFilters,
+    pageIndex,
+    pageSize,
+    customerDisplayName,
+    originDisplayName,
+    destinationDisplayName,
+    search,
+    setStoreFilters,
+    setStoreDisplayValues,
+    setStoreSearch,
+    setShouldRestore,
+  ]);
 
   const handlePageSizeChange = (size: number) => {
     setPageIndex(0);
     setPageSize(size);
+  };
+
+  const applyFilters = () => {
+    const values = filterForm.values;
+    const hasFilterValues =
+      (values.booking_id && values.booking_id.trim()) ||
+      (values.enquiry_id && values.enquiry_id.trim()) ||
+      values.customer ||
+      values.origin ||
+      values.destination ||
+      values.date;
+
+    if (!hasFilterValues) {
+      setFiltersApplied(false);
+      setPageIndex(0);
+      setShowFilters(false);
+      ToastNotification({ type: "info", message: "No filters selected, showing all data" });
+      return;
+    }
+
+    setPageIndex(0);
+    setFiltersApplied(true);
+    setIsApplyingFilters(true);
+    const persisted: PersistedI2EFilters = {
+      statusFilter,
+      booking_id: values.booking_id,
+      enquiry_id: values.enquiry_id,
+      customer: values.customer,
+      origin: values.origin,
+      destination: values.destination,
+      date: values.date ? dayjs(values.date).format("YYYY-MM-DD") : null,
+      filtersApplied: true,
+      showFilters: false,
+      pageIndex: 0,
+      pageSize,
+    };
+    setStoreFilters(LIST_KEY, persisted);
+    setStoreDisplayValues(LIST_KEY, {
+      customer: customerDisplayName,
+      origin: originDisplayName,
+      destination: destinationDisplayName,
+    });
+    setStoreSearch(LIST_KEY, search);
+    setShowFilters(false);
+  };
+
+  const clearAllFilters = async () => {
+    try {
+      setShowFilters(false);
+      const values = filterForm.values;
+      const hasFilterValues =
+        (values.booking_id && values.booking_id.trim()) ||
+        (values.enquiry_id && values.enquiry_id.trim()) ||
+        values.customer ||
+        values.origin ||
+        values.destination ||
+        values.date;
+      if (!hasFilterValues) {
+        setFiltersApplied(false);
+        setPageIndex(0);
+        ToastNotification({ type: "info", message: "No filters selected, showing all data" });
+        return;
+      }
+      filterForm.reset();
+      setFiltersApplied(false);
+      setSearch("");
+      setPageIndex(0);
+      setCustomerDisplayName(null);
+      setOriginDisplayName(null);
+      setDestinationDisplayName(null);
+      clearAllStore(LIST_KEY);
+      await queryClient.invalidateQueries({
+        queryKey: ["air-import-to-export-bookings"],
+      });
+      ToastNotification({ type: "success", message: "All filters cleared successfully" });
+    } catch (e) {
+      console.error("Error clearing filters:", e);
+      setShowFilters(false);
+    }
   };
 
   const handleConfirmCreateExport = async () => {
@@ -338,7 +751,6 @@ function AirImportToExportBooking() {
       const payload = {
         service_type: "EXPORT",
         import_to_export: false,
-        // reference: selectedBooking.id || "",
       };
 
       setConfirmModalOpened(false);
@@ -352,17 +764,11 @@ function AirImportToExportBooking() {
       });
 
       await queryClient.invalidateQueries({
-        queryKey: ["import-to-export-bookings"],
+        queryKey: ["air-import-to-export-bookings"],
       });
 
       // Preserve list state so this page restores when the user comes back.
-      setStoreFilters(LIST_KEY, {
-        statusFilter,
-        pageIndex,
-        pageSize,
-      });
-      setStoreSearch(LIST_KEY, search);
-      setShouldRestore(LIST_KEY, true);
+      persistListState();
 
       navigate("/air/export-booking", {
         state: { refreshData: true },
@@ -375,10 +781,34 @@ function AirImportToExportBooking() {
     }
   };
 
-  const visibleDataColumnCount =
-    (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).filter(
-      (k) => visibleColumns[k],
-    ).length + (statusFilter === "pending" ? 1 : 0);
+  const isDataLoading = isRestoring || isLoading || isFetching;
+
+  const renderRowActions = useCallback(
+    (row: ImportToExportBookingData) => {
+      if (statusFilter !== "pending") return null;
+      return (
+        <Menu withinPortal position="bottom-end" shadow="md" width={220} closeOnItemClick>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray" size="sm">
+              <IconDotsVertical size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item
+              leftSection={<IconCirclePlus size={14} color={primary} />}
+              onClick={() => {
+                setSelectedBooking(row);
+                setConfirmModalOpened(true);
+              }}
+            >
+              Create Export Booking
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      );
+    },
+    [statusFilter, primary],
+  );
 
   return (
     <>
@@ -778,67 +1208,61 @@ function AirImportToExportBooking() {
                     icon={<IconCircleCheck size={14} color="#059669" />}
                     iconBackground="#d1fae5"
                     iconColor="#059669"
-                    value={stats.active}
-                    label="Active"
+                    value={stats.booked}
+                    label="Booked"
                   />
                   <ERPListStatPill
                     theme={theme}
-                    icon={<IconClock size={14} color="#2563eb" />}
+                    icon={<IconPackage size={14} color="#105476" />}
                     iconBackground="#dbeafe"
-                    iconColor="#2563eb"
-                    value={stats.closed}
-                    label="Closed"
+                    iconColor="#105476"
+                    value={stats.received}
+                    label="Received"
                   />
                   <ERPListStatPill
                     theme={theme}
-                    icon={<IconX size={14} color="#dc2626" />}
+                    icon={<IconClock size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={stats.generated}
+                    label="Generated"
+                  />
+                  <ERPListStatPill
+                    theme={theme}
+                    icon={<IconCircleX size={14} color="#dc2626" />}
                     iconBackground="#fee2e2"
                     iconColor="#dc2626"
-                    value={stats.cancel}
-                    label="Cancel"
+                    value={stats.canceled}
+                    label="Canceled"
                   />
                 </>
               ),
               secondary: (
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {displayData.length}
-                  </Text>
-
-                </Group>
+                <>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalPieces.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      pcs
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalWeight.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      kg
+                    </Text>
+                  </Group>
+                </>
               ),
               actions: (
                 <>
-                  <TextInput
-                    size="xs"
-                    w={220}
-                    placeholder="Search..."
-                    value={search}
-                    onChange={(e) => setSearch(e.currentTarget.value)}
-                    leftSection={<IconSearch size={14} />}
-                    rightSection={
-                      search ? (
-                        <ActionIcon
-                          variant="transparent"
-                          size="sm"
-                          onClick={() => setSearch("")}
-                          aria-label="Clear search"
-                        >
-                          <IconX size={14} />
-                        </ActionIcon>
-                      ) : null
-                    }
-                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={{
-                      input: {
-                        fontFamily: theme.fontSans,
-                        fontSize: 12,
-                        height: 32,
-                        minHeight: 32,
-                      },
-                    }}
-                  />
                   <Select
                     size="xs"
                     w={140}
@@ -847,12 +1271,6 @@ function AirImportToExportBooking() {
                       const next = v === "completed" ? "completed" : "pending";
                       setStatusFilter(next);
                       setPageIndex(0);
-                      setStoreFilters(LIST_KEY, {
-                        statusFilter: next,
-                        pageIndex: 0,
-                        pageSize,
-                      });
-                      setStoreSearch(LIST_KEY, search);
                     }}
                     data={[
                       { value: "pending", label: "Pending" },
@@ -867,7 +1285,178 @@ function AirImportToExportBooking() {
                     menuStyles={erpListGeistMenuDropdownStyles}
                     classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                   />
+                  <FormTextInput
+                    placeholder="Search..."
+                    leftSection={<IconSearch size={14} />}
+                    rightSection={
+                      search ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => setSearch("")}
+                          aria-label="Clear search"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={220}
+                    size="xs"
+                    value={search}
+                    onChange={(e) => setSearch(e.currentTarget.value)}
+                    styles={{
+                      input: {
+                        height: 32,
+                        minHeight: 32,
+                        fontSize: 12,
+                        borderColor: border,
+                        fontFamily: fontSans,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    leftSection={<IconFilter size={14} />}
+                    styles={erpToolbarOutlineButtonStyles(theme)}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
                 </>
+              ),
+            }}
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: "Refine import-to-export bookings by reference, customer, route, or date",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={theme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={isDataLoading}
+                  applyDisabled={isDataLoading}
+                />
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <FormTextInput
+                      size="xs"
+                      label="Booking ID"
+                      placeholder="Enter Booking ID"
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.booking_id ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "booking_id",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <FormTextInput
+                      size="xs"
+                      label="Enquiry ID"
+                      placeholder="Enter Enquiry ID"
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.enquiry_id ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "enquiry_id",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Customer"
+                      placeholder="Type customer name"
+                      apiEndpoint={URL.allCustomers}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code),
+                        label: String(item.customer_name),
+                      })}
+                      value={filterForm.values.customer}
+                      displayValue={customerDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("customer", value || "");
+                        setCustomerDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <SingleDateInput
+                      key={`date-${filterForm.values.date}`}
+                      label="Date"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.date}
+                      onChange={(d) => filterForm.setFieldValue("date", d)}
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Origin"
+                      placeholder="Type origin code or name"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_code", "port_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.origin}
+                      displayValue={originDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("origin", value || "");
+                        setOriginDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      className="filter-searchable-select"
+                      additionalParams={airTransportParams}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Destination"
+                      placeholder="Type destination code or name"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_code", "port_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.destination}
+                      displayValue={destinationDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("destination", value || "");
+                        setDestinationDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      className="filter-searchable-select"
+                      additionalParams={airTransportParams}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={I2E_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                </Grid>
               ),
             }}
             table={{
@@ -880,179 +1469,27 @@ function AirImportToExportBooking() {
                   onPageIndexChange={setPageIndex}
                   onPageSizeChange={handlePageSizeChange}
                   selectClassNames={erpListGeistSelectClassNames}
-                  pageSizeOptions={["10", "25", "50"]}
+                  pageSizeOptions={["1", "15", "25", "50"]}
                 />
               ),
-              children: error ? (
-                <Box px="md" py={48} style={{ textAlign: "center" }}>
-                  <Text c="red" size="sm" style={{ fontFamily: fontSans }}>
-                    Error loading import-to-export bookings. Please try again.
-                  </Text>
-                </Box>
-              ) : isRestoring || isLoading || isFetching ? (
+              children: isDataLoading ? (
                 <ERPListTableLoading
                   theme={theme}
                   message="Loading import-to-export bookings…"
                 />
               ) : (
-                <table style={erpListTableElementStyle(theme)}>
-                  <thead>
-                    <tr>
-                      {visibleColumns.booking && (
-                        <th style={erpListThStyle(theme)}>Booking ID</th>
-                      )}
-                      {visibleColumns.date && (
-                        <th style={erpListThStyle(theme)}>Date</th>
-                      )}
-                      {visibleColumns.service && (
-                        <th style={erpListThStyle(theme)}>Service</th>
-                      )}
-                      {visibleColumns.customer && (
-                        <th style={erpListThStyle(theme)}>Customer Name</th>
-                      )}
-                      {visibleColumns.origin && (
-                        <th style={erpListThStyle(theme)}>Origin</th>
-                      )}
-                      {visibleColumns.destination && (
-                        <th style={erpListThStyle(theme)}>Destination</th>
-                      )}
-                      {visibleColumns.customer_service && (
-                        <th style={erpListThStyle(theme)}>Customer Service</th>
-                      )}
-                      {statusFilter === "pending" ? (
-                        <th style={erpListStickyActionThStyle(theme)}>Actions</th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayData.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={Math.max(visibleDataColumnCount, 1)}
-                          style={{ padding: 60, textAlign: "center" }}
-                        >
-                          <Stack align="center" gap="md">
-                            <Box
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: "50%",
-                                backgroundColor: headerBg,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <IconPackage size={24} color={muted} />
-                            </Box>
-                            <Box>
-                              <Text fw={500} c={fg}>
-                                No bookings to display
-                              </Text>
-                              <Text size="sm" c={muted} mt={4}>
-                                Try switching between Pending and Completed
-                              </Text>
-                            </Box>
-                          </Stack>
-                        </td>
-                      </tr>
-                    ) : (
-                      displayData.map((row) => {
-                        const rowProps = erpListDataRowProps(theme);
-                        return (
-                          <tr
-                            key={row.id}
-                            style={rowProps.style}
-                            onMouseEnter={rowProps.onMouseEnter}
-                            onMouseLeave={rowProps.onMouseLeave}
-                          >
-                            {visibleColumns.booking && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text fw={600} size="sm" c={fg}>
-                                  {row.shipment_code}
-                                </Text>
-                              </td>
-                            )}
-                            {visibleColumns.date && (
-                              <td style={erpListTdCellToneStyle(theme, "muted")}>
-                                {row.date ? dayjs(row.date).format(dateFormat) : "—"}
-                              </td>
-                            )}
-                            {visibleColumns.service && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text size="sm" c={fg}>
-                                  {row.service}
-                                </Text>
-                              </td>
-                            )}
-                            {visibleColumns.customer && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text size="sm" c={fg} lineClamp={1}>
-                                  {row.customer_name}
-                                </Text>
-                              </td>
-                            )}
-                            {visibleColumns.origin && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text size="sm" c={fg} lineClamp={1}>
-                                  {row.origin_name}
-                                </Text>
-                              </td>
-                            )}
-                            {visibleColumns.destination && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text size="sm" c={fg} lineClamp={1}>
-                                  {row.destination_name}
-                                </Text>
-                              </td>
-                            )}
-                            {visibleColumns.customer_service && (
-                              <td style={erpListTdCellToneStyle(theme, "default")}>
-                                <Text size="sm" c={muted} lineClamp={1}>
-                                  {row.customer_service_name}
-                                </Text>
-                              </td>
-                            )}
-                            {statusFilter === "pending" ? (
-                              <td style={erpListStickyActionTdStyle(theme)}>
-                                <Menu
-                                  withinPortal
-                                  position="bottom-end"
-                                  shadow="md"
-                                  width={220}
-                                  closeOnItemClick
-                                  styles={erpListGeistMenuDropdownStyles}
-                                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                >
-                                  <Menu.Target>
-                                    <ActionIcon variant="subtle" color="gray" size="sm">
-                                      <IconDotsVertical size={16} />
-                                    </ActionIcon>
-                                  </Menu.Target>
-                                  <Menu.Dropdown>
-                                    <Box px={10} py={5}>
-                                      <UnstyledButton
-                                        onClick={() => {
-                                          setSelectedBooking(row);
-                                          setConfirmModalOpened(true);
-                                        }}
-                                      >
-                                        <Group gap="sm">
-                                          <IconCirclePlus size={16} color={primary} />
-                                          <Text size="sm">Create Export Booking</Text>
-                                        </Group>
-                                      </UnstyledButton>
-                                    </Box>
-                                  </Menu.Dropdown>
-                                </Menu>
-                              </td>
-                            ) : null}
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                <BookingMasterListTable
+                  theme={theme}
+                  geistRootClass={ERP_LIST_GEIST_ROOT_CLASS}
+                  monoClass={ERP_LIST_GEIST_MONO_CLASS}
+                  fontSans={fontSans}
+                  rows={tableRowModels}
+                  visibleColumns={visibleColumns}
+                  showServiceColumn={false}
+                  renderActions={renderRowActions}
+                  emptyTitle="No bookings to display"
+                  emptySubtitle="Try switching between Pending and Completed or adjust your filters"
+                />
               ),
             }}
           />
