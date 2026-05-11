@@ -162,12 +162,11 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
 };
 
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
-  const maxVal = 99999999.99;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
-  return rounded;
+  if (value === null || value === undefined)
+    return value === undefined ? null : null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
 }
 
 type ChargeItem = {
@@ -478,49 +477,63 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrencies, getRoeValue]);
 
-  // Auto-calculate amount (currency amount) when no_of_unit, amount_per_unit, or roe changes: amount = no_of_unit * roe * amount_per_unit
+  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit (InvoiceCreate parity — charge ROE is not multiplied here)
   const chargeAmountPerUnits = form.values.charges
     .map((c) => c.amount_per_unit)
     .join(",");
   const chargeNoOfUnits = form.values.charges
     .map((c) => c.no_of_unit)
     .join(",");
-  const chargeRoes = form.values.charges.map((c) => c.roe).join(",");
+
   useEffect(() => {
     const updatedCharges = form.values.charges.map((charge) => {
       if (
         charge.amount_per_unit != null &&
         charge.amount_per_unit > 0 &&
         charge.no_of_unit != null &&
-        charge.no_of_unit > 0 &&
-        charge.roe != null &&
-        charge.roe > 0
+        charge.no_of_unit > 0
       ) {
-        const calculatedAmount =
-          charge.no_of_unit * charge.roe * charge.amount_per_unit;
+        const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
         const clamped = clampAmount(calculatedAmount);
-        if (clamped != null && clamped > 0 && clamped !== charge.amount) {
-          return { ...charge, amount: clamped };
+        if (clamped != null && clamped !== charge.amount) {
+          return {
+            ...charge,
+            amount: clamped,
+          };
         }
       }
+
       return charge;
     });
+
     const hasChanges = updatedCharges.some(
       (charge, index) => charge.amount !== form.values.charges[index]?.amount,
     );
-    if (hasChanges) form.setFieldValue("charges", updatedCharges);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits, chargeRoes]);
 
-  // Auto-calculate amount_in_local when amount or charge roe changes: amount_in_local = amount * roe
+    if (hasChanges) {
+      form.setFieldValue("charges", updatedCharges);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeAmountPerUnits, chargeNoOfUnits]);
+
+  // Auto-calculate amount_in_local as: amount (currency_amount) * charge.roe — and keep header_amount in sync (InvoiceCreate parity)
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
   const chargeRoesForLocal = form.values.charges.map((c) => c.roe).join(",");
+
   useEffect(() => {
+    const billingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+    const topRoe =
+      form.values.roe != null && form.values.roe > 0
+        ? Number(form.values.roe)
+        : null;
+
     const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount != null &&
+        charge.amount !== null &&
+        charge.amount !== undefined &&
         charge.amount > 0 &&
-        charge.roe != null &&
+        charge.roe !== null &&
+        charge.roe !== undefined &&
         charge.roe > 0
       ) {
         const calculatedLocalAmount = charge.amount * charge.roe;
@@ -530,16 +543,35 @@ function InvoiceReverse() {
           clamped > 0 &&
           clamped !== charge.amount_in_local
         ) {
-          return { ...charge, amount_in_local: clamped };
+          const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+          const newHeaderAmount =
+            billingCurrency && chargeCurr && billingCurrency === chargeCurr
+              ? clamped
+              : topRoe != null
+                ? clampAmount(clamped / topRoe)
+                : clamped;
+          return {
+            ...charge,
+            amount_in_local: clamped,
+            header_amount:
+              newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
+          };
         }
       }
+
       return charge;
     });
+
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount_in_local !== form.values.charges[index]?.amount_in_local,
+        charge.amount_in_local !==
+          form.values.charges[index]?.amount_in_local ||
+        charge.header_amount !== form.values.charges[index]?.header_amount,
     );
-    if (hasChanges) form.setFieldValue("charges", updatedCharges);
+
+    if (hasChanges) {
+      form.setFieldValue("charges", updatedCharges);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmounts, chargeRoesForLocal]);
 
@@ -1684,6 +1716,7 @@ function InvoiceReverse() {
           <Grid>
             <Grid.Col span={4}>
               <SearchableSelect
+                key={`invoice-reverse-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
                 placeholder="Type customer name"
                 apiEndpoint={URL.allCustomers}

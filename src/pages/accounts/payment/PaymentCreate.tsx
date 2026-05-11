@@ -305,7 +305,25 @@ type PaymentFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
-const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+/** Map API/stored party Dr/Cr. When prefilling reversal create from a source payment, flip Dr↔Cr. */
+function mapPaymentPartyDrCr(
+  raw: string | null | undefined,
+  flipForReversalSource: boolean,
+): "Cr" | "Dr" {
+  const side =
+    String(raw ?? "")
+      .trim()
+      .toLowerCase() === "dr"
+      ? "Dr"
+      : "Cr";
+  if (!flipForReversalSource) return side;
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
+const getDefaultDetailRow = (
+  localCurrency: string,
+  isReversalFlow = false,
+): DetailRow => ({
   subledger_id: null,
   account_code: "",
   customer_code: "",
@@ -315,7 +333,7 @@ const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   roe: 1,
   amount: null,
   local_amount: null,
-  dr_cr: "Cr",
+  dr_cr: isReversalFlow ? "Cr" : "Dr",
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -425,6 +443,16 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
   return d ? d.toLocaleDateString() : "—";
 }
 
+function formatOutstandingDocumentAmountInLocal(
+  amountInLocal: number | string | null | undefined,
+): string {
+  if (amountInLocal == null || amountInLocal === "") return "—";
+  if (typeof amountInLocal === "number")
+    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+  const n = parseFloat(String(amountInLocal).trim());
+  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+}
+
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
 function firstNonEmptyString(
   ...candidates: Array<string | number | null | undefined>
@@ -522,7 +550,7 @@ export default function PaymentCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
-      details: [getDefaultDetailRow(localCurrency)],
+      details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
     },
@@ -701,10 +729,10 @@ export default function PaymentCreate({
               roe: parseNum(pAny.roe) ?? 1,
               amount: parseNum(pAny.amount),
               local_amount: parseNum(pAny.local_amount),
-              dr_cr: (pAny.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+              dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
           })
-        : [getDefaultDetailRow(localCurrency)];
+        : [getDefaultDetailRow(localCurrency, _isReversal)];
 
     // Map list response allocations: document_no, document_date, subledger_code, subledger_name, day_book_id, type, location, supplier_invoice_id, adj_curr_amount, adj_local_amount
     const allocations = paymentFromState.allocations;
@@ -968,7 +996,10 @@ export default function PaymentCreate({
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency));
+    form.insertListItem(
+      "details",
+      getDefaultDetailRow(localCurrency, _isReversal),
+    );
   };
 
   const removeDetailRow = (idx: number) => {
@@ -1190,7 +1221,7 @@ export default function PaymentCreate({
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr ?? "Cr").toString(),
+        dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
@@ -1211,7 +1242,7 @@ export default function PaymentCreate({
     return base;
   };
 
-  /** Build payload for reverse-payment API. Header dr_cr = "Dr". For create: payment_no from source. */
+  /** Build payload for reverse-payment API. Header dr_cr = "Dr"; party lines default Cr. */
   const buildReversalPayload = (
     values: PaymentFormValues,
     options?: {
@@ -2378,7 +2409,8 @@ export default function PaymentCreate({
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.dr_cr`,
-                                (v as "Cr" | "Dr") ?? "Cr",
+                                (v as "Cr" | "Dr") ??
+                                  (_isReversal ? "Cr" : "Dr"),
                               )
                             }
                             styles={partyFieldStyles}
@@ -2705,6 +2737,7 @@ export default function PaymentCreate({
                       <Table.Th>Document Doc Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2730,19 +2763,14 @@ export default function PaymentCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.document_amount != null
-                            ? typeof inv.document_amount === "number"
-                              ? inv.document_amount.toFixed(2)
-                              : String(inv.document_amount)
-                            : inv.total != null
-                              ? typeof inv.total === "number"
-                                ? inv.total.toFixed(2)
-                                : String(inv.total)
-                              : inv.amount != null
-                                ? typeof inv.amount === "number"
-                                  ? inv.amount.toFixed(2)
-                                  : String(inv.amount)
-                                : "—"}
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.amount,
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     ))}

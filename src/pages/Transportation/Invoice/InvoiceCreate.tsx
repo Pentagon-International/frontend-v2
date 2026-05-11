@@ -126,7 +126,6 @@ const fetchChargeMaster = async () => {
 
 // Fetch unit master
 
-
 // Fetch effective SAC (tax code) for charge + service: POST body { items: [{ charge_id, service_id }] }
 const fetchGetEffectiveSac = async (
   items: { charge_id: number; service_id: number }[],
@@ -274,14 +273,71 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return null;
 }
 
-// Clamp amount to max 10 digits including decimals, max 2 decimal places (e.g. 99999999.99)
+// Round monetary amounts to exactly 2 decimal places (payload / display math). No upper bound.
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
-  const maxVal = 99999999.99;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
-  return rounded;
+  if (value === null || value === undefined)
+    return value === undefined ? null : null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
+}
+
+/** Prefer first non-empty string from nested party/job records (ocean housings vary by field names). */
+function pickFirstTrimmedCode(
+  records: Array<Record<string, unknown> | null | undefined>,
+  keys: string[],
+): string {
+  for (const rec of records) {
+    if (!rec) continue;
+    for (const key of keys) {
+      const raw = rec[key];
+      if (raw == null || raw === "") continue;
+      const s = String(raw).trim();
+      if (s !== "") return s;
+    }
+  }
+  return "";
+}
+
+function clampSumAmounts(parts: Array<number | null | undefined>): number {
+  const sum = parts.reduce<number>(
+    (acc, v) =>
+      Number.isFinite(Number(v)) ? acc + (Number(v) as number) : acc,
+    0,
+  );
+  return clampAmount(sum) ?? 0;
+}
+
+/** Map job/house party to master state_id for invoice State dropdown. */
+function resolvePartyStateIdFromHousing(
+  isAgent: boolean,
+  useConsigneeForBillTo: boolean,
+  firstHawb: Record<string, unknown>,
+  jobHouse0?: Record<string, unknown>,
+  jobRoot?: Record<string, unknown> | null,
+): number | null {
+  const raw = isAgent
+    ? (firstHawb["agent_state_id"] ??
+      jobHouse0?.["agent_state_id"] ??
+      jobRoot?.["agent_state_id"] ??
+      null)
+    : useConsigneeForBillTo
+      ? (firstHawb["consignee_state_id"] ??
+        jobHouse0?.["consignee_state_id"] ??
+        jobRoot?.["consignee_state_id"] ??
+        null)
+      : (firstHawb["shipper_state_id"] ??
+        jobHouse0?.["shipper_state_id"] ??
+        jobRoot?.["shipper_state_id"] ??
+        null);
+  if (
+    raw === null ||
+    raw === undefined ||
+    String(raw).trim() === "" ||
+    !Number.isFinite(Number(raw))
+  )
+    return null;
+  return Number(raw);
 }
 
 // Invoice data shape from filter/invoice API (for edit/view form fill)
@@ -426,19 +482,29 @@ function InvoiceCreate({
   >({});
 
   const isReadOnly = isViewMode || invoiceIsPosted;
-  const invoiceDataFromState = (location.state?.invoiceData as
-    | Record<string, unknown>
-    | undefined) ?? { };
+  const invoiceDataFromState =
+    (location.state?.invoiceData as Record<string, unknown> | undefined) ?? {};
   const inferredCreditFromData =
     String(invoiceDataFromState?.document_type ?? "").toUpperCase() === "CRN" ||
-    String((invoiceDataFromApi as Record<string, unknown> | null)?.document_type ?? "").toUpperCase() === "CRN" ||
-    String(invoiceDataFromState?.Dr_Cr ?? invoiceDataFromState?.dr_cr ?? "").toLowerCase() === "cr" ||
-    String((invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ?? (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ?? "").toLowerCase() === "cr";
+    String(
+      (invoiceDataFromApi as Record<string, unknown> | null)?.document_type ??
+        "",
+    ).toUpperCase() === "CRN" ||
+    String(
+      invoiceDataFromState?.Dr_Cr ?? invoiceDataFromState?.dr_cr ?? "",
+    ).toLowerCase() === "cr" ||
+    String(
+      (invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ??
+        (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ??
+        "",
+    ).toLowerCase() === "cr";
   const isCreditNoteFlow =
     documentType === "CRN" ||
     location.pathname.includes("credit-note") ||
     inferredCreditFromData;
-  const resolvedDocumentLabel = isCreditNoteFlow ? "Credit Note" : documentLabel;
+  const resolvedDocumentLabel = isCreditNoteFlow
+    ? "Credit Note"
+    : documentLabel;
   const pdfDocumentLabel = resolvedDocumentLabel;
   const pageTitle = isViewMode
     ? `View ${resolvedDocumentLabel}`
@@ -506,6 +572,19 @@ function InvoiceCreate({
         location.pathname.includes("/SeaExport/import-job")),
     [isFromAirExportJob, location.pathname],
   );
+
+  // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
+  const invoiceUsesConsigneeParty = useMemo(() => {
+    const isAgentFlow =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+    if (isAgentFlow) return false;
+    const bt = (
+      location.state as { billToFrom?: "shipper" | "consignee" } | null
+    )?.billToFrom;
+    if (bt === "consignee") return true;
+    if (bt === "shipper") return false;
+    return location.pathname.includes("/SeaExport/import-job/invoice");
+  }, [location.pathname, location.state?.is_agent, location.state?.billToFrom]);
 
   // User's local currency code (for ROE = 1 when billing currency matches)
   const userLocalCurrency = useMemo(() => {
@@ -639,60 +718,57 @@ function InvoiceCreate({
     }));
   }, [stateData]);
 
-  // State from housing is set after state API loads
-  // Agent invoice: use agent_state_id; Customer invoice: use shipper_state_id by default,
-  // but allow ocean import customer invoice flow to use consignee_state_id when billToFrom === "consignee"
+  // State from housing: apply only after state master is loaded and options exist (avoids Select clearing value before data arrives).
   useEffect(() => {
     if (isStateLoading) return;
+
+    const stateRows = Array.isArray(stateData) ? (stateData as any[]) : [];
+    if (stateRows.length === 0) return;
+
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const job = location.state?.job as
-      | {
-          housing_details?: Array<{
-            shipper_state_id?: number | null;
-            agent_state_id?: number | null;
-            consignee_state_id?: number | null;
-          }>;
-        }
+      | { housing_details?: Array<Record<string, unknown>> }
       | undefined;
-    const jobHousing = job?.housing_details;
+    const jobHousingArr = Array.isArray(job?.housing_details)
+      ? (job?.housing_details as Array<Record<string, unknown>>)
+      : [];
     const firstHawb =
       Array.isArray(hawbDetails) && hawbDetails.length > 0
         ? hawbDetails[0]
-        : (jobHousing?.[0] ?? null);
-    const firstHawbAny = firstHawb as
-      | {
-          shipper_state_id?: number | null;
-          agent_state_id?: number | null;
-          consignee_state_id?: number | null;
-        }
-      | null
-      | undefined;
+        : jobHousingArr[0];
+    const jobHouse0 = jobHousingArr.length > 0 ? jobHousingArr[0] : undefined;
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
-    const billToFrom = (
-      location.state as { billToFrom?: "shipper" | "consignee" } | null
-    )?.billToFrom;
-    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
+    if (!firstHawb) return;
 
-    const stateId = isAgent
-      ? (firstHawbAny?.agent_state_id ??
-        jobHousing?.[0]?.agent_state_id ??
-        null)
-      : useConsigneeForBillTo
-        ? (firstHawbAny?.consignee_state_id ??
-          jobHousing?.[0]?.consignee_state_id ??
-          null)
-        : (firstHawbAny?.shipper_state_id ??
-          jobHousing?.[0]?.shipper_state_id ??
-          null);
+    const stateIdNum = resolvePartyStateIdFromHousing(
+      isAgent,
+      invoiceUsesConsigneeParty,
+      firstHawb as Record<string, unknown>,
+      jobHouse0,
+      (job ?? null) as Record<string, unknown> | null,
+    );
+    if (stateIdNum == null) return;
 
-    if (stateId != null && String(stateId) !== form.values.state) {
-      form.setFieldValue("state", String(stateId));
-    }
+    const desired = String(stateIdNum);
+    if (desired === form.values.state) return;
+
+    queueMicrotask(() => {
+      form.setFieldValue("state", desired);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStateLoading, stateData]);
+  }, [
+    isStateLoading,
+    stateData,
+    location.key,
+    location.state?.is_agent,
+    invoiceUsesConsigneeParty,
+    location.state?.hawbDetails,
+    location.state?.housingDetails,
+    location.state?.job,
+  ]);
 
   // Format daybook options: id = value, name = label (value is daybook_id)
   const daybookOptions = useMemo(() => {
@@ -803,18 +879,13 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.currency, userLocalCurrency]);
 
-  // Keep Bill To, State and Address in sync: when customer (Bill To) is empty, clear state and address
+  // When Bill To is cleared, clear address only. Do not clear state here: it runs before
+  // house→invoice prefill and would wipe shipper/consignee state before bill_to is set.
+  // Clearing state on user action is handled in handleBillToChange.
   useEffect(() => {
     const billTo = form.values.bill_to;
-    console.log(
-      "[InvoiceCreate] Bill To effect - current bill_to value:",
-      billTo,
-      "displayName:",
-      billToDisplayName,
-    );
     if (!billTo || (typeof billTo === "string" && billTo.trim() === "")) {
       if (form.values.address) form.setFieldValue("address", "");
-      if (form.values.state) form.setFieldValue("state", "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.bill_to]);
@@ -830,20 +901,24 @@ function InvoiceCreate({
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
     const job = (
       location.state as {
-        job?: { agent_code?: string; agent_name?: string };
+        job?: Record<string, unknown>;
       } | null
     )?.job;
-
-    const billToFrom = (
-      location.state as { billToFrom?: "shipper" | "consignee" } | null
-    )?.billToFrom;
-    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
+    const jobHousingArr = Array.isArray(
+      (job as { housing_details?: unknown[] } | undefined)?.housing_details,
+    )
+      ? ((job as { housing_details: Array<Record<string, unknown>> })
+          .housing_details ?? [])
+      : [];
+    const jobHouse0 = jobHousingArr.length > 0 ? jobHousingArr[0] : undefined;
 
     if (Array.isArray(hawbDetails) && hawbDetails.length > 0) {
       // Get the first HAWB detail
       const firstHawb = hawbDetails[0];
 
       if (firstHawb) {
+        const firstHawbRec = firstHawb as Record<string, unknown>;
+
         if (isAgent && job) {
           // Agent invoice: default billing currency USD, Bill To = origin/destination agent
           form.setFieldValue("currency", "USD");
@@ -851,18 +926,48 @@ function InvoiceCreate({
           if (roe !== null && roe !== undefined) {
             form.setFieldValue("roe", roe);
           }
-          const agentCode = String(job.agent_code || "").trim();
+          const agentCode = pickFirstTrimmedCode(
+            [
+              (job ?? null) as Record<string, unknown> | null,
+              firstHawbRec,
+              jobHouse0,
+            ],
+            [
+              "agent_code",
+              "origin_agent",
+              "destination_agent",
+              "destination_agent_code",
+              "agent_customer_code",
+            ],
+          );
+          const agentNamePick = pickFirstTrimmedCode(
+            [
+              (job ?? null) as Record<string, unknown> | null,
+              firstHawbRec,
+              jobHouse0,
+            ],
+            [
+              "agent_name",
+              "origin_agent_name",
+              "destination_agent_name",
+              "agent_display_name",
+            ],
+          );
+          // Set display name before code so ocean export job invoice (Bill To agent) avoids a transient code-only Bill To hint.
+          if (agentNamePick) setBillToDisplayName(agentNamePick);
           if (agentCode) {
             form.setFieldValue("bill_to", agentCode);
           }
-          if (job.agent_name) {
-            setBillToDisplayName(String(job.agent_name));
-          }
-          const firstHawbAny = firstHawb as Record<string, unknown>;
-          const agentAddress =
-            firstHawbAny?.origin_agent_address ?? firstHawbAny?.agent_address;
-          if (agentAddress && typeof agentAddress === "string") {
-            form.setFieldValue("address", agentAddress);
+          const agentAddressRaw =
+            firstHawbRec?.origin_agent_address ??
+            firstHawbRec?.agent_address ??
+            jobHouse0?.agent_address ??
+            jobHouse0?.origin_agent_address;
+          if (
+            typeof agentAddressRaw === "string" &&
+            agentAddressRaw.trim() !== ""
+          ) {
+            form.setFieldValue("address", agentAddressRaw);
           }
         } else {
           // Customer invoice: by default Bill To = shipper, but allow ocean import to use consignee when requested
@@ -873,45 +978,27 @@ function InvoiceCreate({
               form.setFieldValue("roe", roe);
             }
           }
-          if (useConsigneeForBillTo) {
+          if (invoiceUsesConsigneeParty) {
             // Ocean import customer invoice: Bill To / address from consignee
             console.log(
               "[InvoiceCreate] Ocean import - using consignee for Bill To. Raw firstHawb:",
               firstHawb,
             );
+            const consigneeAddr = firstHawbRec["consignee_address"];
             if (
-              (firstHawb as { consignee_address?: string }).consignee_address
+              typeof consigneeAddr === "string" &&
+              consigneeAddr.trim() !== ""
             ) {
-              form.setFieldValue(
-                "address",
-                (firstHawb as { consignee_address?: string }).consignee_address,
-              );
+              form.setFieldValue("address", consigneeAddr);
             }
-            // Prefer consignee_code from firstHawb; if missing, fall back to job.housing_details[0].consignee_code
-            let consigneeCode = String(
-              (firstHawb as { consignee_code?: string }).consignee_code || "",
-            ).trim();
-            if (
-              !consigneeCode &&
-              job &&
-              Array.isArray(
-                (
-                  job as {
-                    housing_details?: Array<{ consignee_code?: string }>;
-                  }
-                ).housing_details,
-              )
-            ) {
-              const jobHousing = (
-                job as {
-                  housing_details?: Array<{ consignee_code?: string }>;
-                }
-              ).housing_details;
-              const fromJob = jobHousing?.[0]?.consignee_code;
-              if (fromJob) {
-                consigneeCode = String(fromJob).trim();
-              }
-            }
+            const consigneeCode = pickFirstTrimmedCode(
+              [
+                firstHawbRec,
+                jobHouse0,
+                (job ?? null) as Record<string, unknown> | null,
+              ],
+              ["consignee_code", "consignee_id", "customer_code"],
+            );
             console.log(
               "[InvoiceCreate] Consignee mapping - extracted consignee_code:",
               consigneeCode,
@@ -977,26 +1064,14 @@ function InvoiceCreate({
             if (firstHawb.shipper_address) {
               form.setFieldValue("address", firstHawb.shipper_address);
             }
-            // Prefer shipper_code from firstHawb; if missing, fall back to job.housing_details[0].shipper_code
-            let shipperCode = String(
-              (firstHawb as { shipper_code?: string }).shipper_code || "",
-            ).trim();
-            if (
-              !shipperCode &&
-              job &&
-              Array.isArray(
-                (job as { housing_details?: Array<{ shipper_code?: string }> })
-                  .housing_details,
-              )
-            ) {
-              const jobHousing = (job as {
-                housing_details?: Array<{ shipper_code?: string }>;
-              }).housing_details;
-              const fromJob = jobHousing?.[0]?.shipper_code;
-              if (fromJob) {
-                shipperCode = String(fromJob).trim();
-              }
-            }
+            const shipperCode = pickFirstTrimmedCode(
+              [
+                firstHawbRec,
+                jobHouse0,
+                (job ?? null) as Record<string, unknown> | null,
+              ],
+              ["shipper_code", "shipper_id", "customer_code"],
+            );
             if (shipperCode) {
               form.setFieldValue("bill_to", shipperCode);
             }
@@ -1038,6 +1113,8 @@ function InvoiceCreate({
           }
         }
 
+        // Party state — applied in the effect once state dropdown master has loaded.
+
         // Set shipment_no: when from Air Export Job use job.id, else use firstHawb.shipment_id
         if (isFromAirExportJob) {
           form.setFieldValue(
@@ -1047,8 +1124,6 @@ function InvoiceCreate({
         } else if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
-
-        // State from housing is set after state API loads (see useEffect below)
 
         // Map house (HAWB) charges into invoice charges form (same shape as housing stepper for common fields)
         if (
@@ -1203,8 +1278,7 @@ function InvoiceCreate({
                 ? amountInLocal
                 : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
-              dr_cr:
-                (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
+              dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
             };
           });
           form.setFieldValue("charges", mappedCharges);
@@ -1294,7 +1368,9 @@ function InvoiceCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    location.key,
     location.state?.is_agent,
+    invoiceUsesConsigneeParty,
     location.state?.job,
     location.state?.hawbDetails,
     location.state?.housingDetails,
@@ -1391,89 +1467,89 @@ function InvoiceCreate({
               };
 
               return {
-              id: c.id != null ? Number(c.id) : null,
-              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+                id: c.id != null ? Number(c.id) : null,
+                charge_id: c.charge_id != null ? Number(c.charge_id) : null,
                 charge_code: c.charge_code ?? "",
-              charge_name: c.charge_name ?? "",
-              shipment_id: c.shipment_id
-                ? String(c.shipment_id)
-                : c.shipment_no
-                  ? String(c.shipment_no)
-                  : "",
-              shipper_id: c.shipper_id ?? "",
-              unit_id:
-                c.unit_id != null && String(c.unit_id).trim() !== ""
-                  ? String(c.unit_id)
-                  : (() => {
-                      const unitCode = String(c.unit_code ?? "").trim();
-                      if (!unitCode) return "";
-                      const opt = unitOptions.find(
-                        (o) =>
-                          String(o.value).trim().toUpperCase() ===
-                            unitCode.toUpperCase() ||
-                          String(o.label).trim().toUpperCase() ===
-                            unitCode.toUpperCase(),
-                      );
-                      return opt?.value ?? "";
-                    })(),
-              unit_code: c.unit_code ?? "",
-              no_of_unit:
-                c.no_of_unit != null
-                  ? typeof c.no_of_unit === "string"
-                    ? parseFloat(c.no_of_unit)
-                    : c.no_of_unit
-                  : null,
-              currency_id:
-                c.currency_id != null && String(c.currency_id).trim() !== ""
-                  ? String(c.currency_id)
-                  : (() => {
-                      const code = String(c.currency_code ?? "").trim();
-                      if (!code) return "";
-                      const opt = currencyOptions.find(
-                        (o) =>
-                          String(o.label).trim().toUpperCase() ===
-                            code.toUpperCase() ||
-                          String(o.value).trim().toUpperCase() ===
-                            code.toUpperCase(),
-                      );
-                      return opt?.value ?? "";
-                    })(),
-              currency: c.currency_code ?? "",
-              roe:
-                c.roe != null
-                  ? typeof c.roe === "string"
-                    ? parseFloat(c.roe)
-                    : c.roe
-                  : null,
-              amount_per_unit:
-                c.amount_per_unit != null
-                  ? typeof c.amount_per_unit === "string"
-                    ? parseFloat(c.amount_per_unit)
-                    : c.amount_per_unit
-                  : null,
-              amount:
-                c.amount != null
-                  ? typeof c.amount === "string"
-                    ? parseFloat(c.amount)
-                    : c.amount
-                  : null,
-              header_amount:
-                c.amount_in_header != null
-                  ? typeof c.amount_in_header === "string"
-                    ? parseFloat(c.amount_in_header)
-                    : c.amount_in_header
-                  : null,
-              amount_in_local:
-                c.amount_in_local != null
-                  ? typeof c.amount_in_local === "string"
-                    ? parseFloat(c.amount_in_local)
-                    : c.amount_in_local
-                  : null,
-              tax_code: c.tax_code ?? "",
-              dr_cr:
-                (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
-                  ? "Dr"
-                  : chargeDefaultDrCr,
+                charge_name: c.charge_name ?? "",
+                shipment_id: c.shipment_id
+                  ? String(c.shipment_id)
+                  : c.shipment_no
+                    ? String(c.shipment_no)
+                    : "",
+                shipper_id: c.shipper_id ?? "",
+                unit_id:
+                  c.unit_id != null && String(c.unit_id).trim() !== ""
+                    ? String(c.unit_id)
+                    : (() => {
+                        const unitCode = String(c.unit_code ?? "").trim();
+                        if (!unitCode) return "";
+                        const opt = unitOptions.find(
+                          (o) =>
+                            String(o.value).trim().toUpperCase() ===
+                              unitCode.toUpperCase() ||
+                            String(o.label).trim().toUpperCase() ===
+                              unitCode.toUpperCase(),
+                        );
+                        return opt?.value ?? "";
+                      })(),
+                unit_code: c.unit_code ?? "",
+                no_of_unit:
+                  c.no_of_unit != null
+                    ? typeof c.no_of_unit === "string"
+                      ? parseFloat(c.no_of_unit)
+                      : c.no_of_unit
+                    : null,
+                currency_id:
+                  c.currency_id != null && String(c.currency_id).trim() !== ""
+                    ? String(c.currency_id)
+                    : (() => {
+                        const code = String(c.currency_code ?? "").trim();
+                        if (!code) return "";
+                        const opt = currencyOptions.find(
+                          (o) =>
+                            String(o.label).trim().toUpperCase() ===
+                              code.toUpperCase() ||
+                            String(o.value).trim().toUpperCase() ===
+                              code.toUpperCase(),
+                        );
+                        return opt?.value ?? "";
+                      })(),
+                currency: c.currency_code ?? "",
+                roe:
+                  c.roe != null
+                    ? typeof c.roe === "string"
+                      ? parseFloat(c.roe)
+                      : c.roe
+                    : null,
+                amount_per_unit:
+                  c.amount_per_unit != null
+                    ? typeof c.amount_per_unit === "string"
+                      ? parseFloat(c.amount_per_unit)
+                      : c.amount_per_unit
+                    : null,
+                amount:
+                  c.amount != null
+                    ? typeof c.amount === "string"
+                      ? parseFloat(c.amount)
+                      : c.amount
+                    : null,
+                header_amount:
+                  c.amount_in_header != null
+                    ? typeof c.amount_in_header === "string"
+                      ? parseFloat(c.amount_in_header)
+                      : c.amount_in_header
+                    : null,
+                amount_in_local:
+                  c.amount_in_local != null
+                    ? typeof c.amount_in_local === "string"
+                      ? parseFloat(c.amount_in_local)
+                      : c.amount_in_local
+                    : null,
+                tax_code: c.tax_code ?? "",
+                dr_cr:
+                  (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
+                    ? "Dr"
+                    : chargeDefaultDrCr,
                 is_tax_row: isTaxRow,
                 igst_rate: parseNullableNumber(c.igst_rate),
                 cgst_rate: parseNullableNumber(c.cgst_rate),
@@ -1896,8 +1972,7 @@ function InvoiceCreate({
       );
 
       const addrForState =
-        primaryAddress ||
-        (addressesData || []).find((a) => a.state_id != null);
+        primaryAddress || (addressesData || []).find((a) => a.state_id != null);
       if (addrForState?.state_id != null) {
         form.setFieldValue("state", String(addrForState.state_id));
       }
@@ -1907,8 +1982,9 @@ function InvoiceCreate({
         (addressesData || []).find(
           (a) => (a as { gst_id?: string | null }).gst_id != null,
         );
-      const gstFromAddress =
-        (addrForGst as { gst_id?: string | null } | undefined)?.gst_id;
+      const gstFromAddress = (
+        addrForGst as { gst_id?: string | null } | undefined
+      )?.gst_id;
       if (gstFromAddress) {
         form.setFieldValue("gstn", String(gstFromAddress));
       }
@@ -1976,16 +2052,13 @@ function InvoiceCreate({
         return;
       }
 
-      // Total = sum of header amount column; header_total = same (Amount in billing currency total)
-      const total = values.charges.reduce(
-        (sum, c) => sum + (c.header_amount ?? 0),
-        0,
+      // Total = sum of header amount column; header_total = same (rounded to 2 dp for payload)
+      const total = clampSumAmounts(
+        values.charges.map((c) => c.header_amount ?? 0),
       );
       const header_total = total;
-      // Local currency total (billing currency value INR, USD)
-      const local_total = values.charges.reduce(
-        (sum, c) => sum + (c.amount_in_local ?? 0),
-        0,
+      const local_total = clampSumAmounts(
+        values.charges.map((c) => c.amount_in_local ?? 0),
       );
 
       const formatDateDDMMYYYY = (d: Date) => {
@@ -2324,14 +2397,17 @@ function InvoiceCreate({
               .toUpperCase();
             const rate = Number(row.rate ?? 0);
             // If tax rate is 0%, do not send IGST/CGST/SGST in payload.
-            if ((name === "IGST" || name === "CGST" || name === "SGST") && rate <= 0)
+            if (
+              (name === "IGST" || name === "CGST" || name === "SGST") &&
+              rate <= 0
+            )
               return false;
             return true;
           })
           .map((row) => ({
             tax_code: row.sac_code ?? "",
             rate: row.rate ?? 0,
-            amount: row.total_amount ?? 0,
+            amount: clampAmount(row.total_amount ?? 0) ?? 0,
           }));
       }
 
@@ -2471,44 +2547,42 @@ function InvoiceCreate({
               return true;
             })
             .map((row) => {
-            const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-            const amountInLocal = clampAmount(amt * topRoe) ?? 0;
-            return {
-              shipment_no: values.shipment_no,
-              charge_id: row.charge_id ?? null,
-              unit_id: null,
-              no_of_unit: 0,
-              currency_id: currencyId,
-              roe: topRoe,
-              amount_per_unit: 0,
-              amount: amt,
-              amount_in_local: amountInLocal,
-              amount_in_header: amountInLocal,
-              // This row is itself a tax amount entry. Keep SAC code visible, but do NOT fetch/calc GST.
-              tax_code: row.sac_code ?? "",
-              is_tax_row: true,
-              igst_rate: null,
-              cgst_rate: null,
-              sgst_rate: null,
-              igst: null,
-              cgst: null,
-              sgst: null,
-              Dr_Cr: "Cr",
-            };
-          });
+              const amt = clampAmount(row.total_amount ?? 0) ?? 0;
+              const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+              return {
+                shipment_no: values.shipment_no,
+                charge_id: row.charge_id ?? null,
+                unit_id: null,
+                no_of_unit: 0,
+                currency_id: currencyId,
+                roe: topRoe,
+                amount_per_unit: 0,
+                amount: amt,
+                amount_in_local: amountInLocal,
+                amount_in_header: amountInLocal,
+                // This row is itself a tax amount entry. Keep SAC code visible, but do NOT fetch/calc GST.
+                tax_code: row.sac_code ?? "",
+                is_tax_row: true,
+                igst_rate: null,
+                cgst_rate: null,
+                sgst_rate: null,
+                igst: null,
+                cgst: null,
+                sgst: null,
+                Dr_Cr: "Cr",
+              };
+            });
       const allChargesPayload = isAgentPost
         ? chargesPayload
         : [...chargesPayload, ...taxCharges];
 
       // Recompute totals from final charges payload (base charges + appended tax rows)
-      const total = allChargesPayload.reduce(
-        (sum, c) => sum + (Number(c.amount_in_header) || 0),
-        0,
+      const total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_header) || 0),
       );
       const header_total = total;
-      const local_total = allChargesPayload.reduce(
-        (sum, c) => sum + (Number(c.amount_in_local) || 0),
-        0,
+      const local_total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_local) || 0),
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -2678,19 +2752,22 @@ function InvoiceCreate({
               igst_rate: (() => {
                 const raw = (c as any).igst_rate;
                 if (raw == null || raw === "") return null;
-                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
               cgst_rate: (() => {
                 const raw = (c as any).cgst_rate;
                 if (raw == null || raw === "") return null;
-                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
               sgst_rate: (() => {
                 const raw = (c as any).sgst_rate;
                 if (raw == null || raw === "") return null;
-                const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
             };
@@ -2771,7 +2848,9 @@ function InvoiceCreate({
 
     // Fallback for cases where rates haven't been fetched yet (or were skipped for tax rows):
     // infer intra/inter state from non-tax rows' returned rates (from POST response mapping).
-    const nonTax = (form.values.charges || []).filter((c) => c.is_tax_row !== true);
+    const nonTax = (form.values.charges || []).filter(
+      (c) => c.is_tax_row !== true,
+    );
     if (nonTax.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0))
       return true;
     if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
@@ -2902,6 +2981,7 @@ function InvoiceCreate({
             {/* Bill To - spans 2 fields (span=4) */}
             <Grid.Col span={4}>
               <SearchableSelect
+                key={`invoice-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
                 placeholder="Type customer name"
                 apiEndpoint={URL.allCustomers}
@@ -3996,16 +4076,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="CGST"
                           value={(() => {
-                          const code = String(charge.charge_code ?? "")
-                            .trim()
-                            .toUpperCase();
-                          if (
-                            charge.is_tax_row === true ||
-                            code === "IGST" ||
-                            code === "CGST" ||
-                            code === "SGST"
-                          )
-                            return "";
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -4048,16 +4128,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="SGST"
                           value={(() => {
-                          const code = String(charge.charge_code ?? "")
-                            .trim()
-                            .toUpperCase();
-                          if (
-                            charge.is_tax_row === true ||
-                            code === "IGST" ||
-                            code === "CGST" ||
-                            code === "SGST"
-                          )
-                            return "";
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -4101,16 +4181,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="IGST"
                           value={(() => {
-                          const code = String(charge.charge_code ?? "")
-                            .trim()
-                            .toUpperCase();
-                          if (
-                            charge.is_tax_row === true ||
-                            code === "IGST" ||
-                            code === "CGST" ||
-                            code === "SGST"
-                          )
-                            return "";
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
