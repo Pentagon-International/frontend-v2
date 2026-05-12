@@ -53,6 +53,7 @@ import {
   IconList,
   IconLink,
   IconFileUpload,
+  IconFiles,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -845,6 +846,19 @@ const Navbar = ({
                       label="Supplier Invoice"
                       icon={IconFileInvoiceFilled}
                       path="/supplier-invoice"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Invoices"
+                      icon={IconFiles}
+                      path="/invoices"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

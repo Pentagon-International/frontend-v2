@@ -182,6 +182,7 @@ type AdjustmentRow = {
 
 type InvoiceCombinedItem = {
   id?: number;
+  doc_id?: number | string;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -524,6 +525,8 @@ export default function PaymentCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
+  const [isOpeningSupplierInvoiceFromModal, setIsOpeningSupplierInvoiceFromModal] =
+    useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -1068,6 +1071,86 @@ export default function PaymentCreate({
       else next.add(idx);
       return next;
     });
+  };
+
+  const openSupplierInvoiceFromAllocationRow = async (
+    inv: InvoiceCombinedItem,
+  ) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "CRJ") return;
+
+    const docIdRaw = inv.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Supplier invoice not found",
+      });
+      return;
+    }
+
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the supplier invoice in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningSupplierInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.supplierInvoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "").trim().toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setIsOpeningSupplierInvoiceFromModal(false);
+      const supplierPath = `/supplier-invoice/${mode}/${docId}`;
+      const supplierUrl = new window.URL(
+        supplierPath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = supplierUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open supplier invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open supplier invoice details.",
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningSupplierInvoiceFromModal(false);
+    }
   };
 
   const handleSelectInvoice = () => {
@@ -2712,11 +2795,35 @@ export default function PaymentCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningSupplierInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{
+              title: { fontWeight: 600, color: "#105476" },
+              body: { position: "relative" },
+            }}
           >
+            {isOpeningSupplierInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening supplier invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading documents...
@@ -2749,7 +2856,32 @@ export default function PaymentCreate({
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
+                        <Table.Td>
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "CRJ" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                void openSupplierInvoiceFromAllocationRow(inv)
+                              }
+                              title="Open supplier invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">{inv.document_no ?? "—"}</Text>
+                          )}
+                        </Table.Td>
                         <Table.Td>
                           {String(
                             inv.day_book_document_type ??

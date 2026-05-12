@@ -15,6 +15,7 @@ import {
   IconBook2,
   IconFilter,
   IconInfoCircle,
+  IconRefresh,
   IconSearch,
   IconTable,
   IconX,
@@ -77,6 +78,8 @@ type SubledgerEntryRow = {
   narration?: string | null;
   amount?: number | null;
   closing_balance?: number | null;
+  outstanding_amount?: number | null;
+  outstanding_days?: number | null;
 };
 
 type SubledgerEnquiryResponse = {
@@ -110,6 +113,8 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "credit_local_amount", label: "Credit", span: 0.95 },
   { key: "narration", label: "Narration", span: 1 },
   { key: "amount", label: "Amount", span: 0.95 },
+  { key: "outstanding_amount", label: "Outstanding Amt", span: 1.0 },
+  { key: "outstanding_days", label: "Outstanding Days", span: 0.95 },
   { key: "closing_balance", label: "Closing Bal", span: 0.8 },
 ];
 
@@ -144,9 +149,11 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
     case "debit_local_amount":
     case "credit_local_amount":
     case "amount":
-      return 120;
     case "closing_balance":
+    case "outstanding_amount":
       return 120;
+    case "outstanding_days":
+      return 110;
     case "narration":
       return 120;
     default:
@@ -161,9 +168,13 @@ function subledgerCellAlign(
   if (
     key === "debit_local_amount" ||
     key === "credit_local_amount" ||
-    key === "amount"
-  )
+    key === "amount" ||
+    key === "closing_balance" ||
+    key === "outstanding_amount" ||
+    key === "outstanding_days"
+  ) {
     return "center";
+  }
   return subledgerThTextAlign(key);
 }
 
@@ -196,13 +207,27 @@ function formatSubledgerCell(
     }
     return String(value);
   }
+  if (key === "outstanding_days") {
+    if (typeof value === "number" && Number.isFinite(value))
+      return String(Math.round(value));
+    if (typeof value === "string" && value.trim() !== "") {
+      const n = parseInt(value, 10);
+      if (!Number.isNaN(n)) return String(n);
+    }
+    return String(value);
+  }
   if (
     key === "debit_local_amount" ||
     key === "credit_local_amount" ||
     key === "amount" ||
-    key === "closing_balance"
+    key === "closing_balance" ||
+    key === "outstanding_amount"
   ) {
     if (typeof value === "number") return formatAmount(value);
+    if (typeof value === "string" && value.trim() !== "") {
+      const n = parseFloat(value);
+      if (!Number.isNaN(n)) return formatAmount(n);
+    }
   }
   return String(value);
 }
@@ -329,7 +354,9 @@ function subledgerColumnTone(
     key === "debit_local_amount" ||
     key === "credit_local_amount" ||
     key === "amount" ||
-    key === "closing_balance"
+    key === "closing_balance" ||
+    key === "outstanding_amount" ||
+    key === "outstanding_days"
   ) {
     return "numeric";
   }
@@ -502,6 +529,27 @@ export default function SubledgerEnquiry() {
     });
   }, [user]);
 
+  const ingestSubledgerResponse = useCallback(
+    (response: SubledgerEnquiryResponse) => {
+      const list = Array.isArray(response?.data) ? response.data : [];
+      setRows(list);
+      setResultTotal(
+        typeof response?.total === "number" ? response.total : list.length,
+      );
+      setEnquirySummary({
+        opening_balance:
+          typeof response?.opening_balance === "number"
+            ? response.opening_balance
+            : null,
+        closing_balance:
+          typeof response?.closing_balance === "number"
+            ? response.closing_balance
+            : null,
+      });
+    },
+    [],
+  );
+
   const runSubledgerEnquiry = useCallback(
     async (values: FilterFormValues) => {
       setFetchError("");
@@ -528,21 +576,7 @@ export default function SubledgerEnquiry() {
           API_HEADER,
         )) as SubledgerEnquiryResponse;
 
-        const list = Array.isArray(response?.data) ? response.data : [];
-        setRows(list);
-        setResultTotal(
-          typeof response?.total === "number" ? response.total : list.length,
-        );
-        setEnquirySummary({
-          opening_balance:
-            typeof response?.opening_balance === "number"
-              ? response.opening_balance
-              : null,
-          closing_balance:
-            typeof response?.closing_balance === "number"
-              ? response.closing_balance
-              : null,
-        });
+        ingestSubledgerResponse(response);
         setAppliedFilters({
           date_from,
           date_to,
@@ -561,8 +595,45 @@ export default function SubledgerEnquiry() {
         setIsFetchingRows(false);
       }
     },
-    [selectedAccountName, selectedSlCode],
+    [ingestSubledgerResponse, selectedAccountName, selectedSlCode],
   );
+
+  const refreshSubledgerEnquiry = useCallback(async () => {
+    if (!appliedFilters) return;
+    setFetchError("");
+    setIsFetchingRows(true);
+    try {
+      const payload = {
+        filters: {
+          date_from: appliedFilters.date_from,
+          date_to: appliedFilters.date_to,
+          account_code: appliedFilters.account_code,
+          ...(appliedFilters.subledger_code
+            ? { subledger_code: appliedFilters.subledger_code }
+            : {}),
+          ...(appliedFilters.location
+            ? { location: appliedFilters.location }
+            : {}),
+        },
+      };
+
+      const response = (await postAPICall(
+        URL.subledgerEnquiry,
+        payload,
+        API_HEADER,
+      )) as SubledgerEnquiryResponse;
+
+      ingestSubledgerResponse(response);
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    } catch {
+      setRows([]);
+      setEnquirySummary(null);
+      setResultTotal(null);
+      setFetchError("Unable to fetch subledger data. Please try again.");
+    } finally {
+      setIsFetchingRows(false);
+    }
+  }, [appliedFilters, ingestSubledgerResponse]);
 
   const downloadSubledgerCsv = useCallback(async () => {
     if (!appliedFilters) return;
@@ -677,6 +748,8 @@ export default function SubledgerEnquiry() {
       items.push({ key: "Account Code", value: appliedFilters.account_code });
     if (appliedFilters.subledger_code)
       items.push({ key: "SL Code", value: appliedFilters.subledger_code });
+    if (appliedFilters.location)
+      items.push({ key: "Location", value: appliedFilters.location });
     return items;
   }, [appliedFilters]);
 
@@ -829,6 +902,17 @@ export default function SubledgerEnquiry() {
                   menuStyles={v0MenuStyles}
                   classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                 />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconRefresh size={14} />}
+                  onClick={() => void refreshSubledgerEnquiry()}
+                  loading={isFetchingRows}
+                  disabled={!appliedFilters || isFetchingRows}
+                >
+                  Refresh
+                </Button>
                 {rows.length > 0 && (
                   <Button
                     variant="default"

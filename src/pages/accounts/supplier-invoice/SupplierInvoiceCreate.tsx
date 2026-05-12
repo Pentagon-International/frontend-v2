@@ -25,7 +25,7 @@ import {
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -388,17 +388,75 @@ export default function SupplierInvoiceCreate({
 }: SupplierInvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: supplierInvoiceIdFromRoute } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate =
     isReversal && pathname.includes("/reversal/create");
+  /** Loaded via `/supplier-invoice/view|edit/:id` (e.g. opened from Payment allocation modal). */
+  const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
+    useState<SupplierInvoiceListItem | null>(null);
   // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
   const invoiceFromState =
-    location.state as SupplierInvoiceListItem | null | undefined;
+    invoiceFromRouteFetch ??
+    (location.state as SupplierInvoiceListItem | null | undefined);
   const prefillFromJob = (location.state as any)
     ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
+
+  useEffect(() => {
+    const idStr = supplierInvoiceIdFromRoute?.trim();
+    if (!idStr || (!isViewMode && !isEditMode) || isReversalCreate) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+    const idNum = Number(idStr);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiCallProtected.get(
+          `${URL.supplierInvoice}${idNum}/`,
+          API_HEADER,
+        );
+        const rawData = (res as { data?: unknown })?.data ?? res;
+        const record =
+          rawData &&
+          typeof rawData === "object" &&
+          "data" in (rawData as Record<string, unknown>) &&
+          (rawData as { data?: unknown }).data &&
+          typeof (rawData as { data?: unknown }).data === "object"
+            ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+            : rawData && typeof rawData === "object"
+              ? (rawData as Record<string, unknown>)
+              : null;
+        if (!cancelled && record && typeof record === "object") {
+          setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
+        }
+      } catch (e) {
+        console.error("Failed to load supplier invoice by id", e);
+        if (!cancelled) {
+          setInvoiceFromRouteFetch(null);
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    supplierInvoiceIdFromRoute,
+    isViewMode,
+    isEditMode,
+    isReversalCreate,
+  ]);
 
   // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
   useEffect(() => {

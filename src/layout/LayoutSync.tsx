@@ -131,6 +131,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/supplier-invoice/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice Reversal");
+    } else if (path.startsWith("/invoices")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Invoices");
     } else if (path.startsWith("/supplier-invoice")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice");
@@ -173,7 +176,7 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/hbl-document-manager")) {
       setActiveNav("Jobcreation");
       setActiveSubNav("");
-    } else if (path.startsWith("/invoice")) {
+    } else if (path === "/invoice" || path.startsWith("/invoice/")) {
       setActiveNav("Invoice");
       setActiveSubNav("");
     } else if (path.startsWith("/accounts")) {
