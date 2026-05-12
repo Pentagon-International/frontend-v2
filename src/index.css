@@ -156,5 +156,6 @@ body {
 }
 
 .erp-header-filter-fade {
-  animation: erpHeaderFilterFadeIn 160ms ease-out;
+  animation: erpHeaderFilterFadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
 }

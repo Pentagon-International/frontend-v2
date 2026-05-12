@@ -46,7 +46,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
 } from "../../../components";
@@ -63,6 +62,9 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   TariffMasterListNativeTable,
   type TariffListColumn,
+  type TariffHeaderFilterValues,
+  type TariffHeaderFiltersProp,
+  type TariffHeaderRenderInput,
 } from "./TariffMasterListNativeTable";
 import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
@@ -74,11 +76,13 @@ type Origin = {
   status?: string;
   tariff_charges?: any[];
   service?: string;
+  tariff_code?: string;
 };
 
 type FilterState = {
   carrier_name: string | null;
   service: string | null;
+  tariff_code: string | null;
   valid_from: Date | null;
   valid_to: Date | null;
 };
@@ -133,9 +137,9 @@ export default function OriginMaster() {
 
   // Remove old state - now using memoized originData from useQuery
 
-  // Add local search state
+  // Add local search state — 1000ms keeps it consistent with header column filters.
   const [localSearchTerm, setLocalSearchTerm] = useState("");
-  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 500);
+  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 1000);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,6 +158,7 @@ export default function OriginMaster() {
     initialValues: {
       carrier_name: null,
       service: null,
+      tariff_code: null,
       valid_from: null,
       valid_to: null,
     },
@@ -163,6 +168,7 @@ export default function OriginMaster() {
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
     carrier_name: null,
     service: null,
+    tariff_code: null,
     valid_from: null,
     valid_to: null,
   });
@@ -271,6 +277,8 @@ export default function OriginMaster() {
           payload.carrier_name = appliedFilters.carrier_name;
         if (appliedFilters.service)
           payload.service = appliedFilters.service;
+        if (appliedFilters.tariff_code)
+          payload.tariff_code = appliedFilters.tariff_code;
         if (appliedFilters.valid_from)
           payload.valid_from = dayjs(appliedFilters.valid_from).format("YYYY-MM-DD");
         if (appliedFilters.valid_to)
@@ -330,12 +338,21 @@ export default function OriginMaster() {
           Boolean(
             restoredFilters.carrier_name ||
               restoredFilters.service ||
+              restoredFilters.tariff_code ||
               restoredFilters.valid_from ||
               restoredFilters.valid_to,
           ),
         );
       }
       if (typeof restored.search === "string") setLocalSearchTerm(restored.search);
+      // Rehydrate friendly carrier label.
+      const restoredCarrierLabel = restored.displayValues?.carrier_name;
+      if (
+        typeof restoredCarrierLabel === "string" &&
+        restoredCarrierLabel.trim() !== ""
+      ) {
+        setCarrierDisplayValue(restoredCarrierLabel);
+      }
       setCurrentPage(1);
       void queryClient.invalidateQueries({ queryKey: ["origin"] });
       void queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
@@ -375,22 +392,245 @@ export default function OriginMaster() {
     debouncedSearch,
   ]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
+  // Stable reference so the header-filter `renderInput` memo doesn't churn.
+  const erpTheme: ErpListTheme = useMemo(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
   const { border, fg, fontSans, primary, muted } = erpTheme;
   const preserveListState = useCallback(() => {
     setStoreFilters(LIST_KEY, appliedFilters);
     setStoreSearch(LIST_KEY, localSearchTerm);
     useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
   }, [appliedFilters, localSearchTerm, setStoreFilters, setStoreSearch]);
+
+  // ── Column header filters ────────────────────────────────────────────────
+  // Strictly non-invasive: header filter changes update BOTH `filterForm`
+  // (so the advanced filter UI stays in sync) AND `appliedFilters` (so the
+  // existing React Query refetches via its `queryKey`). No new API.
+  const handleHeaderFilterChange = useCallback(
+    (key: string, rawValue: string, displayLabel?: string | null) => {
+      const next = rawValue || null;
+      const newApplied: FilterState = { ...appliedFilters };
+      let nextCarrierLabel = carrierDisplayValue;
+
+      switch (key) {
+        case "carrier_name":
+          filterForm.setFieldValue("carrier_name", next);
+          newApplied.carrier_name = next;
+          nextCarrierLabel = next ? (displayLabel ?? null) : null;
+          setCarrierDisplayValue(nextCarrierLabel);
+          break;
+        case "service":
+          filterForm.setFieldValue("service", next);
+          newApplied.service = next;
+          break;
+        case "tariff_code":
+          filterForm.setFieldValue("tariff_code", next);
+          newApplied.tariff_code = next;
+          break;
+        case "valid_from": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_from", d);
+          newApplied.valid_from = d;
+          break;
+        }
+        case "valid_to": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_to", d);
+          newApplied.valid_to = d;
+          break;
+        }
+      }
+
+      setAppliedFilters(newApplied);
+      setCurrentPage(1);
+
+      const hasAny =
+        newApplied.carrier_name ||
+        newApplied.service ||
+        newApplied.tariff_code ||
+        newApplied.valid_from ||
+        newApplied.valid_to;
+      setFiltersApplied(Boolean(hasAny));
+
+      const filtersForStore: FilterState = {
+        carrier_name:
+          key === "carrier_name" ? next : filterForm.values.carrier_name,
+        service: key === "service" ? next : filterForm.values.service,
+        tariff_code:
+          key === "tariff_code" ? next : filterForm.values.tariff_code,
+        valid_from:
+          key === "valid_from"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_from,
+        valid_to:
+          key === "valid_to"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_to,
+      };
+      setStoreFilters(LIST_KEY, filtersForStore);
+      setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        carrier_name: filtersForStore.carrier_name ? nextCarrierLabel : null,
+      });
+    },
+    [
+      appliedFilters,
+      filterForm,
+      localSearchTerm,
+      carrierDisplayValue,
+      setStoreFilters,
+      setStoreSearch,
+    ],
+  );
+
+  const originHeaderFilterValues: TariffHeaderFilterValues = useMemo(
+    () => ({
+      carrier_name: filterForm.values.carrier_name ?? "",
+      service: filterForm.values.service ?? "",
+      tariff_code: filterForm.values.tariff_code ?? "",
+      valid_from: filterForm.values.valid_from
+        ? dayjs(filterForm.values.valid_from).format("YYYY-MM-DD")
+        : "",
+      valid_to: filterForm.values.valid_to
+        ? dayjs(filterForm.values.valid_to).format("YYYY-MM-DD")
+        : "",
+    }),
+    [
+      filterForm.values.carrier_name,
+      filterForm.values.service,
+      filterForm.values.tariff_code,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+    ],
+  );
+
+  const originHeaderRenderInput = useMemo<
+    Record<string, TariffHeaderRenderInput>
+  >(
+    () => ({
+      carrier_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type carrier name"
+          apiEndpoint={URL.carrier}
+          searchFields={["carrier_name", "carrier_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.carrier_name),
+            label: String(item.carrier_name),
+          })}
+          value={filterForm.values.carrier_name}
+          displayValue={carrierDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handleHeaderFilterChange("carrier_name", value ?? "", label);
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Select Service"
+          data={serviceOptions}
+          value={filterForm.values.service}
+          onChange={(value) => {
+            handleHeaderFilterChange("service", value ?? "");
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_from: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_from}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_from", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_to: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_to}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_to", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filterForm.values.carrier_name,
+      filterForm.values.service,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+      carrierDisplayValue,
+      serviceOptions,
+      handleHeaderFilterChange,
+      erpTheme,
+    ],
+  );
+
+  const originHeaderDisplayFormatter = useMemo<
+    Record<string, (value: string) => string>
+  >(
+    () => ({
+      carrier_name: (raw) => (raw ? carrierDisplayValue ?? raw : ""),
+      valid_from: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+      valid_to: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+    }),
+    [carrierDisplayValue, dateFormat],
+  );
+
+  const originHeaderFiltersProp: TariffHeaderFiltersProp = useMemo(
+    () => ({
+      values: originHeaderFilterValues,
+      onChange: (key, value) => handleHeaderFilterChange(key, value),
+      renderInput: originHeaderRenderInput,
+      displayFormatter: originHeaderDisplayFormatter,
+    }),
+    [
+      originHeaderFilterValues,
+      originHeaderRenderInput,
+      originHeaderDisplayFormatter,
+      handleHeaderFilterChange,
+    ],
+  );
 
   const renderOriginActions = useCallback(
     (row: Origin) => (
@@ -445,9 +685,34 @@ export default function OriginMaster() {
   const originListColumns = useMemo<TariffListColumn<Origin>[]>(
     () => [
       {
+        id: "tariff_code",
+        header: "Tariff Code",
+        cellMaxWidth: 180,
+        filterKey: "tariff_code",
+        filterPlaceholder: "Tariff Code",
+        filterMinWidth: 140,
+        cell: (r) => {
+          const v = r.tariff_code ?? "—";
+          return (
+            <Text
+            size="sm"
+            c={fg}
+            lineClamp={1}
+            style={{ fontFamily: fontSans, cursor: "default" }}
+            title={v}
+            >
+              {v}
+            </Text>
+          );
+        },
+      },
+      {
         id: "carrier",
         header: "Carrier Name",
         cellMaxWidth: 240,
+        filterKey: "carrier_name",
+        filterPlaceholder: "Carrier",
+        filterMinWidth: 200,
         cell: (r) => {
           const charges = r.tariff_charges || [];
           if (charges.length === 0) {
@@ -485,6 +750,9 @@ export default function OriginMaster() {
       {
         id: "service",
         header: "Service",
+        filterKey: "service",
+        filterPlaceholder: "Service",
+        filterMinWidth: 110,
         cell: (r) => (
           <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
             {r.service ?? "—"}
@@ -495,6 +763,9 @@ export default function OriginMaster() {
         id: "valid_from",
         header: "Valid From",
         cellTone: "muted",
+        filterKey: "valid_from",
+        filterPlaceholder: "Valid From",
+        filterMinWidth: 140,
         cell: (r) => (
           <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
             {r.valid_from ? dayjs(r.valid_from).format(dateFormat) : "—"}
@@ -505,6 +776,9 @@ export default function OriginMaster() {
         id: "valid_to",
         header: "Valid To",
         cellTone: "muted",
+        filterKey: "valid_to",
+        filterPlaceholder: "Valid To",
+        filterMinWidth: 140,
         cell: (r) => (
           <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
             {r.valid_to ? dayjs(r.valid_to).format(dateFormat) : "—"}
@@ -605,6 +879,7 @@ export default function OriginMaster() {
       const hasFilterValues =
         filterForm.values.carrier_name ||
         filterForm.values.service ||
+        filterForm.values.tariff_code ||
         filterForm.values.valid_from ||
         filterForm.values.valid_to;
 
@@ -614,6 +889,7 @@ export default function OriginMaster() {
         setAppliedFilters({
           carrier_name: null,
           service: null,
+          tariff_code: null,
           valid_from: null,
           valid_to: null,
         });
@@ -635,11 +911,15 @@ export default function OriginMaster() {
       setAppliedFilters({
         carrier_name: filterForm.values.carrier_name,
         service: filterForm.values.service,
+        tariff_code: filterForm.values.tariff_code,
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
       setStoreFilters(LIST_KEY, { ...filterForm.values });
       setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        carrier_name: filterForm.values.carrier_name ? carrierDisplayValue : null,
+      });
       setCurrentPage(1);
 
       // Enable the filtered query and refetch
@@ -663,6 +943,7 @@ export default function OriginMaster() {
     setAppliedFilters({
       carrier_name: null,
       service: null,
+      tariff_code: null,
       valid_from: null,
       valid_to: null,
     });
@@ -670,6 +951,9 @@ export default function OriginMaster() {
     // Clear display values
     setCarrierDisplayValue(null);
     clearStoreFilters(LIST_KEY);
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      carrier_name: null,
+    });
 
     // Invalidate queries and refetch unfiltered data
     await queryClient.invalidateQueries({ queryKey: ["origin"] });
@@ -986,6 +1270,24 @@ export default function OriginMaster() {
                         </Grid.Col>
                         <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
                           <Box style={erpListFilterFieldCellStyle}>
+                            <TextInput
+                              label="Tariff Code"
+                              placeholder="Type tariff code"
+                              size="xs"
+                              value={filterForm.values.tariff_code ?? ""}
+                              onChange={(e) =>
+                                filterForm.setFieldValue(
+                                  "tariff_code",
+                                  e.currentTarget.value || null,
+                                )
+                              }
+                              classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                              styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                            />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
                           <SingleDateInput
                             key={`valid-from-${filterForm.values.valid_from}`}
                             label="Valid From"
@@ -1040,15 +1342,19 @@ export default function OriginMaster() {
                     Select an origin port in the dialog to load tariff lines for that location.
                   </Text>
                 </Center>
-              ) : isLoading ? (
-                <ERPListTableLoading theme={erpTheme} message="Loading origin data…" />
-              ) : (displayData as Origin[]).length === 0 ? (
+              ) : !isLoading &&
+                (displayData as Origin[]).length === 0 &&
+                !filtersApplied &&
+                debouncedSearch.trim() === "" ? (
+                // Pristine "no rows for this origin" state — show the
+                // "Try Different Origin" button to allow re-picking. When the
+                // user is mid-typing in column header filters we keep the
+                // table (and header filters) mounted instead.
                 <Center py="xl" style={{ backgroundColor: erpTheme.cardBg, flex: 1 }}>
                   <Stack align="center" gap="md">
                     <Text c="dimmed" ta="center">
                       No origins found
-                      {filtersApplied ? " for this filter" : ""}
-                      {!filtersApplied && currentOriginName ? ` for ${currentOriginName}` : ""}
+                      {currentOriginName ? ` for ${currentOriginName}` : ""}
                     </Text>
                     <Button variant="default" size="sm" onClick={handleChangeOrigin}>
                       Try Different Origin
@@ -1074,6 +1380,9 @@ export default function OriginMaster() {
                     emptyIcon={<IconMapPin size={24} color={erpTheme.muted} />}
                     emptyTitle="No origin lines match your search"
                     renderActions={renderOriginActions}
+                    headerFilters={originHeaderFiltersProp}
+                    loading={isLoading}
+                    loadingMessage="Loading origin data…"
                   />
                 </Box>
               ),

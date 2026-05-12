@@ -404,7 +404,7 @@ function formatRouteDisplay(origin: string, destination: string): string {
 }
 
 /** Enquiry tables: wider ID & Service (single-line clamp); Reference No uses shared widths below. */
-const ENQUIRY_COL_ID_MIN = 200;
+const ENQUIRY_COL_ID_MIN = 240;
 const ENQUIRY_COL_SERVICE_MIN = 180;
 const ENQUIRY_COL_SALES_PERSON_MIN = 115;
 const ENQUIRY_COL_REFERENCE_TH_MIN = 92;
@@ -751,7 +751,7 @@ export function EnquirySummaryNativeTable({
     <table style={erpListTableElementStyle(theme)}>
       <thead>
         <tr style={{height:52.4}}>
-          {visible.sno && <th style={erpListThStyle(theme)}>S.No</th>}
+          {visible.sno && <th style={{...erpListThStyle(theme), minWidth:40}}>S.No</th>}
           {visible.enquiry_id && (
             <th style={{ ...erpListThStyle(theme), minWidth: ENQUIRY_COL_ID_MIN }}>
               {headerFilters && editingColumn === "enquiry_id" ? (

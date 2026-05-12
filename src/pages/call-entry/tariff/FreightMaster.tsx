@@ -42,7 +42,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
 } from "../../../components";
@@ -59,6 +58,9 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   TariffMasterListNativeTable,
   type TariffListColumn,
+  type TariffHeaderFilterValues,
+  type TariffHeaderFiltersProp,
+  type TariffHeaderRenderInput,
 } from "./TariffMasterListNativeTable";
 import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
@@ -66,17 +68,23 @@ type Freight = {
   id: number;
   origin_name: string;
   destination_name: string;
+  origin_code?: string;
+  destination_code?: string;
   valid_from: string;
   valid_to: string;
   status?: string;
   tariff_charges?: any[];
   service?: string;
+  tariff_code?: string;
 };
 
 type FilterState = {
   origin: string | null;
   destination: string | null;
   service: string | null;
+  tariff_code: string | null;
+  carrier_name: string | null;
+  carrier_code: string | null;
   valid_from: Date | null;
   valid_to: Date | null;
 };
@@ -89,9 +97,9 @@ export default function Freight() {
   const queryClient = useQueryClient();
   const dateFormat = useDateFormat();
 
-  // Add local search state
+  // Add local search state — 1000ms keeps it consistent with header column filters.
   const [localSearchTerm, setLocalSearchTerm] = useState("");
-  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 500);
+  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 1000);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,6 +117,9 @@ export default function Freight() {
   const [destinationDisplayValue, setDestinationDisplayValue] = useState<
     string | null
   >(null);
+  const [carrierDisplayValue, setCarrierDisplayValue] = useState<string | null>(
+    null
+  );
 
   // Filter form to minimize state variables
   const filterForm = useForm<FilterState>({
@@ -116,6 +127,9 @@ export default function Freight() {
       origin: null,
       destination: null,
       service: null,
+      tariff_code: null,
+      carrier_name: null,
+      carrier_code: null,
       valid_from: null,
       valid_to: null,
     },
@@ -126,6 +140,9 @@ export default function Freight() {
     origin: null,
     destination: null,
     service: null,
+    tariff_code: null,
+    carrier_name: null,
+    carrier_code: null,
     valid_from: null,
     valid_to: null,
   });
@@ -219,6 +236,10 @@ export default function Freight() {
         if (appliedFilters.destination)
           payload.destination_code = appliedFilters.destination;
         if (appliedFilters.service) payload.service = appliedFilters.service;
+        if (appliedFilters.tariff_code)
+          payload.tariff_code = appliedFilters.tariff_code;
+        if (appliedFilters.carrier_name)
+          payload.carrier_name = appliedFilters.carrier_name;
         if (appliedFilters.valid_from)
           payload.valid_from = dayjs(appliedFilters.valid_from).format(
             "YYYY-MM-DD"
@@ -309,6 +330,8 @@ export default function Freight() {
             restoredFilters.origin ||
               restoredFilters.destination ||
               restoredFilters.service ||
+              restoredFilters.tariff_code ||
+              restoredFilters.carrier_name ||
               restoredFilters.valid_from ||
               restoredFilters.valid_to,
           ),
@@ -316,6 +339,39 @@ export default function Freight() {
       }
       if (typeof restored.search === "string") {
         setLocalSearchTerm(restored.search);
+      }
+      // Rehydrate friendly port labels so the advanced filter SearchableSelects
+      // + the collapsed column-header chip show readable names immediately.
+      const restoredOriginLabel = restored.displayValues?.origin_name;
+      if (
+        typeof restoredOriginLabel === "string" &&
+        restoredOriginLabel.trim() !== ""
+      ) {
+        setOriginDisplayValue(restoredOriginLabel);
+      }
+      const restoredDestinationLabel = restored.displayValues?.destination_name;
+      if (
+        typeof restoredDestinationLabel === "string" &&
+        restoredDestinationLabel.trim() !== ""
+      ) {
+        setDestinationDisplayValue(restoredDestinationLabel);
+      }
+      // Carrier label is stored alongside `carrier_code` so we can rehydrate
+      // both the SearchableSelect's display label and its underlying code on
+      // restore from sub-pages, in the same format as it was saved.
+      const restoredCarrierLabel = restored.displayValues?.carrier_name;
+      if (
+        typeof restoredCarrierLabel === "string" &&
+        restoredCarrierLabel.trim() !== ""
+      ) {
+        setCarrierDisplayValue(restoredCarrierLabel);
+      }
+      const restoredCarrierCode = restored.displayValues?.carrier_code;
+      if (
+        typeof restoredCarrierCode === "string" &&
+        restoredCarrierCode.trim() !== ""
+      ) {
+        filterForm.setFieldValue("carrier_code", restoredCarrierCode);
       }
       useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
       hasRestoredFromStore.current = true;
@@ -327,22 +383,355 @@ export default function Freight() {
     setCurrentPage(1);
   }, [debouncedSearch]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
+  // Stable reference so the header-filter `renderInput` memo doesn't churn
+  // every render and cascade into the native table.
+  const erpTheme: ErpListTheme = useMemo(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
   const { border, fg, fontSans, primary, muted } = erpTheme;
   const preserveListState = useCallback(() => {
     setStoreFilters(LIST_KEY, appliedFilters);
     setStoreSearch(LIST_KEY, localSearchTerm);
     useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
   }, [appliedFilters, localSearchTerm, setStoreFilters, setStoreSearch]);
+
+  // ── Column header filters ────────────────────────────────────────────────
+  // Strictly non-invasive: header filter changes update BOTH `filterForm`
+  // (so the advanced filter UI stays in sync) AND `appliedFilters` (so the
+  // existing React Query refetches via its `queryKey`). No new API, no new
+  // payload shape — purely additive over the existing flow.
+  const handleHeaderFilterChange = useCallback(
+    (
+      key: string,
+      rawValue: string,
+      displayLabel?: string | null,
+      extras?: { carrier_code?: string | null },
+    ) => {
+      const next = rawValue || null;
+      const newApplied: FilterState = { ...appliedFilters };
+      let nextOriginLabel = originDisplayValue;
+      let nextDestinationLabel = destinationDisplayValue;
+      let nextCarrierLabel = carrierDisplayValue;
+      let nextCarrierCode: string | null = filterForm.values.carrier_code;
+
+      switch (key) {
+        case "origin":
+          filterForm.setFieldValue("origin", next);
+          newApplied.origin = next;
+          nextOriginLabel = next ? (displayLabel ?? null) : null;
+          setOriginDisplayValue(nextOriginLabel);
+          break;
+        case "destination":
+          filterForm.setFieldValue("destination", next);
+          newApplied.destination = next;
+          nextDestinationLabel = next ? (displayLabel ?? null) : null;
+          setDestinationDisplayValue(nextDestinationLabel);
+          break;
+        case "service":
+          filterForm.setFieldValue("service", next);
+          newApplied.service = next;
+          break;
+        case "tariff_code":
+          filterForm.setFieldValue("tariff_code", next);
+          newApplied.tariff_code = next;
+          break;
+        case "carrier_name":
+          filterForm.setFieldValue("carrier_name", next);
+          newApplied.carrier_name = next;
+          nextCarrierLabel = next ? (displayLabel ?? next) : null;
+          setCarrierDisplayValue(nextCarrierLabel);
+          // Track carrier_code alongside name so we can persist both.
+          nextCarrierCode = next ? (extras?.carrier_code ?? null) : null;
+          filterForm.setFieldValue("carrier_code", nextCarrierCode);
+          newApplied.carrier_code = nextCarrierCode;
+          break;
+        case "valid_from": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_from", d);
+          newApplied.valid_from = d;
+          break;
+        }
+        case "valid_to": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_to", d);
+          newApplied.valid_to = d;
+          break;
+        }
+      }
+
+      setAppliedFilters(newApplied);
+      setCurrentPage(1);
+
+      const hasAny =
+        newApplied.origin ||
+        newApplied.destination ||
+        newApplied.service ||
+        newApplied.tariff_code ||
+        newApplied.carrier_name ||
+        newApplied.valid_from ||
+        newApplied.valid_to;
+      setFiltersApplied(Boolean(hasAny));
+
+      // Persist current filterForm + display labels into the store so the
+      // friendly labels rehydrate on restore from sub-pages.
+      const filtersForStore: FilterState = {
+        origin: key === "origin" ? next : filterForm.values.origin,
+        destination:
+          key === "destination" ? next : filterForm.values.destination,
+        service: key === "service" ? next : filterForm.values.service,
+        tariff_code:
+          key === "tariff_code" ? next : filterForm.values.tariff_code,
+        carrier_name:
+          key === "carrier_name" ? next : filterForm.values.carrier_name,
+        carrier_code:
+          key === "carrier_name" ? nextCarrierCode : filterForm.values.carrier_code,
+        valid_from:
+          key === "valid_from"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_from,
+        valid_to:
+          key === "valid_to"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_to,
+      };
+      setStoreFilters(LIST_KEY, filtersForStore);
+      setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        origin_name: filtersForStore.origin ? nextOriginLabel : null,
+        destination_name: filtersForStore.destination
+          ? nextDestinationLabel
+          : null,
+        carrier_name: filtersForStore.carrier_name ? nextCarrierLabel : null,
+        carrier_code: filtersForStore.carrier_name ? nextCarrierCode : null,
+      });
+    },
+    [
+      appliedFilters,
+      filterForm,
+      localSearchTerm,
+      originDisplayValue,
+      destinationDisplayValue,
+      carrierDisplayValue,
+      setStoreFilters,
+      setStoreSearch,
+    ],
+  );
+
+  const freightHeaderFilterValues: TariffHeaderFilterValues = useMemo(
+    () => ({
+      origin: filterForm.values.origin ?? "",
+      destination: filterForm.values.destination ?? "",
+      service: filterForm.values.service ?? "",
+      tariff_code: filterForm.values.tariff_code ?? "",
+      carrier_name: filterForm.values.carrier_name ?? "",
+      valid_from: filterForm.values.valid_from
+        ? dayjs(filterForm.values.valid_from).format("YYYY-MM-DD")
+        : "",
+      valid_to: filterForm.values.valid_to
+        ? dayjs(filterForm.values.valid_to).format("YYYY-MM-DD")
+        : "",
+    }),
+    [
+      filterForm.values.origin,
+      filterForm.values.destination,
+      filterForm.values.service,
+      filterForm.values.tariff_code,
+      filterForm.values.carrier_name,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+    ],
+  );
+
+  const freightHeaderRenderInput = useMemo<
+    Record<string, TariffHeaderRenderInput>
+  >(
+    () => ({
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type Origin Code"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_name", "port_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.port_code),
+            label: `${item.port_name} (${item.port_code})`,
+          })}
+          value={filterForm.values.origin}
+          displayValue={originDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handleHeaderFilterChange("origin", value ?? "", label);
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type Destination Code"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_name", "port_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.port_code),
+            label: `${item.port_name} (${item.port_code})`,
+          })}
+          value={filterForm.values.destination}
+          displayValue={destinationDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handleHeaderFilterChange("destination", value ?? "", label);
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Select Service"
+          data={serviceOptions}
+          value={filterForm.values.service}
+          onChange={(value) => {
+            handleHeaderFilterChange("service", value ?? "");
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      carrier_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type carrier name"
+          apiEndpoint={URL.carrier}
+          searchFields={["carrier_name", "carrier_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.carrier_name),
+            label: String(item.carrier_name),
+          })}
+          value={filterForm.values.carrier_name}
+          displayValue={carrierDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected, original) => {
+            const label = selected?.label ?? null;
+            const code =
+              typeof original?.carrier_code === "string"
+                ? (original.carrier_code as string)
+                : null;
+            handleHeaderFilterChange(
+              "carrier_name",
+              value ?? "",
+              label,
+              { carrier_code: code },
+            );
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_from: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_from}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_from", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_to: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_to}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_to", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filterForm.values.origin,
+      filterForm.values.destination,
+      filterForm.values.service,
+      filterForm.values.carrier_name,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+      originDisplayValue,
+      destinationDisplayValue,
+      carrierDisplayValue,
+      serviceOptions,
+      handleHeaderFilterChange,
+      erpTheme,
+    ],
+  );
+
+  /** Collapsed header chips: SearchableSelects show friendly names; dates use user's `dateFormat`. */
+  const freightHeaderDisplayFormatter = useMemo<
+    Record<string, (value: string) => string>
+  >(
+    () => ({
+      origin: (raw) => (raw ? originDisplayValue ?? raw : ""),
+      destination: (raw) => (raw ? destinationDisplayValue ?? raw : ""),
+      carrier_name: (raw) => (raw ? carrierDisplayValue ?? raw : ""),
+      valid_from: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+      valid_to: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+    }),
+    [originDisplayValue, destinationDisplayValue, carrierDisplayValue, dateFormat],
+  );
+
+  const freightHeaderFiltersProp: TariffHeaderFiltersProp = useMemo(
+    () => ({
+      values: freightHeaderFilterValues,
+      onChange: (key, value) => handleHeaderFilterChange(key, value),
+      renderInput: freightHeaderRenderInput,
+      displayFormatter: freightHeaderDisplayFormatter,
+    }),
+    [
+      freightHeaderFilterValues,
+      freightHeaderRenderInput,
+      freightHeaderDisplayFormatter,
+      handleHeaderFilterChange,
+    ],
+  );
 
   const renderFreightActions = useCallback(
     (row: Freight) => (
@@ -397,11 +786,42 @@ export default function Freight() {
   const freightListColumns = useMemo<TariffListColumn<Freight>[]>(
     () => [
       {
+        id: "tariff_code",
+        header: "Tariff Code",
+        cellMaxWidth: 180,
+        filterKey: "tariff_code",
+        filterPlaceholder: "Tariff Code",
+        filterMinWidth: 140,
+        cell: (r) => {
+          const v = r.tariff_code ?? "—";
+          return (
+            <Text
+              size="sm"
+              c={fg}
+              lineClamp={1}
+              style={{ fontFamily: fontSans, cursor: "default" }}
+              title={v}
+              >
+              {v}
+            </Text>
+          );
+        },
+      },
+      {
         id: "origin",
         header: "Origin",
         cellMaxWidth: 200,
+        filterKey: "origin",
+        filterPlaceholder: "Origin",
+        filterMinWidth: 180,
         cell: (r) => {
-          const v = r.origin_name ?? "—";
+          const name = r.origin_name ?? "";
+          const code = r.origin_code ?? "";
+          const v = name
+            ? code
+              ? `${name} (${code})`
+              : name
+            : code || "—";
           return (
             <Tooltip
               label={v}
@@ -426,8 +846,17 @@ export default function Freight() {
         id: "destination",
         header: "Destination",
         cellMaxWidth: 200,
+        filterKey: "destination",
+        filterPlaceholder: "Destination",
+        filterMinWidth: 180,
         cell: (r) => {
-          const v = r.destination_name ?? "—";
+          const name = r.destination_name ?? "";
+          const code = r.destination_code ?? "";
+          const v = name
+            ? code
+              ? `${name} (${code})`
+              : name
+            : code || "—";
           return (
             <Tooltip
               label={v}
@@ -449,8 +878,56 @@ export default function Freight() {
         },
       },
       {
+        id: "carrier",
+        header: "Carrier Name",
+        cellMaxWidth: 240,
+        filterKey: "carrier_name",
+        filterPlaceholder: "Carrier",
+        filterMinWidth: 200,
+        cell: (r) => {
+          const charges = r.tariff_charges || [];
+          if (charges.length === 0) {
+            return (
+              <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                —
+              </Text>
+            );
+          }
+          const uniqueCarriers = [
+            ...new Set(
+              charges.map(
+                (c: { carrier_name?: string }) => c.carrier_name,
+              ),
+            ),
+          ].filter(Boolean);
+          const raw = uniqueCarriers.join(", ");
+          return (
+            <Tooltip
+              label={raw || "—"}
+              withArrow
+              multiline
+              w={320}
+              position="top"
+              styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+            >
+              <Text
+                size="sm"
+                c={fg}
+                lineClamp={2}
+                style={{ fontFamily: fontSans, cursor: "default" }}
+              >
+                {raw || "—"}
+              </Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
         id: "service",
         header: "Service",
+        filterKey: "service",
+        filterPlaceholder: "Service",
+        filterMinWidth: 110,
         cell: (r) => (
           <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
             {r.service ?? "—"}
@@ -461,6 +938,9 @@ export default function Freight() {
         id: "valid_from",
         header: "Valid From",
         cellTone: "muted",
+        filterKey: "valid_from",
+        filterPlaceholder: "Valid From",
+        filterMinWidth: 140,
         cell: (r) => (
           <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
             {r.valid_from ? dayjs(r.valid_from).format(dateFormat) : "—"}
@@ -471,6 +951,9 @@ export default function Freight() {
         id: "valid_to",
         header: "Valid To",
         cellTone: "muted",
+        filterKey: "valid_to",
+        filterPlaceholder: "Valid To",
+        filterMinWidth: 140,
         cell: (r) => (
           <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
             {r.valid_to ? dayjs(r.valid_to).format(dateFormat) : "—"}
@@ -491,6 +974,8 @@ export default function Freight() {
         filterForm.values.origin ||
         filterForm.values.destination ||
         filterForm.values.service ||
+        filterForm.values.tariff_code ||
+        filterForm.values.carrier_name ||
         filterForm.values.valid_from ||
         filterForm.values.valid_to;
 
@@ -501,6 +986,9 @@ export default function Freight() {
           origin: null,
           destination: null,
           service: null,
+          tariff_code: null,
+          carrier_name: null,
+          carrier_code: null,
           valid_from: null,
           valid_to: null,
         });
@@ -527,6 +1015,9 @@ export default function Freight() {
         origin: filterForm.values.origin,
         destination: filterForm.values.destination,
         service: filterForm.values.service,
+        tariff_code: filterForm.values.tariff_code,
+        carrier_name: filterForm.values.carrier_name,
+        carrier_code: filterForm.values.carrier_code,
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
@@ -534,6 +1025,18 @@ export default function Freight() {
         ...filterForm.values,
       });
       setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        origin_name: filterForm.values.origin ? originDisplayValue : null,
+        destination_name: filterForm.values.destination
+          ? destinationDisplayValue
+          : null,
+        carrier_name: filterForm.values.carrier_name
+          ? carrierDisplayValue
+          : null,
+        carrier_code: filterForm.values.carrier_name
+          ? filterForm.values.carrier_code
+          : null,
+      });
 
       // Reset to first page when applying filters
       setCurrentPage(1);
@@ -560,6 +1063,9 @@ export default function Freight() {
       origin: null,
       destination: null,
       service: null,
+      tariff_code: null,
+      carrier_name: null,
+      carrier_code: null,
       valid_from: null,
       valid_to: null,
     });
@@ -567,10 +1073,17 @@ export default function Freight() {
     // Clear display values
     setOriginDisplayValue(null);
     setDestinationDisplayValue(null);
+    setCarrierDisplayValue(null);
 
     // Reset to first page
     setCurrentPage(1);
     clearStoreFilters(LIST_KEY);
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      origin_name: null,
+      destination_name: null,
+      carrier_name: null,
+      carrier_code: null,
+    });
 
     // Invalidate queries and refetch unfiltered data
     await queryClient.invalidateQueries({ queryKey: ["freight"] });
@@ -762,6 +1275,40 @@ export default function Freight() {
                   </Grid.Col>
                   <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
                     <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      dropdownZIndex={1000}
+                      size="xs"
+                      label="Carrier Name"
+                      placeholder="Type carrier name"
+                      apiEndpoint={URL.carrier}
+                      searchFields={["carrier_name", "carrier_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.carrier_name),
+                        label: String(item.carrier_name),
+                      })}
+                      value={filterForm.values.carrier_name}
+                      displayValue={carrierDisplayValue}
+                      onChange={(value, selectedData, originalData) => {
+                        filterForm.setFieldValue("carrier_name", value || null);
+                        setCarrierDisplayValue(selectedData?.label || null);
+                        const code =
+                          typeof originalData?.carrier_code === "string"
+                            ? (originalData.carrier_code as string)
+                            : null;
+                        filterForm.setFieldValue(
+                          "carrier_code",
+                          value ? code : null,
+                        );
+                      }}
+                      minSearchLength={2}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      className="filter-searchable-select"
+                    />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
                     <Select
                       key={`service-${filterForm.values.service}`}
                       label="Service"
@@ -783,6 +1330,24 @@ export default function Freight() {
                       classNames={erpListGeistSelectClassNames}
                       styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                     />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        label="Tariff Code"
+                        placeholder="Type tariff code"
+                        size="xs"
+                        value={filterForm.values.tariff_code ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "tariff_code",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
                     </Box>
                   </Grid.Col>
                   <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
@@ -829,12 +1394,7 @@ export default function Freight() {
                   selectClassNames={erpListGeistSelectClassNames}
                 />
               ),
-              children: isLoading ? (
-                <ERPListTableLoading
-                  theme={erpTheme}
-                  message="Loading freight data…"
-                />
-              ) : (
+              children: (
                 <Box
                   style={{
                     flex: 1,
@@ -855,6 +1415,9 @@ export default function Freight() {
                     emptyIcon={<IconTruck size={24} color={erpTheme.muted} />}
                     emptyTitle="No freight records"
                     renderActions={renderFreightActions}
+                    headerFilters={freightHeaderFiltersProp}
+                    loading={isLoading}
+                    loadingMessage="Loading freight data…"
                   />
                 </Box>
               ),

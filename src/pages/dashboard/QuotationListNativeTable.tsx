@@ -1,23 +1,39 @@
-import type { RefObject } from "react";
-import { useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   ActionIcon,
   Badge,
   Box,
+  Center,
   Group,
+  Loader,
   Menu,
   Stack,
   Text,
+  TextInput,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
 import {
+  IconArrowRight,
   IconBook,
   IconDotsVertical,
   IconEdit,
   IconExternalLink,
   IconEye,
   IconFileText,
+  IconFilterFilled,
+  IconX,
 } from "@tabler/icons-react";
 import type { Location } from "react-router-dom";
 import dayjs from "dayjs";
@@ -81,6 +97,386 @@ export type QuotationRowMenuContext = {
   canCreateBookingFromRow: (row: QuotationTableRow) => boolean;
   handleCreateBookingFromRow: (row: QuotationTableRow) => void;
 };
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Column-header filter types & primitives
+ *
+ * Same pattern as `EnquiryListNativeTables`: each filterable column header is
+ * normally a plain label; clicking it transforms into an inline editor. The
+ * parent owns the underlying filter state and supplies a `renderInput` per
+ * column so the editor type (TextInput / Select / SearchableSelect /
+ * SingleDateInput) mirrors the advanced filter section exactly.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Filterable column keys (only the ones that appear in the advanced filter
+ * section). `origin` and `destination` are independent filter fields even
+ * though they share one visual column (Route).
+ */
+export type QuotationHeaderFilterKey =
+  | "enquiry_id"
+  | "customer_name"
+  | "sales_person"
+  | "origin"
+  | "destination"
+  | "status"
+  | "valid_upto_list"
+  | "revision"
+  | "reject_remark";
+
+export type QuotationHeaderFilterValues = Record<
+  QuotationHeaderFilterKey,
+  string
+>;
+
+/** Context passed to a header column's custom input renderer. */
+export type QuotationHeaderInputContext = {
+  /** Whether the input should auto-focus when mounted (always `true` for now). */
+  autoFocus: boolean;
+  /**
+   * Imperatively collapse the cell back to display mode (e.g. immediately
+   * after an option is picked from a `SearchableSelect`). Optional — blur
+   * already collapses the cell.
+   */
+  onClose: () => void;
+};
+
+export type QuotationHeaderRenderInput = (
+  ctx: QuotationHeaderInputContext,
+) => ReactNode;
+
+export type QuotationHeaderFiltersProp = {
+  values: QuotationHeaderFilterValues;
+  onChange: (key: QuotationHeaderFilterKey, value: string) => void;
+  /**
+   * Optional per-column custom input. When provided, used INSTEAD of the
+   * default `TextInput` once the user clicks the column header to enter edit
+   * mode. The parent typically supplies a `SearchableSelect` (customer /
+   * port), `Select` (status / sales person), or `SingleDateInput` here so the
+   * column filters mirror the advanced filter section — keeping the API
+   * payload shape identical.
+   */
+  renderInput?: Partial<Record<QuotationHeaderFilterKey, QuotationHeaderRenderInput>>;
+  /**
+   * Optional per-column formatter for the collapsed header label. Useful
+   * when the underlying filter value is a code (e.g. `INMAA`) but a
+   * friendlier label (e.g. `Chennai (INMAA)`) is available from a sibling
+   * display-value cache.
+   */
+  displayFormatter?: Partial<
+    Record<QuotationHeaderFilterKey, (value: string) => string>
+  >;
+};
+
+/**
+ * Tracks which column is currently in edit mode. `route` is a shared edit
+ * column that exposes both `origin` and `destination` inputs side-by-side.
+ */
+type QuotationEditingColumn = QuotationHeaderFilterKey | "route" | null;
+
+const HEADER_FILTER_TEXTINPUT_STYLES = {
+  input: {
+    height: 26,
+    minHeight: 26,
+    fontSize: 12,
+    paddingLeft: 8,
+    paddingRight: 24,
+  },
+} as const;
+
+/**
+ * Generic free-text header filter input with a local typing buffer.
+ *
+ * Per-keystroke API hits are bad UX, so the input maintains its own local
+ * state and only forwards `onChange` to the parent (which mutates global
+ * filters / triggers refetch) after 1000ms of inactivity. The clear (X)
+ * button bypasses the debounce so clearing is instant.
+ */
+function HeaderFilterInput({
+  value,
+  onChange,
+  placeholder = "Filter...",
+  ariaLabel,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+  autoFocus?: boolean;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  const [debouncedLocalValue] = useDebouncedValue(localValue, 1000);
+  const lastEmittedRef = useRef(value);
+
+  // Sync external value -> local (Clear All / restore / advanced filter edits).
+  useEffect(() => {
+    if (value !== lastEmittedRef.current || value === "") {
+      setLocalValue(value);
+      lastEmittedRef.current = value;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  // Forward debounced local -> parent.
+  useEffect(() => {
+    if (debouncedLocalValue !== lastEmittedRef.current) {
+      lastEmittedRef.current = debouncedLocalValue;
+      onChange(debouncedLocalValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedLocalValue]);
+
+  return (
+    <TextInput
+      size="xs"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.currentTarget.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      autoFocus={autoFocus}
+      styles={HEADER_FILTER_TEXTINPUT_STYLES}
+      rightSection={
+        localValue ? (
+          <ActionIcon
+            variant="transparent"
+            size="xs"
+            color="gray"
+            onMouseDown={(e) => {
+              // Prevent the input from blurring before our handler can fire.
+              e.preventDefault();
+            }}
+            onClick={() => {
+              setLocalValue("");
+              lastEmittedRef.current = "";
+              onChange("");
+            }}
+            aria-label={`Clear ${ariaLabel}`}
+          >
+            <IconX size={12} />
+          </ActionIcon>
+        ) : null
+      }
+    />
+  );
+}
+
+/**
+ * Route-column header label.
+ *
+ * - Unfiltered → plain `"Route"` label.
+ * - Filtered → raw `ORIGIN → DESTINATION` codes (mirrors the body cell).
+ *
+ * Clicking opens the inline route editor (origin + destination dual input).
+ */
+function FilterableRouteHeaderLabel({
+  originCode,
+  destinationCode,
+  onClick,
+  theme,
+  label = "Route",
+}: {
+  originCode: string;
+  destinationCode: string;
+  onClick: () => void;
+  theme: ErpListTheme;
+  label?: string;
+}) {
+  const o = originCode.trim();
+  const d = destinationCode.trim();
+  const isFiltered = o.length > 0 || d.length > 0;
+
+  const baseButtonStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    width: "100%",
+    fontFamily: theme.fontSans,
+    fontWeight: 500,
+    cursor: "pointer",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    minWidth: 0,
+  };
+
+  if (!isFiltered) {
+    return (
+      <UnstyledButton
+        onClick={onClick}
+        className="erp-header-filter-fade"
+        style={baseButtonStyle}
+        title="Click to filter"
+      >
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {label}
+        </span>
+      </UnstyledButton>
+    );
+  }
+
+  const left = o || "—";
+  const right = d || "—";
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={baseButtonStyle}
+      title={`Filter: ${left} → ${right}\nClick to edit`}
+    >
+      <span
+        style={{
+          flexShrink: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          color: o ? theme.primary : undefined,
+          fontWeight: o ? 600 : 500,
+        }}
+      >
+        {left}
+      </span>
+      <IconArrowRight
+        size={12}
+        color={theme.muted}
+        style={{ flexShrink: 0 }}
+      />
+      <span
+        style={{
+          flexShrink: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          color: d ? theme.fg : undefined,
+        }}
+      >
+        {right}
+      </span>
+      <IconFilterFilled
+        size={14}
+        color={theme.muted}
+        style={{ marginLeft: 6 }}
+      />
+    </UnstyledButton>
+  );
+}
+
+/** Renders the original header label (or the active filter value) as a clickable button that opens the edit input. */
+function FilterableHeaderLabel({
+  label,
+  filterDisplay,
+  onClick,
+  theme,
+  align = "left",
+}: {
+  label: string;
+  filterDisplay: string;
+  onClick: () => void;
+  theme: ErpListTheme;
+  align?: "left" | "center" | "right";
+}) {
+  const isFiltered = filterDisplay.length > 0;
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        fontFamily: theme.fontSans,
+        fontWeight: 500,
+        cursor: "pointer",
+        textAlign: align,
+        justifyContent:
+          align === "right"
+            ? "flex-end"
+            : align === "center"
+              ? "center"
+              : "flex-start",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        minWidth: 0,
+      }}
+      title={
+        isFiltered ? `Filter: ${filterDisplay}\nClick to edit` : `Click to filter`
+      }
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {isFiltered ? filterDisplay : label}
+      </span>
+      {isFiltered && <IconFilterFilled size={14} color={theme.muted} />}
+    </UnstyledButton>
+  );
+}
+
+/**
+ * Container around the edit input(s). Auto-focuses on mount, collapses on
+ * Escape, and collapses on blur once focus leaves all inputs in this cell.
+ *
+ * Accepts an optional `style` so callers can absolutely-position the editor
+ * over the (visibility-hidden) label and prevent the column width from
+ * jumping when the editor is wider than the label.
+ */
+function FilterableHeaderEdit({
+  onCollapse,
+  children,
+  style,
+}: {
+  onCollapse: () => void;
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleBlur = useCallback(
+    (_e: ReactFocusEvent) => {
+      setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (!container.contains(document.activeElement)) {
+          onCollapse();
+        }
+      }, 0);
+    },
+    [onCollapse],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCollapse();
+      }
+    },
+    [onCollapse],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="erp-header-filter-fade"
+      style={{ width: "100%", minWidth: 0, ...style }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function QuotationRowMenu({
   row,
@@ -180,6 +576,12 @@ type QuotationListNativeTableProps = {
   isEmpty: boolean;
   onFetchRevision: (quotationServiceId: number) => void;
   rowMenuCtx: QuotationRowMenuContext;
+  /** Click-to-edit inline filters that bind to the parent's filter state. */
+  headerFilters?: QuotationHeaderFiltersProp;
+  /** When true, renders an in-tbody loader instead of the row list (header/footer stay visible). */
+  loading?: boolean;
+  /** Optional friendlier message for the in-tbody loader. */
+  loadingMessage?: string;
 };
 
 /**
@@ -193,6 +595,9 @@ export function QuotationListNativeTable({
   isEmpty,
   onFetchRevision,
   rowMenuCtx,
+  headerFilters,
+  loading = false,
+  loadingMessage = "Loading…",
 }: QuotationListNativeTableProps) {
   const { muted, fg, primary, fontSans } = theme;
   const colCount =
@@ -210,38 +615,261 @@ export function QuotationListNativeTable({
       visible.reject_remark,
     ].filter(Boolean).length + 1;
 
+  // ── Header-filter state (only used when `headerFilters` prop is supplied) ──
+  const [editingHeaderColumn, setEditingHeaderColumn] =
+    useState<QuotationEditingColumn>(null);
+
+  const openHeaderEditor = useCallback(
+    (col: NonNullable<QuotationEditingColumn>) =>
+      setEditingHeaderColumn(col),
+    [],
+  );
+  const makeCollapseHeader = useCallback(
+    (col: NonNullable<QuotationEditingColumn>) => () =>
+      setEditingHeaderColumn((cur) => (cur === col ? null : cur)),
+    [],
+  );
+
+  // Pull custom renderer / display-formatter / values from prop (when present).
+  const hf = headerFilters;
+  const filterValues: QuotationHeaderFilterValues | null = hf?.values ?? null;
+  const customInput = (key: QuotationHeaderFilterKey) =>
+    hf?.renderInput?.[key];
+  const formatDisplay = (key: QuotationHeaderFilterKey, raw: string) =>
+    hf?.displayFormatter?.[key]?.(raw) ?? raw;
+
+  /**
+   * Renders a click-to-edit single-key filterable column header.
+   *
+   * The label is always rendered in normal flow (so it determines the cell's
+   * width); when editing, it's visibility-hidden and the editor is overlaid
+   * with `position: absolute` so the column width does not jump.
+   */
+  const renderFilterableHeader = (
+    key: QuotationHeaderFilterKey,
+    label: string,
+    placeholder: string,
+  ): ReactNode => {
+    if (!hf || !filterValues) return label;
+    const isEditing = editingHeaderColumn === key;
+    const filterDisplay = formatDisplay(key, filterValues[key]);
+    const custom = customInput(key);
+
+    return (
+      <div style={{ position: "relative", width: "100%", minHeight: 26, display: "flex", alignItems: "center" }}>
+        <span
+          style={{
+            display: "block",
+            visibility: isEditing ? "hidden" : "visible",
+            pointerEvents: isEditing ? "none" : undefined,
+          }}
+        >
+          <FilterableHeaderLabel
+            label={label}
+            filterDisplay={filterDisplay}
+            onClick={() => openHeaderEditor(key)}
+            theme={theme}
+          />
+        </span>
+        {isEditing && (
+          <FilterableHeaderEdit
+            onCollapse={makeCollapseHeader(key)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            {custom ? (
+              custom({
+                autoFocus: true,
+                onClose: makeCollapseHeader(key),
+              })
+            ) : (
+              <HeaderFilterInput
+                autoFocus
+                value={filterValues[key]}
+                onChange={(next) => hf.onChange(key, next)}
+                placeholder={placeholder}
+                ariaLabel={`Filter ${label}`}
+              />
+            )}
+          </FilterableHeaderEdit>
+        )}
+      </div>
+    );
+  };
+
   return (
     <table style={erpListTableElementStyle(theme)}>
       <thead>
-        <tr>
-          {visible.sno && <th style={erpListThStyle(theme)}>S.No</th>}
+        <tr style={{ height: 52.4 }}>
+          {visible.sno && <th style={{...erpListThStyle(theme),minWidth:40}}>S.No</th>}
           {visible.enquiry_id && (
-            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Enquiry ID</th>
+            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>
+              {renderFilterableHeader("enquiry_id", "Enquiry ID", "Filter ID")}
+            </th>
           )}
           {visible.customer_name && (
-            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>Customer</th>
+            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>
+              {renderFilterableHeader(
+                "customer_name",
+                "Customer",
+                "Search customer",
+              )}
+            </th>
           )}
-          {visible.sales_person && <th style={erpListThStyle(theme)}>Sales Person</th>}
+          {visible.sales_person && (
+            <th style={{ ...erpListThStyle(theme)}}>
+              {renderFilterableHeader(
+                "sales_person",
+                "Sales Person",
+                "Sales person",
+              )}
+            </th>
+          )}
           {visible.created_at && (
-            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>Quote Date</th>
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>
+              Quote Date
+            </th>
           )}
-          {visible.route && <th style={erpListThStyle(theme)}>Route</th>}
-          {visible.reference_no && <th style={erpListThStyle(theme)}>Reference No</th>}
+          {visible.route && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>
+              {hf && filterValues ? (
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    minHeight: 26,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      visibility:
+                        editingHeaderColumn === "route" ? "hidden" : "visible",
+                      pointerEvents:
+                        editingHeaderColumn === "route" ? "none" : undefined,
+                    }}
+                  >
+                    <FilterableRouteHeaderLabel
+                      originCode={filterValues.origin}
+                      destinationCode={filterValues.destination}
+                      onClick={() => openHeaderEditor("route")}
+                      theme={theme}
+                    />
+                  </span>
+                  {editingHeaderColumn === "route" && (
+                    <FilterableHeaderEdit
+                      onCollapse={makeCollapseHeader("route")}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Group gap={6} wrap="nowrap" style={{ width: "100%" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {customInput("origin")?.({
+                            autoFocus: true,
+                            onClose: makeCollapseHeader("route"),
+                          }) ?? (
+                            <HeaderFilterInput
+                              autoFocus
+                              value={filterValues.origin}
+                              onChange={(next) => hf.onChange("origin", next)}
+                              placeholder="Origin"
+                              ariaLabel="Filter origin"
+                            />
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {customInput("destination")?.({
+                            autoFocus: false,
+                            onClose: makeCollapseHeader("route"),
+                          }) ?? (
+                            <HeaderFilterInput
+                              value={filterValues.destination}
+                              onChange={(next) =>
+                                hf.onChange("destination", next)
+                              }
+                              placeholder="Destination"
+                              ariaLabel="Filter destination"
+                            />
+                          )}
+                        </div>
+                      </Group>
+                    </FilterableHeaderEdit>
+                  )}
+                </div>
+              ) : (
+                "Route"
+              )}
+            </th>
+          )}
+          {visible.reference_no && (
+            <th style={erpListThStyle(theme)}>Reference No</th>
+          )}
           {visible.status && (
-            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap", minWidth: 140 }}>
-              Status
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "nowrap",
+                minWidth: 140,
+              }}
+            >
+              {renderFilterableHeader("status", "Status", "Status")}
             </th>
           )}
           {visible.valid_upto_list && (
-            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>Valid Upto</th>
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "nowrap",
+                minWidth: 160,
+              }}
+            >
+              {renderFilterableHeader(
+                "valid_upto_list",
+                "Valid Upto",
+                "Valid upto",
+              )}
+            </th>
           )}
-          {visible.revision && <th style={erpListThStyle(theme)}>Revision</th>}
-          {visible.reject_remark && <th style={erpListThStyle(theme)}>Remark</th>}
+          {visible.revision && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 150 }}>
+              {renderFilterableHeader("revision", "Revision", "Revision")}
+            </th>
+          )}
+          {visible.reject_remark && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 150 }}>
+              {renderFilterableHeader(
+                "reject_remark",
+                "Remark",
+                "Search remark",
+              )}
+            </th>
+          )}
           <th style={erpListThActionsSpacer(theme, 44)} />
         </tr>
       </thead>
       <tbody>
-        {isEmpty || rows.length === 0 ? (
+        {loading ? (
+          <tr>
+            <td colSpan={colCount} style={{ padding: 60 }}>
+              <Center>
+                <Stack align="center" gap="md">
+                  <Loader color={primary} />
+                  <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+                    {loadingMessage}
+                  </Text>
+                </Stack>
+              </Center>
+            </td>
+          </tr>
+        ) : isEmpty || rows.length === 0 ? (
           <tr>
             <td
               colSpan={colCount}

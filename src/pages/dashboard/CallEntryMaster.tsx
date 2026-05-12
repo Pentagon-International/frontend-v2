@@ -1,8 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   ActionIcon,
   Button,
+  Center,
   Group,
+  Loader,
   Select,
   Text,
   TextInput,
@@ -18,6 +30,7 @@ import {
 } from "@mantine/core";
 import {
   IconCalendarTime,
+  IconFilterFilled,
   IconPlus,
   IconSearch,
   IconFilter,
@@ -48,7 +61,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   DEFAULT_ERP_LIST_THEME,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
@@ -253,6 +265,252 @@ function parseCallEntryFilterResponse(data: any): CallEntryPageResult {
   return { items, total, statusCounts };
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Column-header filter primitives (CallEntryMaster)
+ *
+ * Mirrors the EnquiryMaster / LeadList pattern: a click on the column header
+ * label collapses it into an inline editor (`FilterableHeaderEdit`) which
+ * auto-focuses, auto-blurs back to the label, and supports Escape to cancel.
+ * Each filterable column can supply a richer `renderInput` (Select /
+ * SearchableSelect / SingleDateInput) so the header reuses the SAME control
+ * the advanced-filter drawer offers — single source of truth, identical API
+ * payload shape (no new payload keys, no client-side filtering).
+ *
+ * The default fallback `HeaderFilterInput` uses a local typing buffer + 1000ms
+ * debounced commit so React Query does not refetch on every keystroke.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export type CallEntryHeaderFilterKey =
+  | "customer"
+  | "city"
+  | "sales_person"
+  | "area"
+  | "call_date"
+  | "call_mode"
+  | "followup_date"
+  | "status";
+
+export type CallEntryHeaderFilterValues = Record<CallEntryHeaderFilterKey, string>;
+
+export type CallEntryHeaderInputContext = {
+  /** Whether the input should auto-focus on mount. */
+  autoFocus: boolean;
+  /** Imperatively collapse the cell back to label mode (after a pick). */
+  onClose: () => void;
+};
+
+export type CallEntryHeaderRenderInput = (
+  ctx: CallEntryHeaderInputContext,
+) => ReactNode;
+
+type CallEntryEditingColumn = CallEntryHeaderFilterKey | null;
+
+const CALL_ENTRY_HEADER_FILTER_TEXTINPUT_STYLES = {
+  input: {
+    height: 26,
+    minHeight: 26,
+    fontSize: 12,
+    paddingLeft: 8,
+    paddingRight: 24,
+  },
+} as const;
+
+/**
+ * Stable `classNames` for the date column-header `SingleDateInput`s. Kept at
+ * module scope so the object reference does not churn `renderInput`'s memo.
+ */
+const CALL_ENTRY_HEADER_DATE_INPUT_CLASSNAMES: Record<string, string> = {
+  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+};
+
+/** Fallback TextInput editor used when no `renderInput` is supplied for a column. */
+function HeaderFilterInput({
+  value,
+  onChange,
+  placeholder = "Filter...",
+  ariaLabel,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+  autoFocus?: boolean;
+}) {
+  // Local typing buffer. Keep every keystroke local and only bubble the value
+  // upstream after 1000ms of idle, so React Query does not refetch on every
+  // character. The X-clear button bypasses this debounce for a snappy discrete
+  // UX. External value changes (Clear-All, restore, advanced-filter Apply) are
+  // synced back into the local buffer via the effect below.
+  const [localValue, setLocalValue] = useState(value);
+  const [debouncedLocalValue] = useDebouncedValue(localValue, 1000);
+  const lastEmittedRef = useRef(value);
+
+  useEffect(() => {
+    if (value !== lastEmittedRef.current || value === "") {
+      setLocalValue(value);
+      lastEmittedRef.current = value;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  useEffect(() => {
+    if (debouncedLocalValue !== lastEmittedRef.current) {
+      lastEmittedRef.current = debouncedLocalValue;
+      onChange(debouncedLocalValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedLocalValue]);
+
+  return (
+    <TextInput
+      size="xs"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.currentTarget.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      autoFocus={autoFocus}
+      styles={CALL_ENTRY_HEADER_FILTER_TEXTINPUT_STYLES}
+      rightSection={
+        localValue ? (
+          <ActionIcon
+            variant="transparent"
+            size="xs"
+            color="gray"
+            onMouseDown={(e) => {
+              // Prevent the input from blurring before our handler can fire
+              e.preventDefault();
+            }}
+            onClick={() => {
+              // Discrete user action -- commit immediately, bypass debounce.
+              setLocalValue("");
+              lastEmittedRef.current = "";
+              onChange("");
+            }}
+            aria-label={`Clear ${ariaLabel}`}
+          >
+            <IconX size={12} />
+          </ActionIcon>
+        ) : null
+      }
+    />
+  );
+}
+
+/** Clickable header label that opens the inline editor; shows the active filter when set. */
+function FilterableHeaderLabel({
+  label,
+  filterDisplay,
+  onClick,
+  theme,
+  align = "left",
+}: {
+  label: string;
+  filterDisplay: string;
+  onClick: () => void;
+  theme: { fontSans: string; muted: string };
+  align?: "left" | "center" | "right";
+}) {
+  const isFiltered = filterDisplay.length > 0;
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        fontFamily: theme.fontSans,
+        fontWeight: 500,
+        cursor: "pointer",
+        textAlign: align,
+        justifyContent:
+          align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        minWidth: 0,
+      }}
+      title={
+        isFiltered
+          ? `Filter: ${filterDisplay}\nClick to edit`
+          : `Click to filter`
+      }
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {isFiltered ? filterDisplay : label}
+      </span>
+      {isFiltered && <IconFilterFilled size={14} color={theme.muted} />}
+    </UnstyledButton>
+  );
+}
+
+/**
+ * Wraps the editor input(s). Auto-focuses children on mount, collapses on
+ * Escape, and collapses on blur once focus leaves the cell entirely (so a
+ * Tab inside the cell does not flicker the editor closed).
+ */
+function FilterableHeaderEdit({
+  onCollapse,
+  children,
+  style,
+}: {
+  /**
+   * Must use the functional-set form
+   * (`setState((cur) => cur === me ? null : cur)`) so a click on a different
+   * header that already switched the editing column is not undone by this
+   * collapse handler.
+   */
+  onCollapse: () => void;
+  children: ReactNode;
+  /** Extra style merged onto the wrapper (e.g. absolute positioning over the label). */
+  style?: CSSProperties;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleBlur = useCallback(
+    (_e: ReactFocusEvent) => {
+      setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (!container.contains(document.activeElement)) {
+          onCollapse();
+        }
+      }, 0);
+    },
+    [onCollapse],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCollapse();
+      }
+    },
+    [onCollapse],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="erp-header-filter-fade"
+      style={{ width: "100%", minWidth: 0, boxSizing: "border-box", ...style } as CSSProperties}
+    >
+      {children}
+    </div>
+  );
+}
+
 function CallEntry() {
   // Get first day of current month and today's date
   const getDefaultFromDate = (): Date => {
@@ -311,7 +569,7 @@ function CallEntry() {
 
   //Search Debounce
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debounced] = useDebouncedValue(searchQuery, 1000);
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -345,11 +603,11 @@ function CallEntry() {
     string | null
   >(null);
 
-  // Debounced search effect
+  // Debounced search effect (1000ms to match column-header debounce behaviour)
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-    }, 500);
+    }, 1000);
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
@@ -545,6 +803,13 @@ function CallEntry() {
           restoredFilters.area ||
           (restoredFilters.date_from && restoredFilters.date_to)
         );
+      }
+
+      // Restore the customer display label so the SearchableSelect and the
+      // column header show the friendly name (not the raw customer_code).
+      const restoredCustomerLabel = restoredState.displayValues?.customer;
+      if (typeof restoredCustomerLabel === "string" && restoredCustomerLabel) {
+        setCustomerDisplayValue(restoredCustomerLabel);
       }
 
       // Restore search
@@ -876,6 +1141,17 @@ function CallEntry() {
                 date_to: restoredFilters.date_to || null,
                 search: restoredState.search || null,
               });
+            }
+
+            // Restore the customer display label (friendly name) so it shows
+            // correctly in the column header / advanced filter after refresh.
+            const restoredCustomerLabel =
+              restoredState.displayValues?.customer;
+            if (
+              typeof restoredCustomerLabel === "string" &&
+              restoredCustomerLabel
+            ) {
+              setCustomerDisplayValue(restoredCustomerLabel);
             }
 
             // Restore search from store if it exists (update prevSearchRef to prevent search effect trigger)
@@ -1264,6 +1540,11 @@ function CallEntry() {
       // Store filters and search in the list store
       setStoreFilters(LIST_KEY, filtersToStore);
       setStoreSearch(LIST_KEY, searchQuery.trim() || "");
+      // Persist the customer display label so the friendly name (and not just
+      // the raw customer_code) is shown after navigating back from edit / view.
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        customer: customerDisplayValue,
+      });
 
       setShowFilters(false);
 
@@ -1312,6 +1593,11 @@ function CallEntry() {
     // Clear filters and search from store
     clearStoreFilters(LIST_KEY);
     clearStoreSearch(LIST_KEY);
+    // `clearStoreFilters` deliberately preserves displayValues, so we explicitly
+    // null the customer label here to avoid a stale label after a full clear.
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      customer: null,
+    });
 
     // Trigger API with initial payload (date range only)
     setIsRefreshingData(true);
@@ -1603,17 +1889,416 @@ function CallEntry() {
     callEntryResult,
   ]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
+  // Memoised so its reference is stable across renders — keeps downstream
+  // memos (renderInput, header date-input styles, etc.) from churning.
+  const erpTheme: ErpListTheme = useMemo(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
   const { border, muted, fg, primary, cardBg, fontSans } = erpTheme;
+
+  /* ───────────── Column header filters (click-to-edit, EnquiryMaster pattern)
+   * Strictly NON-INVASIVE: the column header inputs live on top of the
+   * EXISTING `appliedFilters` state. They DO NOT introduce any new payload
+   * structure, separate React Query, search path, or store key. A change
+   * to a column header writes directly into `appliedFilters` (and the
+   * advanced filter form) — the existing `buildFilterPayload` then reads
+   * the new value and React Query auto-refetches via queryKey change.
+   * ─────────────────────────────────────────────────────────────────────── */
+
+  // Which column header is currently in edit mode (only one at a time).
+  const [editingHeaderColumn, setEditingHeaderColumn] =
+    useState<CallEntryEditingColumn>(null);
+
+  const openHeaderEditor = useCallback(
+    (col: NonNullable<CallEntryEditingColumn>) => {
+      setEditingHeaderColumn(col);
+    },
+    [],
+  );
+
+  // IMPORTANT: functional setter, so a fast click on another header that
+  // already switched the editing column is not undone by this collapse.
+  const makeCollapseHeader = useCallback(
+    (col: NonNullable<CallEntryEditingColumn>) => () => {
+      setEditingHeaderColumn((cur) => (cur === col ? null : cur));
+    },
+    [],
+  );
+
+  // Header values derived from `appliedFilters` so the header inputs and
+  // the advanced filter drawer stay in sync via a single source of truth.
+  const callEntryHeaderFilterValues: CallEntryHeaderFilterValues = useMemo(
+    () => ({
+      customer: appliedFilters.customer ?? "",
+      city: appliedFilters.city ?? "",
+      sales_person: appliedFilters.sales_person ?? "",
+      area: appliedFilters.area ?? "",
+      call_date: appliedFilters.call_date
+        ? dayjs(appliedFilters.call_date).format("YYYY-MM-DD")
+        : "",
+      call_mode: appliedFilters.call_mode ?? "",
+      followup_date: appliedFilters.followup_date
+        ? dayjs(appliedFilters.followup_date).format("YYYY-MM-DD")
+        : "",
+      status: appliedFilters.status ?? "",
+    }),
+    [appliedFilters],
+  );
+
+  /**
+   * Atomically patch one or more filter keys at once. Updates the advanced
+   * filter form, applied-filters state, the global list-filter store, and
+   * resets to page 1. The patch values use the SAME shape as `FilterState`
+   * (so dates are `Date | null`, everything else is `string | null`).
+   */
+  const handleCallEntryHeaderFilterPatch = useCallback(
+    (patch: Partial<FilterState>) => {
+      // 1) advanced filter drawer stays in sync for every patched key
+      (Object.entries(patch) as Array<
+        [keyof FilterState, FilterState[keyof FilterState]]
+      >).forEach(([k, v]) => {
+        filterForm.setFieldValue(k, v as any);
+      });
+
+      // 2) applied filters state (this is what `buildFilterPayload` reads
+      //    via its useCallback deps; the queryKey then changes, which
+      //    React Query auto-refetches when `filtersApplied` is true).
+      const newApplied: FilterState = {
+        ...appliedFilters,
+        ...patch,
+        search: debouncedSearch.trim() || null,
+      };
+      setAppliedFilters(newApplied);
+
+      // 3) persist to global store so navigations restore correctly
+      //    (the store accepts the raw object as-is)
+      setStoreFilters(LIST_KEY, newApplied as any);
+
+      // 4) flip filtersApplied based on whether any real filter / search remains
+      const hasFilters =
+        Boolean(newApplied.customer) ||
+        Boolean(newApplied.call_date) ||
+        Boolean(newApplied.call_mode) ||
+        Boolean(newApplied.followup_date) ||
+        Boolean(newApplied.status) ||
+        Boolean(newApplied.sales_person) ||
+        Boolean(newApplied.city) ||
+        Boolean(newApplied.area) ||
+        Boolean(fromDate && toDate);
+      const hasSearch = Boolean(debouncedSearch.trim());
+      setFiltersApplied(hasFilters || hasSearch);
+
+      // 5) reset to first page (same as advanced-filter Apply does)
+      setPageIndex(0);
+    },
+    [
+      filterForm,
+      appliedFilters,
+      debouncedSearch,
+      setStoreFilters,
+      fromDate,
+      toDate,
+    ],
+  );
+
+  /** Single-key wrapper — what `CallEntryHeaderFiltersProp.onChange` calls. */
+  const handleCallEntryHeaderFilterChange = useCallback(
+    (key: CallEntryHeaderFilterKey, value: string) => {
+      // Non-date keys map directly; dates use the renderInput closure with
+      // `handleCallEntryHeaderFilterPatch` so a `Date` is committed instead
+      // of a string (matches the existing FilterState shape).
+      handleCallEntryHeaderFilterPatch({
+        [key]: value || null,
+      } as Partial<FilterState>);
+    },
+    [handleCallEntryHeaderFilterPatch],
+  );
+
+  // Display formatter: friendlier label for the collapsed header. Reuses the
+  // existing option arrays so the labels stay consistent with the drawer.
+  const callEntryHeaderDisplayFormatter = useMemo<
+    Partial<Record<CallEntryHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer: (raw) => (raw ? customerDisplayValue || raw : raw),
+      sales_person: (raw) =>
+        salespersonOptions.find((o: { value: string; label: string }) => o.value === raw)?.label ?? raw,
+      call_mode: (raw) =>
+        callModeOptionsData.find((o: { value: string; label: string }) => o.value === raw)?.label ?? raw,
+      status: (raw) => {
+        const dashboardStatuses = ["OVERDUE", "TODAY", "UPCOMING", "CLOSED"];
+        if (dashboardStatuses.includes(String(raw).toUpperCase())) return raw;
+        return (
+          followUpActionOptionsData.find(
+            (o: { value: string; label: string }) => o.value === raw,
+          )?.label ?? raw
+        );
+      },
+      call_date: (raw) => (raw ? dayjs(raw).format(dateFormat) : raw),
+      followup_date: (raw) => (raw ? dayjs(raw).format(dateFormat) : raw),
+    }),
+    [
+      customerDisplayValue,
+      salespersonOptions,
+      callModeOptionsData,
+      followUpActionOptionsData,
+      dateFormat,
+    ],
+  );
+
+  // Stable styles for the SingleDateInputs used in the date column headers.
+  const callEntryHeaderDateInputStyles = useMemo(
+    () =>
+      erpListFilterUnifiedMantineStyles(erpTheme) as unknown as Record<
+        string,
+        CSSProperties & Record<string, unknown>
+      >,
+    [erpTheme],
+  );
+
+  // Per-column rich editors — mirror the advanced filter drawer's controls
+  // exactly so the column header sends the SAME payload value the advanced
+  // filter would. Free-text columns (city, area) fall back to the default
+  // `HeaderFilterInput` (1000ms debounced commit).
+  const callEntryHeaderRenderInput = useMemo<
+    Partial<Record<CallEntryHeaderFilterKey, CallEntryHeaderRenderInput>>
+  >(
+    () => ({
+      customer: ({ onClose }) => (
+        <SearchableSelect
+          size="xs"
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_name", "customer_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.customer_code),
+            label: String(item.customer_name),
+          })}
+          value={appliedFilters.customer}
+          displayValue={customerDisplayValue}
+          onChange={(value, selectedData) => {
+            const label = selectedData?.label || null;
+            setCustomerDisplayValue(label);
+            // Persist the friendly label to the global store so it survives
+            // navigation back from create / edit / calendar pages.
+            useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+              customer: label,
+            });
+            handleCallEntryHeaderFilterPatch({ customer: value || null });
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={salespersonsLoading ? "Loading…" : "Sales person"}
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={appliedFilters.sales_person || ""}
+          onChange={(value) => {
+            handleCallEntryHeaderFilterChange("sales_person", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      call_mode: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={callModeDataLoading ? "Loading…" : "Mode of call"}
+          searchable
+          clearable
+          size="xs"
+          data={callModeOptionsData}
+          disabled={callModeDataLoading}
+          value={appliedFilters.call_mode || ""}
+          onChange={(value) => {
+            handleCallEntryHeaderFilterChange("call_mode", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={followUpActionDataLoading ? "Loading…" : "Status"}
+          searchable
+          clearable
+          size="xs"
+          data={followUpActionOptionsData}
+          disabled={followUpActionDataLoading}
+          value={appliedFilters.status || ""}
+          onChange={(value) => {
+            handleCallEntryHeaderFilterChange("status", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      // Single date pickers — commit as a `Date` (matches existing FilterState).
+      call_date: ({ onClose }) => (
+        <SingleDateInput
+          value={appliedFilters.call_date}
+          onChange={(d) => {
+            handleCallEntryHeaderFilterPatch({ call_date: d });
+            if (d) onClose();
+          }}
+          placeholder="Call date"
+          size="xs"
+          allowDeselection
+          classNames={CALL_ENTRY_HEADER_DATE_INPUT_CLASSNAMES}
+          styles={callEntryHeaderDateInputStyles}
+        />
+      ),
+      followup_date: ({ onClose }) => (
+        <SingleDateInput
+          value={appliedFilters.followup_date}
+          onChange={(d) => {
+            handleCallEntryHeaderFilterPatch({ followup_date: d });
+            if (d) onClose();
+          }}
+          placeholder="Follow-up"
+          size="xs"
+          allowDeselection
+          classNames={CALL_ENTRY_HEADER_DATE_INPUT_CLASSNAMES}
+          styles={callEntryHeaderDateInputStyles}
+        />
+      ),
+    }),
+    [
+      appliedFilters.customer,
+      appliedFilters.sales_person,
+      appliedFilters.call_mode,
+      appliedFilters.status,
+      appliedFilters.call_date,
+      appliedFilters.followup_date,
+      customerDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      callModeOptionsData,
+      callModeDataLoading,
+      followUpActionOptionsData,
+      followUpActionDataLoading,
+      handleCallEntryHeaderFilterChange,
+      handleCallEntryHeaderFilterPatch,
+      callEntryHeaderDateInputStyles,
+      erpTheme,
+    ],
+  );
+
+  /**
+   * Renders the inner content of a single filterable `<th>` (the click-to-edit
+   * label + the inline editor). Centralises the boilerplate shared by every
+   * filterable column header so the table render stays compact.
+   *
+   * Layout trick: the label is ALWAYS rendered in normal flow so it dictates
+   * the cell's natural width (and therefore its `min-content` size). When
+   * editing, the label is visually hidden but still reserves space, while the
+   * editor is layered on top via `position: absolute; inset: 0`. The editor
+   * therefore never contributes to the cell's preferred width — clicking the
+   * header no longer expands the column.
+   */
+  const renderFilterableHeader = useCallback(
+    (
+      columnId: NonNullable<CallEntryEditingColumn>,
+      filterKey: CallEntryHeaderFilterKey,
+      label: string,
+      ariaLabel: string = `Filter ${label}`,
+    ) => {
+      const value = callEntryHeaderFilterValues[filterKey];
+      const filterDisplay = value
+        ? callEntryHeaderDisplayFormatter?.[filterKey]?.(value) ?? value
+        : "";
+      const isEditing = editingHeaderColumn === columnId;
+      return (
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            minWidth: 0,
+          }}
+        >
+          {/* Label is always rendered so the cell's width is locked to the
+              closed-state size. While editing it's `visibility: hidden`
+              (still occupies space, but not interactive / not focusable). */}
+          <div
+            style={{
+              visibility: isEditing ? "hidden" : "visible",
+              pointerEvents: isEditing ? "none" : "auto",
+            }}
+            aria-hidden={isEditing || undefined}
+          >
+            <FilterableHeaderLabel
+              label={label}
+              filterDisplay={filterDisplay}
+              onClick={() => openHeaderEditor(columnId)}
+              theme={erpTheme}
+            />
+          </div>
+          {isEditing && (
+            <FilterableHeaderEdit
+              onCollapse={makeCollapseHeader(columnId)}
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {callEntryHeaderRenderInput?.[filterKey]?.({
+                autoFocus: true,
+                onClose: makeCollapseHeader(columnId),
+              }) ?? (
+                <HeaderFilterInput
+                  value={value}
+                  onChange={(val) =>
+                    handleCallEntryHeaderFilterChange(filterKey, val)
+                  }
+                  ariaLabel={ariaLabel}
+                  autoFocus
+                />
+              )}
+            </FilterableHeaderEdit>
+          )}
+        </div>
+      );
+    },
+    [
+      editingHeaderColumn,
+      callEntryHeaderFilterValues,
+      callEntryHeaderDisplayFormatter,
+      callEntryHeaderRenderInput,
+      makeCollapseHeader,
+      openHeaderEditor,
+      handleCallEntryHeaderFilterChange,
+      erpTheme,
+    ],
+  );
 
   const visibleDataColumnCount = useMemo(() => {
     const v = visibleColumns;
@@ -2031,59 +2716,57 @@ function CallEntry() {
                   />
                 </>
               ),
-              children: isTableDataLoading ? (
-                <ERPListTableLoading theme={erpTheme} message="Loading call entries…" />
-              ) : (
+              children: (
                 <table style={erpListTableElementStyle(erpTheme)}>
                   <thead>
-                    <tr>
+                    <tr style={{ height: 52.4 }}>
                       {visibleColumns.sno && (
-                        <th style={erpListThStyle(erpTheme)}>
+                        <th style={{ ...erpListThStyle(erpTheme), minWidth: 40 }}>
                           S.No
                         </th>
                       )}
                       {visibleColumns.customerName && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Customer
+                        <th style={{ ...erpListThStyle(erpTheme), minWidth: 180 }}>
+                          {renderFilterableHeader("customer", "customer", "Customer")}
                         </th>
                       )}
                       {visibleColumns.customerLocation && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Customer location
+                        <th style={{ ...erpListThStyle(erpTheme), minWidth: 150 }}>
+                          {renderFilterableHeader("city", "city", "Customer location")}
                         </th>
                       )}
                       {visibleColumns.salesPerson && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Sales person
+                          {renderFilterableHeader("sales_person", "sales_person", "Sales person")}
                         </th>
                       )}
                       {visibleColumns.callEntryLocation && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Call entry location
+                          {renderFilterableHeader("area", "area", "Call entry location")}
                         </th>
                       )}
                       {visibleColumns.callDate && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Call date
+                        <th style={{ ...erpListThStyle(erpTheme)}}>
+                          {renderFilterableHeader("call_date", "call_date", "Call date")}
                         </th>
                       )}
                       {visibleColumns.modeOfCall && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Mode
+                          {renderFilterableHeader("call_mode", "call_mode", "Mode")}
                         </th>
                       )}
                       {visibleColumns.followupDates && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Follow-up
+                        <th style={{ ...erpListThStyle(erpTheme)}}>
+                          {renderFilterableHeader("followup_date", "followup_date", "Follow-up")}
                         </th>
                       )}
                       {visibleColumns.status && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Status
+                          {renderFilterableHeader("status", "status", "Status")}
                         </th>
                       )}
                       {visibleColumns.remark && (
-                        <th style={erpListThStyle(erpTheme)}>
+                        <th style={{...erpListThStyle(erpTheme),minWidth:150}}>
                           Remark
                         </th>
                       )}
@@ -2091,7 +2774,30 @@ function CallEntry() {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayData.length === 0 ? (
+                    {isTableDataLoading ? (
+                      <tr>
+                        <td
+                          colSpan={visibleDataColumnCount}
+                          style={{ padding: 0 }}
+                        >
+                          <Center
+                            py={80}
+                            style={{ backgroundColor: erpTheme.cardBg }}
+                          >
+                            <Stack align="center" gap="md">
+                              <Loader size="lg" color={erpTheme.primary} />
+                              <Text
+                                c="dimmed"
+                                size="sm"
+                                style={{ fontFamily: fontSans }}
+                              >
+                                Loading call entries…
+                              </Text>
+                            </Stack>
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : displayData.length === 0 ? (
                       <tr>
                         <td colSpan={visibleDataColumnCount} style={{ padding: 60, textAlign: "center" }}>
                           <Stack align="center" gap="md">

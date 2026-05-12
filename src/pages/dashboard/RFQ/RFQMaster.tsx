@@ -14,6 +14,7 @@ import {
   MantineProvider,
 } from "@mantine/core";
 import {
+  IconCheck,
   IconPlus,
   IconSearch,
   IconFilter,
@@ -48,7 +49,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
@@ -66,6 +66,10 @@ import { buildPreviewColumnDescriptors } from "../EnquiryListPreviewBuild";
 import {
   EnquiryPreviewNativeTable,
   EnquirySummaryNativeTable,
+  type EnquiryHeaderFilterKey,
+  type EnquiryHeaderFilterValues,
+  type EnquiryHeaderFiltersProp,
+  type EnquiryHeaderRenderInput,
   type EnquirySummaryVisibleColumns,
 } from "../EnquiryListNativeTables";
 import type { EnquiryRowMenuContext } from "../EnquirySummaryRowMenu";
@@ -90,6 +94,202 @@ type FilterState = {
   enquiry_id: string | null;
   reference_no: string | null;
 };
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Column-header filter helpers (RFQMaster)
+ *
+ * Mirrors the EnquiryMaster pattern exactly: the shared `EnquirySummaryNativeTable`
+ * / `EnquiryPreviewNativeTable` already accept a `headerFilters` prop, which
+ * gives every column header a click-to-edit inline editor. We just need to
+ * plumb the prop with the right `values` / `onChange` / `renderInput` /
+ * `displayFormatter` so picks here write into the existing `filters` /
+ * `previewFilters` states — no new payload keys, no client-side filtering.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Stable `displayFormat` references for the `SearchableSelect`s that consume
+ * the customer / port masters.
+ *
+ * IMPORTANT: keep these at MODULE scope (not inline `{...}` literals in JSX).
+ * `SearchableSelect` internally memoises its fetcher with `displayFormat` in
+ * its dependency array, so an inline closure (a new reference on every parent
+ * render) makes the fetch effect re-run on every render — which causes the
+ * customer-master / port-master API to be re-hit while the user is searching.
+ */
+const rfqCustomerDisplayFormat = (item: any) => ({
+  value: String(item.customer_code),
+  label: String(item.customer_name),
+});
+
+const rfqPortDisplayFormat = (item: any) => ({
+  value: String(item.port_code),
+  label: `${item.port_name} (${item.port_code})`,
+});
+
+/** Service options shown inside the compound Service column header editor. */
+const RFQ_SERVICE_HEADER_FILTER_OPTIONS = ["FCL", "LCL", "AIR"];
+
+/**
+ * Trade options shown inside the same compound editor on the right. Mirrors
+ * the advanced filter's Trade `Select` exactly so the same payload values
+ * (`"Import"` / `"Export"`) flow into `filters.trade`.
+ */
+const RFQ_TRADE_HEADER_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "Import", label: "Import" },
+  { value: "Export", label: "Export" },
+];
+
+/** Payload returned by `ServiceHeaderFilterInput.onCommit`. */
+type RfqServiceHeaderCommitPayload = {
+  service: string | null;
+  trade: string | null;
+};
+
+/**
+ * Compound header-filter editor for the Service column.
+ *
+ * Visually a single bordered input, but internally two independent Mantine
+ * controls inside one `<div>`:
+ *   - a `Select` with FCL / LCL / AIR on the left (drives `service`),
+ *   - a `Select` with Import / Export on the right (drives `trade`),
+ *   - a thin divider between them, and
+ *   - a tick (`IconCheck`) action button at the end that commits both slots.
+ *
+ * Each control owns its own local state so typing / picking never touches the
+ * upstream filter state — only the tick fires `onCommit`. After upstream
+ * commits, the controls re-hydrate from `serviceValue` / `tradeValue` so
+ * external edits (advanced filter, store restore, etc.) stay in sync.
+ */
+function ServiceHeaderFilterInput({
+  autoFocus,
+  serviceValue,
+  tradeValue,
+  onCommit,
+}: {
+  autoFocus: boolean;
+  serviceValue: string | null;
+  tradeValue: string | null;
+  onCommit: (next: RfqServiceHeaderCommitPayload) => void;
+}) {
+  const [localService, setLocalService] = useState<string | null>(serviceValue);
+  const [localTrade, setLocalTrade] = useState<string | null>(tradeValue);
+
+  useEffect(() => {
+    setLocalService(serviceValue);
+  }, [serviceValue]);
+  useEffect(() => {
+    setLocalTrade(tradeValue);
+  }, [tradeValue]);
+
+  const commit = useCallback(() => {
+    onCommit({ service: localService, trade: localTrade });
+  }, [localService, localTrade, onCommit]);
+
+  const isModified =
+    localService !== serviceValue || localTrade !== tradeValue;
+  const hasCommittedFilters = serviceValue != null || tradeValue != null;
+  const showClearMode = hasCommittedFilters && !isModified;
+
+  const clearAll = useCallback(() => {
+    setLocalService(null);
+    setLocalTrade(null);
+    onCommit({ service: null, trade: null });
+  }, [onCommit]);
+
+  const handleActionClick = useCallback(() => {
+    if (showClearMode) {
+      clearAll();
+    } else {
+      commit();
+    }
+  }, [showClearMode, clearAll, commit]);
+
+  const innerInputStyles = {
+    input: {
+      border: "none",
+      backgroundColor: "transparent",
+      height: 26,
+      minHeight: 26,
+      paddingTop: 0,
+      paddingBottom: 0,
+    },
+  } as const;
+
+  return (
+    <Box
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0,
+        width: "100%",
+        height: 28,
+        background: "#fff",
+        border: "1px solid var(--mantine-color-default-border, #E2E8F0)",
+        borderRadius: 4,
+        overflow: "hidden",
+      }}
+    >
+      <Select
+        size="xs"
+        placeholder="Svc"
+        data={RFQ_SERVICE_HEADER_FILTER_OPTIONS}
+        value={localService}
+        onChange={(val) => setLocalService(val)}
+        clearable
+        variant="unstyled"
+        comboboxProps={{ zIndex: 1000 }}
+        styles={{
+          ...innerInputStyles,
+          input: { ...innerInputStyles.input, paddingLeft: 8, paddingRight: 4 },
+        }}
+        style={{ flex: "0 0 70px", minWidth: 0 }}
+      />
+      <Box
+        aria-hidden
+        style={{
+          width: 1,
+          height: 18,
+          background: "#E2E8F0",
+          flexShrink: 0,
+        }}
+      />
+      <Select
+        size="xs"
+        placeholder="Trade"
+        data={RFQ_TRADE_HEADER_FILTER_OPTIONS}
+        value={localTrade}
+        onChange={(val) => setLocalTrade(val)}
+        clearable
+        searchable
+        variant="unstyled"
+        autoFocus={autoFocus}
+        comboboxProps={{ zIndex: 1000 }}
+        styles={{
+          ...innerInputStyles,
+          input: { ...innerInputStyles.input, paddingLeft: 8, paddingRight: 4 },
+        }}
+        style={{ flex: 1, minWidth: 0 }}
+      />
+      <ActionIcon
+        size="sm"
+        variant="filled"
+        color={showClearMode ? "red" : "blue"}
+        onClick={handleActionClick}
+        // Prevent the editor's onBlur from collapsing before the click fires.
+        onMouseDown={(e) => e.preventDefault()}
+        aria-label={
+          showClearMode
+            ? "Clear service / trade filter"
+            : "Apply service / trade filter"
+        }
+        title={showClearMode ? "Clear filter" : "Apply"}
+        style={{ flexShrink: 0, marginRight: 2 }}
+      >
+        {showClearMode ? <IconX size={14} /> : <IconCheck size={14} />}
+      </ActionIcon>
+    </Box>
+  );
+}
 
 type PreviewFilterState = {
   customer_name: string | null;
@@ -580,9 +780,137 @@ function RFQMaster() {
     },
     [],
   );
+
+  // ── Column header filters ─────────────────────────────────────────────────
+  // Strictly non-invasive: the column header filter inputs live on top of the
+  // existing `filters` / `previewFilters` states. They DO NOT introduce any
+  // new payload structure, client-side filtering, separate React Query, search
+  // path, or store keys. A monotonic tick is incremented only when the user
+  // edits a header input — a debounced effect (further below) uses that tick
+  // to invoke the EXISTING `refetchSummary` / `refetchPreview`, exactly the
+  // way the Apply button does today. Advanced filter inputs DO NOT bump this
+  // tick, so their existing behaviour (commit-on-Apply) is fully preserved.
+  const [headerFilterTick, setHeaderFilterTick] = useState(0);
+  const [debouncedHeaderFilterTick] = useDebouncedValue(headerFilterTick, 1000);
+  const lastHandledHeaderFilterTickRef = useRef(0);
+
+  const handleSummaryHeaderFilterChange = useCallback(
+    (key: EnquiryHeaderFilterKey, value: string) => {
+      const next = value;
+      switch (key) {
+        case "enquiry_id":
+          updateFilter("enquiry_id", next || null);
+          break;
+        case "customer_name":
+          updateFilter("customer_code", next || null);
+          setCustomerDisplayValue(null);
+          break;
+        case "sales_person":
+          updateFilter("sales_person", next || null);
+          break;
+        case "service":
+          updateFilter("service", next || null);
+          break;
+        case "trade":
+          updateFilter("trade", next || null);
+          break;
+        case "origin":
+          updateFilter("origin_code", next || null);
+          setOriginDisplayValue(null);
+          break;
+        case "destination":
+          updateFilter("destination_code", next || null);
+          setDestinationDisplayValue(null);
+          break;
+        case "status":
+          updateFilter("status", next ? next : "ALL");
+          break;
+        case "reference_no":
+          updateFilter("reference_no", next || null);
+          break;
+      }
+      setListCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [updateFilter],
+  );
+
+  const handlePreviewHeaderFilterChange = useCallback(
+    (key: EnquiryHeaderFilterKey, value: string) => {
+      const next = value;
+      switch (key) {
+        case "enquiry_id":
+          updatePreviewFilter("enquiry_id", next || null);
+          break;
+        case "customer_name":
+          updatePreviewFilter("customer_name", next || null);
+          break;
+        case "sales_person":
+          updatePreviewFilter("sales_person", next || null);
+          break;
+        case "service":
+          updatePreviewFilter("service", next || null);
+          break;
+        case "trade":
+          updatePreviewFilter("trade", next || null);
+          break;
+        case "origin":
+          updatePreviewFilter("origin_name", next || null);
+          break;
+        case "destination":
+          updatePreviewFilter("destination_name", next || null);
+          break;
+        case "status":
+          updatePreviewFilter("status", next ? next : "ALL");
+          break;
+        case "reference_no":
+          updatePreviewFilter("reference_no", next || null);
+          break;
+      }
+      setPreviewCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [updatePreviewFilter],
+  );
+
+  const summaryHeaderFilterValues: EnquiryHeaderFilterValues = useMemo(
+    () => ({
+      enquiry_id: filters.enquiry_id ?? "",
+      customer_name: filters.customer_code ?? "",
+      sales_person: filters.sales_person ?? "",
+      service: filters.service ?? "",
+      trade: filters.trade ?? "",
+      origin: filters.origin_code ?? "",
+      destination: filters.destination_code ?? "",
+      // Hide the "ALL" sentinel in the header input — empty box === "all".
+      status:
+        !filters.status || filters.status === "ALL" ? "" : filters.status,
+      reference_no: filters.reference_no ?? "",
+    }),
+    [filters],
+  );
+
+  const previewHeaderFilterValues: EnquiryHeaderFilterValues = useMemo(
+    () => ({
+      enquiry_id: previewFilters.enquiry_id ?? "",
+      customer_name: previewFilters.customer_name ?? "",
+      sales_person: previewFilters.sales_person ?? "",
+      service: previewFilters.service ?? "",
+      trade: previewFilters.trade ?? "",
+      origin: previewFilters.origin_name ?? "",
+      destination: previewFilters.destination_name ?? "",
+      status:
+        !previewFilters.status || previewFilters.status === "ALL"
+          ? ""
+          : previewFilters.status,
+      reference_no: previewFilters.reference_no ?? "",
+    }),
+    [previewFilters],
+  );
+
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debounced] = useDebouncedValue(searchQuery, 1000);
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
 
   // Helper function to save filters with dates to store (ensures consistency)
@@ -659,7 +987,7 @@ function RFQMaster() {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-    }, 500);
+    }, 1000);
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
@@ -2183,17 +2511,508 @@ function RFQMaster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewCurrentPage, previewPageSize, showPreviewTable]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
+  // Stable reference — the header-filter `renderInput` memos depend on
+  // `erpTheme`, so an inline object literal (new reference every render) would
+  // make those memos recompute every render and cascade into the native tables
+  // re-rendering needlessly. Same fix we did in EnquiryMaster.
+  const erpTheme = useMemo<ErpListTheme>(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
   const { border, muted, primary, fontSans } = erpTheme;
+
+  // ── Header column custom inputs ──────────────────────────────────────────
+  // Mirrors the advanced filter section so the column header inputs (visible
+  // only when a user clicks a header) send the SAME payload shape — e.g.
+  // a customer pick from the header sets `filters.customer_code` (not free
+  // text), exactly like the advanced filter SearchableSelect would.
+  const summaryHeaderRenderInput = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, EnquiryHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_code", "customer_name"]}
+          displayFormat={rfqCustomerDisplayFormat}
+          value={filters.customer_code}
+          displayValue={customerDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("customer_code", value || null);
+            setCustomerDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("customer_name", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search origin"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={rfqPortDisplayFormat}
+          value={filters.origin_code}
+          displayValue={originDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("origin_code", value || null);
+            setOriginDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("origin_name", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search destination"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={rfqPortDisplayFormat}
+          value={filters.destination_code}
+          displayValue={destinationDisplayValue}
+          onChange={(value, selectedData) => {
+            updateFilter("destination_code", value || null);
+            setDestinationDisplayValue(selectedData?.label || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("destination_name", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={filters.sales_person}
+          onChange={(value) => {
+            updateFilter("sales_person", value || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("sales_person", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <ServiceHeaderFilterInput
+          autoFocus={autoFocus}
+          serviceValue={filters.service}
+          tradeValue={filters.trade}
+          onCommit={(next) => {
+            updateFilter("service", next.service);
+            updateFilter("trade", next.trade);
+            if (showPreviewTable) {
+              updatePreviewFilter("service", next.service);
+              updatePreviewFilter("trade", next.trade);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            onClose();
+          }}
+        />
+      ),
+      trade: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Trade"
+          searchable
+          clearable
+          size="xs"
+          data={tradeOptions}
+          value={filters.trade}
+          onChange={(value) => {
+            updateFilter("trade", value || null);
+            if (showPreviewTable) {
+              updatePreviewFilter("trade", value || null);
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={statusOptions}
+          value={filters.status}
+          onChange={(value) => {
+            updateFilter("status", value || "ALL");
+            if (showPreviewTable) {
+              updatePreviewFilter("status", value || "ALL");
+            }
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filters.customer_code,
+      filters.origin_code,
+      filters.destination_code,
+      filters.sales_person,
+      filters.service,
+      filters.trade,
+      filters.status,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      tradeOptions,
+      statusOptions,
+      showPreviewTable,
+      erpTheme,
+      updateFilter,
+      updatePreviewFilter,
+    ],
+  );
+
+  /**
+   * Translates the underlying *code* held in summary state into the
+   * user-friendly *label* that the dropdown originally showed, so the
+   * collapsed column header reads `Chennai (INMAA)` instead of `INMAA`,
+   * `Active` instead of `ACTIVE`, etc.
+   */
+  const summaryHeaderDisplayFormatter = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => customerDisplayValue ?? raw,
+      origin: (raw) => originDisplayValue ?? raw,
+      destination: (raw) => destinationDisplayValue ?? raw,
+      status: (raw) =>
+        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+    }),
+    [
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      statusOptions,
+    ],
+  );
+
+  const summaryHeaderFiltersProp: EnquiryHeaderFiltersProp = useMemo(
+    () => ({
+      values: summaryHeaderFilterValues,
+      onChange: handleSummaryHeaderFilterChange,
+      renderInput: summaryHeaderRenderInput,
+      displayFormatter: summaryHeaderDisplayFormatter,
+    }),
+    [
+      summaryHeaderFilterValues,
+      handleSummaryHeaderFilterChange,
+      summaryHeaderRenderInput,
+      summaryHeaderDisplayFormatter,
+    ],
+  );
+
+  const previewHeaderRenderInput = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, EnquiryHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_code", "customer_name"]}
+          displayFormat={rfqCustomerDisplayFormat}
+          value={previewFilters.customer_name}
+          displayValue={customerDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("customer_name", value || null);
+            // Keep summary state in sync (matches advanced section behaviour).
+            updateFilter("customer_code", value || null);
+            setCustomerDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search origin"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={rfqPortDisplayFormat}
+          value={previewFilters.origin_name}
+          displayValue={originDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("origin_name", value || null);
+            updateFilter("origin_code", value || null);
+            setOriginDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search destination"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={rfqPortDisplayFormat}
+          value={previewFilters.destination_name}
+          displayValue={destinationDisplayValue}
+          onChange={(value, selectedData) => {
+            updatePreviewFilter("destination_name", value || null);
+            updateFilter("destination_code", value || null);
+            setDestinationDisplayValue(selectedData?.label || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={previewFilters.sales_person}
+          onChange={(value) => {
+            updatePreviewFilter("sales_person", value || null);
+            updateFilter("sales_person", value || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <ServiceHeaderFilterInput
+          autoFocus={autoFocus}
+          serviceValue={previewFilters.service}
+          tradeValue={previewFilters.trade}
+          onCommit={(next) => {
+            updatePreviewFilter("service", next.service);
+            updatePreviewFilter("trade", next.trade);
+            updateFilter("service", next.service);
+            updateFilter("trade", next.trade);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            onClose();
+          }}
+        />
+      ),
+      trade: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Trade"
+          searchable
+          clearable
+          size="xs"
+          data={tradeOptions}
+          value={previewFilters.trade}
+          onChange={(value) => {
+            updatePreviewFilter("trade", value || null);
+            updateFilter("trade", value || null);
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={statusOptions}
+          value={previewFilters.status}
+          onChange={(value) => {
+            updatePreviewFilter("status", value || "ALL");
+            updateFilter("status", value || "ALL");
+            setPreviewCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      previewFilters.customer_name,
+      previewFilters.origin_name,
+      previewFilters.destination_name,
+      previewFilters.sales_person,
+      previewFilters.service,
+      previewFilters.trade,
+      previewFilters.status,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      tradeOptions,
+      statusOptions,
+      erpTheme,
+      updateFilter,
+      updatePreviewFilter,
+    ],
+  );
+
+  const previewHeaderDisplayFormatter = useMemo<
+    Partial<Record<EnquiryHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => customerDisplayValue ?? raw,
+      origin: (raw) => originDisplayValue ?? raw,
+      destination: (raw) => destinationDisplayValue ?? raw,
+      status: (raw) =>
+        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+    }),
+    [
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      statusOptions,
+    ],
+  );
+
+  const previewHeaderFiltersProp: EnquiryHeaderFiltersProp = useMemo(
+    () => ({
+      values: previewHeaderFilterValues,
+      onChange: handlePreviewHeaderFilterChange,
+      renderInput: previewHeaderRenderInput,
+      displayFormatter: previewHeaderDisplayFormatter,
+    }),
+    [
+      previewHeaderFilterValues,
+      handlePreviewHeaderFilterChange,
+      previewHeaderRenderInput,
+      previewHeaderDisplayFormatter,
+    ],
+  );
+
+  // ── Debounced refetch on header-filter edit ───────────────────────────────
+  // When `headerFilterTick` advances (the user picked / typed in a column
+  // header), wait for `debouncedHeaderFilterTick` to settle (1000ms) then
+  // refetch via the SAME `refetchSummary` / `refetchPreview` the Apply button
+  // uses. We dedupe via `lastHandledHeaderFilterTickRef` so the same tick is
+  // never replayed twice (e.g. on a parent re-render).
+  useEffect(() => {
+    if (debouncedHeaderFilterTick === 0) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick)
+      return;
+    lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
+
+    if (showPreviewTable) {
+      setPreviewFiltersApplied(true);
+      setIsRefreshingData(true);
+      void Promise.all([refetchPreview(), refetchSummary()]).finally(() =>
+        setIsRefreshingData(false),
+      );
+    } else {
+      setFiltersApplied(true);
+      setIsRefreshingData(true);
+      void refetchSummary().finally(() => setIsRefreshingData(false));
+    }
+  }, [debouncedHeaderFilterTick, showPreviewTable, refetchSummary, refetchPreview]);
 
   const previewLayout = useMemo(
     () => buildPreviewColumnDescriptors(tablePreviewData, previewColumnToKeyMap),
@@ -2904,32 +3723,24 @@ function RFQMaster() {
                   }}
                 />
               ),
+              // Always render the native table so its `<thead>` (column
+              // filters) and the pagination footer stay visible during a
+              // refetch. The loader is rendered INSIDE `<tbody>` via the
+              // `loading` prop — this also preserves any open header-filter
+              // editor across refetches (it lives in the table's state).
               children: showPreviewTable ? (
-                isPreviewListDataLoading ? (
-                  <ERPListTableLoading
-                    theme={erpTheme}
-                    message={
-                      isRefreshingData
-                        ? "Updating detailed list…"
-                        : `Loading detailed ${modulePluralLower}…`
-                    }
-                  />
-                ) : (
-                  <EnquiryPreviewNativeTable
-                    theme={erpTheme}
-                    columns={visiblePreviewColumns}
-                    data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
-                    dateFormat={dateFormat}
-                    getStatusBadge={getStatusBadge}
-                  />
-                )
-              ) : isSummaryTableDataLoading ? (
-                <ERPListTableLoading
+                <EnquiryPreviewNativeTable
                   theme={erpTheme}
-                  message={
+                  columns={visiblePreviewColumns}
+                  data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
+                  dateFormat={dateFormat}
+                  getStatusBadge={getStatusBadge}
+                  headerFilters={previewHeaderFiltersProp}
+                  loading={isPreviewListDataLoading}
+                  loadingMessage={
                     isRefreshingData
-                      ? `Updating ${modulePluralLower}…`
-                      : `Loading ${modulePluralLower}…`
+                      ? "Updating detailed list…"
+                      : `Loading detailed ${modulePluralLower}…`
                   }
                 />
               ) : (
@@ -2943,6 +3754,13 @@ function RFQMaster() {
                   actionsOpenKey={summaryActionsMenuKey}
                   onActionsKeyChange={setSummaryActionsMenuKey}
                   menuDropdownClassName={ERP_LIST_GEIST_ROOT_CLASS}
+                  headerFilters={summaryHeaderFiltersProp}
+                  loading={isSummaryTableDataLoading}
+                  loadingMessage={
+                    isRefreshingData
+                      ? `Updating ${modulePluralLower}…`
+                      : `Loading ${modulePluralLower}…`
+                  }
                 />
               ),
             }}
