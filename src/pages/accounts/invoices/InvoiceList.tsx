@@ -10,22 +10,35 @@ import {
   Box,
   Button,
   Center,
+  Grid,
   MantineProvider,
   Text,
   TextInput,
 } from "@mantine/core";
-import { IconClock, IconCreditCard, IconSearch, IconX } from "@tabler/icons-react";
+import {
+  IconClock,
+  IconCreditCard,
+  IconFilter,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
+  Dropdown,
   ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
   ERPListScreen,
   ERPListStatPill,
   ERPListTableLoading,
+  SearchableSelect,
+  erpListFilterFieldCellStyle,
+  erpListFilterUnifiedMantineStyles,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
   erpToolbarOutlineButtonStyles,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
@@ -33,6 +46,9 @@ import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import FormTextInput from "../../../components/FormTextInput";
+import { getAPICall } from "../../../service/getApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 
 type InvoiceFilterRow = Record<string, unknown> & {
   id?: number | string;
@@ -58,14 +74,45 @@ type InvoiceListQueryResult = {
   data: InvoiceFilterRow[];
 };
 
+type InvoiceListFilters = {
+  bill_to: string;
+  party_display: string | null;
+  document_no: string;
+  shipment_no: string;
+  state_id: string;
+};
+
+const EMPTY_FILTERS: InvoiceListFilters = {
+  bill_to: "",
+  party_display: null,
+  document_no: "",
+  shipment_no: "",
+  state_id: "",
+};
+
+async function fetchStateMaster(): Promise<Array<Record<string, unknown>>> {
+  try {
+    const response = await getAPICall(`${URL.state}`, API_HEADER);
+    if (Array.isArray(response))
+      return response as Array<Record<string, unknown>>;
+    if (response && typeof response === "object" && "data" in response) {
+      const d = (response as { data: unknown }).data;
+      return Array.isArray(d) ? (d as Array<Record<string, unknown>>) : [];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 const columnLabels = {
   sno: "S.No",
   bill_to_name: "Party name",
-  gstn: "GSTN",
-  shipment_no: "Shipment No",
-  state_name: "State name",
   document_no: "Document No",
   document_date: "Document date",
+  shipment_no: "Shipment No",
+  gstn: "GSTN",
+  state_name: "State",
 } as const;
 
 type ColumnKey = keyof typeof columnLabels;
@@ -73,11 +120,11 @@ type ColumnKey = keyof typeof columnLabels;
 const columnDefault: Record<ColumnKey, boolean> = {
   sno: true,
   bill_to_name: true,
-  gstn: true,
-  shipment_no: true,
-  state_name: true,
   document_no: true,
   document_date: true,
+  shipment_no: true,
+  gstn: true,
+  state_name: true,
 };
 
 function columnId<T extends Record<string, unknown>>(col: MRT_ColumnDef<T>): string {
@@ -103,6 +150,13 @@ export default function InvoiceList() {
     () => ({ ...columnDefault }),
   );
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [draftFilters, setDraftFilters] = useState<InvoiceListFilters>({
+    ...EMPTY_FILTERS,
+  });
+  const [appliedFilters, setAppliedFilters] = useState<InvoiceListFilters>({
+    ...EMPTY_FILTERS,
+  });
 
   const index = pagination.pageIndex * pagination.pageSize;
 
@@ -114,14 +168,48 @@ export default function InvoiceList() {
     setPagination({ pageIndex: 0, pageSize: size });
   };
 
-  const buildPayload = (searchValue: string) => {
-    const filters: Record<string, string | boolean> = {
-      is_agent: false,
+  const applyFilters = () => {
+    setAppliedFilters({ ...draftFilters });
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setShowFilters(false);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters({ ...EMPTY_FILTERS });
+    setAppliedFilters({ ...EMPTY_FILTERS });
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  };
+
+  const buildPayload = (filters: InvoiceListFilters, searchValue: string) => {
+    const out: Record<string, string | number | boolean> = {
       status: "UNPOSTED",
     };
-    if (searchValue?.trim()) filters.search = searchValue.trim();
-    return { filters };
+    if (searchValue?.trim()) out.search = searchValue.trim();
+    if (filters.bill_to.trim()) out.bill_to = filters.bill_to.trim();
+    if (filters.shipment_no.trim()) out.shipment_no = filters.shipment_no.trim();
+    if (filters.state_id.trim()) {
+      const n = Number(filters.state_id);
+      if (!Number.isNaN(n) && n > 0) out.state_id = n;
+    }
+    if (filters.document_no.trim()) out.document_no = filters.document_no.trim();
+    return { filters: out };
   };
+
+  const { data: stateRows = [] } = useQuery({
+    queryKey: ["invoice-list-state-master"],
+    queryFn: fetchStateMaster,
+    staleTime: Infinity,
+  });
+
+  const stateOptions = useMemo(() => {
+    if (!Array.isArray(stateRows)) return [];
+    return stateRows
+      .map((item) => ({
+        value: String(item.id ?? ""),
+        label: String(item.state_name ?? item.name ?? ""),
+      }))
+      .filter((o) => o.value !== "" && o.label !== "");
+  }, [stateRows]);
 
   const {
     data: listResult,
@@ -134,11 +222,12 @@ export default function InvoiceList() {
       pagination.pageIndex,
       pagination.pageSize,
       debouncedSearch,
+      JSON.stringify(appliedFilters),
     ],
     queryFn: async (): Promise<InvoiceListQueryResult> => {
       try {
         setIsInitialLoad(false);
-        const payload = buildPayload(debouncedSearch);
+        const payload = buildPayload(appliedFilters, debouncedSearch);
         const response = (await apiCallProtected.post(
           `${URL.invoiceFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
@@ -217,6 +306,25 @@ export default function InvoiceList() {
     fontSans: "'Geist', sans-serif",
   };
 
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(erpTheme);
+  const formTextFilterStyles = useMemo(
+    () => ({
+      label: {
+        ...filterFieldStyles.label,
+        fontSize: 12,
+        fontWeight: 500,
+        marginBottom: 4,
+      },
+      input: {
+        ...filterFieldStyles.input,
+        minHeight: 32,
+        fontSize: 12,
+        fontFamily: erpTheme.fontSans,
+      },
+    }),
+    [filterFieldStyles, erpTheme.fontSans],
+  );
+
   const columnToggleItems = useMemo(
     () =>
       (Object.keys(columnLabels) as ColumnKey[]).map((key) => ({
@@ -252,8 +360,18 @@ export default function InvoiceList() {
         ),
       },
       {
-        accessorKey: "gstn",
-        header: "GSTN",
+        accessorKey: "document_no",
+        header: "Document No",
+        size: 180,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "document_date",
+        header: "Document date",
         size: 140,
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
@@ -272,29 +390,19 @@ export default function InvoiceList() {
         ),
       },
       {
+        accessorKey: "gstn",
+        header: "GSTN",
+        size: 140,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
         accessorKey: "state_name",
         header: "State",
         size: 160,
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "document_no",
-        header: "Document No",
-        size: 180,
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "document_date",
-        header: "Document date",
-        size: 140,
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
@@ -455,6 +563,21 @@ export default function InvoiceList() {
                   variant="default"
                   size="xs"
                   styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconFilter size={14} />}
+                  onClick={() => {
+                    setShowFilters((s) => {
+                      const opening = !s;
+                      if (opening) setDraftFilters({ ...appliedFilters });
+                      return opening;
+                    });
+                  }}
+                >
+                  {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
                   onClick={() => {
                     setSearch("");
                     setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -463,6 +586,109 @@ export default function InvoiceList() {
                   Reset search
                 </Button>
               </>
+            ),
+          }}
+          filters={{
+            opened: showFilters,
+            title: "Filters",
+            subtitle: "Party name, document no., shipment no., state",
+            onClose: () => setShowFilters(false),
+            footer: (
+              <ERPListFilterActionsFooter
+                theme={erpTheme}
+                onClear={clearAllFilters}
+                onApply={applyFilters}
+                applyLoading={loading}
+                applyDisabled={loading}
+              />
+            ),
+            children: (
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      label="Party name"
+                      placeholder="Search customer"
+                      apiEndpoint={URL.customer}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code ?? item.code ?? ""),
+                        label: String(item.customer_name ?? item.name ?? ""),
+                      })}
+                      value={draftFilters.bill_to || null}
+                      displayValue={draftFilters.party_display}
+                      onChange={(value, selectedData) => {
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          bill_to: value ?? "",
+                          party_display: selectedData?.label ?? null,
+                        }));
+                      }}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      size="xs"
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Document No"
+                      placeholder="Enter document no."
+                      value={draftFilters.document_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          document_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Shipment No"
+                      placeholder="Enter shipment no."
+                      value={draftFilters.shipment_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          shipment_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      label="State"
+                      placeholder="Select state"
+                      data={stateOptions}
+                      value={
+                        draftFilters.state_id ? draftFilters.state_id : null
+                      }
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          state_id: value ?? "",
+                        }))
+                      }
+                      searchable
+                      size="xs"
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+              </Grid>
             ),
           }}
           table={{

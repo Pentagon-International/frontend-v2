@@ -154,7 +154,7 @@ import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
 import PaymentReversalMaster from "../pages/accounts/reverse-payment/PaymentReversalMaster";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
-import InvoiceMaster from "../pages/accounts/invoices/InvoiceMaster";
+import InvoiceList from "../pages/accounts/invoices/InvoiceList";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
@@ -405,7 +405,7 @@ const NavigationRoutes = () => {
           path="/overseas-payment/reversal/view"
           element={<OverseasPaymentCreate isReversal />}
         />
-        <Route path="/invoices" element={<InvoiceMaster />} />
+        <Route path="/invoices" element={<InvoiceList />} />
         <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view/:id" element={<SupplierInvoiceCreate />} />
