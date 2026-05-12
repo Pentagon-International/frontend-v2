@@ -12,7 +12,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
@@ -82,10 +81,31 @@ import useDateFormat from "../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 import {
   QuotationListNativeTable,
+  type QuotationHeaderFilterKey,
+  type QuotationHeaderFilterValues,
+  type QuotationHeaderFiltersProp,
+  type QuotationHeaderRenderInput,
   type QuotationRowMenuContext,
   type QuotationTableRow,
   type QuotationVisibleColumns,
 } from "./QuotationListNativeTable";
+import { useDebouncedValue } from "@mantine/hooks";
+
+/**
+ * Stable `displayFormat` references for the `SearchableSelect`s in the column
+ * header inputs. Kept at MODULE scope so `SearchableSelect`'s internal fetch
+ * effect (which depends on `displayFormat`) doesn't refire on every render
+ * and re-hit the customer-master / port-master API.
+ */
+const quotationCustomerDisplayFormat = (item: any) => ({
+  value: String(item.customer_code),
+  label: String(item.customer_name),
+});
+
+const quotationPortDisplayFormat = (item: any) => ({
+  value: String(item.port_code),
+  label: `${item.port_name} (${item.port_code})`,
+});
 
 type QuotationData = {
   id: number;
@@ -360,11 +380,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Debounced search effect
+  // Debounced search effect — 1000ms to match column-header debounce so a
+  // global-search edit and a header-filter edit (both 1000ms) don't race and
+  // double-refetch.
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-    }, 500);
+    }, 1000);
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
@@ -869,6 +891,87 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const [destinationDisplayValue, setDestinationDisplayValue] = useState<
     string | null
   >(null);
+
+  // ── Column header filters ─────────────────────────────────────────────────
+  // Strictly non-invasive: the column header filter inputs live on top of the
+  // existing `filters` state. They DO NOT introduce any new payload structure,
+  // client-side filtering, separate React Query, search path, or store keys.
+  // A monotonic tick is incremented only when the user edits a header input —
+  // a debounced effect (further below) uses that tick to invoke the EXISTING
+  // `refetchFilteredQuotations`, exactly the way the Apply button does today.
+  // Advanced filter inputs DO NOT bump this tick, so their existing behaviour
+  // (commit-on-Apply) is fully preserved.
+  const [headerFilterTick, setHeaderFilterTick] = useState(0);
+  const [debouncedHeaderFilterTick] = useDebouncedValue(headerFilterTick, 1000);
+  const lastHandledHeaderFilterTickRef = useRef(0);
+
+  const handleQuotationHeaderFilterChange = useCallback(
+    (key: QuotationHeaderFilterKey, value: string) => {
+      const next = value;
+      switch (key) {
+        case "enquiry_id":
+          setFilters((prev) => ({ ...prev, enquiry_id: next || null }));
+          break;
+        case "customer_name":
+          // Header column maps to filters.customer_code (per spec).
+          setFilters((prev) => ({ ...prev, customer_code: next || null }));
+          // Clear the SearchableSelect's label cache so the advanced panel
+          // reflects whatever the user typed in the header (single source of truth).
+          setCustomerDisplayValue(null);
+          break;
+        case "sales_person":
+          setFilters((prev) => ({ ...prev, sales_person: next || null }));
+          break;
+        case "origin":
+          setFilters((prev) => ({ ...prev, origin_code: next || null }));
+          setOriginDisplayValue(null);
+          break;
+        case "destination":
+          setFilters((prev) => ({ ...prev, destination_code: next || null }));
+          setDestinationDisplayValue(null);
+          break;
+        case "status":
+          setFilters((prev) => ({ ...prev, status: next || null }));
+          break;
+        case "valid_upto_list":
+          // Header value is an ISO `YYYY-MM-DD` string; convert back to a Date
+          // so `memoizedFilterPayload` formats it the same way as the advanced
+          // SingleDateInput would.
+          setFilters((prev) => ({
+            ...prev,
+            valid_upto: next ? dayjs(next, "YYYY-MM-DD").toDate() : null,
+          }));
+          break;
+        case "revision":
+          setFilters((prev) => ({ ...prev, revision: next || null }));
+          break;
+        case "reject_remark":
+          setFilters((prev) => ({ ...prev, remark: next || null }));
+          break;
+      }
+      setListCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [],
+  );
+
+  const quotationHeaderFilterValues: QuotationHeaderFilterValues = useMemo(
+    () => ({
+      enquiry_id: filters.enquiry_id ?? "",
+      customer_name: filters.customer_code ?? "",
+      sales_person: filters.sales_person ?? "",
+      origin: filters.origin_code ?? "",
+      destination: filters.destination_code ?? "",
+      status:
+        !filters.status || filters.status === "all" ? "" : filters.status,
+      valid_upto_list: filters.valid_upto
+        ? dayjs(filters.valid_upto).format("YYYY-MM-DD")
+        : "",
+      revision: filters.revision ?? "",
+      reject_remark: filters.remark ?? "",
+    }),
+    [filters],
+  );
 
   // Remove raw API calls - using SearchableSelect instead
 
@@ -2602,17 +2705,266 @@ console.log("currentQuotation: ", currentQuotation);
     }
   }, [filtersApplied]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
+  // ── Debounced refetch on header-filter edit ───────────────────────────────
+  // When `headerFilterTick` advances (the user picked / typed in a column
+  // header), wait for `debouncedHeaderFilterTick` to settle (1000ms) then
+  // refetch via the SAME `refetchFilteredQuotations` the Apply button uses.
+  // We dedupe via `lastHandledHeaderFilterTickRef` so the same tick is never
+  // replayed twice (e.g. on a parent re-render). We also save current
+  // filters + search to the store so the column-header edits survive a
+  // sub-page navigation, mirroring what the Apply button does.
+  useEffect(() => {
+    if (debouncedHeaderFilterTick === 0) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick)
+      return;
+    lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
+
+    setFiltersApplied(true);
+    saveFiltersToStore();
+    setIsInitialLoading(true);
+    void refetchFilteredQuotations().finally(() => setIsInitialLoading(false));
+  }, [debouncedHeaderFilterTick, refetchFilteredQuotations, saveFiltersToStore]);
+
+  // Stable reference — the header-filter `renderInput` memo depends on
+  // `erpTheme`, so an inline object literal (new reference every render)
+  // would make it recompute every render and cascade into the native table
+  // re-rendering needlessly. Same fix we did in EnquiryMaster / RFQMaster.
+  const erpTheme = useMemo<ErpListTheme>(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
   const { border, muted, primary, fontSans } = erpTheme;
+
+  // ── Header column custom inputs ──────────────────────────────────────────
+  // Mirrors the advanced filter section so the column header inputs (visible
+  // only when a user clicks a header) send the SAME payload shape — e.g.
+  // a customer pick from the header sets `filters.customer_code` (not free
+  // text), exactly like the advanced filter SearchableSelect would.
+  const quotationHeaderRenderInput = useMemo<
+    Partial<Record<QuotationHeaderFilterKey, QuotationHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search customer"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_code", "customer_name"]}
+          displayFormat={quotationCustomerDisplayFormat}
+          value={filters.customer_code}
+          displayValue={customerDisplayValue}
+          onChange={(value, selectedData) => {
+            setFilters((prev) => ({
+              ...prev,
+              customer_code: value || null,
+            }));
+            setCustomerDisplayValue(selectedData?.label || null);
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search origin"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={quotationPortDisplayFormat}
+          value={filters.origin_code}
+          displayValue={originDisplayValue}
+          onChange={(value, selectedData) => {
+            setFilters((prev) => ({
+              ...prev,
+              origin_code: value || null,
+            }));
+            setOriginDisplayValue(selectedData?.label || null);
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          size="xs"
+          autoFocus={autoFocus}
+          placeholder="Search destination"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_code", "port_name"]}
+          displayFormat={quotationPortDisplayFormat}
+          value={filters.destination_code}
+          displayValue={destinationDisplayValue}
+          onChange={(value, selectedData) => {
+            setFilters((prev) => ({
+              ...prev,
+              destination_code: value || null,
+            }));
+            setDestinationDisplayValue(selectedData?.label || null);
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          minSearchLength={3}
+          dropdownZIndex={1000}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+          className="filter-searchable-select"
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          searchable
+          clearable
+          size="xs"
+          data={salespersonOptions}
+          disabled={salespersonsLoading}
+          value={filters.sales_person}
+          onChange={(value) => {
+            setFilters((prev) => ({
+              ...prev,
+              sales_person: value || null,
+            }));
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={[
+            { value: "GAINED", label: "Gained" },
+            { value: "LOST", label: "Lost" },
+            { value: "QUOTE CREATED", label: "Quote Created" },
+            { value: "all", label: "All" },
+          ]}
+          value={filters.status}
+          onChange={(value) => {
+            setFilters((prev) => ({ ...prev, status: value || null }));
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_upto_list: ({ autoFocus, onClose }) => (
+        <SingleDateInput
+          autoFocus={autoFocus}
+          placeholder="YYYY-MM-DD"
+          size="xs"
+          value={filters.valid_upto}
+          onChange={(date) => {
+            setFilters((prev) => ({ ...prev, valid_upto: date }));
+            setListCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (date) onClose();
+          }}
+          allowDeselection
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filters.customer_code,
+      filters.origin_code,
+      filters.destination_code,
+      filters.sales_person,
+      filters.status,
+      filters.valid_upto,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      erpTheme,
+    ],
+  );
+
+  /**
+   * Translates the underlying code (e.g. `INMAA`) into the user-friendly
+   * label (e.g. `Chennai (INMAA)`) for the collapsed column header, mirroring
+   * what the advanced section's SearchableSelect / Select originally showed.
+   */
+  const quotationHeaderDisplayFormatter = useMemo<
+    Partial<Record<QuotationHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => customerDisplayValue ?? raw,
+      origin: (raw) => originDisplayValue ?? raw,
+      destination: (raw) => destinationDisplayValue ?? raw,
+      status: (raw) => {
+        const opts: Record<string, string> = {
+          GAINED: "Gained",
+          LOST: "Lost",
+          "QUOTE CREATED": "Quote Created",
+          all: "All",
+        };
+        return opts[raw] ?? raw;
+      },
+      valid_upto_list: (raw) =>
+        raw ? dayjs(raw, "YYYY-MM-DD").format(dateFormat) : raw,
+    }),
+    [
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      dateFormat,
+    ],
+  );
+
+  const quotationHeaderFiltersProp: QuotationHeaderFiltersProp = useMemo(
+    () => ({
+      values: quotationHeaderFilterValues,
+      onChange: handleQuotationHeaderFilterChange,
+      renderInput: quotationHeaderRenderInput,
+      displayFormatter: quotationHeaderDisplayFormatter,
+    }),
+    [
+      quotationHeaderFilterValues,
+      handleQuotationHeaderFilterChange,
+      quotationHeaderRenderInput,
+      quotationHeaderDisplayFormatter,
+    ],
+  );
 
   if (isApprovalMode && !isManagerOrAdmin) {
     return (
@@ -3140,68 +3492,72 @@ console.log("currentQuotation: ", currentQuotation);
                   }}
                 />
               ),
-              children:
-                tableLoading || isFetching ? (
-                  <ERPListTableLoading
-                    theme={erpTheme}
-                    message={
-                      isInitialLoading ? "Fetching quotations…" : "Loading quotations…"
-                    }
-                  />
-                ) : (
+              // Always render the native table so its `<thead>` (column
+              // filters) and the pagination footer stay visible during a
+              // refetch. The loader is rendered INSIDE `<tbody>` via the
+              // `loading` prop — this also preserves any open header-filter
+              // editor across refetches (it lives in the table's state).
+              children: (
+                <Box
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    minHeight: 0,
+                    position: "relative",
+                  }}
+                >
                   <Box
                     style={{
                       flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
                       minHeight: 0,
-                      position: "relative",
+                      overflow: "auto",
+                      WebkitOverflowScrolling: "touch",
                     }}
                   >
+                    <QuotationListNativeTable
+                      theme={erpTheme}
+                      rows={quotationTableRows}
+                      visible={quotationVisibleColumns}
+                      dateFormat={dateFormat}
+                      isEmpty={quotationTableRows.length === 0}
+                      onFetchRevision={fetchRevision}
+                      rowMenuCtx={rowMenuCtx}
+                      headerFilters={quotationHeaderFiltersProp}
+                      loading={tableLoading || isFetching}
+                      loadingMessage={
+                        isInitialLoading
+                          ? "Fetching quotations…"
+                          : "Loading quotations…"
+                      }
+                    />
+                  </Box>
+                  {isApprovalMode && isApprovingQuotation && (
                     <Box
                       style={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflow: "auto",
-                        WebkitOverflowScrolling: "touch",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(255, 255, 255, 0.8)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                        borderRadius: 8,
                       }}
                     >
-                      <QuotationListNativeTable
-                        theme={erpTheme}
-                        rows={quotationTableRows}
-                        visible={quotationVisibleColumns}
-                        dateFormat={dateFormat}
-                        isEmpty={quotationTableRows.length === 0}
-                        onFetchRevision={fetchRevision}
-                        rowMenuCtx={rowMenuCtx}
-                      />
+                      <Stack align="center" gap="md">
+                        <Loader size="lg" color="#105476" />
+                        <Text c="dimmed" fw={500}>
+                          Approving quotation...
+                        </Text>
+                      </Stack>
                     </Box>
-                    {isApprovalMode && isApprovingQuotation && (
-                      <Box
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          backgroundColor: "rgba(255, 255, 255, 0.8)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          zIndex: 1000,
-                          borderRadius: 8,
-                        }}
-                      >
-                        <Stack align="center" gap="md">
-                          <Loader size="lg" color="#105476" />
-                          <Text c="dimmed" fw={500}>
-                            Approving quotation...
-                          </Text>
-                        </Stack>
-                      </Box>
-                    )}
-                  </Box>
-                ),
+                  )}
+                </Box>
+              ),
             }}
           />
         </Box>

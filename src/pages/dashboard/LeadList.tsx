@@ -1,4 +1,15 @@
-import { useEffect, useMemo, useRef, useState, startTransition, useCallback } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  useCallback,
+  type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   ActionIcon,
   Button,
@@ -17,10 +28,12 @@ import {
   UnstyledButton,
   MantineProvider,
   Center,
+  Loader,
 } from "@mantine/core";
 import {
   IconSearch,
   IconFilter,
+  IconFilterFilled,
   IconPlus,
   IconEdit,
   IconDotsVertical,
@@ -41,7 +54,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   DEFAULT_ERP_LIST_THEME,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
@@ -62,6 +74,7 @@ import {
   erpListStickyActionTdStyle,
   erpListDataRowProps,
 } from "../../components";
+import SingleDateInput from "../../components/SingleDateInput";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -104,8 +117,24 @@ type LeadData = {
 };
 
 type FilterState = {
+  // Existing
   assigned_to: string | null;
   status: string | null;
+  // Newly supported (mirrors the backend `filters_payload` keys exactly):
+  // `name` -> Lead company name; `contact_*` / `email_id` / `location` use
+  // backend `icontains`; `created_by` filters by username; `interest_level`
+  // is sent inside `remark: { interest_level }` (the backend supports a
+  // dict for the JSON `remark` field); `created_at` / `updated_at` are
+  // single ISO `YYYY-MM-DD` strings matched server-side via `__date=`.
+  name: string | null;
+  contact_person: string | null;
+  contact_number: string | null;
+  email_id: string | null;
+  location: string | null;
+  created_by: string | null;
+  interest_level: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type UserMasterData = {
@@ -126,6 +155,68 @@ const statusOptions = [
   { label: "Converted", value: "Converted" },
   { label: "Lost", value: "Lost" },
 ];
+
+/**
+ * Interest level picker. Sent to the API as `remark: { interest_level: <value> }`
+ * because the backend filters the `remark` JSON field by exact key/value match
+ * when given a dict, which is what `LeadData.remark.interest_level` stores.
+ */
+const interestLevelOptions = [
+  { label: "High", value: "High" },
+  { label: "Medium", value: "Medium" },
+  { label: "Low", value: "Low" },
+];
+
+/**
+ * Stable `classNames` for the date column-header `SingleDateInput`s. Kept at
+ * module scope so the object reference does not churn `renderInput`'s memo.
+ */
+const LEAD_HEADER_DATE_INPUT_CLASSNAMES: Record<string, string> = {
+  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+};
+
+/** Reset-shape for `FilterState` -- used in initial form values, default applied filters, and Clear All. */
+const EMPTY_LEAD_FILTERS: FilterState = {
+  assigned_to: null,
+  status: null,
+  name: null,
+  contact_person: null,
+  contact_number: null,
+  email_id: null,
+  location: null,
+  created_by: null,
+  interest_level: null,
+  created_at: null,
+  updated_at: null,
+};
+
+/** Picks a single field off the restored filter blob (or `null` when absent / falsy). */
+function pickRestoredFilter(
+  restoredFilters: Partial<FilterState> | null | undefined,
+  key: keyof FilterState,
+): string | null {
+  const v = restoredFilters?.[key];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** Merges a (possibly partial) restored filters blob into the full `FilterState` shape. */
+function mergeRestoredLeadFilters(
+  restoredFilters: Partial<FilterState> | null | undefined,
+): FilterState {
+  return {
+    assigned_to: pickRestoredFilter(restoredFilters, "assigned_to"),
+    status: pickRestoredFilter(restoredFilters, "status"),
+    name: pickRestoredFilter(restoredFilters, "name"),
+    contact_person: pickRestoredFilter(restoredFilters, "contact_person"),
+    contact_number: pickRestoredFilter(restoredFilters, "contact_number"),
+    email_id: pickRestoredFilter(restoredFilters, "email_id"),
+    location: pickRestoredFilter(restoredFilters, "location"),
+    created_by: pickRestoredFilter(restoredFilters, "created_by"),
+    interest_level: pickRestoredFilter(restoredFilters, "interest_level"),
+    created_at: pickRestoredFilter(restoredFilters, "created_at"),
+    updated_at: pickRestoredFilter(restoredFilters, "updated_at"),
+  };
+}
 
 type LeadVisibleColumns = {
   sno: boolean;
@@ -158,6 +249,267 @@ const DEFAULT_LEAD_VISIBLE_COLUMNS: LeadVisibleColumns = {
   createdAt: true,
   updatedAt: true,
 };
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Column-header filter primitives
+ *
+ * Mirrors the EnquiryListNativeTables.tsx pattern: a click on the column
+ * header label collapses it into an inline editor (`FilterableHeaderEdit`)
+ * which auto-focuses, auto-blurs back to the label, and supports Escape to
+ * cancel. Each filterable column can supply a richer `renderInput` (e.g. a
+ * `Select` of users / statuses) so the column header reuses the SAME control
+ * the advanced-filter drawer offers -- single source of truth, identical
+ * API payload shape.
+ *
+ * `LeadList` only exposes server-backed filters that the existing
+ * `buildLeadPayload` already understands (`assigned_to`, `status`), so the
+ * key set is intentionally small. No new payload keys, no client-side row
+ * filtering: the column header just writes into the existing
+ * `appliedFilters` state and lets React Query refetch.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One header-filter key per backend filter field that the column header is
+ * allowed to write into. The backend filters `created_at` / `updated_at`
+ * as single dates (`__date=...`), so each maps 1:1 with a single ISO
+ * `YYYY-MM-DD` string in `FilterState`.
+ */
+export type LeadHeaderFilterKey =
+  | "name"
+  | "contact_person"
+  | "contact_number"
+  | "email_id"
+  | "location"
+  | "status"
+  | "assigned_to"
+  | "created_by"
+  | "interest_level"
+  | "created_at"
+  | "updated_at";
+
+export type LeadHeaderFilterValues = Record<LeadHeaderFilterKey, string>;
+
+export type LeadHeaderInputContext = {
+  /** Whether the input should auto-focus on mount (always true for now). */
+  autoFocus: boolean;
+  /** Imperatively collapse the cell back to label mode (after a pick). */
+  onClose: () => void;
+};
+
+export type LeadHeaderRenderInput = (ctx: LeadHeaderInputContext) => ReactNode;
+
+export type LeadHeaderFiltersProp = {
+  values: LeadHeaderFilterValues;
+  onChange: (key: LeadHeaderFilterKey, value: string) => void;
+  renderInput?: Partial<Record<LeadHeaderFilterKey, LeadHeaderRenderInput>>;
+  /**
+   * Optional per-column label formatter for the collapsed header. Used when
+   * the raw filter value is a code or sentinel that should display as a
+   * friendlier label (e.g. `Contacted` instead of the raw value).
+   */
+  displayFormatter?: Partial<Record<LeadHeaderFilterKey, (value: string) => string>>;
+};
+
+/**
+ * Identifies which column header is currently in edit mode. Each entry maps
+ * 1:1 to a `LeadHeaderFilterKey`.
+ */
+type LeadEditingColumn = LeadHeaderFilterKey | null;
+
+const LEAD_HEADER_FILTER_TEXTINPUT_STYLES = {
+  input: {
+    height: 26,
+    minHeight: 26,
+    fontSize: 12,
+    paddingLeft: 8,
+    paddingRight: 24,
+  },
+} as const;
+
+/** Fallback TextInput editor used when no `renderInput` is supplied for a column. */
+function HeaderFilterInput({
+  value,
+  onChange,
+  placeholder = "Filter...",
+  ariaLabel,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+  autoFocus?: boolean;
+}) {
+  // Local typing buffer. We keep every keystroke local and only bubble the
+  // value upstream after 1000ms of idle, so React Query does not refetch on
+  // every character. The X-clear button bypasses this debounce for a snappy
+  // discrete UX. External value changes (Clear-All, restore, advanced filter
+  // Apply) are synced back into the local buffer via the effect below.
+  const [localValue, setLocalValue] = useState(value);
+  const [debouncedLocalValue] = useDebouncedValue(localValue, 1000);
+  const lastEmittedRef = useRef(value);
+
+  useEffect(() => {
+    // If the new external value equals what we last emitted, it's just our
+    // own commit echoing back -- ignore. Otherwise (Clear-All / restore /
+    // advanced-filter Apply), accept the external value. We also always
+    // honour an explicit clear ("") so Clear-All wins over uncommitted typing.
+    if (value !== lastEmittedRef.current || value === "") {
+      setLocalValue(value);
+      lastEmittedRef.current = value;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  useEffect(() => {
+    if (debouncedLocalValue !== lastEmittedRef.current) {
+      lastEmittedRef.current = debouncedLocalValue;
+      onChange(debouncedLocalValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedLocalValue]);
+
+  return (
+    <TextInput
+      size="xs"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.currentTarget.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      autoFocus={autoFocus}
+      styles={LEAD_HEADER_FILTER_TEXTINPUT_STYLES}
+      rightSection={
+        localValue ? (
+          <ActionIcon
+            variant="transparent"
+            size="xs"
+            color="gray"
+            onMouseDown={(e) => {
+              // Prevent the input from blurring before our handler can fire
+              e.preventDefault();
+            }}
+            onClick={() => {
+              // Discrete user action -- commit immediately, bypass debounce.
+              setLocalValue("");
+              lastEmittedRef.current = "";
+              onChange("");
+            }}
+            aria-label={`Clear ${ariaLabel}`}
+          >
+            <IconX size={12} />
+          </ActionIcon>
+        ) : null
+      }
+    />
+  );
+}
+
+/** Clickable header label that opens the inline editor; shows the active filter when set. */
+function FilterableHeaderLabel({
+  label,
+  filterDisplay,
+  onClick,
+  theme,
+  align = "left",
+}: {
+  label: string;
+  filterDisplay: string;
+  onClick: () => void;
+  theme: { fontSans: string; muted: string };
+  align?: "left" | "center" | "right";
+}) {
+  const isFiltered = filterDisplay.length > 0;
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      className="erp-header-filter-fade"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        fontFamily: theme.fontSans,
+        fontWeight: 500,
+        cursor: "pointer",
+        textAlign: align,
+        justifyContent:
+          align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        minWidth: 0,
+      }}
+      title={isFiltered ? `Filter: ${filterDisplay}\nClick to edit` : `Click to filter`}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {isFiltered ? filterDisplay : label}
+      </span>
+      {isFiltered && <IconFilterFilled size={14} color={theme.muted} />}
+    </UnstyledButton>
+  );
+}
+
+/**
+ * Wraps the editor input(s). Auto-focuses children on mount, collapses on
+ * Escape, and collapses on blur once focus leaves the cell entirely (so a
+ * Tab inside the cell does not flicker the editor closed).
+ */
+function FilterableHeaderEdit({
+  onCollapse,
+  children,
+}: {
+  /**
+   * Must use the functional-set form
+   * (`setState((cur) => cur === me ? null : cur)`) so a click on a different
+   * header that already switched the editing column is not undone by this
+   * collapse handler.
+   */
+  onCollapse: () => void;
+  children: ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleBlur = useCallback(
+    (_e: ReactFocusEvent) => {
+      setTimeout(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (!container.contains(document.activeElement)) {
+          onCollapse();
+        }
+      }, 0);
+    },
+    [onCollapse],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCollapse();
+      }
+    },
+    [onCollapse],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="erp-header-filter-fade"
+      style={{ width: "100%", minWidth: 0 } as CSSProperties}
+    >
+      {children}
+    </div>
+  );
+}
 
 function LeadsStatusPill({ status }: { status: string | undefined | null }) {
   const s = (status || "").trim() || "—";
@@ -250,7 +602,7 @@ function LeadList() {
       ? restoreFiltersDataRef.current.searchQuery || ""
       : ""
   );
-  const [debounced] = useDebouncedValue(searchQuery, 500);
+  const [debounced] = useDebouncedValue(searchQuery, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -268,23 +620,15 @@ function LeadList() {
 
   // Filter form
   const filterForm = useForm<FilterState>({
-    initialValues: {
-      assigned_to: null,
-      status: null,
-    },
+    initialValues: EMPTY_LEAD_FILTERS,
   });
 
   // State to store the actual applied filter values - initialize from restoreFilters if present
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>({
-    assigned_to:
-      shouldRestore && restoreFiltersDataRef.current?.filters?.assigned_to !== undefined
-        ? restoreFiltersDataRef.current.filters.assigned_to || null
-        : null,
-    status:
-      shouldRestore && restoreFiltersDataRef.current?.filters?.status !== undefined
-        ? restoreFiltersDataRef.current.filters.status || null
-        : null,
-  });
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(
+    shouldRestore && restoreFiltersDataRef.current?.filters
+      ? mergeRestoredLeadFilters(restoreFiltersDataRef.current.filters)
+      : EMPTY_LEAD_FILTERS,
+  );
   
   const [filtersApplied, setFiltersApplied] = useState(
     shouldRestore && restoreFiltersDataRef.current?.filtersApplied !== undefined
@@ -306,13 +650,33 @@ function LeadList() {
 
   // Memoized filter payload - includes filters + search together
   // Use ONLY debounced value for search to prevent API calls on every keystroke
-  // Always include search field in payload (even if empty) to match API structure
+  // Always include search field in payload (even if empty) to match API structure.
+  // Each backend filter key is added only when the corresponding `appliedFilters`
+  // slot is non-empty so we don't accidentally over-filter.
   const buildLeadPayload = useMemo(() => {
-    const payload: any = {
-      assigned_to: appliedFiltersRef.current.assigned_to || "",
-      status: appliedFiltersRef.current.status || "",
-      search: debounced.trim() || "", // Always include search field (use debounced value)
+    const f = appliedFiltersRef.current;
+    const payload: Record<string, unknown> = {
+      // existing API contract: assigned_to + status are always sent (empty
+      // string == "no filter"). All other keys are optional and only added
+      // when set.
+      assigned_to: f.assigned_to || "",
+      status: f.status || "",
+      search: debounced.trim() || "",
     };
+
+    if (f.name) payload.name = f.name;
+    if (f.contact_person) payload.contact_person = f.contact_person;
+    if (f.contact_number) payload.contact_number = f.contact_number;
+    if (f.email_id) payload.email_id = f.email_id;
+    if (f.location) payload.location = f.location;
+    if (f.created_by) payload.created_by = f.created_by;
+    // The `remark` field is a JSONField. The backend accepts a dict whose
+    // entries are matched as exact key/value pairs -- which is exactly what
+    // `LeadData.remark.interest_level` stores.
+    if (f.interest_level) payload.remark = { interest_level: f.interest_level };
+    // Backend matches `created_at` / `updated_at` with `__date=<ISO YYYY-MM-DD>`.
+    if (f.created_at) payload.created_at = f.created_at;
+    if (f.updated_at) payload.updated_at = f.updated_at;
 
     return payload;
   }, [appliedFilters, debounced]); // Removed searchQuery from dependencies to use only debounced value
@@ -503,9 +867,8 @@ function LeadList() {
 
   // Helper function to check if filters have real values (not just null keys)
   const hasRealFilterValues = useCallback((filters: FilterState): boolean => {
-    return Boolean(
-      (filters.assigned_to && filters.assigned_to.trim() !== "") ||
-      (filters.status && filters.status.trim() !== "")
+    return (Object.values(filters) as Array<string | null>).some(
+      (v) => typeof v === "string" && v.trim() !== "",
     );
   }, []);
 
@@ -514,19 +877,13 @@ function LeadList() {
       // Check if there are any actual filter values (including search)
       // Search is treated as a filter and requires filtersApplied to be true
       const hasFilterValues =
-        filterForm.values.assigned_to ||
-        filterForm.values.status ||
-        debounced.trim(); // Include search value
+        hasRealFilterValues(filterForm.values) || debounced.trim();
 
       if (!hasFilterValues) {
         // If no filter values, show unfiltered data
         setFiltersApplied(false);
-        const emptyFilters = {
-          assigned_to: null,
-          status: null,
-        };
-        setAppliedFilters(emptyFilters);
-        appliedFiltersRef.current = emptyFilters; // Sync ref immediately
+        setAppliedFilters(EMPTY_LEAD_FILTERS);
+        appliedFiltersRef.current = EMPTY_LEAD_FILTERS; // Sync ref immediately
 
         // Clear filters and search from store
         clearStoreFilters(LIST_KEY);
@@ -546,10 +903,7 @@ function LeadList() {
       setFiltersApplied(true);
 
       // Store the current filter form values as applied filters
-      const newAppliedFilters = {
-        assigned_to: filterForm.values.assigned_to,
-        status: filterForm.values.status,
-      };
+      const newAppliedFilters: FilterState = { ...filterForm.values };
       setAppliedFilters(newAppliedFilters);
       appliedFiltersRef.current = newAppliedFilters;
 
@@ -581,12 +935,8 @@ function LeadList() {
     setFiltersApplied(false);
 
     // Reset applied filters state
-    const emptyFilters = {
-      assigned_to: null,
-      status: null,
-    };
-    setAppliedFilters(emptyFilters);
-    appliedFiltersRef.current = emptyFilters; // Sync ref immediately
+    setAppliedFilters(EMPTY_LEAD_FILTERS);
+    appliedFiltersRef.current = EMPTY_LEAD_FILTERS; // Sync ref immediately
 
     // Clear filters and search in store
     clearStoreFilters(LIST_KEY);
@@ -666,18 +1016,16 @@ function LeadList() {
 
       // 1️⃣ Restore filters
       let hasFilters = false;
-      const restoredFilters = restoredState.filters as FilterState;
-      console.log("restored filters---------------",restoredFilters)
+      const restoredFilters = mergeRestoredLeadFilters(
+        restoredState.filters as Partial<FilterState> | undefined,
+      );
+      console.log("restored filters---------------", restoredFilters);
       // Check for REAL filter values (not just null keys)
-      if (restoredFilters && hasRealFilterValues(restoredFilters)) {
+      if (hasRealFilterValues(restoredFilters)) {
         setAppliedFilters(restoredFilters);
-        appliedFiltersRef.current.assigned_to = restoredFilters.assigned_to;
-        appliedFiltersRef.current.status = restoredFilters.status;
-        // Restore filter form values
-        filterForm.setValues({
-          assigned_to: restoredFilters.assigned_to || null,
-          status: restoredFilters.status || null,
-        });
+        appliedFiltersRef.current = restoredFilters;
+        // Restore filter form values (full FilterState shape)
+        filterForm.setValues(restoredFilters);
         hasFilters = true;
       }
 
@@ -695,10 +1043,10 @@ function LeadList() {
 
       // Wait for state updates to flush and buildLeadPayload useMemo to recalculate
       // Increased delay to ensure:
-      // 1. debounced search value is updated (debounce is 500ms)
+      // 1. debounced search value is updated (debounce is 1000ms)
       // 2. appliedFilters state triggers useMemo recalculation
       // 3. buildLeadPayload reads updated values from appliedFiltersRef.current
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
 
       // 3️⃣ Fetch data based on restored state
       if (hasFilters || hasSearch) {
@@ -733,21 +1081,20 @@ function LeadList() {
       const refreshData = async () => {
         // Check if we have filters or search from store
         const restoredState = getState(LIST_KEY);
-        const hasActiveFilters = restoredState?.filters && hasRealFilterValues(restoredState.filters as FilterState);
+        const hasActiveFilters = restoredState?.filters && hasRealFilterValues(mergeRestoredLeadFilters(restoredState.filters as Partial<FilterState>));
         const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
 
         // If we have filters/search in store, restore them first
         if (restoredState && (hasActiveFilters || hasActiveSearch)) {
           // Restore filters from store if they exist
           if (hasActiveFilters) {
-            const restoredFilters = restoredState.filters as FilterState;
+            const restoredFilters = mergeRestoredLeadFilters(
+              restoredState.filters as Partial<FilterState> | undefined,
+            );
             setAppliedFilters(restoredFilters);
             appliedFiltersRef.current = restoredFilters; // Update ref immediately
-            // Restore filter form values
-            filterForm.setValues({
-              assigned_to: restoredFilters.assigned_to || null,
-              status: restoredFilters.status || null,
-            });
+            // Restore filter form values (full FilterState shape)
+            filterForm.setValues(restoredFilters);
           }
 
           // Restore search from store if it exists
@@ -761,7 +1108,7 @@ function LeadList() {
           // Wait for state updates to flush and buildLeadPayload to recalculate
           // This ensures buildLeadPayload will use the restored values from refs
           // Increased delay to ensure debounced value is updated and useMemo recalculates
-          await new Promise((resolve) => setTimeout(resolve, 600));
+          await new Promise((resolve) => setTimeout(resolve, 1100));
 
           // Manually refetch filtered leads AFTER restored state + refs are synced + useMemo recalculated
           // This ensures the payload uses preserved filters/search instead of defaults
@@ -821,17 +1168,13 @@ function LeadList() {
       // Set restore guard FIRST to block all refetch logic during restore
       setIsRestoringFilters(true);
 
-      // Restore filter form state
-      filterForm.setValues({
-        assigned_to: restoreFiltersData.filters?.assigned_to || null,
-        status: restoreFiltersData.filters?.status || null,
-      });
+      // Restore filter form state -- full FilterState shape from restore blob
+      const restoredFilters = mergeRestoredLeadFilters(
+        restoreFiltersData.filters as Partial<FilterState> | undefined,
+      );
+      filterForm.setValues(restoredFilters);
 
       // Restore applied filters state FIRST (synchronously) to ensure refs are updated
-      const restoredFilters = {
-        assigned_to: restoreFiltersData.filters?.assigned_to || null,
-        status: restoreFiltersData.filters?.status || null,
-      };
       setAppliedFilters(restoredFilters);
       appliedFiltersRef.current = restoredFilters; // Sync ref immediately BEFORE startTransition
 
@@ -886,7 +1229,7 @@ function LeadList() {
           // 2. appliedFiltersRef.current is fully synchronized
           // 3. appliedFilters state change triggers useMemo recalculation
           // 4. buildLeadPayload reads updated values from appliedFiltersRef.current
-          await new Promise((resolve) => setTimeout(resolve, 600));
+          await new Promise((resolve) => setTimeout(resolve, 1100));
 
           // Manually refetch filtered leads AFTER:
           // - filtersApplied is set (query is enabled)
@@ -1059,6 +1402,367 @@ function LeadList() {
     refetchLeads();
   }, [pageIndex, pageSize, filtersApplied, debounced, refetchLeads]);
 
+  /* ───────────── Column header filters (click-to-edit, EnquiryMaster pattern)
+   * Strictly NON-INVASIVE: the column header inputs live on top of the
+   * EXISTING `appliedFilters` state. They DO NOT introduce any new payload
+   * structure, separate React Query, search path, or store key. A change to
+   * a column header writes directly into `appliedFilters` (and the advanced
+   * filter form) -- the existing `buildLeadPayload` useMemo then re-builds
+   * and React Query auto-refetches via queryKey, exactly the way the
+   * advanced-filter `Apply` button does today.
+   * ─────────────────────────────────────────────────────────────────────── */
+
+  // Which column header is currently in edit mode (only one at a time).
+  const [editingHeaderColumn, setEditingHeaderColumn] =
+    useState<LeadEditingColumn>(null);
+
+  // Bumped on every header-filter change. A debounced effect below reads
+  // this and calls `refetchFilteredLeads` for safety -- React Query's
+  // queryKey change already triggers a refetch, but the tick gives us a
+  // single, stable, debounced refetch path for parity with EnquiryMaster.
+  const [headerFilterTick, setHeaderFilterTick] = useState(0);
+  // 1100ms (slightly after the HeaderFilterInput's 1000ms commit debounce) so
+  // the safety-net refetch trails -- and is therefore deduplicated by -- the
+  // queryKey-driven auto-refetch that fires once `appliedFilters` commits.
+  const [debouncedHeaderFilterTick] = useDebouncedValue(headerFilterTick, 1100);
+  const lastHandledHeaderFilterTickRef = useRef(0);
+
+  const openHeaderEditor = useCallback((col: NonNullable<LeadEditingColumn>) => {
+    setEditingHeaderColumn(col);
+  }, []);
+
+  // IMPORTANT: functional setter, so a fast click on another header that
+  // already switched the editing column is not undone by this collapse.
+  const makeCollapseHeader = useCallback(
+    (col: NonNullable<LeadEditingColumn>) => () => {
+      setEditingHeaderColumn((cur) => (cur === col ? null : cur));
+    },
+    [],
+  );
+
+  // Header values are derived from `appliedFilters` so the header inputs and
+  // the advanced filter drawer stay in sync via a single source of truth.
+  const leadHeaderFilterValues: LeadHeaderFilterValues = useMemo(
+    () => ({
+      name: appliedFilters.name ?? "",
+      contact_person: appliedFilters.contact_person ?? "",
+      contact_number: appliedFilters.contact_number ?? "",
+      email_id: appliedFilters.email_id ?? "",
+      location: appliedFilters.location ?? "",
+      status: appliedFilters.status ?? "",
+      assigned_to: appliedFilters.assigned_to ?? "",
+      created_by: appliedFilters.created_by ?? "",
+      interest_level: appliedFilters.interest_level ?? "",
+      created_at: appliedFilters.created_at ?? "",
+      updated_at: appliedFilters.updated_at ?? "",
+    }),
+    [appliedFilters],
+  );
+
+  /**
+   * Atomically patch one or more filter keys at once.
+   *
+   * Used by both single-key header inputs (Select / TextInput) AND the
+   * compound date editors which commit `_from`+`_to` together. Reuses the
+   * EXISTING applied-filters / store / filtersApplied wiring -- no new
+   * payload keys, no client-side filtering. After the state update,
+   * `buildLeadPayload` re-memos and React Query auto-refetches via queryKey.
+   */
+  const handleLeadHeaderFilterPatch = useCallback(
+    (patch: Partial<FilterState>) => {
+      const newApplied: FilterState = {
+        ...appliedFiltersRef.current,
+        ...patch,
+      };
+
+      // 1) advanced filter drawer stays in sync for every patched key
+      (Object.entries(patch) as Array<[keyof FilterState, string | null]>).forEach(
+        ([k, v]) => {
+          filterForm.setFieldValue(k, v);
+        },
+      );
+
+      // 2) applied filters state + ref (the ref is what `buildLeadPayload` reads)
+      setAppliedFilters(newApplied);
+      appliedFiltersRef.current = newApplied;
+
+      // 3) persist to global store so navigations restore correctly
+      setStoreFilters(LIST_KEY, newApplied);
+
+      // 4) flip filtersApplied based on whether any real filter / search remains
+      const hasFilters = hasRealFilterValues(newApplied);
+      const hasSearch = Boolean(searchQuery.trim());
+      setFiltersApplied(hasFilters || hasSearch);
+
+      // 5) reset to first page (same as advanced-filter Apply does)
+      setPageIndex(0);
+
+      // 6) bump tick for the debounced refetch fallback
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [filterForm, hasRealFilterValues, searchQuery, setStoreFilters],
+  );
+
+  /** Single-key wrapper -- this is what `LeadHeaderFiltersProp.onChange` calls. */
+  const handleLeadHeaderFilterChange = useCallback(
+    (key: LeadHeaderFilterKey, value: string) => {
+      handleLeadHeaderFilterPatch({ [key]: value || null } as Partial<FilterState>);
+    },
+    [handleLeadHeaderFilterPatch],
+  );
+
+  // Display formatter: friendlier label for the collapsed header. Reuses the
+  // existing option arrays so the labels stay consistent with the drawer.
+  // Dates are formatted with the user's `dateFormat`.
+  const leadHeaderDisplayFormatter = useMemo<
+    Partial<Record<LeadHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      status: (raw) =>
+        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+      assigned_to: (raw) =>
+        userOptions.find((o) => o.value === raw)?.label ?? raw,
+      created_by: (raw) =>
+        userOptions.find((o) => o.value === raw)?.label ?? raw,
+      interest_level: (raw) =>
+        interestLevelOptions.find((o) => o.value === raw)?.label ?? raw,
+      created_at: (raw) => (raw ? dayjs(raw).format(dateFormat) : raw),
+      updated_at: (raw) => (raw ? dayjs(raw).format(dateFormat) : raw),
+    }),
+    [userOptions, dateFormat],
+  );
+
+  // Stable styles for the SingleDateInputs used in the date column headers.
+  // Memoised so they don't churn `leadHeaderRenderInput`'s identity on every
+  // render (the editors look like the other Selects in the filter drawer).
+  const leadHeaderDateInputStyles = useMemo(
+    () =>
+      erpListFilterUnifiedMantineStyles(
+        erpTheme,
+      ) as unknown as Record<
+        string,
+        CSSProperties & Record<string, unknown>
+      >,
+    [erpTheme],
+  );
+
+  // Per-column rich editors -- mirror the advanced filter drawer's controls
+  // exactly so the column header sends the SAME payload value the advanced
+  // filter would (no free-text drift for Select-backed columns; the JSON
+  // remark / location text fields fall back to the default TextInput).
+  const leadHeaderRenderInput = useMemo<
+    Partial<Record<LeadHeaderFilterKey, LeadHeaderRenderInput>>
+  >(
+    () => ({
+      status: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Status"
+          searchable
+          clearable
+          size="xs"
+          data={statusOptions}
+          value={appliedFilters.status || ""}
+          onChange={(value) => {
+            handleLeadHeaderFilterChange("status", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      assigned_to: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={usersLoading ? "Loading users…" : "Assigned to"}
+          searchable
+          clearable
+          size="xs"
+          data={userOptions}
+          disabled={usersLoading}
+          value={appliedFilters.assigned_to || ""}
+          onChange={(value) => {
+            handleLeadHeaderFilterChange("assigned_to", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      created_by: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={usersLoading ? "Loading users…" : "Created by"}
+          searchable
+          clearable
+          size="xs"
+          data={userOptions}
+          disabled={usersLoading}
+          value={appliedFilters.created_by || ""}
+          onChange={(value) => {
+            handleLeadHeaderFilterChange("created_by", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      interest_level: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder="Interest"
+          searchable
+          clearable
+          size="xs"
+          data={interestLevelOptions}
+          value={appliedFilters.interest_level || ""}
+          onChange={(value) => {
+            handleLeadHeaderFilterChange("interest_level", value || "");
+            if (value) onClose();
+          }}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      // Single date picker -- the backend matches `created_at__date=<ISO>`.
+      created_at: ({ onClose }) => (
+        <SingleDateInput
+          value={
+            appliedFilters.created_at
+              ? dayjs(appliedFilters.created_at).toDate()
+              : null
+          }
+          onChange={(date) => {
+            handleLeadHeaderFilterChange(
+              "created_at",
+              date ? dayjs(date).format("YYYY-MM-DD") : "",
+            );
+            // Match `Select` UX: collapse the editor right after a pick.
+            if (date) onClose();
+          }}
+          placeholder="Created at"
+          size="xs"
+          allowDeselection
+          classNames={LEAD_HEADER_DATE_INPUT_CLASSNAMES}
+          styles={leadHeaderDateInputStyles}
+        />
+      ),
+      // Single date picker -- the backend matches `updated_at__date=<ISO>`.
+      updated_at: ({ onClose }) => (
+        <SingleDateInput
+          value={
+            appliedFilters.updated_at
+              ? dayjs(appliedFilters.updated_at).toDate()
+              : null
+          }
+          onChange={(date) => {
+            handleLeadHeaderFilterChange(
+              "updated_at",
+              date ? dayjs(date).format("YYYY-MM-DD") : "",
+            );
+            if (date) onClose();
+          }}
+          placeholder="Updated at"
+          size="xs"
+          allowDeselection
+          classNames={LEAD_HEADER_DATE_INPUT_CLASSNAMES}
+          styles={leadHeaderDateInputStyles}
+        />
+      ),
+    }),
+    [
+      appliedFilters.status,
+      appliedFilters.assigned_to,
+      appliedFilters.created_by,
+      appliedFilters.interest_level,
+      appliedFilters.created_at,
+      appliedFilters.updated_at,
+      userOptions,
+      usersLoading,
+      handleLeadHeaderFilterChange,
+      leadHeaderDateInputStyles,
+      erpTheme,
+    ],
+  );
+
+  const leadHeaderFiltersProp: LeadHeaderFiltersProp = useMemo(
+    () => ({
+      values: leadHeaderFilterValues,
+      onChange: handleLeadHeaderFilterChange,
+      renderInput: leadHeaderRenderInput,
+      displayFormatter: leadHeaderDisplayFormatter,
+    }),
+    [
+      leadHeaderFilterValues,
+      handleLeadHeaderFilterChange,
+      leadHeaderRenderInput,
+      leadHeaderDisplayFormatter,
+    ],
+  );
+
+  /**
+   * Renders the inner content of a single-key filterable `<th>` (the
+   * click-to-edit label + the inline editor). Centralises the boilerplate
+   * shared by every non-date column header so the table render stays small.
+   */
+  const renderFilterableHeader = useCallback(
+    (
+      columnId: NonNullable<LeadEditingColumn>,
+      filterKey: LeadHeaderFilterKey,
+      label: string,
+      ariaLabel: string = `Filter ${label}`,
+    ) => {
+      const value = leadHeaderFiltersProp.values[filterKey];
+      const filterDisplay = value
+        ? leadHeaderFiltersProp.displayFormatter?.[filterKey]?.(value) ?? value
+        : "";
+      return editingHeaderColumn === columnId ? (
+        <FilterableHeaderEdit onCollapse={makeCollapseHeader(columnId)}>
+          {leadHeaderFiltersProp.renderInput?.[filterKey]?.({
+            autoFocus: true,
+            onClose: makeCollapseHeader(columnId),
+          }) ?? (
+            <HeaderFilterInput
+              value={value}
+              onChange={(val) => leadHeaderFiltersProp.onChange(filterKey, val)}
+              ariaLabel={ariaLabel}
+              autoFocus
+            />
+          )}
+        </FilterableHeaderEdit>
+      ) : (
+        <FilterableHeaderLabel
+          label={label}
+          filterDisplay={filterDisplay}
+          onClick={() => openHeaderEditor(columnId)}
+          theme={erpTheme}
+        />
+      );
+    },
+    [
+      editingHeaderColumn,
+      leadHeaderFiltersProp,
+      makeCollapseHeader,
+      openHeaderEditor,
+      erpTheme,
+    ],
+  );
+
+
+  // Debounced safety refetch -- the queryKey change already triggers a
+  // refetch when `appliedFilters` updates, this just guarantees it.
+  useEffect(() => {
+    if (debouncedHeaderFilterTick === 0) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick)
+      return;
+    lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
+    void refetchFilteredLeads();
+  }, [debouncedHeaderFilterTick, refetchFilteredLeads]);
+
   const isTableDataLoading =
     leadLoading || leadFetching || filteredLeadLoading || filteredLeadFetching;
   const filterApplyBusy = isTableDataLoading;
@@ -1185,7 +1889,8 @@ function LeadList() {
             filters={{
               opened: showFilters,
               title: "Filters",
-              subtitle: "Refine by status or assignee; search is in the toolbar",
+              subtitle:
+                "Refine by company, contact, status, assignee, dates and more; search is in the toolbar",
               onClose: () => setShowFilters(false),
               footer: (
                 <ERPListFilterActionsFooter
@@ -1200,6 +1905,96 @@ function LeadList() {
                 <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                   <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                     <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        size="xs"
+                        label="Company"
+                        placeholder="Search company"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.name || ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "name",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        size="xs"
+                        label="Contact person"
+                        placeholder="Search contact person"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.contact_person || ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "contact_person",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        size="xs"
+                        label="Contact number"
+                        placeholder="Search contact number"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.contact_number || ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "contact_number",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        size="xs"
+                        label="Email"
+                        placeholder="Search email"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.email_id || ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "email_id",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <TextInput
+                        size="xs"
+                        label="Location"
+                        placeholder="Search city / state / country"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.location || ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "location",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
                       <Select
                         size="xs"
                         label="Status"
@@ -1210,7 +2005,9 @@ function LeadList() {
                         nothingFoundMessage="No status found"
                         disabled={filterApplyBusy}
                         value={filterForm.values.status || ""}
-                        onChange={(value) => filterForm.setFieldValue("status", value || null)}
+                        onChange={(value) =>
+                          filterForm.setFieldValue("status", value || null)
+                        }
                         classNames={erpListGeistSelectClassNames}
                         styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       />
@@ -1220,17 +2017,120 @@ function LeadList() {
                     <Box style={erpListFilterFieldCellStyle}>
                       <Select
                         key={`assigned-to-${filterForm.values.assigned_to}-${usersLoading}-${userOptions.length}`}
+                        size="xs"
                         label="Assigned to"
-                        placeholder={usersLoading ? "Loading users…" : "All users"}
+                        placeholder={
+                          usersLoading ? "Loading users…" : "All users"
+                        }
                         searchable
                         clearable
                         data={userOptions}
-                        nothingFoundMessage={usersLoading ? "Loading users…" : "No users found"}
+                        nothingFoundMessage={
+                          usersLoading ? "Loading users…" : "No users found"
+                        }
                         disabled={filterApplyBusy || usersLoading}
                         value={filterForm.values.assigned_to || ""}
-                        onChange={(value) => filterForm.setFieldValue("assigned_to", value || null)}
+                        onChange={(value) =>
+                          filterForm.setFieldValue("assigned_to", value || null)
+                        }
                         classNames={erpListGeistSelectClassNames}
                         styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        key={`created-by-${filterForm.values.created_by}-${usersLoading}-${userOptions.length}`}
+                        size="xs"
+                        label="Created by"
+                        placeholder={
+                          usersLoading ? "Loading users…" : "All users"
+                        }
+                        searchable
+                        clearable
+                        data={userOptions}
+                        nothingFoundMessage={
+                          usersLoading ? "Loading users…" : "No users found"
+                        }
+                        disabled={filterApplyBusy || usersLoading}
+                        value={filterForm.values.created_by || ""}
+                        onChange={(value) =>
+                          filterForm.setFieldValue("created_by", value || null)
+                        }
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        size="xs"
+                        label="Interest"
+                        placeholder="All levels"
+                        searchable
+                        clearable
+                        data={interestLevelOptions}
+                        nothingFoundMessage="No interest level found"
+                        disabled={filterApplyBusy}
+                        value={filterForm.values.interest_level || ""}
+                        onChange={(value) =>
+                          filterForm.setFieldValue(
+                            "interest_level",
+                            value || null,
+                          )
+                        }
+                        classNames={erpListGeistSelectClassNames}
+                        styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <SingleDateInput
+                        label="Created at"
+                        placeholder="Pick a date"
+                        value={
+                          filterForm.values.created_at
+                            ? dayjs(filterForm.values.created_at).toDate()
+                            : null
+                        }
+                        onChange={(date) =>
+                          filterForm.setFieldValue(
+                            "created_at",
+                            date ? dayjs(date).format("YYYY-MM-DD") : null,
+                          )
+                        }
+                        size="xs"
+                        disabled={filterApplyBusy}
+                        allowDeselection
+                        classNames={LEAD_HEADER_DATE_INPUT_CLASSNAMES}
+                        styles={leadHeaderDateInputStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <SingleDateInput
+                        label="Updated at"
+                        placeholder="Pick a date"
+                        value={
+                          filterForm.values.updated_at
+                            ? dayjs(filterForm.values.updated_at).toDate()
+                            : null
+                        }
+                        onChange={(date) =>
+                          filterForm.setFieldValue(
+                            "updated_at",
+                            date ? dayjs(date).format("YYYY-MM-DD") : null,
+                          )
+                        }
+                        size="xs"
+                        disabled={filterApplyBusy}
+                        allowDeselection
+                        classNames={LEAD_HEADER_DATE_INPUT_CLASSNAMES}
+                        styles={leadHeaderDateInputStyles}
                       />
                     </Box>
                   </Grid.Col>
@@ -1256,82 +2156,139 @@ function LeadList() {
                   }}
                 />
               ),
-              children: isTableDataLoading ? (
-                <ERPListTableLoading theme={erpTheme} message="Loading leads…" />
-              ) : (
+              children: (
                 <table style={erpListTableElementStyle(erpTheme)}>
                   <thead>
-                    <tr>
+                    <tr style={{ height: 52.4 }}>
                       {visibleColumns.sno && (
-                        <th style={erpListThStyle(erpTheme)}>
+                        <th style={{...erpListThStyle(erpTheme), minWidth:40}}>
                           S.No
                         </th>
                       )}
                       {visibleColumns.company && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Company
+                        <th style={{...erpListThStyle(erpTheme), minWidth:180}}>
+                          {renderFilterableHeader("name", "name", "Company")}
                         </th>
                       )}
                       {visibleColumns.contactPerson && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Contact person
+                          {renderFilterableHeader(
+                            "contact_person",
+                            "contact_person",
+                            "Contact person",
+                          )}
                         </th>
                       )}
                       {visibleColumns.contactNumber && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Contact number
+                          {renderFilterableHeader(
+                            "contact_number",
+                            "contact_number",
+                            "Contact number",
+                          )}
                         </th>
                       )}
                       {visibleColumns.email && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Email
+                          {renderFilterableHeader(
+                            "email_id",
+                            "email_id",
+                            "Email",
+                          )}
                         </th>
                       )}
                       {visibleColumns.location && (
-                        <th style={erpListThStyle(erpTheme)}>
-                          Location
+                        <th style={{...erpListThStyle(erpTheme), minWidth:150}}>
+                          {renderFilterableHeader(
+                            "location",
+                            "location",
+                            "Location",
+                          )}
                         </th>
                       )}
                       {visibleColumns.status && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Status
+                          {renderFilterableHeader("status", "status", "Status")}
                         </th>
                       )}
                       {visibleColumns.assignedTo && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Assigned to
+                          {renderFilterableHeader(
+                            "assigned_to",
+                            "assigned_to",
+                            "Assigned to",
+                          )}
                         </th>
                       )}
                       {visibleColumns.createdBy && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Created by
+                          {renderFilterableHeader(
+                            "created_by",
+                            "created_by",
+                            "Created by",
+                          )}
                         </th>
                       )}
                       {visibleColumns.interest && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Interest
+                          {renderFilterableHeader(
+                            "interest_level",
+                            "interest_level",
+                            "Interest",
+                          )}
                         </th>
                       )}
                       {visibleColumns.latestRemark && (
-                        <th style={erpListThStyle(erpTheme)}>
+                        <th style={{...erpListThStyle(erpTheme), minWidth:180}}>
                           Latest remark
                         </th>
                       )}
                       {visibleColumns.createdAt && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Created at
+                          {renderFilterableHeader(
+                            "created_at",
+                            "created_at",
+                            "Created at",
+                          )}
                         </th>
                       )}
                       {visibleColumns.updatedAt && (
                         <th style={erpListThStyle(erpTheme)}>
-                          Updated at
+                          {renderFilterableHeader(
+                            "updated_at",
+                            "updated_at",
+                            "Updated at",
+                          )}
                         </th>
                       )}
                       <th style={erpListThActionsSpacer(erpTheme)} />
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedRows.length === 0 ? (
+                    {isTableDataLoading ? (
+                      <tr>
+                        <td
+                          colSpan={visibleDataColumnCount}
+                          style={{ padding: 0 }}
+                        >
+                          <Center
+                            py={80}
+                            style={{ backgroundColor: erpTheme.cardBg }}
+                          >
+                            <Stack align="center" gap="md">
+                              <Loader size="lg" color={erpTheme.primary} />
+                              <Text
+                                c="dimmed"
+                                size="sm"
+                                style={{ fontFamily: fontSans }}
+                              >
+                                Loading leads…
+                              </Text>
+                            </Stack>
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : pagedRows.length === 0 ? (
                       <tr>
                         <td colSpan={visibleDataColumnCount} style={{ padding: 60, textAlign: "center" }}>
                           <Stack align="center" gap="md">

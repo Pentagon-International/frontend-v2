@@ -33,7 +33,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpListGeistMantineTheme,
   erpListGeistSelectClassNames,
   erpListFilterUnifiedMantineStyles,
@@ -43,7 +42,15 @@ import {
   erpToolbarPrimaryButtonStyles,
   type ErpListTheme,
 } from "../../components";
-import { PipelineListNativeTable, type PipelineListRow } from "./PipelineListNativeTable";
+import {
+  PipelineListNativeTable,
+  type PipelineHeaderFilterKey,
+  type PipelineHeaderFilterValues,
+  type PipelineHeaderFiltersProp,
+  type PipelineHeaderRenderInput,
+  type PipelineListRow,
+  type PipelineRoutePair,
+} from "./PipelineListNativeTable";
 import { useDebouncedValue } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,9 +62,12 @@ type PipelineData = {
   customer_code: string;
   customer_name: string;
   service: string;
+  origin_port_code?: string;
   origin_port_name: string;
+  destination_port_code?: string;
   destination_port_name: string;
   no_of_shipments: number;
+  frequency_id?: number | null;
   frequency_name: string;
   volume: string | null;
   profit: number;
@@ -107,6 +117,22 @@ type FilterState = {
 
 const LIST_KEY = "PIPELINE";
 
+/**
+ * Stable `displayFormat` references for the customer / port `SearchableSelect`s
+ * — kept at module scope so the header `renderInput` memo doesn't churn on
+ * every parent render (which would otherwise re-mount the dropdown and
+ * spuriously re-hit the master APIs).
+ */
+const pipelineCustomerDisplayFormat = (item: Record<string, unknown>) => ({
+  value: String(item.customer_code),
+  label: String(item.customer_name),
+});
+
+const pipelinePortDisplayFormat = (item: Record<string, unknown>) => ({
+  value: String(item.port_code),
+  label: `${item.port_name} (${item.port_code})`,
+});
+
 function Pipeline() {
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
@@ -138,11 +164,31 @@ function Pipeline() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  //Search Debounce
+  //Search Debounce — 1000ms keeps it consistent with header text filters.
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
+
+  /**
+   * Friendly customer label that shadows `filterForm.values.customer`
+   * (which holds the opaque `customer_code`). Persisted in
+   * `useListFilterStore.displayValues.customer_name` so the column-header
+   * chip and `SearchableSelect.displayValue` show the human-readable name
+   * before the master API has been hit on restore.
+   */
+  const [customerDisplayValue, setCustomerDisplayValue] = useState<
+    string | null
+  >(null);
+  /** Friendly display labels for origin/destination ports (port_name).
+   *  Mirrors `customerDisplayValue` — kept in sync with the advanced
+   *  filter section + persisted in `useListFilterStore.displayValues`. */
+  const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
+    null,
+  );
+  const [destinationDisplayValue, setDestinationDisplayValue] = useState<
+    string | null
+  >(null);
 
   // State to store the actual applied filter values
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
@@ -286,6 +332,31 @@ function Pipeline() {
         );
       }
 
+      // Rehydrate friendly display labels so the UI shows readable names
+      // immediately (header chip + advanced SearchableSelect / Select).
+      const restoredCustomerLabel = restoredState.displayValues?.customer_name;
+      if (
+        typeof restoredCustomerLabel === "string" &&
+        restoredCustomerLabel.trim() !== ""
+      ) {
+        setCustomerDisplayValue(restoredCustomerLabel);
+      }
+      const restoredOriginLabel = restoredState.displayValues?.origin_name;
+      if (
+        typeof restoredOriginLabel === "string" &&
+        restoredOriginLabel.trim() !== ""
+      ) {
+        setOriginDisplayValue(restoredOriginLabel);
+      }
+      const restoredDestinationLabel =
+        restoredState.displayValues?.destination_name;
+      if (
+        typeof restoredDestinationLabel === "string" &&
+        restoredDestinationLabel.trim() !== ""
+      ) {
+        setDestinationDisplayValue(restoredDestinationLabel);
+      }
+
       // Restore search
       let hasSearch = false;
       if (
@@ -296,8 +367,8 @@ function Pipeline() {
         hasSearch = true;
       }
 
-      // Wait for state updates to flush (including debounced search)
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      // Wait for state updates to flush (including debounced search, now 1000ms)
+      await new Promise((resolve) => setTimeout(resolve, 1100));
 
       // Set applied filters and filtersApplied if we have filters or search
       if (hasFilters || hasSearch) {
@@ -422,7 +493,11 @@ function Pipeline() {
     return pipelineLoading || pipelineFetching;
   }, [pipelineLoading, pipelineFetching]);
 
-  // Helper function to save filters and search to store
+  // Helper function to save filters, search AND friendly display labels
+  // (customer/origin/destination port names) into the global store. The
+  // labels are what the advanced filter SearchableSelects + the collapsed
+  // column header chips render before any master API has a chance to
+  // re-resolve them on restore.
   const saveFiltersToStore = useCallback(() => {
     const filtersWithValues = {
       customer: filterForm.values.customer,
@@ -434,9 +509,21 @@ function Pipeline() {
     };
     setStoreFilters(LIST_KEY, filtersWithValues);
     setStoreSearch(LIST_KEY, searchQuery);
+    // Persist all friendly labels — they're only meaningful when the
+    // corresponding code/key is set, so null out otherwise.
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      customer_name: filterForm.values.customer ? customerDisplayValue : null,
+      origin_name: filterForm.values.origin ? originDisplayValue : null,
+      destination_name: filterForm.values.destination
+        ? destinationDisplayValue
+        : null,
+    });
   }, [
     filterForm.values,
     searchQuery,
+    customerDisplayValue,
+    originDisplayValue,
+    destinationDisplayValue,
     setStoreFilters,
     setStoreSearch,
   ]);
@@ -498,6 +585,11 @@ function Pipeline() {
       
       // Save filters and search to store
       saveFiltersToStore();
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        customer_name: customerDisplayValue,
+        origin_name: originDisplayValue,
+        destination_name: destinationDisplayValue,
+      });
       
       console.log("Filters applied successfully");
     } catch (error) {
@@ -509,6 +601,9 @@ function Pipeline() {
     setShowFilters(false);
 
     filterForm.reset(); // Reset form to initial values
+    setCustomerDisplayValue(null);
+    setOriginDisplayValue(null);
+    setDestinationDisplayValue(null);
     setSearchQuery("");
     setListCurrentPage(1);
     setFiltersApplied(false); // Reset filters applied state
@@ -531,12 +626,376 @@ function Pipeline() {
     // Clear filters and search from store
     clearStoreFilters(LIST_KEY);
     clearStoreSearch(LIST_KEY);
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      customer_name: null,
+      origin_name: null,
+      destination_name: null,
+    });
 
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
     });
   };
+
+  // Stable reference so the header-filter `renderInput` memo doesn't churn
+  // every render and cascade into the native table. MUST be declared above
+  // the header-filter memos since they reference `erpTheme`.
+  const erpTheme = useMemo<ErpListTheme>(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
+  const { border, muted, primary, fontSans, fg } = erpTheme;
+
+  // ── Column header filters ────────────────────────────────────────────────
+  // Strictly non-invasive: header filter changes update BOTH `filterForm`
+  // (so the advanced filter UI stays in sync) AND `appliedFilters` (so the
+  // existing React Query refetches via its `queryKey`). No new API, no new
+  // payload shape, no separate query — purely additive to the existing flow.
+  const handlePipelineHeaderFilterChange = useCallback(
+    (
+      key: PipelineHeaderFilterKey,
+      value: string,
+      displayLabel?: string | null,
+    ) => {
+      const next = value || null;
+      const newApplied: FilterState = { ...appliedFilters };
+
+      // Track the next display-label values up-front so we can persist them
+      // alongside the filters/search at the end of this handler (single
+      // store write per header-filter change).
+      let nextCustomerLabel = customerDisplayValue;
+      let nextOriginLabel = originDisplayValue;
+      let nextDestinationLabel = destinationDisplayValue;
+
+      switch (key) {
+        case "customer_name":
+          // Column header `customer_name` writes to the `customer` payload key
+          // (which is the customer_code) — same as the advanced filter does.
+          filterForm.setFieldValue("customer", next);
+          newApplied.customer = next;
+          nextCustomerLabel = next ? (displayLabel ?? null) : null;
+          setCustomerDisplayValue(nextCustomerLabel);
+          break;
+        case "sales_person":
+          filterForm.setFieldValue("sales_person", next);
+          newApplied.sales_person = next;
+          break;
+        case "service":
+          filterForm.setFieldValue("service", next);
+          newApplied.service = next;
+          break;
+        case "origin":
+          filterForm.setFieldValue("origin", next);
+          newApplied.origin = next;
+          nextOriginLabel = next ? (displayLabel ?? null) : null;
+          setOriginDisplayValue(nextOriginLabel);
+          break;
+        case "destination":
+          filterForm.setFieldValue("destination", next);
+          newApplied.destination = next;
+          nextDestinationLabel = next ? (displayLabel ?? null) : null;
+          setDestinationDisplayValue(nextDestinationLabel);
+          break;
+        case "frequency":
+          filterForm.setFieldValue("frequency", next);
+          newApplied.frequency = next;
+          break;
+      }
+
+      setAppliedFilters(newApplied);
+      setListCurrentPage(1);
+
+      const hasAny =
+        newApplied.customer ||
+        newApplied.service ||
+        newApplied.origin ||
+        newApplied.destination ||
+        newApplied.frequency ||
+        newApplied.sales_person ||
+        (debouncedSearch.trim() !== "");
+      setFiltersApplied(Boolean(hasAny));
+
+      // Persist current filterForm into the store so values rehydrate
+      // on restore from any associated sub-page.
+      const filtersForStore = {
+        customer: key === "customer_name" ? next : filterForm.values.customer,
+        service: key === "service" ? next : filterForm.values.service,
+        origin: key === "origin" ? next : filterForm.values.origin,
+        destination:
+          key === "destination" ? next : filterForm.values.destination,
+        frequency: key === "frequency" ? next : filterForm.values.frequency,
+        sales_person:
+          key === "sales_person" ? next : filterForm.values.sales_person,
+      };
+      setStoreFilters(LIST_KEY, filtersForStore);
+      setStoreSearch(LIST_KEY, searchQuery);
+      // Persist friendly display labels for all 3 SearchableSelect-backed
+      // filters so the chips / Selects render readable names on restore.
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        customer_name: filtersForStore.customer ? nextCustomerLabel : null,
+        origin_name: filtersForStore.origin ? nextOriginLabel : null,
+        destination_name: filtersForStore.destination
+          ? nextDestinationLabel
+          : null,
+      });
+    },
+    [
+      appliedFilters,
+      debouncedSearch,
+      filterForm,
+      searchQuery,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      setStoreFilters,
+      setStoreSearch,
+    ],
+  );
+
+  const pipelineHeaderFilterValues: PipelineHeaderFilterValues = useMemo(
+    () => ({
+      customer_name: filterForm.values.customer ?? "",
+      sales_person: filterForm.values.sales_person ?? "",
+      service: filterForm.values.service ?? "",
+      origin: filterForm.values.origin ?? "",
+      destination: filterForm.values.destination ?? "",
+      frequency: filterForm.values.frequency ?? "",
+    }),
+    [
+      filterForm.values.customer,
+      filterForm.values.sales_person,
+      filterForm.values.service,
+      filterForm.values.origin,
+      filterForm.values.destination,
+      filterForm.values.frequency,
+    ],
+  );
+
+  /**
+   * Rich editors for the filterable column headers — mirror the advanced
+   * filter section's controls so the column header sends the SAME payload
+   * value the advanced filter would.
+   */
+  const pipelineHeaderRenderInput = useMemo<
+    Partial<Record<PipelineHeaderFilterKey, PipelineHeaderRenderInput>>
+  >(
+    () => ({
+      customer_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type customer name"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_name", "customer_code"]}
+          displayFormat={pipelineCustomerDisplayFormat}
+          value={filterForm.values.customer}
+          displayValue={customerDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handlePipelineHeaderFilterChange(
+              "customer_name",
+              value ?? "",
+              label,
+            );
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      sales_person: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          size="xs"
+          data={salespersonOptions}
+          value={filterForm.values.sales_person}
+          onChange={(value) => {
+            handlePipelineHeaderFilterChange(
+              "sales_person",
+              value ?? "",
+            );
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          disabled={salespersonsLoading}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Select Service"
+          data={[
+            { value: "AIR", label: "AIR" },
+            { value: "FCL", label: "FCL" },
+            { value: "LCL", label: "LCL" },
+          ]}
+          value={filterForm.values.service}
+          onChange={(value) => {
+            handlePipelineHeaderFilterChange("service", value ?? "");
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      origin: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type Origin Code"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_name", "port_code"]}
+          displayFormat={pipelinePortDisplayFormat}
+          value={filterForm.values.origin}
+          displayValue={originDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handlePipelineHeaderFilterChange("origin", value ?? "", label);
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      destination: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type Destination Code"
+          apiEndpoint={URL.portMaster}
+          searchFields={["port_name", "port_code"]}
+          displayFormat={pipelinePortDisplayFormat}
+          value={filterForm.values.destination}
+          displayValue={destinationDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handlePipelineHeaderFilterChange(
+              "destination",
+              value ?? "",
+              label,
+            );
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      frequency: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder={
+            frequencyDataLoading ? "Loading..." : "Select Frequency"
+          }
+          data={frequencyOptionsData}
+          value={filterForm.values.frequency}
+          onChange={(value) => {
+            handlePipelineHeaderFilterChange("frequency", value ?? "");
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          disabled={frequencyDataLoading}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filterForm.values.customer,
+      filterForm.values.sales_person,
+      filterForm.values.service,
+      filterForm.values.origin,
+      filterForm.values.destination,
+      filterForm.values.frequency,
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      frequencyOptionsData,
+      frequencyDataLoading,
+      handlePipelineHeaderFilterChange,
+      erpTheme,
+    ],
+  );
+
+  // Collapsed-header display formatters: prefer friendly labels (e.g.
+  // customer name, port name, frequency name) over the opaque payload
+  // value (customer_code, port_code, frequency_id) when available.
+  const pipelineHeaderDisplayFormatter = useMemo<
+    Partial<Record<PipelineHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer_name: (raw) => {
+        if (!raw) return "";
+        return customerDisplayValue ?? raw;
+      },
+      origin: (raw) => {
+        if (!raw) return "";
+        return originDisplayValue ?? raw;
+      },
+      destination: (raw) => {
+        if (!raw) return "";
+        return destinationDisplayValue ?? raw;
+      },
+      frequency: (raw) => {
+        if (!raw) return "";
+        const opt = frequencyOptionsData.find((o) => o.value === raw);
+        return opt?.label ?? raw;
+      },
+    }),
+    [
+      customerDisplayValue,
+      originDisplayValue,
+      destinationDisplayValue,
+      frequencyOptionsData,
+    ],
+  );
+
+  const pipelineHeaderFiltersProp: PipelineHeaderFiltersProp = useMemo(
+    () => ({
+      values: pipelineHeaderFilterValues,
+      onChange: (key, value) =>
+        handlePipelineHeaderFilterChange(key, value),
+      renderInput: pipelineHeaderRenderInput,
+      displayFormatter: pipelineHeaderDisplayFormatter,
+    }),
+    [
+      pipelineHeaderFilterValues,
+      pipelineHeaderRenderInput,
+      pipelineHeaderDisplayFormatter,
+      handlePipelineHeaderFilterChange,
+    ],
+  );
 
   // Trigger filtered API when debounced search changes
   useEffect(() => {
@@ -597,18 +1056,6 @@ function Pipeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const erpTheme: ErpListTheme = {
-    border: DEFAULT_ERP_LIST_THEME.border,
-    muted: DEFAULT_ERP_LIST_THEME.muted,
-    fg: DEFAULT_ERP_LIST_THEME.fg,
-    primary: DEFAULT_ERP_LIST_THEME.primary,
-    headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
-    pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
-    cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
-    fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
-  };
-  const { border, muted, primary, fontSans, fg } = erpTheme;
-
   /** Sub-header stats from API `summary` + `total_count` (same pattern as Air Export Booking summary pills). */
   const pipelineStats = useMemo(() => {
     const q = pipelineQueryResult ?? EMPTY_PIPELINE_QUERY;
@@ -641,23 +1088,83 @@ function Pipeline() {
   ]);
 
   const pipelineTableRows: PipelineListRow[] = useMemo(() => {
-    return displayData.map((r, i) => ({
-      sno: (listCurrentPage - 1) * listPageSize + i + 1,
-      customer_code: r.customer_code,
-      customer_name: r.customer_name,
-      created_by: r.created_by,
-      total_profit: r.total_profit,
-      total_volume: r.total_volume,
-      pipelines: r.pipelines,
-      raw: {
+    /** Collapse the customer's `pipelines[]` array into unique display
+     * tokens for the Service / Frequency columns. Preserves first-seen
+     * order for stable rendering. */
+    const collectUnique = (
+      list: PipelineData[] | undefined,
+      pick: (p: PipelineData) => string | null | undefined,
+    ): string[] => {
+      if (!Array.isArray(list)) return [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const item of list) {
+        const v = pick(item);
+        if (!v) continue;
+        const s = String(v).trim();
+        if (!s || seen.has(s)) continue;
+        seen.add(s);
+        out.push(s);
+      }
+      return out;
+    };
+
+    /**
+     * Pair (origin, destination) per pipeline entry → unique route pairs.
+     * The Route column body renders these as `CODE → CODE` lines, with the
+     * full port names available in the tooltip.
+     */
+    const collectRoutes = (
+      list: PipelineData[] | undefined,
+    ): PipelineRoutePair[] => {
+      if (!Array.isArray(list)) return [];
+      const seen = new Set<string>();
+      const out: PipelineRoutePair[] = [];
+      for (const item of list) {
+        const oc = (item.origin_port_code ?? "").trim();
+        const on = (item.origin_port_name ?? "").trim();
+        const dc = (item.destination_port_code ?? "").trim();
+        const dn = (item.destination_port_name ?? "").trim();
+        if (!oc && !on && !dc && !dn) continue;
+        const key = `${oc || on}->${dc || dn}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          originCode: oc,
+          originName: on,
+          destinationCode: dc,
+          destinationName: dn,
+        });
+      }
+      return out;
+    };
+
+    return displayData.map((r, i) => {
+      const list = r.pipelines as PipelineData[] | undefined;
+      const services = collectUnique(list, (p) => p.service);
+      const routes = collectRoutes(list);
+      const frequencies = collectUnique(list, (p) => p.frequency_name);
+      return {
+        sno: (listCurrentPage - 1) * listPageSize + i + 1,
         customer_code: r.customer_code,
         customer_name: r.customer_name,
         created_by: r.created_by,
-        pipelines: r.pipelines,
         total_profit: r.total_profit,
         total_volume: r.total_volume,
-      },
-    }));
+        pipelines: r.pipelines,
+        services,
+        routes,
+        frequencies,
+        raw: {
+          customer_code: r.customer_code,
+          customer_name: r.customer_name,
+          created_by: r.created_by,
+          pipelines: r.pipelines,
+          total_profit: r.total_profit,
+          total_volume: r.total_volume,
+        },
+      };
+    });
   }, [displayData, listCurrentPage, listPageSize]);
 
   const openPipeline = useCallback(
@@ -836,19 +1343,20 @@ function Pipeline() {
                 <SearchableSelect
                   size="xs"
                   label="Customer Name"
-                  placeholder="Select Service"
+                  placeholder="Select customer"
                   apiEndpoint={URL.customer}
                   searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code),
-                    label: String(item.customer_name),
-                  })}
+                  displayFormat={pipelineCustomerDisplayFormat}
                   value={filterForm.values.customer}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("customer", value || "")
-                  }
-                  minSearchLength={2}
+                  displayValue={customerDisplayValue}
                   dropdownZIndex={1000}
+                  onChange={(value, selected) => {
+                    const nextValue = value || null;
+                    const nextLabel = selected?.label ?? null;
+                    filterForm.setFieldValue("customer", nextValue);
+                    setCustomerDisplayValue(nextValue ? nextLabel : null);
+                  }}
+                  minSearchLength={2}
                   classNames={erpListGeistSelectClassNames}
                   styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   className="filter-searchable-select"
@@ -896,14 +1404,15 @@ function Pipeline() {
                   placeholder="Type Origin Code"
                   apiEndpoint={URL.portMaster}
                   searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  displayFormat={pipelinePortDisplayFormat}
                   value={filterForm.values.origin}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("origin", value || "")
-                  }
+                  displayValue={originDisplayValue}
+                  onChange={(value, selected) => {
+                    const nextValue = value || null;
+                    const nextLabel = selected?.label ?? null;
+                    filterForm.setFieldValue("origin", nextValue);
+                    setOriginDisplayValue(nextValue ? nextLabel : null);
+                  }}
                   minSearchLength={3}
                   dropdownZIndex={1000}
                   classNames={erpListGeistSelectClassNames}
@@ -922,14 +1431,15 @@ function Pipeline() {
                   placeholder="Type Destination Code"
                   apiEndpoint={URL.portMaster}
                   searchFields={["port_name", "port_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.port_code),
-                    label: `${item.port_name} (${item.port_code})`,
-                  })}
+                  displayFormat={pipelinePortDisplayFormat}
                   value={filterForm.values.destination}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("destination", value || "")
-                  }
+                  displayValue={destinationDisplayValue}
+                  onChange={(value, selected) => {
+                    const nextValue = value || null;
+                    const nextLabel = selected?.label ?? null;
+                    filterForm.setFieldValue("destination", nextValue);
+                    setDestinationDisplayValue(nextValue ? nextLabel : null);
+                  }}
                   minSearchLength={3}
                   dropdownZIndex={1000}
                   classNames={erpListGeistSelectClassNames}
@@ -994,12 +1504,7 @@ function Pipeline() {
                   }}
                 />
               ),
-              children: tableLoading ? (
-                <ERPListTableLoading
-                  theme={erpTheme}
-                  message="Loading pipeline data…"
-                />
-              ) : (
+              children: (
                 <Box
                   style={{
                     flex: 1,
@@ -1014,6 +1519,9 @@ function Pipeline() {
                     isEmpty={displayData.length === 0}
                     onView={(row) => openPipeline(row, "view")}
                     onEdit={(row) => openPipeline(row, "edit")}
+                    headerFilters={pipelineHeaderFiltersProp}
+                    loading={tableLoading}
+                    loadingMessage="Loading pipeline data…"
                   />
                 </Box>
               ),

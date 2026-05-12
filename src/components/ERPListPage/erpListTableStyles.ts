@@ -26,6 +26,7 @@ export function erpListThStyle(theme: ErpListTheme, options?: ErpListThOptions):
     padding: "6px 10px",
     textAlign: options?.textAlign ?? "left",
     fontWeight: 500,
+    minWidth:120,
     fontSize: 14,
     color: theme.muted,
     backgroundColor: theme.headerBg,
