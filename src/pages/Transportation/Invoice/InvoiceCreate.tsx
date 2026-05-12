@@ -308,6 +308,19 @@ function clampSumAmounts(parts: Array<number | null | undefined>): number {
   return clampAmount(sum) ?? 0;
 }
 
+/** Charges on a housing row may be `charges` (air/sea) or `mawb_charges` (air import). */
+function getHousingChargeArray(
+  hawb: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const ch = hawb.charges;
+  if (Array.isArray(ch) && ch.length > 0)
+    return ch as Record<string, unknown>[];
+  const mc = hawb.mawb_charges;
+  if (Array.isArray(mc) && mc.length > 0)
+    return mc as Record<string, unknown>[];
+  return [];
+}
+
 /** Map job/house party to master state_id for invoice State dropdown. */
 function resolvePartyStateIdFromHousing(
   isAgent: boolean,
@@ -1125,23 +1138,70 @@ function InvoiceCreate({
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
 
-        // Map house (HAWB) charges into invoice charges form (same shape as housing stepper for common fields)
-        if (
-          documentType !== "CRN" &&
-          firstHawb.charges &&
-          Array.isArray(firstHawb.charges) &&
-          firstHawb.charges.length > 0
-        ) {
+        // Map house charges → invoice lines.
+        // Agent: Collect from every HAWB (charges or mawb_charges); each line uses same billing currency as header.
+        const chargesSource: unknown[] = (() => {
+          if (documentType === "CRN") return [];
+          if (isAgent) {
+            const houses = hawbDetails as Array<Record<string, unknown>>;
+            const merged = houses.flatMap((hawb) =>
+              getHousingChargeArray(hawb)
+                .filter(
+                  (c) =>
+                    String((c as { pp_cc?: unknown }).pp_cc ?? "").trim() ===
+                    "Collect",
+                )
+                .map((c) => {
+                  const row =
+                    typeof c === "object" && c !== null
+                      ? (c as Record<string, unknown>)
+                      : {};
+                  return {
+                    ...row,
+                    shipment_id:
+                      row.shipment_id ??
+                      hawb.shipment_id ??
+                      hawb.shipment_no ??
+                      "",
+                    shipper_id:
+                      row.shipper_id ??
+                      hawb.shipper_code ??
+                      hawb.shipper_id ??
+                      "",
+                  };
+                }),
+            );
+            if (merged.length > 0) return merged;
+            if (
+              firstHawb.charges &&
+              Array.isArray(firstHawb.charges) &&
+              firstHawb.charges.length > 0
+            )
+              return firstHawb.charges as unknown[];
+            return [];
+          }
+          if (
+            firstHawb.charges &&
+            Array.isArray(firstHawb.charges) &&
+            firstHawb.charges.length > 0
+          )
+            return firstHawb.charges as unknown[];
+          return [];
+        })();
+
+        if (chargesSource.length > 0) {
+          // Agent: header billing currency defaults to USD (see agent useEffect); each charge keeps its own currency from the job.
           const billingCurrency = isAgent
             ? "USD"
             : defaultBranchCurrency || form.values.currency || "";
+          const headerCode = billingCurrency.trim().toUpperCase();
           const headerRoe = billingCurrency
             ? getRoeValue(billingCurrency)
             : null;
 
-          const mappedCharges = firstHawb.charges.map((charge: any) => {
+          const mappedCharges = (chargesSource as any[]).map((charge: any) => {
             const unitDetails = charge.unit_details as
-              | { unit_code?: string }
+              | { unit_code?: string; unit_id?: number }
               | undefined;
             const unitCode = String(
               charge.unit_code ??
@@ -1150,15 +1210,43 @@ function InvoiceCreate({
                 "",
             ).trim();
             const currencyDetails = charge.currency_details as
-              | { currency_code?: string }
+              | { currency_id?: number; currency_code?: string }
               | undefined;
-            const currency = String(
-              charge.currency ?? currencyDetails?.currency_code ?? "",
-            ).trim();
+            const rawCurrencyId =
+              charge.currency_id ??
+              currencyDetails?.currency_id ??
+              (typeof charge.currency === "number" ? charge.currency : null);
+            let currency = String(
+              charge.currency_code ??
+                currencyDetails?.currency_code ??
+                (typeof charge.currency === "string" ? charge.currency : "") ??
+                "",
+            )
+              .trim()
+              .toUpperCase();
+            if (!currency && rawCurrencyId != null && Array.isArray(currencyData)) {
+              const row = (
+                currencyData as {
+                  id?: number;
+                  code?: string;
+                  currency_code?: string;
+                }[]
+              ).find((c) => String(c.id) === String(rawCurrencyId));
+              currency = (row?.code || row?.currency_code || "")
+                .toString()
+                .trim()
+                .toUpperCase();
+            }
             const unit_id =
-              charge.unit_id != null ? String(charge.unit_id) : "";
+              charge.unit_id != null && String(charge.unit_id).trim() !== ""
+                ? String(charge.unit_id)
+                : charge.unit != null && String(charge.unit).trim() !== ""
+                  ? String(charge.unit)
+                  : unitDetails?.unit_id != null
+                    ? String(unitDetails.unit_id)
+                    : "";
             const currency_id =
-              charge.currency_id != null ? String(charge.currency_id) : "";
+              rawCurrencyId != null ? String(rawCurrencyId) : "";
 
             const noOfUnit =
               charge.no_of_unit != null
@@ -1173,10 +1261,10 @@ function InvoiceCreate({
                   : parseFloat(charge.amount_per_unit)
                 : null;
             const roeVal =
-              charge.roe != null
+              charge.roe != null && String(charge.roe).trim() !== ""
                 ? typeof charge.roe === "number"
                   ? charge.roe
-                  : parseFloat(charge.roe)
+                  : parseFloat(String(charge.roe))
                 : currency
                   ? getRoeValue(currency)
                   : null;
@@ -1185,14 +1273,18 @@ function InvoiceCreate({
               charge.amount != null
                 ? typeof charge.amount === "number"
                   ? charge.amount
-                  : parseFloat(charge.amount)
+                  : parseFloat(String(charge.amount))
                 : null;
             let amountInLocal: number | null =
               charge.amount_in_local != null
                 ? typeof charge.amount_in_local === "number"
                   ? charge.amount_in_local
-                  : parseFloat(charge.amount_in_local)
-                : null;
+                  : parseFloat(String(charge.amount_in_local))
+                : charge.sell_local_amount != null
+                  ? typeof charge.sell_local_amount === "number"
+                    ? charge.sell_local_amount
+                    : parseFloat(String(charge.sell_local_amount))
+                  : null;
             let headerAmt: number | null =
               (charge.amount_in_header ?? charge.header_amount) != null
                 ? typeof (charge.amount_in_header ?? charge.header_amount) ===
@@ -1221,7 +1313,6 @@ function InvoiceCreate({
                 if (calcLocal != null) amountInLocal = calcLocal;
               }
             }
-            // Amount in (billing currency): always compute when we have amount_in_local
             if (amountInLocal != null && amountInLocal > 0) {
               const billCurr =
                 billingCurrency || (form.values.currency ?? "").trim();
@@ -1253,7 +1344,7 @@ function InvoiceCreate({
                       String(charge.shipment_no).trim() !== ""
                     ? String(charge.shipment_no)
                     : firstHawb.shipment_id
-                      ? firstHawb.shipment_id
+                      ? String(firstHawb.shipment_id)
                       : null,
               shipper_id:
                 charge.shipper_id != null
@@ -1283,15 +1374,14 @@ function InvoiceCreate({
           });
           form.setFieldValue("charges", mappedCharges);
 
-          // Fetch SAC code for each charge that has charge_id (from house)
           const jobServiceIdForSac =
             (location.state as { job?: { service_id?: number } })?.job
               ?.service_id ?? null;
           if (
+            !isAgent &&
             jobServiceIdForSac &&
             mappedCharges.some((c: ChargeItem) => c.charge_id != null)
           ) {
-            // Keep track of original indices when filtering
             const chargesWithIds = mappedCharges
               .map((c, idx) => ({ charge: c, originalIdx: idx }))
               .filter(({ charge }) => charge.charge_id != null);
@@ -1302,7 +1392,6 @@ function InvoiceCreate({
             }));
 
             fetchGetEffectiveSac(items).then((data) => {
-              // Map response by index order (API returns in same order as request)
               data.forEach((item, responseIdx) => {
                 const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
                 if (
@@ -1320,9 +1409,10 @@ function InvoiceCreate({
           }
         } else {
           const branchCurrency = isAgent
-            ? "USD"
+            ? ""
             : defaultBranchCurrency || form.values.currency || "";
-          const branchRoe = branchCurrency ? getRoeValue(branchCurrency) : null;
+          const branchRoe =
+            !isAgent && branchCurrency ? getRoeValue(branchCurrency) : null;
           form.setFieldValue("charges", [
             {
               charge_id: null,
@@ -1331,7 +1421,7 @@ function InvoiceCreate({
               unit_id: "",
               no_of_unit: null,
               currency: branchCurrency,
-              currency_id: defaultBranchCurrencyId || "",
+              currency_id: isAgent ? "" : defaultBranchCurrencyId || "",
               billing_currency: null,
               roe: branchRoe,
               amount_per_unit: null,
@@ -2024,9 +2114,14 @@ function InvoiceCreate({
       // }
 
       const stateId = values.state ? Number(values.state) : null;
+      const headerCurSave = (values.currency ?? "")
+        .toString()
+        .trim()
+        .toUpperCase();
       const currencyItem = (currencyData as any[])?.find(
         (c: any) =>
-          (c.code || c.currency_code || "").toString() === values.currency,
+          (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+          headerCurSave,
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
@@ -2123,13 +2218,18 @@ function InvoiceCreate({
           currency_code?: string;
         }[];
         const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          ? currencyDataArr?.find(
+              (c) => String(c.id) === String(charge.currency_id).trim(),
+            )
           : currencyDataArr?.find(
               (c) =>
-                (c.code || c.currency_code || "").toString() ===
-                charge.currency,
+                (c.code || c.currency_code || "")
+                  .toString()
+                  .trim()
+                  .toUpperCase() ===
+                (charge.currency ?? "").toString().trim().toUpperCase(),
             );
-        const chargeCurrencyId =
+        let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
         const unitDataArr = unitData as {
           id?: number;
@@ -2341,10 +2441,13 @@ function InvoiceCreate({
     try {
       const values = form.values;
       const stateId = values.state ? Number(values.state) : null;
+      const headerCur = (values.currency ?? "").toString().trim().toUpperCase();
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
       )?.find(
-        (c) => (c.code || c.currency_code || "").toString() === values.currency,
+        (c) =>
+          (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+          headerCur,
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
@@ -2467,16 +2570,19 @@ function InvoiceCreate({
           );
       const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          ? currencyDataArr?.find(
+              (c) => String(c.id) === String(charge.currency_id).trim(),
+            )
           : currencyDataArr?.find(
               (c) =>
-                (c.code || c.currency_code || "").toString() ===
-                charge.currency,
+                (c.code || c.currency_code || "")
+                  .toString()
+                  .trim()
+                  .toUpperCase() ===
+                (charge.currency ?? "").toString().trim().toUpperCase(),
             );
         let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        if (chargeCurrencyId == null && currencyId != null)
-          chargeCurrencyId = currencyId;
         const unitItem = charge.unit_id
           ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
           : unitDataArr?.find(
@@ -3004,33 +3110,38 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {/* State - optional for agent invoice */}
-            <Grid.Col span={2}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading states" : "Select state"}
-                data={stateOptions}
-                value={form.values.state ? form.values.state : null}
-                onChange={(value) => form.setFieldValue("state", value ?? "")}
-                searchable
-                withAsterisk={!isAgentInvoice}
-                error={form.errors.state || undefined}
-                readOnly={isStateLoading || isReadOnly}
-                // disabled={isStateLoading || isReadOnly}
-              />
-            </Grid.Col>
+            {!isAgentInvoice && (
+              <>
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label="State"
+                    placeholder={
+                      isStateLoading ? "Loading states" : "Select state"
+                    }
+                    data={stateOptions}
+                    value={form.values.state ? form.values.state : null}
+                    onChange={(value) =>
+                      form.setFieldValue("state", value ?? "")
+                    }
+                    searchable
+                    withAsterisk
+                    error={form.errors.state || undefined}
+                    readOnly={isStateLoading || isReadOnly}
+                  />
+                </Grid.Col>
 
-            {/* GSTN */}
-            <Grid.Col span={2}>
-              <FormTextInput
-                label="GSTN"
-                placeholder="Enter GSTN"
-                value={form.values.gstn}
-                onChange={(e) => form.setFieldValue("gstn", e.target.value)}
-                error={form.errors.gstn}
-                readOnly={isReadOnly}
-              />
-            </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label="GSTN"
+                    placeholder="Enter GSTN"
+                    value={form.values.gstn}
+                    onChange={(e) => form.setFieldValue("gstn", e.target.value)}
+                    error={form.errors.gstn}
+                    readOnly={isReadOnly}
+                  />
+                </Grid.Col>
+              </>
+            )}
 
             {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
