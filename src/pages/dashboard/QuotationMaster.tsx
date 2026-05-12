@@ -735,6 +735,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     );
   }, [filters, fromDate, toDate, debouncedSearch, isApprovalMode]);
 
+  /** Use filtered-query rows/totals when filters were applied, or when search is active (search refetch intentionally does not set filtersApplied). */
+  const showFilteredQuotationData =
+    filtersApplied || Boolean(debouncedSearch.trim());
+
   // Single-flight protection for refetchFilteredQuotations
   const isRefetchingRef = useRef(false);
 
@@ -872,44 +876,35 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   // This prevents double API calls (one with filters+search, one with search-only)
   // Search is merged into buildFilterPayload and sent together with existing filters
 
-  // Determine which data to display
-  // Determine which data to display based on hasActiveFiltersOrSearch (not filtersApplied)
-  // filtersApplied is UI-only and should not control data source
-  // Similar to EnquiryMaster: check if filtered data exists and has length
-  // Determine which data to display - similar to EnquiryMaster pattern
+  // Determine which data to display — use showFilteredQuotationData so search-only mode
+  // (filtersApplied stays false) still reads from the filtered React Query result.
   // Note: When tableLoading is true, a full loader is shown instead of the table, so we don't need
   // to handle empty data states here - the loader prevents "No records to display" flicker
   const displayData = useMemo(() => {
-    // If filters were applied OR search is present OR hasActiveFiltersOrSearch, show filtered results
-    // Check if filteredQuotationData exists and has data (similar to EnquiryMaster pattern)
-    // Use hasActiveFiltersOrSearch to determine if we should show filtered data
-    if (filtersApplied) {
-      // Show filtered data if it exists, otherwise show empty array (will show "No records" message)
+    if (showFilteredQuotationData) {
       return filteredQuotationResult?.data || [];
     }
-    // Otherwise, show the original quotation data
     return quotationResult?.data || [];
   }, [
     quotationResult,
     filteredQuotationResult,
-    filtersApplied,
-    hasActiveFiltersOrSearch,
+    showFilteredQuotationData,
   ]);
 
   const summaryListTotalRecords = useMemo(() => {
-    if (filtersApplied) {
+    if (showFilteredQuotationData) {
       return filteredQuotationResult?.total ?? listTotalRecords;
     }
     return quotationResult?.total ?? listTotalRecords;
   }, [
-    filtersApplied,
+    showFilteredQuotationData,
     filteredQuotationResult?.total,
     quotationResult?.total,
     listTotalRecords,
   ]);
 
   useEffect(() => {
-    const listFetching = filtersApplied
+    const listFetching = showFilteredQuotationData
       ? filteredQuotationFetching
       : quotationFetching;
     /** While fetching the next/prev page, totals can briefly go stale — never clamp page during that window. */
@@ -923,7 +918,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     summaryListTotalRecords,
     listPageSize,
     listCurrentPage,
-    filtersApplied,
+    showFilteredQuotationData,
     filteredQuotationFetching,
     quotationFetching,
   ]);
@@ -977,13 +972,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       paginationInitialized.current = true;
       return;
     }
-    if (filtersApplied) {
+    if (showFilteredQuotationData) {
       refetchFilteredQuotations();
     } else {
       loadAllQuotations();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listCurrentPage, listPageSize]);
+  }, [listCurrentPage, listPageSize, showFilteredQuotationData]);
 
   // Handle initial filters from navigation
   useEffect(() => {
@@ -2527,7 +2522,9 @@ console.log("currentQuotation: ", currentQuotation);
 
   /** Toolbar stats from quotation filter API `summary.status_counts` (filter-scoped). */
   const quotationListStats = useMemo(() => {
-    const source = filtersApplied ? filteredQuotationResult : quotationResult;
+    const source = showFilteredQuotationData
+      ? filteredQuotationResult
+      : quotationResult;
     const sc = source?.statusCounts ?? null;
     return {
       total: summaryListTotalRecords,
@@ -2538,7 +2535,7 @@ console.log("currentQuotation: ", currentQuotation);
       lost: getQuotationListStatusCount(sc, "lost"),
     };
   }, [
-    filtersApplied,
+    showFilteredQuotationData,
     filteredQuotationResult,
     quotationResult,
     summaryListTotalRecords,
