@@ -51,7 +51,7 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
@@ -92,7 +92,6 @@ const LIST_KEY = "DESTINATION_MASTER";
 export default function DestinationMaster() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
 
   const dateFormat = useDateFormat();
 
@@ -148,7 +147,9 @@ export default function DestinationMaster() {
 
   // Filter states - similar to CallEntryMaster
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+  // NOTE: `filtersApplied` used to gate a separate filtered-data query, but
+  // the unified query now reacts to `appliedFiltersKey` directly so the flag
+  // is no longer needed.
 
   // Store display values (labels) for SearchableSelect fields
   const [carrierDisplayValue, setCarrierDisplayValue] = useState<string | null>(null);
@@ -189,140 +190,100 @@ export default function DestinationMaster() {
     []
   );
 
-  // Fetch destination data with React Query - using filter API with destination code from modal
-  const {
-    data: destinationVal = [],
-    isLoading: isDestinationLoading,
-    isFetching: isDestinationFetching,
-  } = useQuery({
-    queryKey: ["destination", currentDestinationCode, currentPage, pageSize, debouncedSearch],
-    queryFn: async () => {
-      try {
-        const requestBody: { filters: any } = { filters: {} };
+  /**
+   * Single unified data query — same refetch principle as EnquiryMaster.
+   *
+   * `queryKey` includes every input that should trigger a refetch: the modal-
+   * selected `currentDestinationCode`, pagination, the applied filters object
+   * (stringified for a stable structural key), and the debounced global
+   * search. React Query natively re-runs the `queryFn` whenever any of these
+   * change, so pagination, filter Apply, column-header filter changes and
+   * global search all flow through a single fetch + a single `isFetching`
+   * flag — no `useMemo` switching between two queries, and the loader always
+   * reflects an in-flight refetch.
+   */
+  const appliedFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        carrier_name: appliedFilters.carrier_name,
+        service: appliedFilters.service,
+        tariff_code: appliedFilters.tariff_code,
+        valid_from: appliedFilters.valid_from
+          ? dayjs(appliedFilters.valid_from).format("YYYY-MM-DD")
+          : null,
+        valid_to: appliedFilters.valid_to
+          ? dayjs(appliedFilters.valid_to).format("YYYY-MM-DD")
+          : null,
+      }),
+    [appliedFilters],
+  );
 
-        // Add destination_code filter if destination is selected from modal (use port code)
-        if (currentDestinationCode) {
-          requestBody.filters.destination_code = currentDestinationCode;
+  const { data: destinationResult, isFetching: destinationFetching } = useQuery(
+    {
+      queryKey: [
+        "destination",
+        currentDestinationCode,
+        currentPage,
+        pageSize,
+        appliedFiltersKey,
+        debouncedSearch,
+      ],
+      queryFn: async () => {
+        try {
+          const payload: Record<string, unknown> = {};
+          if (currentDestinationCode)
+            payload.destination_code = currentDestinationCode;
+          if (appliedFilters.carrier_name)
+            payload.carrier_name = appliedFilters.carrier_name;
+          if (appliedFilters.service) payload.service = appliedFilters.service;
+          if (appliedFilters.tariff_code)
+            payload.tariff_code = appliedFilters.tariff_code;
+          if (appliedFilters.valid_from)
+            payload.valid_from = dayjs(appliedFilters.valid_from).format(
+              "YYYY-MM-DD",
+            );
+          if (appliedFilters.valid_to)
+            payload.valid_to = dayjs(appliedFilters.valid_to).format(
+              "YYYY-MM-DD",
+            );
+          if (debouncedSearch.trim())
+            payload.search = debouncedSearch.trim();
+
+          const response = await apiCallProtected.post(
+            `${URL.filter_destination}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
+            { filters: payload },
+          );
+          const data = response as any;
+          const rows = Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(data?.results)
+            ? data.results
+            : Array.isArray(data?.result)
+            ? data.result
+            : [];
+          const total = getTariffFilterListTotal(data, rows);
+          return { data: rows, total };
+        } catch (error) {
+          console.error("Error fetching destination data:", error);
+          return { data: [] as Destination[], total: 0 };
         }
-        if (debouncedSearch.trim()) requestBody.filters.search = debouncedSearch.trim();
-
-        const response = await apiCallProtected.post(
-          `${URL.filter_destination}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        console.log("Initial load API response:", data);
-
-        // Handle response with total count
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Error fetching destination data:", error);
-        setTotalRecords(0);
-        return [];
-      }
+      },
+      // Modal-driven gating: only run when the user has selected a destination
+      // and confirmed via the "Search" action. All other refetch triggers
+      // (filter Apply, pagination, search) flow through the queryKey above.
+      enabled: hasSearched && Boolean(currentDestinationCode),
+      staleTime: 0,
+      gcTime: 0,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    enabled:
-      hasSearched &&
-      !filtersApplied &&
-      debouncedSearch.trim() === "" &&
-      Boolean(currentDestinationCode),
-  });
+  );
 
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredDestinationData = [],
-    isLoading: filteredDestinationLoading,
-    isFetching: filteredDestinationFetching,
-  } = useQuery({
-    queryKey: [
-      "filteredDestination",
-      filtersApplied,
-      appliedFilters,
-      currentDestinationCode,
-      debouncedSearch,
-      currentPage,
-      pageSize,
-    ],
-    queryFn: async () => {
-      try {
-        const hasSearch = debouncedSearch.trim() !== "";
-        if (!filtersApplied && !hasSearch) return [];
-
-        const payload: any = {};
-
-        // Always include destination_code from modal selection if available
-        if (currentDestinationCode) {
-          payload.destination_code = currentDestinationCode;
-        }
-
-        if (appliedFilters.carrier_name)
-          payload.carrier_name = appliedFilters.carrier_name;
-        if (appliedFilters.service)
-          payload.service = appliedFilters.service;
-        if (appliedFilters.tariff_code)
-          payload.tariff_code = appliedFilters.tariff_code;
-        if (appliedFilters.valid_from)
-          payload.valid_from = dayjs(appliedFilters.valid_from).format("YYYY-MM-DD");
-        if (appliedFilters.valid_to)
-          payload.valid_to = dayjs(appliedFilters.valid_to).format("YYYY-MM-DD");
-
-        if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
-        if (Object.keys(payload)?.length === 0) return [];
-
-        const requestBody = { filters: payload };
-        const response = await apiCallProtected.post(
-          `${URL.filter_destination}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        console.log("Filter API response:", data);
-
-        // Handle response with total count
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Error fetching filtered destination data:", error);
-        setTotalRecords(0);
-        return [];
-      }
-    },
-    enabled:
-      hasSearched &&
-      Boolean(currentDestinationCode) &&
-      (filtersApplied || debouncedSearch.trim() !== ""),
-    staleTime: 0,
-    gcTime: 0,
-  });
+  useEffect(() => {
+    if (destinationResult && typeof destinationResult.total === "number") {
+      setTotalRecords(destinationResult.total);
+    }
+  }, [destinationResult]);
 
   useEffect(() => {
     clearStoreAllExcept(LIST_KEY);
@@ -336,17 +297,9 @@ export default function DestinationMaster() {
       if (restoredFilters) {
         filterForm.setValues(restoredFilters);
         setAppliedFilters(restoredFilters);
-        setFiltersApplied(
-          Boolean(
-            restoredFilters.carrier_name ||
-              restoredFilters.service ||
-              restoredFilters.tariff_code ||
-              restoredFilters.valid_from ||
-              restoredFilters.valid_to,
-          ),
-        );
       }
-      if (typeof restored.search === "string") setLocalSearchTerm(restored.search);
+      if (typeof restored.search === "string")
+        setLocalSearchTerm(restored.search);
       // Rehydrate friendly carrier label.
       const restoredCarrierLabel = restored.displayValues?.carrier_name;
       if (
@@ -355,44 +308,24 @@ export default function DestinationMaster() {
       ) {
         setCarrierDisplayValue(restoredCarrierLabel);
       }
+      // Restoring `appliedFilters`/`debouncedSearch` flips the unified query's
+      // key, so the table refetches with the restored values automatically.
       setCurrentPage(1);
-      void queryClient.invalidateQueries({ queryKey: ["destination"] });
-      void queryClient.invalidateQueries({ queryKey: ["filteredDestination"] });
       useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
       hasRestoredFromStore.current = true;
     }
-  }, [filterForm, queryClient]);
+  }, [filterForm]);
 
   useEffect(() => {
     setStoreSearch(LIST_KEY, localSearchTerm);
     setCurrentPage(1);
   }, [debouncedSearch]);
 
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      console.log("Displaying filtered data:", filteredDestinationData);
-      return filteredDestinationData;
-    }
-    console.log("Displaying unfiltered data:", destinationVal);
-    return destinationVal;
-  }, [destinationVal, filteredDestinationData, filtersApplied]);
-
-  // Loading state
-  const isLoading = useMemo(() => {
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      return filteredDestinationLoading || filteredDestinationFetching;
-    }
-    return isDestinationLoading || isDestinationFetching;
-  }, [
-    isDestinationLoading,
-    isDestinationFetching,
-    filteredDestinationLoading,
-    filteredDestinationFetching,
-    filtersApplied,
-    debouncedSearch,
-  ]);
+  const displayData = (destinationResult?.data ?? []) as Destination[];
+  // Single source of truth for the table loader: any in-flight refetch shows
+  // the loader. Pagination, Apply, column-header filters and search all go
+  // through React Query so this flag covers every refresh.
+  const isLoading = destinationFetching;
 
   // Stable reference so the header-filter `renderInput` memo doesn't churn.
   const erpTheme: ErpListTheme = useMemo(
@@ -456,14 +389,6 @@ export default function DestinationMaster() {
 
       setAppliedFilters(newApplied);
       setCurrentPage(1);
-
-      const hasAny =
-        newApplied.carrier_name ||
-        newApplied.service ||
-        newApplied.tariff_code ||
-        newApplied.valid_from ||
-        newApplied.valid_to;
-      setFiltersApplied(Boolean(hasAny));
 
       const filtersForStore: FilterState = {
         carrier_name:
@@ -900,8 +825,9 @@ export default function DestinationMaster() {
         filterForm.values.valid_to;
 
       if (!hasFilterValues) {
-        // If no filter values, show unfiltered data
-        setFiltersApplied(false);
+        // If no filter values, show unfiltered data — clearing
+        // `appliedFilters` flips `appliedFiltersKey` and the unified query
+        // refetches automatically with empty filters.
         setAppliedFilters({
           carrier_name: null,
           service: null,
@@ -909,21 +835,17 @@ export default function DestinationMaster() {
           valid_from: null,
           valid_to: null,
         });
-
-        // Invalidate and refetch unfiltered data
-        await queryClient.invalidateQueries({ queryKey: ["destination"] });
         clearStoreFilters(LIST_KEY);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
         });
-        console.log("No filter values provided, showing unfiltered data");
         return;
       }
 
-      setFiltersApplied(true); // Mark filters as applied
-
-      // Store the current filter form values as applied filters
+      // Store the current filter form values as applied filters. The unified
+      // query's `queryKey` includes `appliedFiltersKey` and `currentPage`, so
+      // the state updates here are sufficient to trigger a refetch.
       setAppliedFilters({
         carrier_name: filterForm.values.carrier_name,
         service: filterForm.values.service,
@@ -934,17 +856,12 @@ export default function DestinationMaster() {
       setStoreFilters(LIST_KEY, { ...filterForm.values });
       setStoreSearch(LIST_KEY, localSearchTerm);
       useListFilterStore.getState().setDisplayValues(LIST_KEY, {
-        carrier_name: filterForm.values.carrier_name ? carrierDisplayValue : null,
+        carrier_name: filterForm.values.carrier_name
+          ? carrierDisplayValue
+          : null,
       });
       setCurrentPage(1);
-
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredDestination"],
-      });
       setShowFilters(false);
-
-      console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
     }
@@ -953,9 +870,9 @@ export default function DestinationMaster() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setFiltersApplied(false); // Reset filters applied state
 
-    // Reset applied filters state
+    // Reset applied filters — flips `appliedFiltersKey` so the unified query
+    // automatically refetches unfiltered data with the loader visible.
     setAppliedFilters({
       carrier_name: null,
       service: null,
@@ -971,10 +888,6 @@ export default function DestinationMaster() {
       carrier_name: null,
     });
 
-    // Invalidate queries and refetch unfiltered data
-    await queryClient.invalidateQueries({ queryKey: ["destination"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredDestination"] });
-    await queryClient.removeQueries({ queryKey: ["filteredDestination"] }); // Remove filtered data from cache
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
@@ -1153,11 +1066,12 @@ export default function DestinationMaster() {
                           size="sm"
                           aria-label="Clear search"
                           onClick={() => {
+                            // Clearing search updates `debouncedSearch` (after
+                            // 1000ms) which is part of the unified query's
+                            // key — the table refetches automatically.
                             setLocalSearchTerm("");
                             clearStoreSearch(LIST_KEY);
                             setCurrentPage(1);
-                            void queryClient.invalidateQueries({ queryKey: ["destination"] });
-                            void queryClient.invalidateQueries({ queryKey: ["filteredDestination"] });
                           }}
                           style={{ cursor: "pointer" }}
                         >
@@ -1169,7 +1083,7 @@ export default function DestinationMaster() {
                     size="xs"
                     value={localSearchTerm}
                     onChange={(e) => setLocalSearchTerm(e.currentTarget.value)}
-                    disabled={!hasSearched || isDestinationLoading}
+                    disabled={!hasSearched || isLoading}
                     classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={{
                       input: {
@@ -1363,7 +1277,13 @@ export default function DestinationMaster() {
                 </Center>
               ) : !isLoading &&
                 (displayData as Destination[]).length === 0 &&
-                !filtersApplied &&
+                !(
+                  appliedFilters.carrier_name ||
+                  appliedFilters.service ||
+                  appliedFilters.tariff_code ||
+                  appliedFilters.valid_from ||
+                  appliedFilters.valid_to
+                ) &&
                 debouncedSearch.trim() === "" ? (
                 // Pristine "no rows for this destination" state — show the
                 // "Try Different Destination" button to allow re-picking.

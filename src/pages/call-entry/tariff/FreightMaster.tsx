@@ -47,7 +47,7 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
@@ -94,7 +94,6 @@ const LIST_KEY = "FREIGHT_MASTER";
 export default function Freight() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
   const dateFormat = useDateFormat();
 
   // Add local search state — 1000ms keeps it consistent with header column filters.
@@ -108,7 +107,9 @@ export default function Freight() {
 
   // Filter states - similar to CallEntryMaster
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+  // NOTE: `filtersApplied` used to gate a separate filtered-data query, but
+  // the unified query now reacts to `appliedFiltersKey` directly so the flag
+  // is no longer needed.
 
   // Store display values (labels) for SearchableSelect fields
   const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
@@ -163,74 +164,46 @@ export default function Freight() {
     []
   );
 
-  // Fetch freight data with React Query - initial fetch without filters with pagination
-  const {
-    data: freightVal = [],
-    isLoading: isFreightLoading,
-    isFetching: isFreightFetching,
-    refetch: refetchFreight,
-  } = useQuery({
-    queryKey: ["freight", currentPage, pageSize, debouncedSearch],
-    queryFn: async () => {
-      try {
-        const requestBody: { filters: any } = { filters: {} };
-        if (debouncedSearch.trim()) requestBody.filters.search = debouncedSearch.trim();
+  /**
+   * Single unified data query — same refetch principle as EnquiryMaster.
+   *
+   * `queryKey` includes every input that should trigger a refetch: pagination,
+   * the applied filters object (stringified for a stable structural key), and
+   * the debounced global search. React Query then natively re-runs the
+   * `queryFn` whenever any of these change, so pagination, filter Apply,
+   * column-header filter changes and global search all flow through a single
+   * fetch + a single `isFetching` flag — no `useMemo` switching between two
+   * queries, and the loader always reflects an in-flight refetch.
+   */
+  const appliedFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        origin: appliedFilters.origin,
+        destination: appliedFilters.destination,
+        service: appliedFilters.service,
+        tariff_code: appliedFilters.tariff_code,
+        carrier_name: appliedFilters.carrier_name,
+        valid_from: appliedFilters.valid_from
+          ? dayjs(appliedFilters.valid_from).format("YYYY-MM-DD")
+          : null,
+        valid_to: appliedFilters.valid_to
+          ? dayjs(appliedFilters.valid_to).format("YYYY-MM-DD")
+          : null,
+      }),
+    [appliedFilters],
+  );
 
-        const response = await apiCallProtected.post(
-          `${URL.filter_freight}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        console.log("Initial load API response:", data);
-
-        // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Error fetching freight data:", error);
-        setTotalRecords(0);
-        return [];
-      }
-    },
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    enabled: !filtersApplied && debouncedSearch.trim() === "",
-  });
-
-  // Separate query for filtered data - only runs when filters are applied with pagination
-  const {
-    data: filteredFreightData = [],
-    isLoading: filteredFreightLoading,
-    isFetching: filteredFreightFetching,
-  } = useQuery({
+  const { data: freightResult, isFetching: freightFetching } = useQuery({
     queryKey: [
-      "filteredFreight",
-      filtersApplied,
-      appliedFilters,
-      debouncedSearch,
+      "freight",
       currentPage,
       pageSize,
+      appliedFiltersKey,
+      debouncedSearch,
     ],
     queryFn: async () => {
       try {
-        const hasSearch = debouncedSearch.trim() !== "";
-        if (!filtersApplied && !hasSearch) return [];
-
-        const payload: any = {};
+        const payload: Record<string, unknown> = {};
 
         if (appliedFilters.origin) payload.origin_code = appliedFilters.origin;
         if (appliedFilters.destination)
@@ -242,76 +215,55 @@ export default function Freight() {
           payload.carrier_name = appliedFilters.carrier_name;
         if (appliedFilters.valid_from)
           payload.valid_from = dayjs(appliedFilters.valid_from).format(
-            "YYYY-MM-DD"
+            "YYYY-MM-DD",
           );
         if (appliedFilters.valid_to)
           payload.valid_to = dayjs(appliedFilters.valid_to).format(
-            "YYYY-MM-DD"
+            "YYYY-MM-DD",
           );
+        if (debouncedSearch.trim())
+          payload.search = debouncedSearch.trim();
 
-        if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
-        if (Object.keys(payload)?.length === 0) return [];
-
-        const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
           `${URL.filter_freight}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
+          { filters: payload },
         );
         const data = response as any;
-        console.log("Filter API response:", data);
-
-        // Handle response with total count
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
+        const rows = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.result)
+          ? data.result
+          : [];
+        const total = getTariffFilterListTotal(data, rows);
+        return { data: rows, total };
       } catch (error) {
-        console.error("Error fetching filtered freight data:", error);
-        setTotalRecords(0);
-        return [];
+        console.error("Error fetching freight data:", error);
+        return { data: [] as Freight[], total: 0 };
       }
     },
-    enabled: filtersApplied || debouncedSearch.trim() !== "",
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    enabled: true,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      console.log("Displaying filtered data:", filteredFreightData);
-      return Array.isArray(filteredFreightData) ? filteredFreightData : [];
+  // Keep the `totalRecords` state in sync with whatever the latest fetch
+  // returned. Using an effect (rather than `setState` inside `queryFn`) keeps
+  // React's render cycle clean and avoids spurious re-renders during fetch.
+  useEffect(() => {
+    if (freightResult && typeof freightResult.total === "number") {
+      setTotalRecords(freightResult.total);
     }
-    console.log("Displaying unfiltered data:", freightVal);
-    return Array.isArray(freightVal) ? freightVal : [];
-  }, [freightVal, filteredFreightData, filtersApplied]);
+  }, [freightResult]);
 
-  // Loading state
-  const isLoading = useMemo(() => {
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      return filteredFreightLoading || filteredFreightFetching;
-    }
-    return isFreightLoading || isFreightFetching;
-  }, [
-    isFreightLoading,
-    isFreightFetching,
-    filteredFreightLoading,
-    filteredFreightFetching,
-    filtersApplied,
-    debouncedSearch,
-  ]);
+  const displayData = (freightResult?.data ?? []) as Freight[];
+  // Single source of truth for the table loader: any in-flight refetch shows
+  // the loader. Pagination, Apply, column-header filters and search all go
+  // through React Query so this flag covers every refresh.
+  const isLoading = freightFetching;
 
   useEffect(() => {
     clearStoreAllExcept(LIST_KEY);
@@ -325,17 +277,6 @@ export default function Freight() {
       if (restoredFilters) {
         filterForm.setValues(restoredFilters);
         setAppliedFilters(restoredFilters);
-        setFiltersApplied(
-          Boolean(
-            restoredFilters.origin ||
-              restoredFilters.destination ||
-              restoredFilters.service ||
-              restoredFilters.tariff_code ||
-              restoredFilters.carrier_name ||
-              restoredFilters.valid_from ||
-              restoredFilters.valid_to,
-          ),
-        );
       }
       if (typeof restored.search === "string") {
         setLocalSearchTerm(restored.search);
@@ -471,16 +412,6 @@ export default function Freight() {
 
       setAppliedFilters(newApplied);
       setCurrentPage(1);
-
-      const hasAny =
-        newApplied.origin ||
-        newApplied.destination ||
-        newApplied.service ||
-        newApplied.tariff_code ||
-        newApplied.carrier_name ||
-        newApplied.valid_from ||
-        newApplied.valid_to;
-      setFiltersApplied(Boolean(hasAny));
 
       // Persist current filterForm + display labels into the store so the
       // friendly labels rehydrate on restore from sub-pages.
@@ -981,7 +912,6 @@ export default function Freight() {
 
       if (!hasFilterValues) {
         // If no filter values, show unfiltered data
-        setFiltersApplied(false);
         setAppliedFilters({
           origin: null,
           destination: null,
@@ -993,22 +923,18 @@ export default function Freight() {
           valid_to: null,
         });
 
-        // Reset to first page
+        // Reset to first page — clearing filters changes `appliedFiltersKey`
+        // which automatically triggers the unified query to refetch with the
+        // new (empty) payload. No manual invalidation/refetch is needed.
         setCurrentPage(1);
         clearStoreFilters(LIST_KEY);
 
-        // Invalidate and refetch unfiltered data
-        await queryClient.invalidateQueries({ queryKey: ["freight"] });
-        await refetchFreight();
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
         });
-        console.log("No filter values provided, showing unfiltered data");
         return;
       }
-
-      setFiltersApplied(true); // Mark filters as applied
 
       // Store the current filter form values as applied filters
       setAppliedFilters({
@@ -1038,16 +964,11 @@ export default function Freight() {
           : null,
       });
 
-      // Reset to first page when applying filters
+      // Reset to first page when applying filters. The unified query's
+      // `queryKey` includes `appliedFiltersKey` and `currentPage`, so the
+      // state updates above are sufficient to trigger a refetch.
       setCurrentPage(1);
-
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredFreight"],
-      });
       setShowFilters(false);
-
-      console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
     }
@@ -1056,7 +977,6 @@ export default function Freight() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setFiltersApplied(false); // Reset filters applied state
 
     // Reset applied filters state
     setAppliedFilters({
@@ -1075,7 +995,9 @@ export default function Freight() {
     setDestinationDisplayValue(null);
     setCarrierDisplayValue(null);
 
-    // Reset to first page
+    // Reset to first page. Clearing `appliedFilters` invalidates the unified
+    // query's key automatically, so the table refetches with empty filters
+    // and the loader shows for the duration of the request.
     setCurrentPage(1);
     clearStoreFilters(LIST_KEY);
     useListFilterStore.getState().setDisplayValues(LIST_KEY, {
@@ -1084,12 +1006,6 @@ export default function Freight() {
       carrier_name: null,
       carrier_code: null,
     });
-
-    // Invalidate queries and refetch unfiltered data
-    await queryClient.invalidateQueries({ queryKey: ["freight"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredFreight"] });
-    await queryClient.removeQueries({ queryKey: ["filteredFreight"] }); // Remove filtered data from cache
-    await refetchFreight();
 
     ToastNotification({
       type: "success",

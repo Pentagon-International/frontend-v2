@@ -90,6 +90,15 @@ export type {
   ERPListColumnToggleItem,
 } from "./ERPListColumnToggleMenu";
 
+export {
+  ERPListColumnHeaderFilter,
+  ERPListHeaderFilterInput,
+} from "./ERPListColumnHeaderFilter";
+export type {
+  ERPListColumnHeaderFilterProps,
+  ERPListHeaderFilterInputProps,
+} from "./ERPListColumnHeaderFilter";
+
 export { ERPListJobStatusPill } from "./ERPListJobStatusPill";
 
 export {

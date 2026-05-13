@@ -51,7 +51,7 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
@@ -92,7 +92,6 @@ const LIST_KEY = "ORIGIN_MASTER";
 export default function OriginMaster() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
 
   const dateFormat = useDateFormat();
 
@@ -148,7 +147,9 @@ export default function OriginMaster() {
 
   // Filter states - similar to CallEntryMaster
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+  // NOTE: `filtersApplied` used to gate a separate filtered-data query, but
+  // the unified query now reacts to `appliedFiltersKey` directly so the flag
+  // is no longer needed.
 
   // Store display values (labels) for SearchableSelect fields
   const [carrierDisplayValue, setCarrierDisplayValue] = useState<string | null>(null);
@@ -189,138 +190,97 @@ export default function OriginMaster() {
     []
   );
 
-  // Fetch origin data with React Query - using filter API with origin code from modal
-  const {
-    data: originVal = [],
-    isLoading: isOriginLoading,
-    isFetching: isOriginFetching,
-  } = useQuery({
-    queryKey: ["origin", currentOriginCode, currentPage, pageSize, debouncedSearch],
-    queryFn: async () => {
-      try {
-        const requestBody: { filters: any } = { filters: {} };
+  /**
+   * Single unified data query — same refetch principle as EnquiryMaster.
+   *
+   * `queryKey` includes every input that should trigger a refetch: the modal-
+   * selected `currentOriginCode`, pagination, the applied filters object
+   * (stringified for a stable structural key), and the debounced global
+   * search. React Query natively re-runs the `queryFn` whenever any of these
+   * change, so pagination, filter Apply, column-header filter changes and
+   * global search all flow through a single fetch + a single `isFetching`
+   * flag — no `useMemo` switching between two queries, and the loader always
+   * reflects an in-flight refetch.
+   */
+  const appliedFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        carrier_name: appliedFilters.carrier_name,
+        service: appliedFilters.service,
+        tariff_code: appliedFilters.tariff_code,
+        valid_from: appliedFilters.valid_from
+          ? dayjs(appliedFilters.valid_from).format("YYYY-MM-DD")
+          : null,
+        valid_to: appliedFilters.valid_to
+          ? dayjs(appliedFilters.valid_to).format("YYYY-MM-DD")
+          : null,
+      }),
+    [appliedFilters],
+  );
 
-        // Add origin_code filter if origin is selected from modal (use port code)
-        if (currentOriginCode) {
-          requestBody.filters.origin_code = currentOriginCode;
-        }
-        if (debouncedSearch.trim()) requestBody.filters.search = debouncedSearch.trim();
-
-        const response = await apiCallProtected.post(
-          `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        console.log("Initial load API response:", data);
-
-        // Handle response - API returns { results: [...] } or { result: [...] }
-        // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Error fetching origin data:", error);
-        setTotalRecords(0);
-        return [];
-      }
-    },
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    enabled:
-      hasSearched &&
-      !filtersApplied &&
-      debouncedSearch.trim() === "" &&
-      Boolean(currentOriginCode),
-  });
-
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredOriginData = [],
-    isLoading: filteredOriginLoading,
-    isFetching: filteredOriginFetching,
-  } = useQuery({
+  const { data: originResult, isFetching: originFetching } = useQuery({
     queryKey: [
-      "filteredOrigin",
-      filtersApplied,
-      appliedFilters,
+      "origin",
       currentOriginCode,
-      debouncedSearch,
       currentPage,
       pageSize,
+      appliedFiltersKey,
+      debouncedSearch,
     ],
     queryFn: async () => {
       try {
-        const hasSearch = debouncedSearch.trim() !== "";
-        if (!filtersApplied && !hasSearch) return [];
-
-        const payload: any = {};
-
-        // Always include origin_code from modal selection if available
-        if (currentOriginCode) {
-          payload.origin_code = currentOriginCode;
-        }
-
+        const payload: Record<string, unknown> = {};
+        if (currentOriginCode) payload.origin_code = currentOriginCode;
         if (appliedFilters.carrier_name)
           payload.carrier_name = appliedFilters.carrier_name;
-        if (appliedFilters.service)
-          payload.service = appliedFilters.service;
+        if (appliedFilters.service) payload.service = appliedFilters.service;
         if (appliedFilters.tariff_code)
           payload.tariff_code = appliedFilters.tariff_code;
         if (appliedFilters.valid_from)
-          payload.valid_from = dayjs(appliedFilters.valid_from).format("YYYY-MM-DD");
+          payload.valid_from = dayjs(appliedFilters.valid_from).format(
+            "YYYY-MM-DD",
+          );
         if (appliedFilters.valid_to)
-          payload.valid_to = dayjs(appliedFilters.valid_to).format("YYYY-MM-DD");
+          payload.valid_to = dayjs(appliedFilters.valid_to).format(
+            "YYYY-MM-DD",
+          );
+        if (debouncedSearch.trim())
+          payload.search = debouncedSearch.trim();
 
-        if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
-        if (Object.keys(payload)?.length === 0) return [];
-
-        const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
           `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
+          { filters: payload },
         );
         const data = response as any;
-        console.log("Filter API response:", data);
-
-        // Handle response with total count
-        if (data && Array.isArray(data.data)) {
-          const rows = data.data;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.result)) {
-          const rows = data.result;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        } else if (data && Array.isArray(data.results)) {
-          const rows = data.results;
-          setTotalRecords(getTariffFilterListTotal(data, rows));
-          return rows;
-        }
-        setTotalRecords(0);
-        return [];
+        const rows = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.result)
+          ? data.result
+          : [];
+        const total = getTariffFilterListTotal(data, rows);
+        return { data: rows, total };
       } catch (error) {
-        console.error("Error fetching filtered origin data:", error);
-        setTotalRecords(0);
-        return [];
+        console.error("Error fetching origin data:", error);
+        return { data: [] as Origin[], total: 0 };
       }
     },
-    enabled: hasSearched && Boolean(currentOriginCode) && (filtersApplied || debouncedSearch.trim() !== ""),
+    // Modal-driven gating: only run when the user has selected an origin and
+    // confirmed via the "Search" action. All other refetch triggers (filter
+    // Apply, pagination, search) flow through the queryKey changes above.
+    enabled: hasSearched && Boolean(currentOriginCode),
     staleTime: 0,
     gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
+
+  useEffect(() => {
+    if (originResult && typeof originResult.total === "number") {
+      setTotalRecords(originResult.total);
+    }
+  }, [originResult]);
 
   useEffect(() => {
     clearStoreAllExcept(LIST_KEY);
@@ -334,17 +294,9 @@ export default function OriginMaster() {
       if (restoredFilters) {
         filterForm.setValues(restoredFilters);
         setAppliedFilters(restoredFilters);
-        setFiltersApplied(
-          Boolean(
-            restoredFilters.carrier_name ||
-              restoredFilters.service ||
-              restoredFilters.tariff_code ||
-              restoredFilters.valid_from ||
-              restoredFilters.valid_to,
-          ),
-        );
       }
-      if (typeof restored.search === "string") setLocalSearchTerm(restored.search);
+      if (typeof restored.search === "string")
+        setLocalSearchTerm(restored.search);
       // Rehydrate friendly carrier label.
       const restoredCarrierLabel = restored.displayValues?.carrier_name;
       if (
@@ -353,44 +305,24 @@ export default function OriginMaster() {
       ) {
         setCarrierDisplayValue(restoredCarrierLabel);
       }
+      // Restoring `appliedFilters`/`debouncedSearch` flips the unified query's
+      // key, so the table will refetch with the restored values automatically.
       setCurrentPage(1);
-      void queryClient.invalidateQueries({ queryKey: ["origin"] });
-      void queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
       useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
       hasRestoredFromStore.current = true;
     }
-  }, [filterForm, queryClient]);
+  }, [filterForm]);
 
   useEffect(() => {
     setStoreSearch(LIST_KEY, localSearchTerm);
     setCurrentPage(1);
   }, [debouncedSearch]);
 
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      console.log("Displaying filtered data:", filteredOriginData);
-      return filteredOriginData;
-    }
-    console.log("Displaying unfiltered data:", originVal);
-    return originVal;
-  }, [originVal, filteredOriginData, filtersApplied]);
-
-  // Loading state
-  const isLoading = useMemo(() => {
-    if (filtersApplied || debouncedSearch.trim() !== "") {
-      return filteredOriginLoading || filteredOriginFetching;
-    }
-    return isOriginLoading || isOriginFetching;
-  }, [
-    isOriginLoading,
-    isOriginFetching,
-    filteredOriginLoading,
-    filteredOriginFetching,
-    filtersApplied,
-    debouncedSearch,
-  ]);
+  const displayData = (originResult?.data ?? []) as Origin[];
+  // Single source of truth for the table loader: any in-flight refetch shows
+  // the loader. Pagination, Apply, column-header filters and search all go
+  // through React Query so this flag covers every refresh.
+  const isLoading = originFetching;
 
   // Stable reference so the header-filter `renderInput` memo doesn't churn.
   const erpTheme: ErpListTheme = useMemo(
@@ -454,14 +386,6 @@ export default function OriginMaster() {
 
       setAppliedFilters(newApplied);
       setCurrentPage(1);
-
-      const hasAny =
-        newApplied.carrier_name ||
-        newApplied.service ||
-        newApplied.tariff_code ||
-        newApplied.valid_from ||
-        newApplied.valid_to;
-      setFiltersApplied(Boolean(hasAny));
 
       const filtersForStore: FilterState = {
         carrier_name:
@@ -884,8 +808,9 @@ export default function OriginMaster() {
         filterForm.values.valid_to;
 
       if (!hasFilterValues) {
-        // If no filter values, show unfiltered data
-        setFiltersApplied(false);
+        // If no filter values, show unfiltered data — clearing
+        // `appliedFilters` flips `appliedFiltersKey` and the unified query
+        // refetches automatically with empty filters.
         setAppliedFilters({
           carrier_name: null,
           service: null,
@@ -893,21 +818,17 @@ export default function OriginMaster() {
           valid_from: null,
           valid_to: null,
         });
-
-        // Invalidate and refetch unfiltered data
-        await queryClient.invalidateQueries({ queryKey: ["origin"] });
         clearStoreFilters(LIST_KEY);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
         });
-        console.log("No filter values provided, showing unfiltered data");
         return;
       }
 
-      setFiltersApplied(true); // Mark filters as applied
-
-      // Store the current filter form values as applied filters
+      // Store the current filter form values as applied filters. The unified
+      // query's `queryKey` includes `appliedFiltersKey` and `currentPage`, so
+      // the state updates here are sufficient to trigger a refetch.
       setAppliedFilters({
         carrier_name: filterForm.values.carrier_name,
         service: filterForm.values.service,
@@ -918,17 +839,12 @@ export default function OriginMaster() {
       setStoreFilters(LIST_KEY, { ...filterForm.values });
       setStoreSearch(LIST_KEY, localSearchTerm);
       useListFilterStore.getState().setDisplayValues(LIST_KEY, {
-        carrier_name: filterForm.values.carrier_name ? carrierDisplayValue : null,
+        carrier_name: filterForm.values.carrier_name
+          ? carrierDisplayValue
+          : null,
       });
       setCurrentPage(1);
-
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredOrigin"],
-      });
       setShowFilters(false);
-
-      console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
     }
@@ -937,9 +853,9 @@ export default function OriginMaster() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setFiltersApplied(false); // Reset filters applied state
 
-    // Reset applied filters state
+    // Reset applied filters — flips `appliedFiltersKey` so the unified query
+    // automatically refetches unfiltered data with the loader visible.
     setAppliedFilters({
       carrier_name: null,
       service: null,
@@ -955,10 +871,6 @@ export default function OriginMaster() {
       carrier_name: null,
     });
 
-    // Invalidate queries and refetch unfiltered data
-    await queryClient.invalidateQueries({ queryKey: ["origin"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
-    await queryClient.removeQueries({ queryKey: ["filteredOrigin"] }); // Remove filtered data from cache
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
@@ -1134,11 +1046,12 @@ export default function OriginMaster() {
                           size="sm"
                           aria-label="Clear search"
                           onClick={() => {
+                            // Clearing search updates `debouncedSearch` (after
+                            // 1000ms) which is part of the unified query's
+                            // key — the table refetches automatically.
                             setLocalSearchTerm("");
                             clearStoreSearch(LIST_KEY);
                             setCurrentPage(1);
-                            void queryClient.invalidateQueries({ queryKey: ["origin"] });
-                            void queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
                           }}
                           style={{ cursor: "pointer" }}
                         >
@@ -1150,7 +1063,7 @@ export default function OriginMaster() {
                     size="xs"
                     value={localSearchTerm}
                     onChange={(e) => setLocalSearchTerm(e.currentTarget.value)}
-                    disabled={!hasSearched || isOriginLoading}
+                    disabled={!hasSearched || isLoading}
                     classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={{
                       input: {
@@ -1344,7 +1257,13 @@ export default function OriginMaster() {
                 </Center>
               ) : !isLoading &&
                 (displayData as Origin[]).length === 0 &&
-                !filtersApplied &&
+                !(
+                  appliedFilters.carrier_name ||
+                  appliedFilters.service ||
+                  appliedFilters.tariff_code ||
+                  appliedFilters.valid_from ||
+                  appliedFilters.valid_to
+                ) &&
                 debouncedSearch.trim() === "" ? (
                 // Pristine "no rows for this origin" state — show the
                 // "Try Different Origin" button to allow re-picking. When the

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -16,6 +16,9 @@ import {
   UnstyledButton,
   Badge,
   Grid,
+  Loader,
+  Select,
+  Stack,
   TextInput,
   MantineProvider,
 } from "@mantine/core";
@@ -38,12 +41,12 @@ import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import {
   Dropdown,
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   SingleDateInput,
   erpListFilterFieldCellStyle,
   erpListFilterUnifiedMantineStyles,
@@ -144,6 +147,14 @@ type FilterState = {
   paid_to_type: string | null;
   request_no: string | null;
   job_reference: string | null;
+  /**
+   * Free-text filter on the `not_over` column (backend `not_over` icontains).
+   * Stored as a nullable string so the advanced filter section can render an
+   * empty FormTextInput while still distinguishing "filter cleared" (null)
+   * from "filter set to empty" — both are treated the same in the payload
+   * (only non-empty trimmed values are sent).
+   */
+  not_over: string | null;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -185,6 +196,7 @@ const emptyFilters = (): FilterState => ({
   paid_to_type: null,
   request_no: null,
   job_reference: null,
+  not_over: null,
 });
 
 const LIST_KEY = "PAYMENT_REQUEST_APPROVAL";
@@ -221,7 +233,10 @@ const paymentRequestColumnDefault: PaymentRequestColumnVisibility = {
   status: true,
 };
 
-const paymentRequestColumnLabels: Record<keyof PaymentRequestColumnVisibility, string> = {
+const paymentRequestColumnLabels: Record<
+  keyof PaymentRequestColumnVisibility,
+  string
+> = {
   sno: "S.No",
   created_by: "User",
   request_no: "Request No",
@@ -250,7 +265,10 @@ function paymentRequestColumnId(
 function PaymentRequestApproval() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 25 });
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
   const [totalRecords, setTotalRecords] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -259,7 +277,8 @@ function PaymentRequestApproval() {
   const [showFilters, setShowFilters] = useState(false);
   // draftFilters: what user is editing in the panel; appliedFilters: what drives the query
   const [draftFilters, setDraftFilters] = useState<FilterState>(emptyFilters());
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(emptyFilters());
+  const [appliedFilters, setAppliedFilters] =
+    useState<FilterState>(emptyFilters());
   const [draftCreatedBy, setDraftCreatedBy] = useState("");
   const [appliedCreatedBy, setAppliedCreatedBy] = useState("");
   const [draftPaidTo, setDraftPaidTo] = useState("");
@@ -273,11 +292,26 @@ function PaymentRequestApproval() {
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
 
-  const [visibleColumns, setVisibleColumns] = useState<PaymentRequestColumnVisibility>(
-    () => ({ ...paymentRequestColumnDefault }),
-  );
+  const [visibleColumns, setVisibleColumns] =
+    useState<PaymentRequestColumnVisibility>(() => ({
+      ...paymentRequestColumnDefault,
+    }));
+
+  /**
+   * Column-header filtering: which header is currently in "edit" mode.
+   * Lifted to the page so opening a new header collapses any prior editor,
+   * and so the editor state survives MRT re-renders triggered by filter
+   * changes flowing through the column memo's deps.
+   */
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
 
   useEffect(() => {
     if (isRestoring) return;
@@ -306,6 +340,7 @@ function PaymentRequestApproval() {
         paid_to_type: (f.paid_to_type as string) ?? null,
         request_no: (f.request_no as string) ?? null,
         job_reference: (f.job_reference as string) ?? null,
+        not_over: (f.not_over as string) ?? null,
       };
       setDraftFilters(restored);
       setAppliedFilters(restored);
@@ -328,12 +363,20 @@ function PaymentRequestApproval() {
   const buildFilterPayload = useMemo(() => {
     const payload: Record<string, unknown> = {};
     if (appliedFilters.status) payload.status = appliedFilters.status;
-    if (appliedFilters.date_from) payload.date_from = dayjs(appliedFilters.date_from).format("YYYY-MM-DD");
-    if (appliedFilters.date_to) payload.date_to = dayjs(appliedFilters.date_to).format("YYYY-MM-DD");
-    if (appliedFilters.payment_type) payload.payment_type = appliedFilters.payment_type;
-    if (appliedFilters.paid_to_type) payload.paid_to_type = appliedFilters.paid_to_type;
-    if (appliedFilters.request_no?.trim()) payload.request_no = appliedFilters.request_no.trim();
-    if (appliedFilters.job_reference?.trim()) payload.job_reference = appliedFilters.job_reference.trim();
+    if (appliedFilters.date_from)
+      payload.date_from = dayjs(appliedFilters.date_from).format("YYYY-MM-DD");
+    if (appliedFilters.date_to)
+      payload.date_to = dayjs(appliedFilters.date_to).format("YYYY-MM-DD");
+    if (appliedFilters.payment_type)
+      payload.payment_type = appliedFilters.payment_type;
+    if (appliedFilters.paid_to_type)
+      payload.paid_to_type = appliedFilters.paid_to_type;
+    if (appliedFilters.request_no?.trim())
+      payload.request_no = appliedFilters.request_no.trim();
+    if (appliedFilters.job_reference?.trim())
+      payload.job_reference = appliedFilters.job_reference.trim();
+    if (appliedFilters.not_over?.trim())
+      payload.not_over = appliedFilters.not_over.trim();
     if (appliedCreatedBy.trim()) payload.created_by = appliedCreatedBy.trim();
     if (appliedPaidTo.trim()) payload.paid_to = appliedPaidTo.trim();
     return payload;
@@ -347,15 +390,25 @@ function PaymentRequestApproval() {
     isFetching: requestFetching,
     error: requestError,
   } = useQuery<PaymentRequestListQueryResult>({
-    queryKey: ["paymentRequestApproval", pagination.pageIndex, pagination.pageSize, JSON.stringify(buildFilterPayload), debouncedSearch],
+    queryKey: [
+      "paymentRequestApproval",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(buildFilterPayload),
+      debouncedSearch,
+    ],
     queryFn: async (): Promise<PaymentRequestListQueryResult> => {
       try {
-        const filtersWithSearch: Record<string, unknown> = { ...buildFilterPayload };
-        if (debouncedSearch?.trim()) filtersWithSearch.search = debouncedSearch.trim();
+        const filtersWithSearch: Record<string, unknown> = {
+          ...buildFilterPayload,
+        };
+        if (debouncedSearch?.trim())
+          filtersWithSearch.search = debouncedSearch.trim();
 
-        const payload = Object.keys(filtersWithSearch).length > 0
-          ? { filters: filtersWithSearch }
-          : { filters: {} };
+        const payload =
+          Object.keys(filtersWithSearch).length > 0
+            ? { filters: filtersWithSearch }
+            : { filters: {} };
 
         setIsInitialLoad(false);
 
@@ -365,18 +418,27 @@ function PaymentRequestApproval() {
         )) as Record<string, unknown>;
 
         const raw = response as Record<string, unknown> & { summary?: unknown };
-        const bodyCandidate = raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
-        const body = bodyCandidate != null
-          ? (bodyCandidate as PaymentRequestFilterResponse | PaymentRequestRecord[])
-          : null;
+        const bodyCandidate =
+          raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
+        const body =
+          bodyCandidate != null
+            ? (bodyCandidate as
+                | PaymentRequestFilterResponse
+                | PaymentRequestRecord[])
+            : null;
         if (!body) {
           setTotalRecords(0);
           return { data: [], summary: undefined };
         }
 
-        const list: PaymentRequestRecord[] = Array.isArray((body as PaymentRequestFilterResponse).data)
-          ? ((body as PaymentRequestFilterResponse).data as PaymentRequestRecord[])
-          : Array.isArray(body) ? (body as PaymentRequestRecord[]) : [];
+        const list: PaymentRequestRecord[] = Array.isArray(
+          (body as PaymentRequestFilterResponse).data,
+        )
+          ? ((body as PaymentRequestFilterResponse)
+              .data as PaymentRequestRecord[])
+          : Array.isArray(body)
+            ? (body as PaymentRequestRecord[])
+            : [];
 
         const totalEnvelope =
           body != null &&
@@ -385,11 +447,17 @@ function PaymentRequestApproval() {
           ("total" in body || "index" in body)
             ? (body as unknown as Record<string, unknown>)
             : (raw as Record<string, unknown>);
-        const listTotal = getBookingShipmentFilterListTotal(totalEnvelope, list, index);
+        const listTotal = getBookingShipmentFilterListTotal(
+          totalEnvelope,
+          list,
+          index,
+        );
 
         const rawSummary = raw?.summary;
         const summary: PaymentRequestListSummary | undefined =
-          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+          rawSummary &&
+          typeof rawSummary === "object" &&
+          !Array.isArray(rawSummary)
             ? (rawSummary as PaymentRequestListSummary)
             : undefined;
 
@@ -423,7 +491,10 @@ function PaymentRequestApproval() {
   const requestData = paymentRequestListResult?.data ?? [];
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const totalPages = Math.max(
+      1,
+      Math.ceil(totalRecords / pagination.pageSize),
+    );
     const maxPageIndex = totalPages - 1;
     if (pagination.pageIndex > maxPageIndex) {
       setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
@@ -482,26 +553,36 @@ function PaymentRequestApproval() {
 
   const formTextFilterStyles = useMemo(
     () => ({
-      label: { ...filterFieldStyles.label, fontSize: 12, fontWeight: 500, marginBottom: 4 },
-      input: { ...filterFieldStyles.input, minHeight: 32, fontSize: 12, fontFamily: erpTheme.fontSans },
+      label: {
+        ...filterFieldStyles.label,
+        fontSize: 12,
+        fontWeight: 500,
+        marginBottom: 4,
+      },
+      input: {
+        ...filterFieldStyles.input,
+        minHeight: 32,
+        fontSize: 12,
+        fontFamily: erpTheme.fontSans,
+      },
     }),
     [filterFieldStyles, erpTheme.fontSans],
   );
 
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as (keyof PaymentRequestColumnVisibility)[]).map(
-        (key) => ({
-          id: String(key),
-          label: paymentRequestColumnLabels[key],
-          checked: visibleColumns[key],
-          onToggle: () =>
-            setVisibleColumns((prev) => ({
-              ...prev,
-              [key]: !prev[key],
-            })),
-        }),
-      ),
+      (
+        Object.keys(visibleColumns) as (keyof PaymentRequestColumnVisibility)[]
+      ).map((key) => ({
+        id: String(key),
+        label: paymentRequestColumnLabels[key],
+        checked: visibleColumns[key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [key]: !prev[key],
+          })),
+      })),
     [visibleColumns],
   );
 
@@ -511,7 +592,8 @@ function PaymentRequestApproval() {
     setDraftFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handlePageSizeChange = (newPageSize: number) => setPagination({ pageIndex: 0, pageSize: newPageSize });
+  const handlePageSizeChange = (newPageSize: number) =>
+    setPagination({ pageIndex: 0, pageSize: newPageSize });
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
@@ -537,6 +619,63 @@ function PaymentRequestApproval() {
     setShowFilters(false);
   };
 
+  /**
+   * Header-filter writes update BOTH draft and applied state at once (instant
+   * filtering, mirroring the EnquiryMaster column-header UX). Supports the
+   * three filter-state buckets used by this page (FilterState +
+   * appliedCreatedBy + appliedPaidTo), keeps the advanced filter section in
+   * sync, resets pagination to page 1, and persists the new payload to the
+   * global list-filter store so values survive navigation.
+   */
+  const commitHeaderFilters = useCallback(
+    (next: {
+      filters?: (prev: FilterState) => FilterState;
+      createdBy?: string;
+      paidTo?: string;
+    }) => {
+      const nextFilters = next.filters
+        ? next.filters(draftFilters)
+        : draftFilters;
+      const nextCreatedBy =
+        next.createdBy !== undefined ? next.createdBy : appliedCreatedBy;
+      const nextPaidTo =
+        next.paidTo !== undefined ? next.paidTo : appliedPaidTo;
+      if (next.filters) {
+        setDraftFilters(nextFilters);
+        setAppliedFilters(nextFilters);
+      }
+      if (next.createdBy !== undefined) {
+        setDraftCreatedBy(nextCreatedBy);
+        setAppliedCreatedBy(nextCreatedBy);
+      }
+      if (next.paidTo !== undefined) {
+        setDraftPaidTo(nextPaidTo);
+        setAppliedPaidTo(nextPaidTo);
+      }
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+      const payload: Record<string, unknown> = {};
+      if (nextFilters.status) payload.status = nextFilters.status;
+      if (nextFilters.date_from)
+        payload.date_from = dayjs(nextFilters.date_from).format("YYYY-MM-DD");
+      if (nextFilters.date_to)
+        payload.date_to = dayjs(nextFilters.date_to).format("YYYY-MM-DD");
+      if (nextFilters.payment_type)
+        payload.payment_type = nextFilters.payment_type;
+      if (nextFilters.paid_to_type)
+        payload.paid_to_type = nextFilters.paid_to_type;
+      if (nextFilters.request_no?.trim())
+        payload.request_no = nextFilters.request_no.trim();
+      if (nextFilters.job_reference?.trim())
+        payload.job_reference = nextFilters.job_reference.trim();
+      if (nextFilters.not_over?.trim())
+        payload.not_over = nextFilters.not_over.trim();
+      if (nextCreatedBy.trim()) payload.created_by = nextCreatedBy.trim();
+      if (nextPaidTo.trim()) payload.paid_to = nextPaidTo.trim();
+      setStoreFilters(LIST_KEY, payload);
+    },
+    [draftFilters, appliedCreatedBy, appliedPaidTo, setStoreFilters],
+  );
+
   // ─── Columns ──────────────────────────────────────────────────────────────
 
   const allColumns = useMemo<MRT_ColumnDef<PaymentRequestRecord>[]>(
@@ -553,14 +692,49 @@ function PaymentRequestApproval() {
         accessorKey: "created_by",
         header: "User",
         size: 130,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="User"
+            value={appliedCreatedBy}
+            displayValue={appliedCreatedBy}
+            theme={erpTheme}
+            placeholder="Filter User"
+            isEditing={editingHeaderId === "created_by"}
+            onStartEdit={() => openHeaderEditor("created_by")}
+            onStopEdit={() => collapseHeaderEditor("created_by")}
+            onChange={(nextVal) => commitHeaderFilters({ createdBy: nextVal })}
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
         accessorKey: "request_no",
         header: "Request No",
         size: 150,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Request No"
+            value={appliedFilters.request_no ?? ""}
+            displayValue={appliedFilters.request_no ?? ""}
+            theme={erpTheme}
+            placeholder="Filter Request No"
+            isEditing={editingHeaderId === "request_no"}
+            onStartEdit={() => openHeaderEditor("request_no")}
+            onStopEdit={() => collapseHeaderEditor("request_no")}
+            onChange={(nextVal) =>
+              commitHeaderFilters({
+                filters: (prev) => ({ ...prev, request_no: nextVal || null }),
+              })
+            }
+          />
+        ),
         Cell: ({ cell }) => (
-          <Text size="sm" fw={600} c={primary} style={{ fontFamily: erpTheme.fontSans }}>
+          <Text
+            size="sm"
+            fw={600}
+            c={primary}
+            style={{ fontFamily: erpTheme.fontSans }}
+          >
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -575,12 +749,78 @@ function PaymentRequestApproval() {
         accessorKey: "payment_type",
         header: "Type",
         size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Type"
+            value={appliedFilters.payment_type ?? ""}
+            displayValue={appliedFilters.payment_type ?? ""}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "payment_type"}
+            onStartEdit={() => openHeaderEditor("payment_type")}
+            onStopEdit={() => collapseHeaderEditor("payment_type")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Payment Type"
+                searchable
+                clearable
+                size="xs"
+                data={["Bank", "Cash", "Online Transfer", "PDC", "DD/PO"]}
+                value={appliedFilters.payment_type ?? ""}
+                onChange={(v) => {
+                  /*
+                   * Mirror the advanced filter section's value mapping so the
+                   * payload stays identical regardless of which input the
+                   * user touches.
+                   */
+                  const mapped =
+                    v === "Cash"
+                      ? "CASH"
+                      : v === "Online Transfer"
+                        ? "ONLINE TRANSFER"
+                        : v;
+                  commitHeaderFilters({
+                    filters: (prev) => ({
+                      ...prev,
+                      payment_type: mapped ?? null,
+                    }),
+                  });
+                  if (v) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
         accessorKey: "not_over",
         header: "Over",
         size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Over"
+            value={appliedFilters.not_over ?? ""}
+            displayValue={appliedFilters.not_over ?? ""}
+            theme={erpTheme}
+            placeholder="Filter Over"
+            isEditing={editingHeaderId === "not_over"}
+            onStartEdit={() => openHeaderEditor("not_over")}
+            onStopEdit={() => collapseHeaderEditor("not_over")}
+            onChange={(nextVal) =>
+              commitHeaderFilters({
+                filters: (prev) => ({
+                  ...prev,
+                  not_over: nextVal || null,
+                }),
+              })
+            }
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
@@ -599,18 +839,83 @@ function PaymentRequestApproval() {
         accessorKey: "paid_to_type",
         header: "Paid To Type",
         size: 130,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Paid To Type"
+            value={appliedFilters.paid_to_type ?? ""}
+            displayValue={appliedFilters.paid_to_type ?? ""}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "paid_to_type"}
+            onStartEdit={() => openHeaderEditor("paid_to_type")}
+            onStopEdit={() => collapseHeaderEditor("paid_to_type")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Paid To Type"
+                searchable
+                clearable
+                size="xs"
+                data={["customer", "agent", "supplier", "Vendor"]}
+                value={appliedFilters.paid_to_type ?? ""}
+                onChange={(v) => {
+                  commitHeaderFilters({
+                    filters: (prev) => ({ ...prev, paid_to_type: v ?? null }),
+                  });
+                  if (v) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
         accessorKey: "paid_to",
         header: "Paid To",
         size: 150,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Paid To"
+            value={appliedPaidTo}
+            displayValue={appliedPaidTo}
+            theme={erpTheme}
+            placeholder="Filter Paid To"
+            isEditing={editingHeaderId === "paid_to"}
+            onStartEdit={() => openHeaderEditor("paid_to")}
+            onStopEdit={() => collapseHeaderEditor("paid_to")}
+            onChange={(nextVal) => commitHeaderFilters({ paidTo: nextVal })}
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
         id: "job_no",
         header: "Job Id",
         size: 140,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Job Id"
+            value={appliedFilters.job_reference ?? ""}
+            displayValue={appliedFilters.job_reference ?? ""}
+            theme={erpTheme}
+            placeholder="Filter Job Id"
+            isEditing={editingHeaderId === "job_no"}
+            onStartEdit={() => openHeaderEditor("job_no")}
+            onStopEdit={() => collapseHeaderEditor("job_no")}
+            onChange={(nextVal) =>
+              commitHeaderFilters({
+                filters: (prev) => ({
+                  ...prev,
+                  job_reference: nextVal || null,
+                }),
+              })
+            }
+          />
+        ),
         Cell: ({ row }) => getFirstJobNo(row.original.charges),
       },
       {
@@ -621,7 +926,12 @@ function PaymentRequestApproval() {
           const val = cell.getValue<string>();
           if (!val) return "-";
           return (
-            <Text size="sm" style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }} truncate title={val}>
+            <Text
+              size="sm"
+              style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }}
+              truncate
+              title={val}
+            >
               {val}
             </Text>
           );
@@ -635,7 +945,12 @@ function PaymentRequestApproval() {
           const val = cell.getValue<string>();
           if (!val) return "-";
           return (
-            <Text size="sm" style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }} truncate title={val}>
+            <Text
+              size="sm"
+              style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }}
+              truncate
+              title={val}
+            >
               {val}
             </Text>
           );
@@ -645,6 +960,42 @@ function PaymentRequestApproval() {
         accessorKey: "status",
         header: "Status",
         size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Status"
+            value={appliedFilters.status ?? ""}
+            displayValue={appliedFilters.status ?? ""}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "status"}
+            onStartEdit={() => openHeaderEditor("status")}
+            onStopEdit={() => collapseHeaderEditor("status")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Status"
+                searchable
+                clearable
+                size="xs"
+                data={[
+                  { value: "Active", label: "Active" },
+                  { value: "Approved", label: "Approved" },
+                  { value: "Rejected", label: "Rejected" },
+                ]}
+                value={appliedFilters.status ?? ""}
+                onChange={(v) => {
+                  commitHeaderFilters({
+                    filters: (prev) => ({ ...prev, status: v ?? null }),
+                  });
+                  if (v) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => {
           const val = cell.getValue<string>();
           if (!val) return "-";
@@ -683,22 +1034,27 @@ function PaymentRequestApproval() {
             <Menu.Dropdown>
               {row.original.status?.trim().toLowerCase() !== "approved" &&
                 row.original.status?.trim().toLowerCase() !== "rejected" && (
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setStoreFilters(LIST_KEY, buildFilterPayload);
-                      setStoreSearch(LIST_KEY, search);
-                      setShouldRestore(LIST_KEY, true);
-                      navigate(`/payment-request/edit/${row.original.id}`);
-                    }}
-                  >
-                    <Group gap="sm">
-                      <IconEdit size={16} color={primary} />
-                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>Edit</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              )}
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      onClick={() => {
+                        setStoreFilters(LIST_KEY, buildFilterPayload);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
+                        navigate(`/payment-request/edit/${row.original.id}`);
+                      }}
+                    >
+                      <Group gap="sm">
+                        <IconEdit size={16} color={primary} />
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: erpTheme.fontSans }}
+                        >
+                          Edit
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                )}
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
@@ -710,7 +1066,9 @@ function PaymentRequestApproval() {
                 >
                   <Group gap="sm">
                     <IconEye size={16} color={primary} />
-                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>View</Text>
+                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+                      View
+                    </Text>
                   </Group>
                 </UnstyledButton>
               </Box>
@@ -751,6 +1109,14 @@ function PaymentRequestApproval() {
       dateFormat,
       erpTheme,
       primary,
+      appliedFilters,
+      appliedCreatedBy,
+      appliedPaidTo,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      filterFieldStyles,
     ],
   );
 
@@ -759,7 +1125,9 @@ function PaymentRequestApproval() {
       allColumns.filter((col) => {
         const id = paymentRequestColumnId(col);
         if (id === "actions") return true;
-        return visibleColumns[id as keyof PaymentRequestColumnVisibility] !== false;
+        return (
+          visibleColumns[id as keyof PaymentRequestColumnVisibility] !== false
+        );
       }),
     [allColumns, visibleColumns],
   );
@@ -768,7 +1136,13 @@ function PaymentRequestApproval() {
 
   const table = useMantineReactTable({
     columns,
-    data: tableData,
+    /*
+     * During a fetch we pass an empty data array so MRT renders
+     * `renderEmptyRowsFallback` (the loader) inside `<tbody>` while keeping
+     * `<thead>` (with the column-header filter inputs) and the pagination
+     * footer mounted. Mirrors EnquiryListNativeTables' loader-in-body UX.
+     */
+    data: isLoading ? [] : tableData,
     state: { pagination },
     enableColumnFilters: false,
     enablePagination: true,
@@ -778,7 +1152,10 @@ function PaymentRequestApproval() {
     enableSorting: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
-    initialState: { pagination: { pageSize: 10, pageIndex: 0 }, columnPinning: { right: ["actions"] } },
+    initialState: {
+      pagination: { pageSize: 10, pageIndex: 0 },
+      columnPinning: { right: ["actions"] },
+    },
     layoutMode: "grid",
     manualPagination: true,
     onPaginationChange: setPagination,
@@ -803,47 +1180,79 @@ function PaymentRequestApproval() {
         backgroundColor: "transparent",
       },
     },
-    mantineTableBodyCellProps: ({ column }) => ({
-      style: {
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: cardBg,
-        ...(column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              zIndex: 2,
-              minWidth: "30px",
-              borderLeft: `1px solid ${border}`,
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {}),
-      },
-    }),
-    mantineTableHeadCellProps: ({ column }) => ({
-      style: {
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: erpTheme.headerBg,
-        top: 0,
-        zIndex: 3,
-        borderBottom: `1px solid ${border}`,
-        ...(column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              zIndex: 4,
-              minWidth: "80px",
-              backgroundColor: erpTheme.headerBg,
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {}),
-      },
-    }),
+    mantineTableBodyCellProps: ({ column }) => {
+      const colSize = column.getSize();
+      return {
+        style: {
+          /*
+           * Pin cell width to the column's declared `size` so the column
+           * cannot resize when its header swaps between the static label
+           * and the inline filter editor.
+           */
+          width: colSize,
+          minWidth: colSize,
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: cardBg,
+          ...(column.id === "actions"
+            ? {
+                // Pinned-right Actions cell. `minWidth: 80px` matches the
+                // head cell so the sticky body cell and sticky head cell
+                // stay the same width. `zIndex: 2` stays BELOW the sticky
+                // head (`zIndex: 4`) so the head paints over the body cell
+                // at the bottom-right corner during horizontal scroll.
+                position: "sticky" as const,
+                right: 0,
+                zIndex: 2,
+                minWidth: "80px",
+                borderLeft: `1px solid ${border}`,
+                boxShadow: "1px -2px 4px 0px #00000040",
+              }
+            : {}),
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      const colSize = column.getSize();
+      return {
+        style: {
+          /*
+           * Pin head cell width to the column's declared `size` (matches the
+           * body cell width) so toggling between the column label and the
+           * inline filter editor never resizes the header.
+           */
+          width: colSize,
+          minWidth: colSize,
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: erpTheme.headerBg,
+          top: 0,
+          zIndex: 3,
+          borderBottom: `1px solid ${border}`,
+          /*
+           * Stable header cell height so swapping between the column label
+           * and the inline filter editor never resizes the row.
+           */
+          minHeight: 52,
+          height: 52,
+          verticalAlign: "middle" as const,
+          ...(column.id === "actions"
+            ? {
+                position: "sticky" as const,
+                right: 0,
+                zIndex: 4,
+                minWidth: "80px",
+                backgroundColor: erpTheme.headerBg,
+                boxShadow: "0px -2px 4px 0px #00000040",
+              }
+            : {}),
+        },
+      };
+    },
     mantineTableContainerProps: {
       style: {
         height: "100%",
@@ -854,15 +1263,28 @@ function PaymentRequestApproval() {
       },
     },
     renderEmptyRowsFallback: () => (
-      <tr>
-        <td colSpan={columns.length}>
-          <Center py="xl" style={{ backgroundColor: cardBg }}>
-            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              No payment requests found
+      <Center
+        py={80}
+        style={{ width: "100%", backgroundColor: cardBg }}
+        className="erp-header-filter-fade"
+      >
+        {isLoading ? (
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
+            <Text
+              c="dimmed"
+              size="sm"
+              style={{ fontFamily: erpTheme.fontSans }}
+            >
+              Loading payment requests…
             </Text>
-          </Center>
-        </td>
-      </tr>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            No payment requests found
+          </Text>
+        )}
+      </Center>
     ),
   });
 
@@ -872,7 +1294,13 @@ function PaymentRequestApproval() {
     <MantineProvider theme={erpListGeistMantineTheme}>
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
-        style={{ ...erpListGeistRootTypography, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+        style={{
+          ...erpListGeistRootTypography,
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         <ERPListScreen
           theme={erpTheme}
@@ -981,7 +1409,8 @@ function PaymentRequestApproval() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine by user, request no., job, payment type, paid-to, dates, or status",
+            subtitle:
+              "Refine by user, request no., job, payment type, paid-to, dates, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1026,7 +1455,12 @@ function PaymentRequestApproval() {
                       label="Job Id"
                       value={draftFilters.job_reference ?? ""}
                       placeholder="Type Job Id"
-                      onChange={(e) => updateFilter("job_reference", e.currentTarget.value || null)}
+                      onChange={(e) =>
+                        updateFilter(
+                          "job_reference",
+                          e.currentTarget.value || null,
+                        )
+                      }
                       size="xs"
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
@@ -1039,7 +1473,12 @@ function PaymentRequestApproval() {
                       label="Request Number"
                       value={draftFilters.request_no ?? ""}
                       placeholder="Type Request Number"
-                      onChange={(e) => updateFilter("request_no", e.currentTarget.value || null)}
+                      onChange={(e) =>
+                        updateFilter(
+                          "request_no",
+                          e.currentTarget.value || null,
+                        )
+                      }
                       size="xs"
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
@@ -1056,7 +1495,12 @@ function PaymentRequestApproval() {
                       searchable
                       value={draftFilters.payment_type}
                       onChange={(v) => {
-                        const mapped = v === "Cash" ? "CASH" : v === "Online Transfer" ? "ONLINE TRANSFER" : v;
+                        const mapped =
+                          v === "Cash"
+                            ? "CASH"
+                            : v === "Online Transfer"
+                              ? "ONLINE TRANSFER"
+                              : v;
                         updateFilter("payment_type", mapped ?? null);
                       }}
                       styles={filterFieldStyles}
@@ -1073,6 +1517,30 @@ function PaymentRequestApproval() {
                       searchable
                       value={draftFilters.paid_to_type}
                       onChange={(v) => updateFilter("paid_to_type", v ?? null)}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    {/*
+                     * Backend supports the `not_over` icontains filter and
+                     * the "Over" column is visible in the table — surface
+                     * it here so the advanced filter section is in sync
+                     * with the column-header filter.
+                     */}
+                    <FormTextInput
+                      label="Over"
+                      placeholder="Filter Over"
+                      value={draftFilters.not_over ?? ""}
+                      onChange={(e) =>
+                        updateFilter(
+                          "not_over",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={filterFieldStyles}
                     />
                   </Box>
@@ -1147,14 +1615,26 @@ function PaymentRequestApproval() {
               />
             ),
             children: requestError ? (
-              <Center py="xl" style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}>
-                <Text size="sm" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
-                  Error loading payment requests. Please try refreshing the page.
+              <Center
+                py="xl"
+                style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}
+              >
+                <Text
+                  size="sm"
+                  c="dimmed"
+                  style={{ fontFamily: erpTheme.fontSans }}
+                >
+                  Error loading payment requests. Please try refreshing the
+                  page.
                 </Text>
               </Center>
-            ) : isLoading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading payment requests…" />
             ) : (
+              /*
+               * Always render the table so `<thead>` (column-header filters)
+               * and the pagination footer stay visible. While loading, MRT
+               * shows `renderEmptyRowsFallback` (the loader) inside `<tbody>`
+               * only — matching EnquiryListNativeTables' UX.
+               */
               <MantineReactTable table={table} />
             ),
           }}
