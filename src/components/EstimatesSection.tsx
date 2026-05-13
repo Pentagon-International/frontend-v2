@@ -89,6 +89,13 @@ function toNumberOrNull(v: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Mantine Select option values are strings; API rows may use numbers. */
+function selectStringId(id: unknown): string | null {
+  if (id == null || id === "") return null;
+  const s = String(id).trim();
+  return s === "" ? null : s;
+}
+
 function calcTotalCost(
   no_of_unit: unknown,
   roe: unknown,
@@ -310,7 +317,7 @@ export function EstimatesSection({
               placeholder="Unit"
               searchable
               data={unitOptions}
-              value={row.unit_id || null}
+              value={selectStringId(row.unit_id)}
               onChange={(value) => {
                 const unitId = value ?? "";
                 const unitItem = (unitDataRaw ?? []).find(
@@ -346,7 +353,7 @@ export function EstimatesSection({
               placeholder="Currency"
               searchable
               data={currencyOptions}
-              value={row.currency_id || null}
+              value={selectStringId(row.currency_id)}
               onChange={(value) => {
                 const currencyId = value ?? "";
                 const currItem = (currencyDataRaw ?? []).find(
