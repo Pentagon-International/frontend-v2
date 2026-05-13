@@ -3506,6 +3506,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 title="By sales rep"
                 subtitle={pipelineSalespersonBarSubtitle}
                 rows={pipelineData}
+                summary={pipelineSummary}
                 loading={initialLoading || cellEditLoading}
                 onRowClick={(row) => {
                   void handleColumnClick("salesperson", row.salesperson);
@@ -3543,6 +3544,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 title="By product"
                 subtitle={pipelineSalespersonBarSubtitle}
                 rows={productData}
+                summary={productSummary}
                 loading={productLoading || cellEditLoading}
                 onRowClick={(row) => {
                   void handleProductColumnClick("service", row.service, row);
@@ -3580,6 +3582,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 title="By region / sector"
                 subtitle={pipelineSalespersonBarSubtitle}
                 rows={regionPipelineBaseRows}
+                summary={sectorSummary}
                 loading={sectorLoading || cellEditLoading}
                 onRowClick={(row) => {
                   void handleSectorColumnClick("region", row.region, {
