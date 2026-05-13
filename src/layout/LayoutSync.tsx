@@ -131,9 +131,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/supplier-invoice/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice Reversal");
-    } else if (path.startsWith("/invoices")) {
+    } else if (path.startsWith("/invoice-reverse")) {
       setActiveNav("Desk");
-      setActiveSubNav("Invoices");
+      setActiveSubNav("Invoice Reverse");
+    } else if (path.startsWith("/unposted-documents") || path === "/invoices") {
+      setActiveNav("Desk");
+      setActiveSubNav("Unposted Documents");
     } else if (path.startsWith("/supplier-invoice")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice");

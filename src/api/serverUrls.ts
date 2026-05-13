@@ -135,6 +135,8 @@ export const URL = {
   gstSacMasterFilter: "filter/gst-sac-master/",
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
+  /** Unified unposted / finance document list (POST body: `{ filters: { status, ... } }`). */
+  financeDocumentsFilter: "filter/finance-documents/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
   tdsCalculation: "tds_calculation/",
   invoiceReversableData: "invoice/reversable-data/",

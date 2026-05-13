@@ -882,6 +882,11 @@ function InvoiceCreate({
     )?.invoiceData?.reverse_invoice_id,
   );
 
+  const skipInvoiceDetailFetch = Boolean(
+    (location.state as { skipInvoiceDetailFetch?: boolean } | null)
+      ?.skipInvoiceDetailFetch,
+  );
+
   // When user currency and billing currency are the same, set top-level ROE to 1
   useEffect(() => {
     const billingCurrency = form.values.currency?.trim().toUpperCase();
@@ -1476,7 +1481,12 @@ function InvoiceCreate({
         isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
         location.key,
       ],
-      enabled: Boolean(isEditOrViewMode && invoiceId && location.key),
+      enabled: Boolean(
+        isEditOrViewMode &&
+          invoiceId &&
+          location.key &&
+          !skipInvoiceDetailFetch,
+      ),
       queryFn: async () => getAPICall(`${URL.invoice}${invoiceId}`, API_HEADER),
       staleTime: 5 * 60 * 1000,
       refetchOnMount: true,
@@ -1668,7 +1678,7 @@ function InvoiceCreate({
               ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceDataFromApi, isEditOrViewMode]);
+  }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {

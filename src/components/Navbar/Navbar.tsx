@@ -856,9 +856,9 @@ const Navbar = ({
                     />
                     <SubNavLink
                       parent="Accounts"
-                      label="Invoices"
+                      label="Unposted Documents"
                       icon={IconFiles}
-                      path="/invoices"
+                      path="/unposted-documents"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

@@ -95,8 +95,9 @@ type JVChargeRow = {
   charge_name: string;
   account_id: number | null;
   account_code: string;
-  /** GL / chart label shown in SearchableSelect (account_name only); not sent in API payload. */
+  /** Plain chart `account_name` from selection; sent as API `account_name` (not the composite label). */
   account_display: string;
+  /** Composite "gl_code - account_name - gl_name" for row state / hints; payload uses `accountNameForPayload`. */
   account_name: string;
   subledger_code: string;
   code: string;
@@ -181,6 +182,13 @@ function accountNameHintFromStored(stored: string): string {
   const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) return parts[1] ?? parts[0] ?? "";
   return parts[0] ?? "";
+}
+
+/** API `account_name`: plain chart account name only (not gl_code - name - gl_name composite). */
+function accountNameForPayload(row: JVChargeRow): string {
+  const fromDisplay = String(row.account_display ?? "").trim();
+  if (fromDisplay) return fromDisplay;
+  return accountNameHintFromStored(String(row.account_name ?? ""));
 }
 
 const STATUS_OPTIONS = [
@@ -403,32 +411,45 @@ function JournalVoucher() {
 
     const chargesFromApi =
       Array.isArray(d.charges) && d.charges.length > 0
-        ? d.charges.map((c: any) => ({
-            id: isReversalMode ? null : (c.id ?? null),
-            segment: "",
-            job_no: c.job_id ?? "",
-            sub_job: "",
-            shipment_id: c.shipment_id ?? "",
-            cn_r: c.c_r_n ?? "",
-            charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-            charge_name: "",
-            account_id: null,
-            account_code: c.code ?? "",
-            account_display: accountNameHintFromStored(String(c.account_name ?? "")),
-            account_name: c.account_name ?? "",
-            subledger_code: c.subledger ?? "",
-            code: c.code ?? "",
-            key: c.key ?? "",
-            currency_id: c.currency_id != null ? String(c.currency_id) : "",
-            currency_code: "",
-            roe: c.roe != null ? Number(c.roe) : null,
-            amount: c.amount != null ? Number(c.amount) : null,
-            local_amount: c.local_amount != null ? Number(c.local_amount) : null,
-            dr_cr: isReversalMode
-              ? c.dr_cr === "Dr" ? "Cr" : "Dr"
-              : (c.dr_cr ?? "Dr"),
-            narration: c.narration ?? "",
-          }))
+        ? d.charges.map((c: any) => {
+            const nestedCharge =
+              c.charge && typeof c.charge === "object"
+                ? (c.charge as { charge_name?: string; charge_code?: string })
+                : null;
+            const chargeLabel = String(
+              c.charge_name ??
+                nestedCharge?.charge_name ??
+                c.charge_code ??
+                nestedCharge?.charge_code ??
+                "",
+            ).trim();
+            return {
+              id: isReversalMode ? null : (c.id ?? null),
+              segment: "",
+              job_no: c.job_id ?? "",
+              sub_job: "",
+              shipment_id: c.shipment_id ?? "",
+              cn_r: c.c_r_n ?? "",
+              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+              charge_name: chargeLabel,
+              account_id: null,
+              account_code: c.code ?? "",
+              account_display: accountNameHintFromStored(String(c.account_name ?? "")),
+              account_name: c.account_name ?? "",
+              subledger_code: c.subledger ?? "",
+              code: c.code ?? "",
+              key: c.key ?? "",
+              currency_id: c.currency_id != null ? String(c.currency_id) : "",
+              currency_code: "",
+              roe: c.roe != null ? Number(c.roe) : null,
+              amount: c.amount != null ? Number(c.amount) : null,
+              local_amount: c.local_amount != null ? Number(c.local_amount) : null,
+              dr_cr: isReversalMode
+                ? c.dr_cr === "Dr" ? "Cr" : "Dr"
+                : (c.dr_cr ?? "Dr"),
+              narration: c.narration ?? "",
+            };
+          })
         : [emptyRow()];
 
     form.setValues({
@@ -495,9 +516,14 @@ function JournalVoucher() {
     const creditTotal = Math.round(credit * 1000) / 1000;
     const difference = Math.round((debit - credit) * 1000) / 1000;
 
-    // Top-level account_name: first charge that has one
-    const firstAccountName =
-      values.charges.find((c) => c.account_name)?.account_name ?? "";
+    // Top-level account_name: first charge's plain account name (not full chart label).
+    const firstAccountName = (() => {
+      for (const c of values.charges) {
+        const n = accountNameForPayload(c);
+        if (n) return n;
+      }
+      return "";
+    })();
 
     return {
       ...(isUpdate ? { id: saveResponse?.id ?? Number(recordId) } : {}),
@@ -516,7 +542,7 @@ function JournalVoucher() {
         charge_id: c.charge_id ?? null,
         currency_id: c.currency_id ? Number(c.currency_id) : null,
         // NOTE: we intentionally do NOT send `account_id` to backend
-        account_name: c.account_name ?? "",
+        account_name: accountNameForPayload(c),
         subledger: c.subledger_code ?? "",
         code: c.code ?? "",
         key: c.key ?? "",

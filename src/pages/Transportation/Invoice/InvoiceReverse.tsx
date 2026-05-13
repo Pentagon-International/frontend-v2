@@ -11,7 +11,7 @@ import {
   Tabs,
   Table,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronRight,
@@ -231,6 +231,7 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
 
 type ReversableDataResponse = {
   id?: number;
+  customer_id?: number;
   state_id?: number;
   state_name?: string;
   currency_id?: number;
@@ -272,6 +273,118 @@ type ReversableDataResponse = {
   }>;
 };
 
+function applyReversableDataToReverseForm(
+  data: ReversableDataResponse,
+  form: UseFormReturnType<InvoiceFormData>,
+  opts: {
+    setIsAgentInvoice: (v: boolean) => void;
+    setBillToDisplayName: (v: string | null) => void;
+    emptyDaybook: boolean;
+  },
+) {
+  opts.setIsAgentInvoice(data.is_agent === true);
+  const roeNum =
+    data.roe != null
+      ? typeof data.roe === "string"
+        ? parseFloat(data.roe)
+        : data.roe
+      : null;
+  opts.setBillToDisplayName(data.bill_to_name ?? null);
+  form.setValues({
+    bill_to: data.bill_to ?? "",
+    address: data.address ?? "",
+    state: data.state_id != null ? String(data.state_id) : "",
+    gstn: data.gstn ?? "",
+    shipment_no: data.shipment_no ?? "",
+    daybook_id:
+      opts.emptyDaybook
+        ? ""
+        : data.day_book_id != null
+          ? String(data.day_book_id)
+          : "",
+    document_date: normalizeDate(data.document_date ?? null),
+    due_date: normalizeDate(data.due_date ?? null),
+    currency: data.currency_code ?? "",
+    roe: Number.isFinite(roeNum) ? roeNum : null,
+    narration: data.narration ?? "",
+    irn_no: data.irn_no ?? "",
+    charges:
+      data.charges && data.charges.length > 0
+        ? data.charges.map((c) => {
+            const noOfUnit =
+              c.no_of_unit != null
+                ? typeof c.no_of_unit === "string"
+                  ? parseFloat(c.no_of_unit)
+                  : c.no_of_unit
+                : null;
+            const roe =
+              c.roe != null
+                ? typeof c.roe === "string"
+                  ? parseFloat(c.roe)
+                  : c.roe
+                : null;
+            const amountPerUnit =
+              c.amount_per_unit != null
+                ? typeof c.amount_per_unit === "string"
+                  ? parseFloat(c.amount_per_unit)
+                  : c.amount_per_unit
+                : null;
+            const amount =
+              c.amount != null
+                ? typeof c.amount === "string"
+                  ? parseFloat(c.amount)
+                  : c.amount
+                : null;
+            const amountInLocal =
+              c.amount_in_local != null
+                ? typeof c.amount_in_local === "string"
+                  ? parseFloat(c.amount_in_local)
+                  : c.amount_in_local
+                : null;
+            const headerAmount =
+              c.amount_in_header != null
+                ? typeof c.amount_in_header === "string"
+                  ? parseFloat(c.amount_in_header)
+                  : c.amount_in_header
+                : null;
+            return {
+              id: c.id ?? null,
+              charge_id: c.charge_id ?? null,
+              charge_name: c.charge_name ?? "",
+              shipment_id: c.shipment_id ?? c.shipment_no ?? "",
+              unit_code: c.unit_code ?? "",
+              no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
+              currency: c.currency_code ?? "",
+              roe: Number.isFinite(roe) ? roe : null,
+              amount_per_unit: Number.isFinite(amountPerUnit)
+                ? amountPerUnit
+                : null,
+              amount: Number.isFinite(amount) ? amount : null,
+              header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
+              amount_in_local: Number.isFinite(amountInLocal)
+                ? amountInLocal
+                : null,
+              tax_code: c.tax_code ?? "",
+              dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+            };
+          })
+        : [],
+  });
+}
+
+function firstNonEmptyString(...vals: unknown[]): string {
+  const junk = new Set(["false", "true", "null", "undefined", "none"]);
+  for (const v of vals) {
+    if (v === false || v === true) continue;
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (!s) continue;
+    if (junk.has(s.toLowerCase())) continue;
+    return s;
+  }
+  return "";
+}
+
 function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -282,6 +395,16 @@ function InvoiceReverse() {
         (b: { is_default?: boolean }) => b.is_default === true,
       ) as { currency?: { currency_code?: string } } | undefined
     )?.currency?.currency_code ?? "";
+
+  const returnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const navigateBack = useCallback(() => {
+    if (returnTo) navigate(returnTo);
+    else navigate(-1);
+  }, [returnTo, navigate]);
+
+  const [reverseDocLabel, setReverseDocLabel] = useState("");
+  const [invoiceDocLabel, setInvoiceDocLabel] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -737,16 +860,80 @@ function InvoiceReverse() {
   ]);
 
   useEffect(() => {
-    const docNo = (location.state as { document_no?: string } | null)
-      ?.document_no;
-    if (!docNo?.trim()) {
+    type NavState = {
+      document_no?: string;
+      financeReverseRecord?: ReversableDataResponse;
+      reverse_document_no?: string;
+      invoice_document_no?: string;
+    } | null;
+    const st = location.state as NavState;
+    const prebuilt = st?.financeReverseRecord;
+
+    if (prebuilt && typeof prebuilt === "object") {
+      let cancelled = false;
+      setLoading(true);
+      setLoadError(null);
+      applyReversableDataToReverseForm(prebuilt as ReversableDataResponse, form, {
+        setIsAgentInvoice,
+        setBillToDisplayName,
+        emptyDaybook: false,
+      });
+      setDocumentNo(String(prebuilt.document_no ?? st?.document_no ?? ""));
+      const p = prebuilt as Record<string, unknown>;
+      setReverseDocLabel(
+        firstNonEmptyString(
+          st?.reverse_document_no,
+          p.reverse_document_no,
+          p.document_no,
+        ),
+      );
+      setInvoiceDocLabel(
+        firstNonEmptyString(
+          st?.invoice_document_no,
+          p.invoice_document_no,
+          p.invoice_no,
+          p.original_invoice_no,
+          p.reference_document_no,
+          p.ref_invoice_no,
+          typeof p.invoice === "object" &&
+            p.invoice !== null &&
+            (p.invoice as Record<string, unknown>).document_no,
+        ),
+      );
+      if (prebuilt.id != null && Number(prebuilt.id) > 0) {
+        setSaveResponse({
+          id: Number(prebuilt.id),
+          customer_id:
+            prebuilt.customer_id != null ? Number(prebuilt.customer_id) : undefined,
+          document_no: String(prebuilt.document_no ?? ""),
+          status: String(prebuilt.status ?? "UNPOSTED"),
+        });
+        setInvoiceIsPosted(
+          String(prebuilt.status ?? "").toUpperCase() === "POSTED",
+        );
+      } else {
+        setSaveResponse(null);
+        setInvoiceIsPosted(false);
+      }
+      if (!cancelled) setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const docNo = st?.document_no?.trim() ?? "";
+    if (!docNo) {
       setLoadError(
-        "Document number is required. Please go back and use Invoice Reverse from the Accounts table.",
+        "Document number is required. Open this screen from a job invoice, or from Unposted Documents with a valid document.",
       );
       setLoading(false);
+      setReverseDocLabel("");
+      setInvoiceDocLabel("");
       return;
     }
     setDocumentNo(docNo);
+    setInvoiceDocLabel(firstNonEmptyString(docNo));
+    setReverseDocLabel("");
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
@@ -755,91 +942,18 @@ function InvoiceReverse() {
         if (cancelled) return;
         const data = ((res as { data?: ReversableDataResponse })?.data ??
           res) as ReversableDataResponse;
-        setIsAgentInvoice(data.is_agent === true);
-        const roeNum =
-          data.roe != null
-            ? typeof data.roe === "string"
-              ? parseFloat(data.roe)
-              : data.roe
-            : null;
-        setBillToDisplayName(data.bill_to_name ?? null);
-        form.setValues({
-          bill_to: data.bill_to ?? "",
-          address: data.address ?? "",
-          state: data.state_id != null ? String(data.state_id) : "",
-          gstn: data.gstn ?? "",
-          shipment_no: data.shipment_no ?? "",
-          daybook_id: "", // Do not set daybook from response; user selects from CRN-filtered dropdown
-          document_date: normalizeDate(data.document_date ?? null),
-          due_date: normalizeDate(data.due_date ?? null),
-          currency: data.currency_code ?? "",
-          roe: Number.isFinite(roeNum) ? roeNum : null,
-          narration: data.narration ?? "",
-          irn_no: data.irn_no ?? "",
-          charges:
-            data.charges && data.charges.length > 0
-              ? data.charges.map((c) => {
-                  const noOfUnit =
-                    c.no_of_unit != null
-                      ? typeof c.no_of_unit === "string"
-                        ? parseFloat(c.no_of_unit)
-                        : c.no_of_unit
-                      : null;
-                  const roe =
-                    c.roe != null
-                      ? typeof c.roe === "string"
-                        ? parseFloat(c.roe)
-                        : c.roe
-                      : null;
-                  const amountPerUnit =
-                    c.amount_per_unit != null
-                      ? typeof c.amount_per_unit === "string"
-                        ? parseFloat(c.amount_per_unit)
-                        : c.amount_per_unit
-                      : null;
-                  const amount =
-                    c.amount != null
-                      ? typeof c.amount === "string"
-                        ? parseFloat(c.amount)
-                        : c.amount
-                      : null;
-                  const amountInLocal =
-                    c.amount_in_local != null
-                      ? typeof c.amount_in_local === "string"
-                        ? parseFloat(c.amount_in_local)
-                        : c.amount_in_local
-                      : null;
-                  const headerAmount =
-                    c.amount_in_header != null
-                      ? typeof c.amount_in_header === "string"
-                        ? parseFloat(c.amount_in_header)
-                        : c.amount_in_header
-                      : null;
-                  return {
-                    id: c.id ?? null,
-                    charge_id: c.charge_id ?? null,
-                    charge_name: c.charge_name ?? "",
-                    shipment_id: c.shipment_id ?? c.shipment_no ?? "",
-                    unit_code: c.unit_code ?? "",
-                    no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
-                    currency: c.currency_code ?? "",
-                    roe: Number.isFinite(roe) ? roe : null,
-                    amount_per_unit: Number.isFinite(amountPerUnit)
-                      ? amountPerUnit
-                      : null,
-                    amount: Number.isFinite(amount) ? amount : null,
-                    header_amount: Number.isFinite(headerAmount)
-                      ? headerAmount
-                      : null,
-                    amount_in_local: Number.isFinite(amountInLocal)
-                      ? amountInLocal
-                      : null,
-                    tax_code: c.tax_code ?? "",
-                    dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
-                  };
-                })
-              : [],
+        applyReversableDataToReverseForm(data, form, {
+          setIsAgentInvoice,
+          setBillToDisplayName,
+          emptyDaybook: true,
         });
+        const dr = data as unknown as Record<string, unknown>;
+        setInvoiceDocLabel(
+          firstNonEmptyString(data.document_no, docNo, dr.ref_invoice_no),
+        );
+        setReverseDocLabel(
+          firstNonEmptyString(dr.reverse_document_no, dr.reverse_document_number),
+        );
       })
       .catch((err) => {
         if (!cancelled) {
@@ -858,7 +972,16 @@ function InvoiceReverse() {
     return () => {
       cancelled = true;
     };
+    // form from useForm is stable; load is driven by location.state (same pattern as before extract).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
+
+  useEffect(() => {
+    if (!saveResponse?.document_no) return;
+    setReverseDocLabel((prev) =>
+      firstNonEmptyString(saveResponse.document_no, prev),
+    );
+  }, [saveResponse?.document_no]);
 
   useEffect(() => {
     // if (
@@ -1572,8 +1695,18 @@ function InvoiceReverse() {
 
   if (loading) {
     return (
-      <Box p="md">
-        <Stack align="center" justify="center" py="xl" gap="md">
+      <Box
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <Stack align="center" justify="center" gap="md">
           <Loader size="lg" color="#105476" />
           <Text size="sm" c="#105476" fw={500}>
             Loading invoice data...
@@ -1595,7 +1728,7 @@ function InvoiceReverse() {
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Back
             </Button>
@@ -1639,58 +1772,66 @@ function InvoiceReverse() {
           <Text size="xl" fw={600} c="#105476">
             {reversalPageTitle}
           </Text>
-          <Group gap="md" wrap="nowrap">
-            {saveResponse && (
-              <Group gap="sm" wrap="nowrap">
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    {saveResponse.status?.toUpperCase() === "POSTED"
-                      ? "Invoice Reversal Number"
-                      : "Draft Invoice Reversal Number"}
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color="#105476"
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {saveResponse.document_no || documentNo || "—"}
-                  </Badge>
-                </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Status:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={
-                      saveResponse.status?.toUpperCase() === "UNPOSTED"
-                        ? "gray"
-                        : saveResponse.status?.toUpperCase() === "POSTED"
-                          ? "green"
-                          : "#105476"
-                    }
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {saveResponse.status?.toUpperCase() || "—"}
-                  </Badge>
-                </Group>
-              </Group>
-            )}
-            {/* {documentNo && !saveResponse && (
+          <Group gap="md" wrap="wrap" justify="flex-end">
+            {firstNonEmptyString(reverseDocLabel, saveResponse?.document_no) && (
               <Group gap="xs" wrap="nowrap">
-                <Text size="sm" fw={500} c="dimmed">Original Document No</Text>
-                <Badge size="sm" variant="light" color="#105476" styles={{ root: { textTransform: "none" } }}>
-                  {documentNo}
+                <Text size="sm" fw={500} c="dimmed">
+                  Reverse document no
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color="#105476"
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {firstNonEmptyString(
+                    reverseDocLabel,
+                    saveResponse?.document_no,
+                  ) || "—"}
                 </Badge>
               </Group>
-            )} */}
+            )}
+            {firstNonEmptyString(invoiceDocLabel) ? (
+              <Group gap="xs" wrap="nowrap">
+                <Text size="sm" fw={500} c="dimmed">
+                  Invoice document no
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color="#105476"
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {firstNonEmptyString(invoiceDocLabel)}
+                </Badge>
+              </Group>
+            ) : null}
+            {saveResponse && (
+              <Group gap="xs" wrap="nowrap">
+                <Text size="sm" fw={500} c="dimmed">
+                  Status
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color={
+                    saveResponse.status?.toUpperCase() === "UNPOSTED"
+                      ? "gray"
+                      : saveResponse.status?.toUpperCase() === "POSTED"
+                        ? "green"
+                        : "#105476"
+                  }
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {saveResponse.status?.toUpperCase() || "—"}
+                </Badge>
+              </Group>
+            )}
             <Button
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Back
             </Button>
@@ -2780,7 +2921,7 @@ function InvoiceReverse() {
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Cancel
             </Button>

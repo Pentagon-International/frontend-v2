@@ -38,7 +38,8 @@ const pathTitleMap: Record<string, string> = {
   "/supplier-invoice/view": "Supplier Invoice",
   "/supplier-invoice/create": "Supplier Invoice",
   "/supplier-invoice": "Supplier Invoice List",
-  "/invoices": "Invoices",
+  "/unposted-documents": "Unposted Documents",
+  "/invoices": "Unposted Documents",
   "/receipt/reversal/view": "Receipt Reversal",
   "/receipt/reversal/edit": "Receipt Reversal",
   "/receipt/reversal/create": "Receipt Reversal",
@@ -63,6 +64,7 @@ const pathTitleMap: Record<string, string> = {
   "/journal-voucher/edit": "Journal Voucher",
   "/journal-voucher/create": "Journal Voucher",
   "/journal-voucher": "Journal Voucher List",
+  "/invoice-reverse": "Invoice Reverse",
   "/payment-request-approval": "Payment Request List",
   "/payment-request": "Payment Request",
   "/payment/reversal/view": "Payment Reversal",
@@ -97,7 +99,9 @@ const pathActiveSubNavMap: Record<string, string> = {
   "/air/export-dsr": "Air export DSR",
   "/SeaExport/import-dsr": "Ocean Import DSR",
   "/SeaExport/export-dsr": "Ocean Export DSR",
-  "/invoices": "Invoices",
+  "/unposted-documents": "Unposted Documents",
+  "/invoices": "Unposted Documents",
+  "/invoice-reverse": "Invoice Reverse",
 };
 
 export const usePageTitleSync = () => {
