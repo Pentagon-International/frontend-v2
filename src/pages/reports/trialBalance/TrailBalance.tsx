@@ -21,6 +21,10 @@ interface BranchWithCountry {
     country_code: string;
     country_name: string;
   };
+  currency?: {
+    currency_id: number;
+    currency_code: string;
+  };
 }
 
 type TrialBalanceFormValues = {
@@ -119,9 +123,16 @@ export default function TrialBalance() {
     allBranchOptions,
     branchCodesForCountry,
     scopedDefaultBranchCode,
+    currencyDropdownData,
+    defaultCurrencyCode,
   } = useMemo(() => {
     const emptyBranches = () =>
       [] as { value: string; label: string }[];
+
+    const fallbackCurrencyOptions = [
+      { value: "INR", label: "INR" },
+      { value: "USD", label: "USD" },
+    ];
 
     if (!user) {
       return {
@@ -129,6 +140,8 @@ export default function TrialBalance() {
         allBranchOptions: emptyBranches(),
         branchCodesForCountry: (_countryId: string | null) => [] as string[],
         scopedDefaultBranchCode: null as string | null,
+        currencyDropdownData: fallbackCurrencyOptions,
+        defaultCurrencyCode: "INR",
       };
     }
 
@@ -137,12 +150,26 @@ export default function TrialBalance() {
       label: user.country.country_name,
     };
 
+    const branchesTyped = (user.branches ?? []) as BranchWithCountry[];
+    const defaultUserBranch = branchesTyped.find((b) => b.is_default);
+    const localCurrencyCode =
+      defaultUserBranch?.currency?.currency_code?.trim() || "INR";
+    const currencyOptionsForUser =
+      localCurrencyCode === "USD"
+        ? [{ value: "USD", label: "USD" }]
+        : [
+            { value: localCurrencyCode, label: localCurrencyCode },
+            { value: "USD", label: "USD" },
+          ];
+
     if (!user.branches?.length) {
       return {
         countryOptions: [profileCountryOption],
         allBranchOptions: emptyBranches(),
         branchCodesForCountry: (_countryId: string | null) => [] as string[],
         scopedDefaultBranchCode: null as string | null,
+        currencyDropdownData: currencyOptionsForUser,
+        defaultCurrencyCode: localCurrencyCode,
       };
     }
 
@@ -177,6 +204,8 @@ export default function TrialBalance() {
       allBranchOptions: allBranchOpts,
       branchCodesForCountry: branchCodesForCountryFn,
       scopedDefaultBranchCode: def?.branch_code ?? null,
+      currencyDropdownData: currencyOptionsForUser,
+      defaultCurrencyCode: localCurrencyCode,
     };
   }, [user]);
 
@@ -190,7 +219,7 @@ export default function TrialBalance() {
       format: "pdf",
       account_code: "false",
       is_last_year_income: "true",
-      currency_code: "INR",
+      currency_code: defaultCurrencyCode,
       country_id: null,
       branch_code: scopedDefaultBranchCode,
     },
@@ -253,7 +282,7 @@ export default function TrialBalance() {
     const filters: Record<string, unknown> = {
       from_date: dayjs(form.values.from_date).format("YYYY-MM-DD"),
       to_date: dayjs(form.values.to_date).format("YYYY-MM-DD"),
-      currency_code: form.values.currency_code || "INR",
+      currency_code: form.values.currency_code || defaultCurrencyCode || "INR",
       is_last_year_income: form.values.is_last_year_income === "true",
       account_code: form.values.account_code === "true",
     };
@@ -406,10 +435,7 @@ export default function TrialBalance() {
           <Grid.Col span={{ base: 12, md: 3 }}>
             <Dropdown
               label="Currency Code"
-              data={[
-                { value: "INR", label: "INR" },
-                { value: "USD", label: "USD" },
-              ]}
+              data={currencyDropdownData}
               value={form.values.currency_code}
               onChange={(v) => form.setFieldValue("currency_code", v)}
             />
