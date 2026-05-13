@@ -11,19 +11,26 @@ import {
   Button,
   Center,
   Grid,
+  Group,
   MantineProvider,
+  Menu,
   Text,
   TextInput,
+  UnstyledButton,
 } from "@mantine/core";
 import {
   IconClock,
   IconCreditCard,
+  IconDots,
+  IconEdit,
+  IconEye,
   IconFilter,
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
+import { useNavigate } from "react-router-dom";
 import {
   Dropdown,
   ERPListColumnToggleMenu,
@@ -59,6 +66,8 @@ type InvoiceFilterRow = Record<string, unknown> & {
   state_name?: string;
   document_no?: string;
   document_date?: string;
+  status?: string;
+  document_type?: string;
 };
 
 type InvoiceFilterResponse = {
@@ -138,7 +147,18 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
+function rowInvoiceId(row: InvoiceFilterRow): string | null {
+  const raw = row.id;
+  if (raw == null || raw === "") return null;
+  return String(raw);
+}
+
+function isCreditNoteRow(row: InvoiceFilterRow): boolean {
+  return String(row.document_type ?? "").toUpperCase() === "CRN";
+}
+
 export default function InvoiceList() {
+  const navigate = useNavigate();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -409,14 +429,90 @@ export default function InvoiceList() {
           </Text>
         ),
       },
+      {
+        id: "actions",
+        header: "Actions",
+        size: 80,
+        enableSorting: false,
+        Cell: ({ row }) => {
+          const id = rowInvoiceId(row.original);
+          if (!id) {
+            return (
+              <Text size="xs" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
+                —
+              </Text>
+            );
+          }
+          const status = String(row.original?.status ?? "").toUpperCase();
+          const canEdit = status === "" || status === "UNPOSTED";
+          const basePath = isCreditNoteRow(row.original)
+            ? "/credit-note"
+            : "/invoice";
+          return (
+            <Menu
+              withinPortal
+              position="bottom-end"
+              shadow="md"
+              width={200}
+              styles={erpListGeistMenuDropdownStyles}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+            >
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray" size="sm">
+                  <IconDots size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Box px={10} py={5}>
+                  <UnstyledButton
+                    onClick={() => {
+                      navigate(`${basePath}/view/${id}`);
+                    }}
+                  >
+                    <Group gap="sm">
+                      <IconEye size={16} color={primary} />
+                      <Text
+                        size="sm"
+                        style={{ fontFamily: erpTheme.fontSans }}
+                      >
+                        View
+                      </Text>
+                    </Group>
+                  </UnstyledButton>
+                </Box>
+                {canEdit && (
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      onClick={() => {
+                        navigate(`${basePath}/edit/${id}`);
+                      }}
+                    >
+                      <Group gap="sm">
+                        <IconEdit size={16} color={primary} />
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: erpTheme.fontSans }}
+                        >
+                          Edit
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+          );
+        },
+      },
     ],
-    [erpTheme.fontSans, index],
+    [erpTheme.fontSans, index, navigate, primary],
   );
 
   const columns = useMemo(
     () =>
       allColumns.filter((col) => {
         const id = columnId(col);
+        if (id === "actions") return true;
         return visibleColumns[id as ColumnKey] !== false;
       }),
     [allColumns, visibleColumns],
@@ -431,9 +527,11 @@ export default function InvoiceList() {
     enableColumnActions: false,
     enableSorting: false,
     enableBottomToolbar: false,
+    enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
       pagination: { pageSize: 10, pageIndex: 0 },
+      columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
     manualPagination: true,
@@ -461,26 +559,54 @@ export default function InvoiceList() {
         backgroundColor: "transparent",
       },
     },
-    mantineTableBodyCellProps: {
-      style: {
-        width: "fit-content",
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: cardBg,
-      },
+    mantineTableBodyCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "30px",
+              zIndex: 2,
+              borderLeft: `1px solid ${border}`,
+              boxShadow: "1px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: cardBg,
+          ...extraStyles,
+        },
+      };
     },
-    mantineTableHeadCellProps: {
-      style: {
-        width: "fit-content",
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: erpTheme.headerBg,
-        borderBottom: `1px solid ${border}`,
-      },
+    mantineTableHeadCellProps: ({ column }) => {
+      const extraStyles =
+        column.id === "actions"
+          ? {
+              position: "sticky" as const,
+              right: 0,
+              minWidth: "80px",
+              zIndex: 2,
+              backgroundColor: erpTheme.headerBg,
+              boxShadow: "0px -2px 4px 0px #00000040",
+            }
+          : {};
+      return {
+        style: {
+          width: "fit-content",
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: erpTheme.headerBg,
+          borderBottom: `1px solid ${border}`,
+          ...extraStyles,
+        },
+      };
     },
     mantineTableContainerProps: {
       style: {
