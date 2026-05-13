@@ -30,7 +30,7 @@ import {
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -95,6 +95,8 @@ type JVChargeRow = {
   charge_name: string;
   account_id: number | null;
   account_code: string;
+  /** GL / chart label shown in SearchableSelect (account_name only); not sent in API payload. */
+  account_display: string;
   account_name: string;
   subledger_code: string;
   code: string;
@@ -136,6 +138,7 @@ const emptyRow = (): JVChargeRow => ({
   charge_name: "",
   account_id: null,
   account_code: "",
+  account_display: "",
   account_name: "",
   subledger_code: "",
   code: "",
@@ -154,6 +157,30 @@ function clampAmt(v: number | null | undefined): number | null {
   const r = Math.round(v * 100) / 100;
   const MAX = 99999999.99;
   return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+}
+
+/** Chart of accounts dropdown label (same order as ReceiptCreate). */
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [c, b, a].filter(Boolean).join(" - ");
+}
+
+/**
+ * Stored `account_name` on JV lines is "gl_code - account_name - gl_name" from selection.
+ * Derive the middle segment for read-only hint when `account_display` is empty (e.g. loaded from API).
+ */
+function accountNameHintFromStored(stored: string): string {
+  const s = String(stored ?? "").trim();
+  if (!s) return "";
+  const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[1] ?? parts[0] ?? "";
+  return parts[0] ?? "";
 }
 
 const STATUS_OPTIONS = [
@@ -182,7 +209,10 @@ const textareaStyles = {
   label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
 };
 
-const cellStyle: React.CSSProperties = { padding: "3px 3px 3px 0", verticalAlign: "middle" };
+const cellStyle: React.CSSProperties = {
+  padding: "3px 3px 3px 0",
+  verticalAlign: "top",
+};
 const inputCell = { input: { fontSize: "12px", fontFamily: "Inter", height: "34px" } };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -207,8 +237,6 @@ function JournalVoucher() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
-  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
-
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
   const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
@@ -386,6 +414,7 @@ function JournalVoucher() {
             charge_name: "",
             account_id: null,
             account_code: c.code ?? "",
+            account_display: accountNameHintFromStored(String(c.account_name ?? "")),
             account_name: c.account_name ?? "",
             subledger_code: c.subledger ?? "",
             code: c.code ?? "",
@@ -447,12 +476,6 @@ function JournalVoucher() {
       difference: Math.round((debit - credit) * 100) / 100,
     };
   }, [form.values.charges]);
-
-  // ─── Selected row account info ────────────────────────────────────────────
-
-  const selectedRow = form.values.charges[selectedRowIndex];
-  const selectedAccountName = selectedRow?.account_name || "";
-  const selectedNarration = selectedRow?.narration || "";
 
   // ─── Submit ───────────────────────────────────────────────────────────────
 
@@ -642,7 +665,7 @@ function JournalVoucher() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const tableHeaders = [
+  const tableHeaders: { label: ReactNode; width: string }[] = [
     { label: "SNo", width: "40px" },
     // { label: "Seg", width: "68px" },
     { label: "Job Id", width: "88px" },
@@ -650,7 +673,16 @@ function JournalVoucher() {
     { label: "Shipment Id", width: "108px" },
     { label: "C/R/N", width: "62px" },
     { label: "Charge", width: "148px" },
-    { label: "*Account Name", width: "168px" },
+    {
+      label: (
+        <Stack gap={0}>
+          <Text component="span" size="xs" fw={700} c="#105476" lh={1.2}>
+            Account name
+          </Text>
+        </Stack>
+      ),
+      width: "200px",
+    },
     { label: "Subledger", width: "102px" },
     { label: "Code", width: "76px" },
     { label: "Key", width: "76px" },
@@ -1147,12 +1179,12 @@ function JournalVoucher() {
                   borderCollapse: "separate",
                   borderSpacing: "0 3px",
                   tableLayout: "fixed",
-                  minWidth: 1580,
+                  minWidth: 1612,
                 }}
               >
                 <colgroup>
-                  {tableHeaders.map((h) => (
-                    <col key={h.label} style={{ width: h.width }} />
+                  {tableHeaders.map((h, hi) => (
+                    <col key={`col-${hi}`} style={{ width: h.width }} />
                   ))}
                   {!isReadOnly && <col style={{ width: "52px" }} />}
                 </colgroup>
@@ -1160,9 +1192,9 @@ function JournalVoucher() {
                 {/* ── Header ── */}
                 <thead>
                   <tr>
-                    {tableHeaders.map((h) => (
+                    {tableHeaders.map((h, hi) => (
                       <th
-                        key={h.label}
+                        key={`th-${hi}`}
                         style={{
                           position: "sticky",
                           top: 0,
@@ -1206,17 +1238,8 @@ function JournalVoucher() {
                 {/* ── Body ── */}
                 <tbody>
                   {form.values.charges.map((row, index) => {
-                    const isSelected = selectedRowIndex === index;
                     return (
-                      <tr
-                        key={index}
-                        onClick={() => setSelectedRowIndex(index)}
-                        style={{
-                          backgroundColor: isSelected ? "#eef6fb" : "transparent",
-                          cursor: "pointer",
-                          transition: "background 0.15s",
-                        }}
-                      >
+                      <tr key={index}>
                         {/* SNo */}
                         <td style={cellStyle}>
                           <TextInput
@@ -1329,66 +1352,113 @@ function JournalVoucher() {
                           />
                         </td>
 
-                        {/* Account Code */}
+                        {/* Account (chart of accounts) */}
                         <td style={cellStyle}>
-                          <SearchableSelect
-                            placeholder="Search by account name"
-                            apiEndpoint={URL.chartOfAccounts}
-                            value={row.account_id != null ? String(row.account_id) : null}
-                            dropdownZIndex={1100}
-                            minSearchLength={1}
-                            searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
-                            displayFormat={(item: Record<string, unknown>) => {
-                              const id = String(item.id ?? "").trim();
-                              const glName = String(item.gl_name ?? "").trim();
-                              const gl = String(item.gl_account_code ?? "").trim();
-                              const name = String(item.account_name ?? "").trim();
-                              return {
-                                value: id,
-                                label: [name, gl, glName].filter(Boolean).join(" - "),
-                              };
+                          <Box
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 4,
+                              width: "100%",
+                              minWidth: 0,
                             }}
-                            displayValue={
-                              row.account_name
-                                ? `${row.account_name}${row.account_code ? ` - ${row.account_code}` : ""}`
-                                : row.account_code || undefined
-                            }
-                            returnOriginalData
-                            onChange={(value, _selectedData, originalData) => {
-                              if (!value || !originalData) {
-                                form.setFieldValue(`charges.${index}.account_code`, "");
-                                form.setFieldValue(`charges.${index}.subledger_code`, "");
-                                form.setFieldValue(`charges.${index}.account_name`, "");
-                                return;
-                              }
-                              form.setFieldValue(
-                                `charges.${index}.account_code`,
-                                originalData.gl_account_code !== undefined &&
-                                  originalData.gl_account_code !== null
-                                  ? String(originalData.gl_account_code)
-                                  : "",
-                              );
-                              form.setFieldValue(
-                                `charges.${index}.subledger_code`,
-                                originalData.sl_code !== undefined &&
-                                  originalData.sl_code !== null
-                                  ? String(originalData.sl_code)
-                                  : "",
-                              );
-                              form.setFieldValue(
-                                `charges.${index}.account_name`,
-                                [
-                                  String((originalData as any).gl_account_code ?? "").trim(),
-                                  String((originalData as any).account_name ?? "").trim(),
-                                  String((originalData as any).gl_name ?? "").trim(),
-                                ]
-                                  .filter(Boolean)
-                                  .join(" - "),
-                              );
-                            }}
-                            readOnly={isReadOnly}
-                            styles={inputCell}
-                          />
+                          >
+                            <Box style={{ flexShrink: 0, width: "100%" }}>
+                              <SearchableSelect
+                                placeholder="Account name"
+                                apiEndpoint={URL.chartOfAccounts}
+                                value={row.account_id != null ? String(row.account_id) : null}
+                                dropdownZIndex={1100}
+                                minSearchLength={1}
+                                searchFields={[
+                                  "gl_name",
+                                  "gl_account_code",
+                                  "account_name",
+                                  "id",
+                                ]}
+                                displayFormat={(item: Record<string, unknown>) => {
+                                  const id = String(item.id ?? "").trim();
+                                  const glName = String(item.gl_name ?? "").trim();
+                                  const gl = String(item.gl_account_code ?? "").trim();
+                                  const name = String(item.account_name ?? "").trim();
+                                  return {
+                                    value: id,
+                                    label: formatChartOfAccountsLabel(glName, gl, name),
+                                  };
+                                }}
+                                displayValue={
+                                  row.account_display.trim()
+                                    ? row.account_display
+                                    : undefined
+                                }
+                                returnOriginalData
+                                onChange={(value, _selectedData, originalData) => {
+                                  if (!value || !originalData) {
+                                    form.setFieldValue(`charges.${index}.account_code`, "");
+                                    form.setFieldValue(`charges.${index}.subledger_code`, "");
+                                    form.setFieldValue(`charges.${index}.account_name`, "");
+                                    form.setFieldValue(`charges.${index}.account_display`, "");
+                                    return;
+                                  }
+                                  const displayName = String(
+                                    (originalData as { account_name?: string }).account_name ??
+                                      "",
+                                  ).trim();
+                                  form.setFieldValue(
+                                    `charges.${index}.account_code`,
+                                    originalData.gl_account_code !== undefined &&
+                                      originalData.gl_account_code !== null
+                                      ? String(originalData.gl_account_code)
+                                      : "",
+                                  );
+                                  form.setFieldValue(
+                                    `charges.${index}.subledger_code`,
+                                    originalData.sl_code !== undefined &&
+                                      originalData.sl_code !== null
+                                      ? String(originalData.sl_code)
+                                      : "",
+                                  );
+                                  form.setFieldValue(
+                                    `charges.${index}.account_name`,
+                                    [
+                                      String((originalData as any).gl_account_code ?? "").trim(),
+                                      String((originalData as any).account_name ?? "").trim(),
+                                      String((originalData as any).gl_name ?? "").trim(),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" - "),
+                                  );
+                                  form.setFieldValue(
+                                    `charges.${index}.account_display`,
+                                    displayName,
+                                  );
+                                }}
+                                readOnly={isReadOnly}
+                                styles={{
+                                  ...inputCell,
+                                  input: {
+                                    ...inputCell.input,
+                                    minHeight: 34,
+                                    height: 34,
+                                  },
+                                }}
+                              />
+                            </Box>
+                            {String(row.account_code ?? "").trim() ? (
+                              <Text
+                                size="xs"
+                                c="dimmed"
+                                lh={1.35}
+                                style={{
+                                  fontFamily: "Inter",
+                                  display: "block",
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                {`Account code: ${String(row.account_code ?? "").trim()}`}
+                              </Text>
+                            ) : null}
+                          </Box>
                         </td>
 
                         {/* Subledger */}
@@ -1563,9 +1633,6 @@ function JournalVoucher() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     form.removeListItem("charges", index);
-                                    if (selectedRowIndex >= form.values.charges.length - 1) {
-                                      setSelectedRowIndex(Math.max(0, form.values.charges.length - 2));
-                                    }
                                   }}
                                 >
                                   <IconTrash size={12} />
@@ -1665,45 +1732,6 @@ function JournalVoucher() {
                       {totals.difference.toFixed(2)}
                     </Text>
                   </Box>
-                </Grid.Col>
-              </Grid>
-
-              {/* ── Account Name & Narration (selected row display) ── */}
-              <Divider mt="md" mb="md" color="#dee2e6" size="sm" />
-              <Grid columns={12} gutter="md">
-                <Grid.Col span={3}>
-                  <TextInput
-                    label="Account Name"
-                    value={selectedAccountName}
-                    readOnly
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                        backgroundColor: "var(--mantine-color-gray-0)",
-                        color: "#105476",
-                        fontWeight: 500,
-                      },
-                      label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
-                    }}
-                  />
-                </Grid.Col>
-                <Grid.Col span={3}>
-                  <TextInput
-                    label="Narration"
-                    value={selectedNarration}
-                    readOnly
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                        backgroundColor: "var(--mantine-color-gray-0)",
-                      },
-                      label: { fontSize: "13px", fontFamily: "Inter", marginBottom: "4px" },
-                    }}
-                  />
                 </Grid.Col>
               </Grid>
             </Box>

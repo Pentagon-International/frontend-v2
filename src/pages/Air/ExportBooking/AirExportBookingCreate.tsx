@@ -80,6 +80,9 @@ function AirExportBookingCreate() {
       routed: "Self", // Default to Self routing
       routed_by: "", // Let stepper auto-set from logged-in user for Self
       customer_service_name: "", // Will be auto-set from user in Self mode or filled by user
+      bill_no: "",
+      bill_date: null,
+      iata: "",
       is_direct: true,
       is_coload: false,
 
