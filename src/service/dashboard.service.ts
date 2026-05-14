@@ -149,6 +149,8 @@ export interface CustomerOutstandingVsOverdueResponse {
   success: boolean;
   message: string;
   as_of: string;
+  /** Present when API returns aggregation mode (customer vs salesperson list). */
+  salesperson?: boolean;
   summary: CustomerOutstandingVsOverdueSummary;
   data: CustomerOutstandingVsOverdueItem[];
   total: number;
@@ -165,6 +167,15 @@ export interface CustomerOutstandingVsOverdueFilters {
   search?: string;
   index?: number;
   limit?: number;
+  /**
+   * Customer vs salesperson list: `false` / `true`.
+   * Rep drill-down: use `salesperson: true` together with `salesman: "<rep name>"` in the POST body.
+   */
+  salesperson?: boolean | string;
+  /**
+   * Dashboard tile: POST `{ company }` only with `?index=0&limit=5` (summary + first page slice).
+   */
+  summaryCard?: boolean;
 }
 
 export interface CallEntryItem {
@@ -814,30 +825,48 @@ export const getCustomerOutstandingVsOverdueData = async (
   filters: CustomerOutstandingVsOverdueFilters
 ): Promise<CustomerOutstandingVsOverdueResponse> => {
   try {
-    const index = Number.isFinite(filters.index) ? Number(filters.index) : 0;
-    const limit = Number.isFinite(filters.limit) ? Number(filters.limit) : 5;
+    const summaryCard = filters.summaryCard === true;
+    const index = summaryCard
+      ? 0
+      : Number.isFinite(filters.index)
+        ? Number(filters.index)
+        : 0;
+    const limit = summaryCard
+      ? 5
+      : Number.isFinite(filters.limit)
+        ? Number(filters.limit)
+        : 15;
     const queryParams = new URLSearchParams();
     queryParams.append("index", String(index));
     queryParams.append("limit", String(limit));
     const url = `${URL.dashboard.customerOutstandingVsOverdue}?${queryParams.toString()}`;
+
     const payload: Record<string, unknown> = {
       company: filters.company,
     };
-    if (filters.location && filters.location.trim()) {
-      payload.location = filters.location.trim();
+    if (!summaryCard) {
+      if (typeof filters.salesperson === "boolean") {
+        payload.salesperson = filters.salesperson;
+      } else if (typeof filters.salesperson === "string" && filters.salesperson.trim()) {
+        payload.salesperson = filters.salesperson.trim();
+      }
+      if (filters.location && filters.location.trim()) {
+        payload.location = filters.location.trim();
+      }
+      if (filters.salesman && filters.salesman.trim()) {
+        payload.salesman = filters.salesman.trim();
+      }
+      if (filters.customer_name && filters.customer_name.trim()) {
+        payload.customer_name = filters.customer_name.trim();
+      }
+      if (filters.risk && filters.risk.trim()) {
+        payload.risk = filters.risk.trim();
+      }
+      if (filters.search && filters.search.trim()) {
+        payload.search = filters.search.trim();
+      }
     }
-    if (filters.salesman && filters.salesman.trim()) {
-      payload.salesman = filters.salesman.trim();
-    }
-    if (filters.customer_name && filters.customer_name.trim()) {
-      payload.customer_name = filters.customer_name.trim();
-    }
-    if (filters.risk && filters.risk.trim()) {
-      payload.risk = filters.risk.trim();
-    }
-    if (filters.search && filters.search.trim()) {
-      payload.search = filters.search.trim();
-    }
+
     const response = await postAPICall(url, payload);
     return response as CustomerOutstandingVsOverdueResponse;
   } catch (error) {

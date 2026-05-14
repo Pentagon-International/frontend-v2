@@ -13,6 +13,7 @@ import {
 import {
   getCustomerOutstandingVsOverdueData,
   type CustomerOutstandingVsOverdueResponse,
+  type CustomerOutstandingVsOverdueSummary,
 } from "../../../service/dashboard.service";
 import {
   dashboardPanelBody,
@@ -20,6 +21,9 @@ import {
   dashboardPanelShell,
   dashboardPanelTitleStyle,
 } from "./dashboardPanelStyles";
+import { enquiryConversionColors } from "./EnquiryConversion/enquiryConversionTokens";
+
+const ERP_FONT_SANS = "'Geist', sans-serif";
 
 interface OutstandingVsOverdueCardProps {
   company: string;
@@ -45,16 +49,22 @@ const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
 
 const progressColors = ["#22c55e", "#84cc16", "#f59e0b", "#fb923c", "#ef4444"];
 
+function readSummaryDays90Plus(
+  summary: CustomerOutstandingVsOverdueSummary | null | undefined
+): string | number | undefined {
+  if (!summary) return undefined;
+  const legacy = (summary as unknown as Record<string, unknown>)["days_90+"];
+  const v = summary.days_90_plus ?? legacy;
+  return typeof v === "string" || typeof v === "number" ? v : undefined;
+}
+
 const OutstandingVsOverdueCard = ({
   company,
   onViewAll,
-  globalSearch,
 }: OutstandingVsOverdueCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] =
     useState<CustomerOutstandingVsOverdueResponse | null>(null);
-  const index = 0;
-  const limit = 5;
 
   const fetchCardData = useCallback(async () => {
     if (!company?.trim()) return;
@@ -62,9 +72,7 @@ const OutstandingVsOverdueCard = ({
       setIsLoading(true);
       const data = await getCustomerOutstandingVsOverdueData({
         company,
-        index,
-        limit,
-        ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+        summaryCard: true,
       });
       setResponse(data);
     } catch (error) {
@@ -73,7 +81,7 @@ const OutstandingVsOverdueCard = ({
     } finally {
       setIsLoading(false);
     }
-  }, [company, index, limit, globalSearch]);
+  }, [company]);
 
   useEffect(() => {
     void fetchCardData();
@@ -99,7 +107,7 @@ const OutstandingVsOverdueCard = ({
     return {
       currentAmount,
       overdueAmount: overdue,
-      ninetyPlusAmount: toNumber(summary["days_90+"]),
+      ninetyPlusAmount: toNumber(readSummaryDays90Plus(summary)),
       currentPct,
       overduePct,
     };
@@ -111,7 +119,7 @@ const OutstandingVsOverdueCard = ({
     const overdue1_30 = toNumber(summary.days_1_30);
     const overdue31_60 = toNumber(summary.days_31_60);
     const overdue61_90 = toNumber(summary.days_61_90);
-    const overdue90Plus = toNumber(summary["days_90+"]);
+    const overdue90Plus = toNumber(readSummaryDays90Plus(summary));
     const currentBucket = Math.max(
       0,
       totalOutstanding - (overdue1_30 + overdue31_60 + overdue61_90 + overdue90Plus)
@@ -134,12 +142,20 @@ const OutstandingVsOverdueCard = ({
       style={{
         ...dashboardPanelShell,
         cursor: onViewAll ? "pointer" : "default",
+        fontFamily: ERP_FONT_SANS,
+        WebkitFontSmoothing: "antialiased",
+        MozOsxFontSmoothing: "grayscale",
       }}
       onClick={onViewAll}
     >
       <Box style={dashboardPanelHeaderBand}>
         <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
-          <Group gap={8} wrap="nowrap" justify="space-between" style={{ flex: 1, minWidth: 0 , fontFamily: "Geist", fontWeight: "550", }}>
+          <Group
+            gap={8}
+            wrap="nowrap"
+            justify="space-between"
+            style={{ flex: 1, minWidth: 0, fontFamily: ERP_FONT_SANS, fontWeight: 550 }}
+          >
             <Text style={dashboardPanelTitleStyle}>Outstanding vs Overdue</Text>
             <UnstyledButton
               type="button"
@@ -166,7 +182,7 @@ const OutstandingVsOverdueCard = ({
             {summary?.currency || "INR"}
           </Badge>
         </Group>
-        <Text size="xs" c="#64748B" mt={4}>
+        <Text fz={11} fw={600} c="#8AA0B9" mt={4} style={{ lineHeight: 1.4 }}>
           Total {formatAmountCompact(summary?.total_outstanding)} ·{" "}
           {toNumber(summary?.open_invoices).toLocaleString("en-IN")} invoices
         </Text>
@@ -181,35 +197,56 @@ const OutstandingVsOverdueCard = ({
           <>
             <Group grow gap="lg" wrap="nowrap">
               <Box>
-                <Text size="10px" fw={700} c="#16A34A" style={{ letterSpacing: "0.06em" }}>
-                  CURRENT
+                <Text
+                  size="11px"
+                  fw={600}
+                  c={enquiryConversionColors.subHeading}
+                  tt="uppercase"
+                  lts={0.8}
+                  mb={12}
+                >
+                  Current
                 </Text>
-                <Text fw={800} c="#16A34A" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
+                <Text fw={700} fz={32} c="#16A34A" lh={1}>
                   {formatAmountCompact(metrics.currentAmount)}
                 </Text>
-                <Text size="xs" c="#16A34A" fw={600} mt={6}>
+                <Text size="xs" fw={700} c="#16A34A" mt={4}>
                   {formatPercent(metrics.currentPct)}
                 </Text>
               </Box>
               <Box>
-                <Text size="10px" fw={700} c="#EF4444" style={{ letterSpacing: "0.06em" }}>
-                  OVERDUE
+                <Text
+                  size="11px"
+                  fw={600}
+                  c={enquiryConversionColors.subHeading}
+                  tt="uppercase"
+                  lts={0.8}
+                  mb={12}
+                >
+                  Overdue
                 </Text>
-                <Text fw={800} c="#EF4444" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
+                <Text fw={700} fz={32} c="#EF4444" lh={1}>
                   {formatAmountCompact(summary?.total_overdue)}
                 </Text>
-                <Text size="xs" c="#EF4444" fw={600} mt={6}>
+                <Text size="xs" fw={700} c="#EF4444" mt={4}>
                   {formatPercent(metrics.overduePct)}
                 </Text>
               </Box>
               <Box>
-                <Text size="10px" fw={700} c="#64748B" style={{ letterSpacing: "0.06em" }}>
-                  90+ DAYS
+                <Text
+                  size="11px"
+                  fw={600}
+                  c={enquiryConversionColors.subHeading}
+                  tt="uppercase"
+                  lts={0.8}
+                  mb={12}
+                >
+                  90+ days
                 </Text>
-                <Text fw={800} c="#0F172A" mt={2} style={{ fontSize: "30px", lineHeight: 1 }}>
-                  {formatAmountCompact(summary?.["days_90+"])}
+                <Text fw={700} fz={32} c={enquiryConversionColors.heading} lh={1}>
+                  {formatAmountCompact(readSummaryDays90Plus(summary))}
                 </Text>
-                <Text size="xs" c="#64748B" fw={600} mt={6}>
+                <Text size="xs" fw={700} c={enquiryConversionColors.subHeading} mt={4}>
                   {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
                 </Text>
               </Box>
@@ -232,7 +269,7 @@ const OutstandingVsOverdueCard = ({
               </Group>
               <Group justify="space-between" mt={8} gap={6} wrap="nowrap">
                 {agingSegments.map((segment) => (
-                  <Text key={segment.label} size="10px" c="#94A3B8" fw={600}>
+                  <Text key={segment.label} size="11px" fw={600} c={enquiryConversionColors.subHeading}>
                     {segment.label}
                   </Text>
                 ))}
@@ -240,10 +277,10 @@ const OutstandingVsOverdueCard = ({
             </Box>
 
             <Group justify="space-between" mt="auto" pt={14}>
-              <Text size="11px" c="#64748B">
+              <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
                 As of {response?.as_of || "-"}
               </Text>
-              <Text size="11px" c="#64748B" fw={600}>
+              <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
                 {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
               </Text>
             </Group>

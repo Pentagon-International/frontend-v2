@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 /* v0 Air Export redesign parity (Geist + Geist Mono) */
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
 
 :root {
   /* Override Mantine default border to match ERP palette */
@@ -104,6 +105,24 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* Customer-outstanding vs overdue Mantine tables — enquiry-style header tokens (beats global MRT thead rule). */
+.co-ec-table .mantine-Table-thead th {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+/* Customer-outstanding drawer — align with enquiry modal table headers (`fw` 500). */
+.co-ec-drawer-table .mantine-Table-thead th {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+}
+
 /* Table row hover */
 .mantine-Table-tbody tr:hover td {
   background-color: #F8FAFC !important;
@@ -137,6 +156,21 @@ body {
 
 .air-export-booking-geist-root .air-export-geist-mono {
   font-family: 'Geist Mono', monospace !important;
+}
+
+/*
+ * Customer Outstanding vs Overdue — match Enquiry conversion modal tables (Plus Jakarta).
+ * Must follow the Geist root rule: same * !important but higher specificity so it wins.
+ */
+.air-export-booking-geist-root .co-ostd-jakarta-values,
+.air-export-booking-geist-root .co-ostd-jakarta-values * {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* Drawer content is portaled outside the Geist root — same face when this class is used. */
+.co-ostd-jakarta-values,
+.co-ostd-jakarta-values * {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
 /* ─── Native table header click-to-edit filters (Enquiry / RFQ shared) ──
