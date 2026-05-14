@@ -1,25 +1,21 @@
-import { useMemo, useState, useEffect, useRef } from "react";
-import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  MRT_PaginationState,
-  useMantineReactTable,
-} from "mantine-react-table";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import type { MRT_PaginationState } from "mantine-react-table";
 import {
   Group,
   Button,
   Text,
+  Stack,
   Box,
   Menu,
   ActionIcon,
   Modal,
-  Badge,
   Grid,
   TextInput,
   MantineProvider,
-  createTheme,
-  rem,
+  Select,
   Tooltip,
+  Center,
+  Loader,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -31,7 +27,8 @@ import {
   IconPackage,
   IconCircleCheck,
   IconClock,
-  IconCircleX,
+  IconStack2,
+  IconBriefcase,
   IconArrowRight,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -44,115 +41,59 @@ import {
   SearchableSelect,
   SingleDateInput,
   Dropdown,
+  ERPListColumnHeaderFilter,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListPaginationFooter,
-  ERPListFilterActionsFooter,
-  ERPListTableLoading,
-  ERPListTableEmpty,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
-  type ErpListTheme,
+  erpToolbarSelectStyles,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  DEFAULT_ERP_LIST_THEME,
+  erpListGeistMantineTheme,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistRootTypography,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistSelectClassNames,
+  erpListThStyle,
+  erpListDataRowProps,
+  erpListBookingMasterTableStyle,
+  erpListStickyActionThStyle,
+  erpListStickyActionTdStyle,
+  ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+  erpListBookingMasterBodyTd,
+  erpListBookingMasterDateTd,
+  erpListBookingMasterReferenceTdShell,
+  ERPListJobStatusPill,
+  ERP_LIST_GEIST_MONO_CLASS,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
-
-dayjs.extend(utc);
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_EXPORT_JOB_MASTER";
 
-const AIR_EXPORT_JOB_GEIST_ROOT_CLASS = "air-export-job-geist-root";
-
-const V0_FONT_SANS = "'Geist', sans-serif";
-const v0RootTypography = {
-  fontFamily: V0_FONT_SANS,
-  fontSize: 14,
-  lineHeight: 1.5,
-  WebkitFontSmoothing: "antialiased" as const,
-  MozOsxFontSmoothing: "grayscale" as const,
-};
-
-const AIR_EXPORT_FILTER_SELECT_CLASSNAMES = {
-  dropdown: AIR_EXPORT_JOB_GEIST_ROOT_CLASS,
-  option: AIR_EXPORT_JOB_GEIST_ROOT_CLASS,
-};
-
-const AIR_EXPORT_FILTER_BORDER = "#e2e8f0";
-const AIR_EXPORT_FILTER_UNIFIED_STYLES = {
-  label: {
-    fontFamily: V0_FONT_SANS,
-    fontSize: 12,
-    fontWeight: 500,
-    color: "#64748b",
-    lineHeight: 1.25,
-    marginBottom: 6,
-    display: "block" as const,
-    minHeight: 15,
-  },
-  input: {
-    fontFamily: V0_FONT_SANS,
-    fontSize: 12,
-    height: 32,
-    minHeight: 32,
-    borderColor: AIR_EXPORT_FILTER_BORDER,
-  },
-  dropdown: {
-    fontFamily: V0_FONT_SANS,
-    fontSize: 12,
-  },
-  option: {
-    fontFamily: V0_FONT_SANS,
-    fontSize: 12,
-  },
-} as const;
-
-const airExportJobV0MantineTheme = createTheme({
-  fontFamily: V0_FONT_SANS,
-  headings: { fontFamily: V0_FONT_SANS },
-  fontSizes: {
-    xs: rem(12),
-    sm: rem(14),
-    md: rem(16),
-    lg: rem(18),
-    xl: rem(20),
-  },
-});
-
-type AirExportJobFilters = {
-  job_id: string;
-  mawb_no: string;
-  agent_code: string;
-  agent_name: string;
-  origin_code: string;
-  origin_name: string;
-  destination_code: string;
-  destination_name: string;
-  etd: string;
-  eta: string;
-  status: string;
-};
-
-const DEFAULT_AIR_EXPORT_FILTERS: AirExportJobFilters = {
-  job_id: "",
-  mawb_no: "",
-  agent_code: "",
-  agent_name: "",
-  origin_code: "",
-  origin_name: "",
-  destination_code: "",
-  destination_name: "",
-  etd: "",
-  eta: "",
-  status: "",
+type VisibleColumnsState = {
+  sno: boolean;
+  job_id: boolean;
+  mawb: boolean;
+  agent: boolean;
+  route: boolean;
+  etd: boolean;
+  eta: boolean;
+  status: boolean;
 };
 
 type AirExportJobData = {
   id: number;
+  sno?: number;
   service_id?: number;
   service: string;
   service_type: string;
@@ -188,7 +129,7 @@ type AirExportJobData = {
   job_id?: string;
 };
 
-/** Matches `summary` on filtered job create list for air export jobs. */
+/** `summary` on `filterJobCreate` (totals are filter-scoped). */
 type AirExportJobListSummary = {
   status_counts?: {
     active?: number;
@@ -203,21 +144,68 @@ type AirExportJobListQueryResult = {
   summary?: AirExportJobListSummary;
 };
 
-type AirExportJobTableRow = AirExportJobData & { sno: number };
+/** Air Export Booking route column: origin_code_read → origin_code → origin_name (same for destination). */
+function routeEndpointsFromAirExportJobRow(row: AirExportJobData) {
+  const ext = row as AirExportJobData & {
+    origin_code_read?: string | null;
+    destination_code_read?: string | null;
+  };
+  const oc =
+    String(ext.origin_code_read || "").trim() ||
+    String(row.origin_code || "").trim() ||
+    String(row.origin_name || "").trim() ||
+    "";
+  const dc =
+    String(ext.destination_code_read || "").trim() ||
+    String(row.destination_code || "").trim() ||
+    String(row.destination_name || "").trim() ||
+    "";
+  return { oc, dc };
+}
+
+type AirExportJobFilters = {
+  job_id: string;
+  mawb_no: string;
+  agent_code: string;
+  agent_name: string;
+  origin_code: string;
+  origin_name: string;
+  destination_code: string;
+  destination_name: string;
+  etd: string;
+  eta: string;
+  status: string;
+};
 
 function AirExportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
+  const { muted, fg, primary } = theme;
+
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
   });
   const [totalRecords, setTotalRecords] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-  const [draftFilters, setDraftFilters] =
-    useState<AirExportJobFilters>(DEFAULT_AIR_EXPORT_FILTERS);
+  const DEFAULT_FILTERS: AirExportJobFilters = {
+    job_id: "",
+    mawb_no: "",
+    agent_code: "",
+    agent_name: "",
+    origin_code: "",
+    origin_name: "",
+    destination_code: "",
+    destination_name: "",
+    etd: "",
+    eta: "",
+    status: "",
+  };
+  const [draftFilters, setDraftFilters] = useState<AirExportJobFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
-    useState<AirExportJobFilters>(DEFAULT_AIR_EXPORT_FILTERS);
+    useState<AirExportJobFilters>(DEFAULT_FILTERS);
   const [isRestoring, setIsRestoring] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -229,13 +217,52 @@ function AirExportJobMaster() {
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [cancelConfirmRow, setCancelConfirmRow] = useState<AirExportJobData | null>(
     null
   );
   const [isCancelling, setIsCancelling] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
+    sno: true,
+    job_id: true,
+    mawb: true,
+    agent: true,
+    route: true,
+    etd: true,
+    eta: true,
+    status: true,
+  });
 
   const dateFormat = useDateFormat();
+  const formatFilterDateLabel = useCallback(
+    (iso: string) => {
+      if (!iso?.trim()) return "";
+      const d = dayjs(iso);
+      return d.isValid() ? d.format(dateFormat) : iso;
+    },
+    [dateFormat],
+  );
+
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
+  const collapseHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
+    [],
+  );
+
+  const commitHeaderFilters = useCallback(
+    (partial: Partial<AirExportJobFilters>) => {
+      setDraftFilters((prev) => {
+        const next = { ...prev, ...partial };
+        setAppliedFilters(next);
+        setStoreFilters(LIST_KEY, next);
+        return next;
+      });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
+    [setStoreFilters],
+  );
+
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
     const label =
@@ -248,8 +275,6 @@ function AirExportJobMaster() {
     return { label, color } as const;
   };
 
-  // Keep restore flow tied strictly to navigation key, same as AirImportJobMaster.
-  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     const stored = getState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
@@ -257,6 +282,7 @@ function AirExportJobMaster() {
 
     if (!shouldRestore) {
       setIsRestoring(false);
+      setIsInitialLoad(false);
       return;
     }
 
@@ -265,7 +291,7 @@ function AirExportJobMaster() {
     }
 
     if (stored?.filters && typeof stored.filters === "object") {
-      const restored = { ...DEFAULT_AIR_EXPORT_FILTERS, ...stored.filters };
+      const restored = { ...DEFAULT_FILTERS, ...stored.filters };
       setDraftFilters(restored);
       setAppliedFilters(restored);
     }
@@ -275,10 +301,19 @@ function AirExportJobMaster() {
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
+    setIsInitialLoad(false);
   }, [location.key]);
-  /* eslint-enable react-hooks/exhaustive-deps */
 
-  const index = pagination.pageIndex * pagination.pageSize;
+  const pageIndex = pagination.pageIndex;
+  const pageSize = pagination.pageSize;
+
+  const handlePageSizeChange = (size: number) => {
+    setPagination({ pageIndex: 0, pageSize: size });
+  };
+
+  const handlePageIndexChange = (idx: number) => {
+    setPagination((prev) => ({ ...prev, pageIndex: idx }));
+  };
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
@@ -289,8 +324,8 @@ function AirExportJobMaster() {
   };
 
   const clearAllFilters = () => {
-    setDraftFilters({ ...DEFAULT_AIR_EXPORT_FILTERS });
-    setAppliedFilters({ ...DEFAULT_AIR_EXPORT_FILTERS });
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
     clearAllStore(LIST_KEY);
   };
@@ -300,112 +335,108 @@ function AirExportJobMaster() {
     searchValue: string,
   ): Record<string, string> => {
     const cleaned: Record<string, string> = {};
+    const push = (
+      apiKey: string,
+      raw: string | undefined | null,
+      mode?: "upper",
+    ) => {
+      const v = (raw ?? "").trim();
+      if (!v) return;
+      cleaned[apiKey] = mode === "upper" ? v.toUpperCase() : v;
+    };
 
-    Object.entries(filters).forEach(([key, value]) => {
-      if (key === "agent_code" || key === "origin_name" || key === "destination_name") {
-        return;
-      }
-      if (!value) return;
-      if (value.trim() !== "") {
-        cleaned[key] = key === "status" ? value.toUpperCase() : value;
-      }
-    });
+    push("job_id", filters.job_id);
+    push("mawb_no", filters.mawb_no);
+    push("origin_code", filters.origin_code);
+    push("destination_code", filters.destination_code);
+    push("etd", filters.etd);
+    push("eta", filters.eta);
+    push("status", filters.status, "upper");
 
-    if (searchValue?.trim()) cleaned.search = searchValue;
+    if (filters.agent_name?.trim()) cleaned.agent = filters.agent_name.trim();
+    if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
     return cleaned;
   };
 
-  const { data: exportJobResponse, isLoading: exportJobLoading, isFetching: exportJobFetching, refetch: refetchExportJobs } =
-    useQuery({
-      queryKey: [
-        "airExportJobs",
-        pagination.pageIndex,
-        pagination.pageSize,
-        JSON.stringify(appliedFilters),
-        debouncedSearch,
-      ],
-      queryFn: async (): Promise<AirExportJobListQueryResult> => {
-        const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+  const {
+    data: exportJobResponse,
+    isLoading: exportJobLoading,
+    isFetching: exportJobFetching,
+    refetch: refetchExportJobs,
+  } = useQuery<AirExportJobListQueryResult>({
+    queryKey: [
+      "airExportJobs",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
+    queryFn: async (): Promise<AirExportJobListQueryResult> => {
+      const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
-        const payload =
-          Object.keys(filtersPayload).length > 0
-            ? {
-                filters: {
-                  service: "AIR",
-                  service_type: "Export",
-                  ...filtersPayload,
-                },
-              }
-            : {
-                filters: {
-                  service: "AIR",
-                  service_type: "Export",
-                },
-              };
+      const payload =
+        Object.keys(filtersPayload).length > 0
+          ? {
+              filters: {
+                service: "AIR",
+                service_type: "Export",
+                ...filtersPayload,
+              },
+            }
+          : {
+              filters: {
+                service: "AIR",
+                service_type: "Export",
+              },
+            };
 
-        setIsInitialLoad(false);
-        const response = (await apiCallProtected.post(
-          `${URL.filterJobCreate}?index=${index}&limit=${pagination.pageSize}`,
-          payload,
-          API_HEADER
-        )) as Record<string, unknown>;
+      setIsInitialLoad(false);
+      const offset = pagination.pageIndex * pagination.pageSize;
+      const response = (await apiCallProtected.post(
+        `${URL.filterJobCreate}?index=${offset}&limit=${pagination.pageSize}`,
+        payload,
+        API_HEADER
+      )) as Record<string, unknown>;
 
-        const list = Array.isArray(response.data) ? (response.data as AirExportJobData[]) : [];
-        const total = getBookingShipmentFilterListTotal(response, list, index);
-        setTotalRecords(total);
+      const list = Array.isArray(response?.data) ? (response.data as AirExportJobData[]) : [];
+      const total = getBookingShipmentFilterListTotal(response, list, offset);
+      setTotalRecords(total);
 
-        const rawSummary = response.summary;
-        const summary: AirExportJobListSummary | undefined =
-          rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
-            ? (rawSummary as AirExportJobListSummary)
-            : undefined;
+      const rawSummary = response?.summary;
+      const summary: AirExportJobListSummary | undefined =
+        rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+          ? (rawSummary as AirExportJobListSummary)
+          : undefined;
 
-        return { data: list, total, summary };
-      },
-      enabled: !isRestoring && search === debouncedSearch,
-      staleTime: 0,
-      refetchOnWindowFocus: false,
-      refetchOnMount: true,
-    });
+      return { data: list, total, summary };
+    },
+    enabled: !isRestoring,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+  });
 
   const exportJobData = exportJobResponse?.data ?? [];
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(Math.max(0, totalRecords) / pagination.pageSize));
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
     const maxPageIndex = totalPages - 1;
-    setPagination((p) => (p.pageIndex > maxPageIndex ? { ...p, pageIndex: maxPageIndex } : p));
-  }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
-
-  const stats = useMemo(() => {
-    const s = exportJobResponse?.summary;
-    if (s?.status_counts) {
-      return {
-        total: totalRecords,
-        active: s.status_counts.active ?? 0,
-        closed: s.status_counts.closed ?? 0,
-        cancel: s.status_counts.cancel ?? 0,
-      };
+    if (pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
     }
-    return {
-      total: totalRecords,
-      active: 0,
-      closed: 0,
-      cancel: 0,
-    };
-  }, [exportJobResponse?.summary, totalRecords]);
+  }, [totalRecords, pageSize, pageIndex]);
 
-  const tableData: AirExportJobTableRow[] = useMemo(
-    () =>
-      exportJobData.map((row, i) => ({
-        ...row,
-        sno: pagination.pageIndex * pagination.pageSize + i + 1,
-      })),
-    [exportJobData, pagination.pageIndex, pagination.pageSize]
-  );
+  const isLoading = exportJobFetching || exportJobLoading || isInitialLoad;
 
-  const isDataLoading =
-    isRestoring || exportJobLoading || exportJobFetching || isInitialLoad;
+  const mergeTh = (minW: number = 120) => ({
+    ...erpListThStyle(theme),
+    minHeight: 52.4,
+    height: 52.4,
+    verticalAlign: "middle" as const,
+    boxSizing: "border-box" as const,
+    minWidth: minW,
+  });
 
   // Reset to first page whenever the search term changes (after debounce).
   // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
@@ -422,251 +453,6 @@ function AirExportJobMaster() {
       prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
     );
   }, [debouncedSearch, isRestoring]);
-
-  /** Aligned with `AirExportBookingMaster` list table (padding, palette, route column). */
-  const border = "#e2e8f0";
-  const muted = "#64748b";
-  const fg = "#0f172a";
-  const primary = "#105476";
-  const pageBg = "#F0F4F8";
-  const cardBg = "#ffffff";
-  const headerBg = "#f8fafc";
-
-  const erpTheme: ErpListTheme = {
-    border,
-    muted,
-    fg,
-    primary,
-    headerBg,
-    pageBg,
-    cardBg,
-    fontSans: V0_FONT_SANS,
-  };
-
-  const columns = useMemo<MRT_ColumnDef<AirExportJobTableRow>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-        Cell: ({ cell }) => (
-          <Text fw={600} size="sm" c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-            {cell.getValue<number>()}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "job_id",
-        header: "Job ID",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          if (!value) {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                —
-              </Text>
-            );
-          }
-          return (
-            <Text fw={600} size="sm" c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-              {value}
-            </Text>
-          );
-        },
-      },
-      {
-        accessorKey: "mawb_no",
-        header: "MAWB No",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          if (value) {
-            return (
-              <Text size="xs" fw={500} c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-                {value}
-              </Text>
-            );
-          }
-          return (
-            <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-              —
-            </Text>
-          );
-        },
-      },
-      {
-        accessorKey: "agent_name",
-        header: "Destination Agent",
-        size: 200,
-        Cell: ({ cell }) => {
-          const value = (cell.getValue<string | null>() || "").trim();
-          if (!value) {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                —
-              </Text>
-            );
-          }
-          return (
-            <Tooltip
-              label={value}
-              withArrow
-              styles={{ tooltip: { fontFamily: V0_FONT_SANS, fontSize: 12 } }}
-            >
-              <Text size="sm" c={fg} lineClamp={1} maw={200} style={{ cursor: "default", fontFamily: V0_FONT_SANS }}>
-                {value}
-              </Text>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        id: "route",
-        header: "Route",
-        size: 260,
-        minSize: 200,
-        Cell: ({ row }) => {
-          const o = row.original;
-          const oc = o.origin_code || o.origin_name || "";
-          const dc = o.destination_code || o.destination_name || "";
-          return (
-            <Group gap={6} wrap="nowrap">
-              <Text fw={600} size="sm" c={primary} style={{ fontFamily: V0_FONT_SANS }}>
-                {oc || "—"}
-              </Text>
-              <IconArrowRight size={12} color={muted} style={{ flexShrink: 0 }} />
-              <Text fw={500} size="sm" c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-                {dc || "—"}
-              </Text>
-            </Group>
-          );
-        },
-      },
-      {
-        accessorKey: "etd",
-        header: "ETD",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          if (!value) {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                —
-              </Text>
-            );
-          }
-          try {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                {dayjs.utc(value).local().format(`${dateFormat} HH:mm`)}
-              </Text>
-            );
-          } catch {
-            return (
-              <Text size="sm" c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-                {value}
-              </Text>
-            );
-          }
-        },
-      },
-      {
-        accessorKey: "eta",
-        header: "ETA",
-        size: 150,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<string | null>();
-          if (!value) {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                —
-              </Text>
-            );
-          }
-          try {
-            return (
-              <Text size="sm" c={muted} style={{ fontFamily: V0_FONT_SANS }}>
-                {dayjs.utc(value).local().format(`${dateFormat} HH:mm`)}
-              </Text>
-            );
-          } catch {
-            return (
-              <Text size="sm" c={fg} style={{ fontFamily: V0_FONT_SANS }}>
-                {value}
-              </Text>
-            );
-          }
-        },
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: "Status",
-        size: 120,
-        Cell: ({ cell }) => {
-          const { label, color } = getStatusBadge(cell.getValue<string | null>());
-          return (
-            <Badge size="sm" variant="light" color={color} styles={{ label: { fontFamily: V0_FONT_SANS } }}>
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 80,
-        Cell: ({ row }) => {
-          const statusUpper = (row.original.status ?? "").toUpperCase();
-          const isCancel = statusUpper === "CANCEL";
-          const canCancel = statusUpper !== "GENERATED" && !isCancel;
-          return (
-            <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconEdit size={14} />}
-                  disabled={isCancel}
-                  onClick={() => {
-                    if (!isCancel) {
-                      setStoreFilters(LIST_KEY, appliedFilters);
-                      setStoreSearch(LIST_KEY, search);
-                      setShouldRestore(LIST_KEY, true);
-                      navigate(`/air/export-job/edit`, {
-                        state: { job: row.original },
-                      });
-                    }
-                  }}
-                >
-                  Edit
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={<IconX size={14} />}
-                  color="red"
-                  disabled={!canCancel}
-                  onClick={() => {
-                    if (canCancel) setCancelConfirmRow(row.original);
-                  }}
-                >
-                  Cancel
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [navigate, dateFormat, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore, fg, primary, muted]
-  );
 
   const handleConfirmCancel = async () => {
     if (!cancelConfirmRow) return;
@@ -697,134 +483,57 @@ function AirExportJobMaster() {
     }
   };
 
-  const table = useMantineReactTable({
-    columns,
-    data: tableData,
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableBottomToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    manualPagination: true,
-    onPaginationChange: setPagination,
-    rowCount: totalRecords,
-    state: {
-      pagination,
-    },
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyRowProps: {
-      style: {
-        borderBottom: `1px solid ${border}`,
-        transition: "background 0.12s",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "30px",
-              zIndex: 2,
-              borderLeft: `1px solid ${border}`,
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {};
+  const listSummary = exportJobResponse?.summary;
+  const stats = useMemo(() => {
+    const sc = listSummary?.status_counts;
+    if (sc) {
       return {
-        style: {
-          width: "fit-content",
-          padding: "10px 14px",
-          fontSize: 14,
-          fontFamily: V0_FONT_SANS,
-          color: muted,
-          backgroundColor: cardBg,
-          verticalAlign: "middle" as const,
-          ...extraStyles,
-        },
+        total: totalRecords,
+        active: sc.active ?? 0,
+        closed: sc.closed ?? 0,
+        cancel: sc.cancel ?? 0,
       };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "80px",
-              zIndex: 2,
-              backgroundColor: headerBg,
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {};
-      return {
-        style: {
-          width: "fit-content",
-          padding: "10px 14px",
-          fontSize: 14,
-          fontWeight: 500,
-          fontFamily: V0_FONT_SANS,
-          color: muted,
-          backgroundColor: headerBg,
-          top: 0,
-          zIndex: 3,
-          borderBottom: `1px solid ${border}`,
-          whiteSpace: "nowrap" as const,
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+    }
+    const rows = exportJobData;
+    return {
+      total: totalRecords,
+      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
+      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
+      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+    };
+  }, [exportJobData, totalRecords, listSummary]);
+
+  const columnToggleItems = useMemo(
+    () =>
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
+        id: String(key),
+        label: String(key).replace(/_/g, " "),
+        checked: visibleColumns[key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [key]: !prev[key],
+          })),
+      })),
+    [visibleColumns],
+  );
 
   return (
-    <MantineProvider theme={airExportJobV0MantineTheme}>
-      <Box className={AIR_EXPORT_JOB_GEIST_ROOT_CLASS} style={v0RootTypography}>
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
         <ERPListScreen
-          theme={erpTheme}
+          theme={theme}
           toolbar={{
             leading: (
               <>
                 <ERPListStatPill
-                  theme={erpTheme}
+                  theme={theme}
                   icon={<IconPackage size={14} color={primary} />}
                   value={stats.total}
                   label="Total"
                 />
                 <ERPListStatPill
-                  theme={erpTheme}
+                  theme={theme}
                   icon={<IconCircleCheck size={14} color="#059669" />}
                   iconBackground="#d1fae5"
                   iconColor="#059669"
@@ -832,7 +541,7 @@ function AirExportJobMaster() {
                   label="Active"
                 />
                 <ERPListStatPill
-                  theme={erpTheme}
+                  theme={theme}
                   icon={<IconClock size={14} color="#2563eb" />}
                   iconBackground="#dbeafe"
                   iconColor="#2563eb"
@@ -840,8 +549,8 @@ function AirExportJobMaster() {
                   label="Closed"
                 />
                 <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconCircleX size={14} color="#dc2626" />}
+                  theme={theme}
+                  icon={<IconX size={14} color="#dc2626" />}
                   iconBackground="#fee2e2"
                   iconColor="#dc2626"
                   value={stats.cancel}
@@ -849,47 +558,85 @@ function AirExportJobMaster() {
                 />
               </>
             ),
+            secondary: (
+              <>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {exportJobData.length}
+                  </Text>
+                </Group>
+                <Group gap={8} wrap="nowrap" align="center">
+                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <Text fw={600} size="sm" c={fg} component="span">
+                    {totalRecords.toLocaleString()}
+                  </Text>
+                  <Text size="xs" c={muted} component="span">
+                    total
+                  </Text>
+                </Group>
+              </>
+            ),
             actions: (
-              <Group gap="xs" wrap="nowrap">
+              <>
                 <TextInput
-                  classNames={{ input: AIR_EXPORT_JOB_GEIST_ROOT_CLASS }}
-                  placeholder="Search..."
-                  leftSection={<IconSearch size={16} />}
+                  size="xs"
+                  w={220}
+                  placeholder="Search…"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  leftSection={<IconSearch size={14} />}
                   rightSection={
                     search ? (
                       <ActionIcon
                         variant="transparent"
                         size="sm"
                         onClick={() => setSearch("")}
-                        style={{ cursor: "pointer" }}
                         aria-label="Clear search"
                       >
-                        <IconX size={16} />
+                        <IconX size={14} />
                       </ActionIcon>
                     ) : null
                   }
-                  w={248}
-                  size="sm"
-                  value={search}
-                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                   styles={{
                     input: {
-                      borderRadius: 6,
-                      fontSize: 14,
-                      fontFamily: V0_FONT_SANS,
-                      color: fg,
-                      height: 36,
-                      border: `1px solid ${border}`,
-                      "&:focus": {
-                        borderColor: primary,
-                      },
+                      fontFamily: theme.fontSans,
+                      fontSize: 12,
+                      height: 32,
+                      minHeight: 32,
                     },
                   }}
+                />
+                <Select
+                  size="xs"
+                  w={130}
+                  value={appliedFilters.status?.trim() ? appliedFilters.status : "all"}
+                  onChange={(v) => {
+                    const status = !v || v === "all" ? "" : v;
+                    setDraftFilters((p) => ({ ...p, status }));
+                    setAppliedFilters((p) => ({ ...p, status }));
+                    setPagination((p) => ({ ...p, pageIndex: 0 }));
+                  }}
+                  data={[
+                    { value: "all", label: "All Status" },
+                    { value: "Active", label: "Active" },
+                    { value: "Closed", label: "Closed" },
+                    { value: "Cancel", label: "Cancel" },
+                  ]}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpToolbarSelectStyles(theme)}
+                />
+                <ERPListColumnToggleMenu
+                  theme={theme}
+                  items={columnToggleItems}
+                  menuStyles={erpListGeistMenuDropdownStyles}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                 />
                 <Button
                   variant="default"
                   size="xs"
-                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  styles={erpToolbarOutlineButtonStyles(theme)}
                   leftSection={<IconFilter size={14} />}
                   onClick={() => setShowFilters((s) => !s)}
                 >
@@ -898,7 +645,7 @@ function AirExportJobMaster() {
                 <Button
                   size="xs"
                   leftSection={<IconPlus size={14} />}
-                  styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                  styles={erpToolbarPrimaryButtonStyles(theme)}
                   onClick={() => {
                     setStoreFilters(LIST_KEY, appliedFilters);
                     setStoreSearch(LIST_KEY, search);
@@ -908,196 +655,210 @@ function AirExportJobMaster() {
                 >
                   Create New
                 </Button>
-              </Group>
+              </>
             ),
           }}
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine jobs by ID, route, MAWB, dates, or status",
+            subtitle: "Refine air export jobs by reference, agent, route, or dates",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
-                theme={erpTheme}
+                theme={theme}
                 onClear={clearAllFilters}
                 onApply={applyFilters}
-                applyLoading={isDataLoading}
-                applyDisabled={isDataLoading}
+                applyLoading={isLoading}
+                applyDisabled={isLoading}
               />
             ),
             children: (
               <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <FormTextInput
-                    label="Job ID"
-                    placeholder="Type Job ID"
-                    size="xs"
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    value={draftFilters.job_id}
-                    onChange={(e) =>
-                      setDraftFilters((prev) => ({ ...prev, job_id: e.currentTarget.value }))
-                    }
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Job ID"
+                      placeholder="Type Job ID"
+                      size="xs"
+                      styles={filterFieldStyles}
+                      value={draftFilters.job_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({ ...prev, job_id: e.currentTarget.value }))
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <FormTextInput
-                    label="MAWB No"
-                    placeholder="Type MAWB No"
-                    size="xs"
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    value={draftFilters.mawb_no}
-                    onChange={(e) =>
-                      setDraftFilters((prev) => ({ ...prev, mawb_no: e.currentTarget.value }))
-                    }
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="MAWB No"
+                      placeholder="Type MAWB No"
+                      size="xs"
+                      styles={filterFieldStyles}
+                      value={draftFilters.mawb_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({ ...prev, mawb_no: e.currentTarget.value }))
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <SearchableSelect
-                    apiEndpoint={URL.agent}
-                    label="Agent"
-                    placeholder="Type Agent"
-                    size="xs"
-                    classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    value={draftFilters.agent_code}
-                    displayValue={draftFilters.agent_name}
-                    onChange={(value, selectedData, originalData) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        agent_code: value || "",
-                        agent_name:
-                          selectedData?.label ||
-                          String(
-                            originalData?.customer_name ?? originalData?.name ?? value ?? ""
-                          ),
-                      }))
-                    }
-                    dropdownZIndex={1000}
-                    minSearchLength={1}
-                    displayFormat={(item) => ({
-                      value: String(item.customer_code ?? item.id ?? ""),
-                      label: String(item.customer_name ?? item.name ?? ""),
-                    })}
-                    searchFields={["customer_code", "customer_name", "name"]}
-                    returnOriginalData
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      apiEndpoint={URL.agent}
+                      label="Agent"
+                      placeholder="Type Agent"
+                      size="xs"
+                      value={draftFilters.agent_code}
+                      displayValue={draftFilters.agent_name}
+                      onChange={(value, selectedData, originalData) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          agent_code: value || "",
+                          agent_name:
+                            selectedData?.label ||
+                            String(
+                              originalData?.customer_name ?? originalData?.name ?? value ?? ""
+                            ),
+                        }))
+                      }
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      displayFormat={(item) => ({
+                        value: String(item.customer_code ?? item.id ?? ""),
+                        label: String(item.customer_name ?? item.name ?? ""),
+                      })}
+                      searchFields={["customer_code", "customer_name", "name"]}
+                      returnOriginalData
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <SearchableSelect
-                    apiEndpoint={URL.portMaster}
-                    additionalParams={{ transport_mode: "AIR" }}
-                    label="Origin"
-                    placeholder="Type Origin"
-                    size="xs"
-                    classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    value={draftFilters.origin_code}
-                    displayValue={draftFilters.origin_name}
-                    onChange={(value, selectedData, originalData) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        origin_code: value || "",
-                        origin_name:
-                          selectedData?.label ||
-                          String(originalData?.port_name ?? value ?? ""),
-                      }))
-                    }
-                    dropdownZIndex={1000}
-                    minSearchLength={1}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    searchFields={["port_code", "port_name"]}
-                    returnOriginalData
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      apiEndpoint={URL.portMaster}
+                      additionalParams={{ transport_mode: "AIR" }}
+                      label="Origin"
+                      placeholder="Type Origin"
+                      size="xs"
+                      value={draftFilters.origin_code}
+                      displayValue={draftFilters.origin_name}
+                      onChange={(value, selectedData, originalData) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          origin_code: value || "",
+                          origin_name:
+                            selectedData?.label ||
+                            String(originalData?.port_name ?? value ?? ""),
+                        }))
+                      }
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      searchFields={["port_code", "port_name"]}
+                      returnOriginalData
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <SearchableSelect
-                    apiEndpoint={URL.portMaster}
-                    label="Destination"
-                    placeholder="Type Destination"
-                    additionalParams={{ transport_mode: "AIR" }}
-                    size="xs"
-                    classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    value={draftFilters.destination_code}
-                    displayValue={draftFilters.destination_name}
-                    onChange={(value, selectedData, originalData) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        destination_code: value || "",
-                        destination_name:
-                          selectedData?.label ||
-                          String(originalData?.port_name ?? value ?? ""),
-                      }))
-                    }
-                    dropdownZIndex={1000}
-                    minSearchLength={1}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    searchFields={["port_code", "port_name"]}
-                    returnOriginalData
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      apiEndpoint={URL.portMaster}
+                      label="Destination"
+                      placeholder="Type Destination"
+                      additionalParams={{ transport_mode: "AIR" }}
+                      size="xs"
+                      value={draftFilters.destination_code}
+                      displayValue={draftFilters.destination_name}
+                      onChange={(value, selectedData, originalData) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          destination_code: value || "",
+                          destination_name:
+                            selectedData?.label ||
+                            String(originalData?.port_name ?? value ?? ""),
+                        }))
+                      }
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      searchFields={["port_code", "port_name"]}
+                      returnOriginalData
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <SingleDateInput
-                    label="ETD"
-                    size="xs"
-                    classNames={{ dropdown: AIR_EXPORT_JOB_GEIST_ROOT_CLASS }}
-                    styles={{
-                      ...AIR_EXPORT_FILTER_UNIFIED_STYLES,
-                      input: {
-                        ...AIR_EXPORT_FILTER_UNIFIED_STYLES.input,
-                        minHeight: 32,
-                      },
-                    }}
-                    value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
-                    onChange={(date) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
-                      }))
-                    }
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="ETD"
+                      size="xs"
+                      value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                        }))
+                      }
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <SingleDateInput
-                    label="ETA"
-                    size="xs"
-                    classNames={{ dropdown: AIR_EXPORT_JOB_GEIST_ROOT_CLASS }}
-                    styles={{
-                      ...AIR_EXPORT_FILTER_UNIFIED_STYLES,
-                      input: {
-                        ...AIR_EXPORT_FILTER_UNIFIED_STYLES.input,
-                        minHeight: 32,
-                      },
-                    }}
-                    value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
-                    onChange={(date) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
-                      }))
-                    }
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="ETA"
+                      size="xs"
+                      value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                        }))
+                      }
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 3 }}>
-                  <Dropdown
-                    label="Status"
-                    placeholder="Select Status"
-                    size="xs"
-                    classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                    data={["Active", "Closed", "Cancel"]}
-                    searchable
-                    value={draftFilters.status || null}
-                    onChange={(value) =>
-                      setDraftFilters((prev) => ({ ...prev, status: value || "" }))
-                    }
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      label="Status"
+                      placeholder="Select status"
+                      size="xs"
+                      searchable
+                      clearable
+                      data={[
+                        { value: "Active", label: "Active" },
+                        { value: "Closed", label: "Closed" },
+                        { value: "Cancel", label: "Cancel" },
+                      ]}
+                      value={draftFilters.status || null}
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({ ...prev, status: value || "" }))
+                      }
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
                 </Grid.Col>
               </Grid>
             ),
@@ -1105,54 +866,533 @@ function AirExportJobMaster() {
           table={{
             footer: (
               <ERPListPaginationFooter
-                theme={erpTheme}
+                theme={theme}
                 totalRecords={totalRecords}
-                pageIndex={pagination.pageIndex}
-                pageSize={pagination.pageSize}
-                onPageIndexChange={(i) => setPagination((p) => ({ ...p, pageIndex: i }))}
-                onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={handlePageIndexChange}
+                onPageSizeChange={handlePageSizeChange}
+                selectClassNames={erpListGeistSelectClassNames}
                 pageSizeOptions={["10", "25", "50"]}
-                selectClassNames={{
-                  dropdown: AIR_EXPORT_JOB_GEIST_ROOT_CLASS,
-                  option: AIR_EXPORT_JOB_GEIST_ROOT_CLASS,
-                }}
               />
             ),
-            children: isDataLoading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading air export jobs..." />
-            ) : tableData.length === 0 ? (
-              <ERPListTableEmpty
-                theme={erpTheme}
-                icon={<IconPackage size={24} color={muted} />}
-                title="No jobs found"
-              />
-            ) : (
-              <MantineReactTable table={table} />
+            children: (
+              <Box style={{ position: "relative", flex: 1, minHeight: 0 }}>
+                <table style={erpListBookingMasterTableStyle(theme)}>
+                  <thead>
+                    <tr>
+                      {visibleColumns.sno && <th style={mergeTh(40)}>S.No</th>}
+                      {visibleColumns.job_id && (
+                        <th style={mergeTh(140)}>
+                          <ERPListColumnHeaderFilter
+                            label="Job ID"
+                            value={appliedFilters.job_id}
+                            displayValue={appliedFilters.job_id}
+                            theme={theme}
+                            placeholder="Filter Job ID"
+                            isEditing={editingHeaderId === "job_id"}
+                            onStartEdit={() => openHeaderEditor("job_id")}
+                            onStopEdit={() => collapseHeaderEditor("job_id")}
+                            onChange={(next) => commitHeaderFilters({ job_id: next || "" })}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.mawb && (
+                        <th style={mergeTh(140)}>
+                          <ERPListColumnHeaderFilter
+                            label="MAWB No"
+                            value={appliedFilters.mawb_no}
+                            displayValue={appliedFilters.mawb_no}
+                            theme={theme}
+                            placeholder="Filter MAWB"
+                            isEditing={editingHeaderId === "mawb_no"}
+                            onStartEdit={() => openHeaderEditor("mawb_no")}
+                            onStopEdit={() => collapseHeaderEditor("mawb_no")}
+                            onChange={(next) => commitHeaderFilters({ mawb_no: next || "" })}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.agent && (
+                        <th style={mergeTh(240)}>
+                          <ERPListColumnHeaderFilter
+                            label="Destination Agent"
+                            value={appliedFilters.agent_code}
+                            displayValue={appliedFilters.agent_name || appliedFilters.agent_code}
+                            theme={theme}
+                            placeholder="Filter agent"
+                            isEditing={editingHeaderId === "agent"}
+                            onStartEdit={() => openHeaderEditor("agent")}
+                            onStopEdit={() => collapseHeaderEditor("agent")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus }) => (
+                              <SearchableSelect
+                                autoFocus={autoFocus}
+                                size="xs"
+                                placeholder="Agent"
+                                apiEndpoint={URL.agent}
+                                searchFields={["customer_code", "customer_name", "name"]}
+                                displayFormat={(item) => ({
+                                  value: String(item.customer_code ?? item.id ?? ""),
+                                  label: String(item.customer_name ?? item.name ?? ""),
+                                })}
+                                value={appliedFilters.agent_code || undefined}
+                                displayValue={appliedFilters.agent_name || undefined}
+                                onChange={(value, selectedData, originalData) => {
+                                  commitHeaderFilters({
+                                    agent_code: value || "",
+                                    agent_name:
+                                      selectedData?.label ||
+                                      String(
+                                        originalData?.customer_name ??
+                                          originalData?.name ??
+                                          value ??
+                                          ""
+                                      ),
+                                  });
+                                }}
+                                minSearchLength={1}
+                                dropdownZIndex={1000}
+                                returnOriginalData
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.route && (
+                        <th style={mergeTh(220)}>
+                          <ERPListColumnHeaderFilter
+                            label="Route"
+                            value={
+                              (appliedFilters.origin_code || "") +
+                              (appliedFilters.destination_code || "")
+                            }
+                            displayValue={
+                              appliedFilters.origin_code || appliedFilters.destination_code
+                                ? `${appliedFilters.origin_code || "—"} → ${appliedFilters.destination_code || "—"}`
+                                : ""
+                            }
+                            theme={theme}
+                            isEditing={editingHeaderId === "route"}
+                            onStartEdit={() => openHeaderEditor("route")}
+                            onStopEdit={() => collapseHeaderEditor("route")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus }) => (
+                              <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    autoFocus={autoFocus}
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={{ transport_mode: "AIR" }}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Origin"
+                                    displayFormat={(item: Record<string, unknown>) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={appliedFilters.origin_code}
+                                    displayValue={appliedFilters.origin_name}
+                                    onChange={(value, selectedData, originalData) =>
+                                      commitHeaderFilters({
+                                        origin_code: value || "",
+                                        origin_name:
+                                          selectedData?.label ||
+                                          String(originalData?.port_name ?? value ?? ""),
+                                      })
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    returnOriginalData
+                                    classNames={erpListGeistSelectClassNames}
+                                    styles={filterFieldStyles}
+                                  />
+                                </Box>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={{ transport_mode: "AIR" }}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Destination"
+                                    displayFormat={(item: Record<string, unknown>) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={appliedFilters.destination_code}
+                                    displayValue={appliedFilters.destination_name}
+                                    onChange={(value, selectedData, originalData) =>
+                                      commitHeaderFilters({
+                                        destination_code: value || "",
+                                        destination_name:
+                                          selectedData?.label ||
+                                          String(originalData?.port_name ?? value ?? ""),
+                                      })
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    returnOriginalData
+                                    classNames={erpListGeistSelectClassNames}
+                                    styles={filterFieldStyles}
+                                  />
+                                </Box>
+                              </Group>
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.etd && (
+                        <th style={mergeTh(200)}>
+                          <ERPListColumnHeaderFilter
+                            label="ETD"
+                            value={appliedFilters.etd}
+                            displayValue={formatFilterDateLabel(appliedFilters.etd)}
+                            theme={theme}
+                            isEditing={editingHeaderId === "etd"}
+                            onStartEdit={() => openHeaderEditor("etd")}
+                            onStopEdit={() => collapseHeaderEditor("etd")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                size="xs"
+                                value={appliedFilters.etd ? dayjs(appliedFilters.etd).toDate() : null}
+                                onChange={(date) => {
+                                  commitHeaderFilters({
+                                    etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.eta && (
+                        <th style={mergeTh(200)}>
+                          <ERPListColumnHeaderFilter
+                            label="ETA"
+                            value={appliedFilters.eta}
+                            displayValue={formatFilterDateLabel(appliedFilters.eta)}
+                            theme={theme}
+                            isEditing={editingHeaderId === "eta"}
+                            onStartEdit={() => openHeaderEditor("eta")}
+                            onStopEdit={() => collapseHeaderEditor("eta")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                size="xs"
+                                value={appliedFilters.eta ? dayjs(appliedFilters.eta).toDate() : null}
+                                onChange={(date) => {
+                                  commitHeaderFilters({
+                                    eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.status && (
+                        <th style={mergeTh(100)}>
+                          <ERPListColumnHeaderFilter
+                            label="Status"
+                            value={appliedFilters.status}
+                            displayValue={appliedFilters.status}
+                            theme={theme}
+                            isEditing={editingHeaderId === "status"}
+                            onStartEdit={() => openHeaderEditor("status")}
+                            onStopEdit={() => collapseHeaderEditor("status")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <Select
+                                autoFocus={autoFocus}
+                                placeholder="Status"
+                                searchable
+                                clearable
+                                size="xs"
+                                data={[
+                                  { value: "Active", label: "Active" },
+                                  { value: "Closed", label: "Closed" },
+                                  { value: "Cancel", label: "Cancel" },
+                                ]}
+                                value={appliedFilters.status || null}
+                                onChange={(value) => {
+                                  commitHeaderFilters({ status: value ?? "" });
+                                  onClose();
+                                }}
+                                comboboxProps={{ zIndex: 1000 }}
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      <th
+                        style={{
+                          ...erpListStickyActionThStyle(theme, 96),
+                          minHeight: 52.4,
+                          height: 52.4,
+                          verticalAlign: "middle",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={20} style={{ padding: 80, textAlign: "center" }}>
+                          <Center className="erp-header-filter-fade">
+                            <Stack align="center" gap="sm">
+                              <Loader size="lg" color={primary} />
+                              <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
+                                Loading air export jobs…
+                              </Text>
+                            </Stack>
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : exportJobData.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} style={{ padding: 60, textAlign: "center" }}>
+                          <Stack align="center" gap="md">
+                            <Box
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                backgroundColor: ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconPackage size={24} color={muted} />
+                            </Box>
+                            <Box>
+                              <Text fw={500} c={fg}>
+                                No jobs to display
+                              </Text>
+                              <Text size="sm" c={muted} mt={4}>
+                                Try adjusting your search or filters
+                              </Text>
+                            </Box>
+                          </Stack>
+                        </td>
+                      </tr>
+                    ) : (
+                      exportJobData.map((row, i) => {
+                        const rowProps = erpListDataRowProps(theme);
+                        const sno = row.sno ?? pageIndex * pageSize + i + 1;
+                        const tdPad = erpListBookingMasterBodyTd();
+                        const tdDate = erpListBookingMasterDateTd(theme);
+                        const refShell = erpListBookingMasterReferenceTdShell(theme);
+                        const fmtUtcLocal = (v: string | null | undefined) => {
+                          if (!v) return "—";
+                          try {
+                            const raw = String(v).trim();
+                            const d = dayjs(raw);
+                            if (!d.isValid()) return raw;
+                            // Bare YYYY-MM-DD: parse as calendar day like Ocean Export (avoid UTC-midnight shift).
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                              return d.format(dateFormat);
+                            }
+                            return d.format(`${dateFormat} HH:mm`);
+                          } catch {
+                            return v;
+                          }
+                        };
+                        return (
+                          <tr
+                            key={row.id}
+                            style={rowProps.style}
+                            onMouseEnter={rowProps.onMouseEnter}
+                            onMouseLeave={rowProps.onMouseLeave}
+                          >
+                            {visibleColumns.sno && (
+                              <td style={tdPad}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {sno}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.job_id && (
+                              <td style={tdPad}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {row.job_id || "—"}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.mawb && (
+                              <td
+                                className={ERP_LIST_GEIST_MONO_CLASS}
+                                style={refShell}
+                              >
+                                {row.mawb_no ? (
+                                  <Text size="xs" fw={500} c={fg}>
+                                    {row.mawb_no}
+                                  </Text>
+                                ) : (
+                                  <Text size="sm" c={muted}>
+                                    —
+                                  </Text>
+                                )}
+                              </td>
+                            )}
+                            {visibleColumns.agent && (
+                              <td style={{ ...tdPad, maxWidth: 200 }}>
+                                <Tooltip
+                                  label={row.agent_name ?? ""}
+                                  withArrow
+                                  styles={{
+                                    tooltip: {
+                                      fontFamily: theme.fontSans,
+                                      fontSize: 12,
+                                    },
+                                  }}
+                                >
+                                  <Text
+                                    size="sm"
+                                    c={fg}
+                                    lineClamp={1}
+                                    style={{ cursor: "default" }}
+                                  >
+                                    {row.agent_name || "—"}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
+                            {visibleColumns.route && (() => {
+                              const { oc, dc } = routeEndpointsFromAirExportJobRow(row);
+                              return (
+                                <td style={tdPad}>
+                                  <Group gap={6} wrap="nowrap">
+                                    <Text fw={600} size="sm" c={primary}>
+                                      {oc || "—"}
+                                    </Text>
+                                    <IconArrowRight size={12} color={muted} />
+                                    <Text fw={500} size="sm" c={fg}>
+                                      {dc || "—"}
+                                    </Text>
+                                  </Group>
+                                </td>
+                              );
+                            })()}
+                            {visibleColumns.etd && (
+                              <td style={tdDate}>{fmtUtcLocal(row.etd)}</td>
+                            )}
+                            {visibleColumns.eta && (
+                              <td style={tdDate}>{fmtUtcLocal(row.eta)}</td>
+                            )}
+                            {visibleColumns.status && (
+                              <td style={tdPad}>
+                                <ERPListJobStatusPill status={row.status} />
+                              </td>
+                            )}
+                            <td style={erpListStickyActionTdStyle(theme)}>
+                              {(() => {
+                                const statusUpper = (row.status ?? "").toUpperCase();
+                                const isCancel = statusUpper === "CANCEL";
+                                const canCancel = statusUpper !== "GENERATED" && !isCancel;
+                                return (
+                                  <Menu
+                                    withinPortal
+                                    position="bottom-end"
+                                    shadow="md"
+                                    width={200}
+                                    styles={erpListGeistMenuDropdownStyles}
+                                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                  >
+                                    <Menu.Target>
+                                      <ActionIcon variant="subtle" color="gray" size="sm">
+                                        <IconDotsVertical size={16} />
+                                      </ActionIcon>
+                                    </Menu.Target>
+                                    <Menu.Dropdown>
+                                      <Menu.Item
+                                        leftSection={<IconEdit size={14} />}
+                                        disabled={isCancel}
+                                        onClick={() => {
+                                          if (!isCancel) {
+                                            setStoreFilters(LIST_KEY, appliedFilters);
+                                            setStoreSearch(LIST_KEY, search);
+                                            setShouldRestore(LIST_KEY, true);
+                                            navigate(`/air/export-job/edit`, {
+                                              state: { job: row },
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        Edit
+                                      </Menu.Item>
+                                      <Menu.Item
+                                        leftSection={<IconX size={14} />}
+                                        color="red"
+                                        disabled={!canCancel}
+                                        onClick={() => {
+                                          if (canCancel) setCancelConfirmRow(row);
+                                        }}
+                                      >
+                                        Cancel
+                                      </Menu.Item>
+                                    </Menu.Dropdown>
+                                  </Menu>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </Box>
             ),
           }}
         />
+
         <Modal
-        opened={!!cancelConfirmRow}
-        onClose={() => !isCancelling && setCancelConfirmRow(null)}
-        title="Cancel job"
-        centered
-      >
-        <Text size="sm" c="dimmed" mb="md">
-          Are you sure you want to cancel this job? This action cannot be undone.
-        </Text>
-        <Group justify="flex-end" gap="xs">
-          <Button
-            variant="subtle"
-            onClick={() => setCancelConfirmRow(null)}
-            disabled={isCancelling}
-          >
-            No
-          </Button>
-          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
-            Yes, cancel
-          </Button>
-        </Group>
-      </Modal>
+          opened={!!cancelConfirmRow}
+          onClose={() => !isCancelling && setCancelConfirmRow(null)}
+          title={
+            <Text fw={600} size="md" style={{ fontFamily: theme.fontSans }}>
+              Cancel job
+            </Text>
+          }
+          centered
+          classNames={{
+            content: ERP_LIST_GEIST_ROOT_CLASS,
+            body: ERP_LIST_GEIST_ROOT_CLASS,
+            header: ERP_LIST_GEIST_ROOT_CLASS,
+          }}
+        >
+          <Text size="sm" c="dimmed" mb="md" style={{ fontFamily: theme.fontSans }}>
+            Are you sure you want to cancel this job? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="subtle"
+              onClick={() => setCancelConfirmRow(null)}
+              disabled={isCancelling}
+            >
+              No
+            </Button>
+            <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+              Yes, cancel
+            </Button>
+          </Group>
+        </Modal>
       </Box>
     </MantineProvider>
   );

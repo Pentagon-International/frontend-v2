@@ -1,6 +1,8 @@
 export {
   BookingMasterListTable,
   DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
+  type BookingMasterHeaderRenderers,
+  type BookingMasterHeaderWidths,
   type BookingMasterListTableProps,
   type BookingMasterTableRowModel,
   type BookingMasterVisibleColumns,

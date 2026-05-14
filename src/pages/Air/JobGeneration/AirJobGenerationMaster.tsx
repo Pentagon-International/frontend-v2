@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, type ReactNode } from "react";
 import {
   Group,
   Button,
@@ -8,9 +8,11 @@ import {
   Menu,
   ActionIcon,
   Box,
+  Center,
   TextInput,
   Loader,
   MantineProvider,
+  Select,
 } from "@mantine/core";
 import {
   IconFilter,
@@ -33,15 +35,17 @@ import {
   SearchableSelect,
   Dropdown,
   SingleDateInput,
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
   erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN,
   DEFAULT_ERP_LIST_THEME,
   erpListGeistMantineTheme,
   ERP_LIST_GEIST_ROOT_CLASS,
@@ -51,12 +55,12 @@ import {
   erpListThStyle,
   erpListDataRowProps,
   erpListBookingMasterTableStyle,
-  erpListBookingMasterTrailingHeaderTh,
   ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
   erpListBookingMasterBodyTd,
   erpListBookingMasterDateTd,
   erpListBookingMasterReferenceTdShell,
-  erpListRowActionMenuTdStyle,
+  erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
   ERPListJobStatusPill,
   ERP_LIST_GEIST_MONO_CLASS,
 } from "../../../components";
@@ -67,19 +71,37 @@ import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_JOB_GENERATION_MASTER";
 
+/** Same as backend `STATUS_CHOICES` — sent as `filters.status` (`status__iexact`). */
+const AIR_JOB_STATUS_FILTER_OPTIONS = [
+  { value: "PENDING", label: "Pending" },
+  { value: "GENERATED", label: "Generated" },
+  { value: "INACTIVE", label: "Inactive" },
+] as const;
+
+function airJobStatusFilterLabel(value: string | null | undefined) {
+  if (!value) return "";
+  const found = AIR_JOB_STATUS_FILTER_OPTIONS.find((o) => o.value === value);
+  return found?.label ?? value;
+}
+
 type AirJobData = {
   id: number;
+  sno?: number;
   service: string;
-  origin_code_read: string;
+  service_type?: string;
+  origin_code_read?: string;
   origin_name: string;
-  destination_code_read: string;
+  destination_code_read?: string;
   destination_name: string;
   schedule: string;
-  flight_no: string;
-  carrier_code_read: string;
+  flight_no: string | null;
+  vessel?: string | null;
+  voyage?: string | null;
+  carrier_code_read?: string;
   carrier_name: string;
   cut_off_date: string;
   eta: string;
@@ -97,7 +119,8 @@ type AirJobData = {
     carrier_name?: string;
     flight_no?: string;
   }>;
-  shipment_details: Array<unknown>;
+  shipment_details?: Array<unknown>;
+  booking_details?: Array<unknown>;
 };
 
 type FilterState = {
@@ -112,6 +135,8 @@ type FilterState = {
   cut_off_date: Date | null;
   eta: Date | null;
   etd: Date | null;
+  /** API `filters.status` (case-insensitive match on backend). */
+  status: string | null;
 };
 
 type VisibleColumnsState = {
@@ -140,18 +165,6 @@ function routeEndpointsFromJobRow(row: AirJobData) {
   return { oc, dc };
 }
 
-function getStatusBadge(statusRaw: string | undefined | null) {
-  const statusUpper = (statusRaw || "").toUpperCase();
-  const label =
-    statusUpper === "CANCEL"
-      ? "Cancel"
-      : statusUpper === "CLOSED"
-        ? "Closed"
-        : "Active";
-  const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
-  return { label, color } as const;
-}
-
 function AirJobGenerationMaster() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -167,6 +180,7 @@ function AirJobGenerationMaster() {
   const [appliedFilterPayload, setAppliedFilterPayload] = useState<Record<string, unknown>>({
     service: "AIR",
   });
+  const dateFormat = useDateFormat();
   const getState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
   const setStoreSearch = useListFilterStore((s) => s.setSearch);
@@ -174,8 +188,23 @@ function AirJobGenerationMaster() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
+
+  /**
+   * Column-header filtering: which header is currently in "edit" mode. Lifted
+   * here so opening one header collapses any other open editor and the state
+   * survives table re-renders.
+   */
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId(id),
+    [],
+  );
+  const collapseHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
+    [],
+  );
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
     flight_no: true,
@@ -200,6 +229,7 @@ function AirJobGenerationMaster() {
       cut_off_date: null,
       eta: null,
       etd: null,
+      status: null,
     },
   });
 
@@ -218,8 +248,55 @@ function AirJobGenerationMaster() {
       payload.eta = dayjs(filterForm.values.eta).format("YYYY-MM-DD");
     if (filterForm.values.etd)
       payload.etd = dayjs(filterForm.values.etd).format("YYYY-MM-DD");
+    if (filterForm.values.status) payload.status = filterForm.values.status;
     return payload;
   }, [filterForm.values]);
+
+  /**
+   * Build the API payload directly from a snapshot of form values. Used by
+   * `commitHeaderFilters` so that header-typed updates flow into the request
+   * without waiting for the form's state-update cycle.
+   */
+  const buildPayloadFrom = useCallback(
+    (values: FilterState): Record<string, unknown> => {
+      const payload: Record<string, unknown> = {};
+      if (values.service) payload.service = values.service;
+      if (values.origin) payload.origin_code = values.origin;
+      if (values.destination) payload.destination_code = values.destination;
+      if (values.schedule) payload.schedule = values.schedule;
+      if (values.flight_no) payload.flight_no = values.flight_no;
+      if (values.carrier_name) payload.carrier_name = values.carrier_name;
+      if (values.cut_off_date)
+        payload.cut_off_date = dayjs(values.cut_off_date).format("YYYY-MM-DD");
+      if (values.eta) payload.eta = dayjs(values.eta).format("YYYY-MM-DD");
+      if (values.etd) payload.etd = dayjs(values.etd).format("YYYY-MM-DD");
+      if (values.status) payload.status = values.status;
+      return payload;
+    },
+    [],
+  );
+
+  /**
+   * Column-header writes update BOTH form values and `appliedFilterPayload`
+   * at once (instant filtering, mirroring ReceiptMaster's column-header UX),
+   * reset pagination to page 1, and persist to the global list-filter store
+   * so the value is preserved across navigation.
+   */
+  const commitHeaderFilters = useCallback(
+    (updates: Partial<FilterState>) => {
+      const nextValues: FilterState = { ...filterForm.values, ...updates };
+      filterForm.setValues(updates);
+      const payload = buildPayloadFrom(nextValues);
+      setAppliedFilterPayload(payload);
+      setPageIndex(0);
+      setStoreFilters(LIST_KEY, {
+        ...payload,
+        origin_name: nextValues.origin_name || "",
+        destination_name: nextValues.destination_name || "",
+      });
+    },
+    [filterForm, buildPayloadFrom, setStoreFilters],
+  );
 
   useEffect(() => {
     const stored = getState(LIST_KEY);
@@ -247,6 +324,7 @@ function AirJobGenerationMaster() {
         cut_off_date: f.cut_off_date ? new Date(f.cut_off_date as string) : null,
         eta: f.eta ? new Date(f.eta as string) : null,
         etd: f.etd ? new Date(f.etd as string) : null,
+        status: (f.status as string) || null,
       });
       setAppliedFilterPayload(apiPayload);
     }
@@ -325,6 +403,16 @@ function AirJobGenerationMaster() {
 
   const isLoading = bookingLoading || bookingFetching || isInitialLoad;
 
+  const mergeTh = (minW: number, widthPx: number) => ({
+    ...erpListThStyle(theme),
+    minHeight: 52.4,
+    height: 52.4,
+    verticalAlign: "middle" as const,
+    boxSizing: "border-box" as const,
+    minWidth: minW,
+    width: widthPx,
+  });
+
   const displayData = useMemo(() => {
     return (bookingData || []).map((row, i) => ({
       ...row,
@@ -334,11 +422,12 @@ function AirJobGenerationMaster() {
 
   const stats = useMemo(() => {
     const rows = bookingData || [];
+    const st = (s: string | undefined) => (s || "").toUpperCase();
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+      pending: rows.filter((r) => st(r.status) === "PENDING").length,
+      generated: rows.filter((r) => st(r.status) === "GENERATED").length,
+      inactive: rows.filter((r) => st(r.status) === "INACTIVE").length,
     };
   }, [bookingData, totalRecords]);
 
@@ -448,27 +537,27 @@ function AirJobGenerationMaster() {
                 />
                 <ERPListStatPill
                   theme={theme}
+                  icon={<IconClock size={14} color="#d97706" />}
+                  iconBackground="#fef3c7"
+                  iconColor="#d97706"
+                  value={stats.pending}
+                  label="Pending"
+                />
+                <ERPListStatPill
+                  theme={theme}
                   icon={<IconCircleCheck size={14} color="#059669" />}
                   iconBackground="#d1fae5"
                   iconColor="#059669"
-                  value={stats.active}
-                  label="Active"
+                  value={stats.generated}
+                  label="Generated"
                 />
                 <ERPListStatPill
                   theme={theme}
-                  icon={<IconClock size={14} color="#2563eb" />}
-                  iconBackground="#dbeafe"
-                  iconColor="#2563eb"
-                  value={stats.closed}
-                  label="Closed"
-                />
-                <ERPListStatPill
-                  theme={theme}
-                  icon={<IconX size={14} color="#dc2626" />}
-                  iconBackground="#fee2e2"
-                  iconColor="#dc2626"
-                  value={stats.cancel}
-                  label="Cancel"
+                  icon={<IconStack2 size={14} color="#6b7280" />}
+                  iconBackground="#f3f4f6"
+                  iconColor="#6b7280"
+                  value={stats.inactive}
+                  label="Inactive"
                 />
               </>
             ),
@@ -576,133 +665,169 @@ function AirJobGenerationMaster() {
             ),
             children: (
               <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <FormTextInput
-                    size="xs"
-                    label="Flight No"
-                    placeholder="Enter flight number"
-                    styles={filterFieldStyles}
-                    {...filterForm.getInputProps("flight_no")}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      size="xs"
+                      label="Flight No"
+                      placeholder="Enter flight number"
+                      styles={filterFieldStyles}
+                      {...filterForm.getInputProps("flight_no")}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <FormTextInput
-                    size="xs"
-                    label="Carrier"
-                    placeholder="Enter carrier name"
-                    styles={filterFieldStyles}
-                    {...filterForm.getInputProps("carrier_name")}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      size="xs"
+                      label="Carrier"
+                      placeholder="Enter carrier name"
+                      styles={filterFieldStyles}
+                      {...filterForm.getInputProps("carrier_name")}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Origin"
-                    placeholder="Type origin code or name"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    additionalParams={airTransportParams}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.origin}
-                    displayValue={filterForm.values.origin_name}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("origin", value || null);
-                      filterForm.setFieldValue("origin_name", selectedData?.label || null);
-                    }}
-                    minSearchLength={3}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={filterFieldStyles}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Origin"
+                      placeholder="Type origin code or name"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_code", "port_name"]}
+                      additionalParams={airTransportParams}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.origin}
+                      displayValue={filterForm.values.origin_name}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("origin", value || null);
+                        filterForm.setFieldValue("origin_name", selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Destination"
-                    placeholder="Type destination code or name"
-                    apiEndpoint={URL.portMaster}
-                    additionalParams={airTransportParams}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.destination}
-                    displayValue={filterForm.values.destination_name}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("destination", value || null);
-                      filterForm.setFieldValue(
-                        "destination_name",
-                        selectedData?.label || null,
-                      );
-                    }}
-                    minSearchLength={3}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={filterFieldStyles}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Destination"
+                      placeholder="Type destination code or name"
+                      apiEndpoint={URL.portMaster}
+                      additionalParams={airTransportParams}
+                      searchFields={["port_code", "port_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.destination}
+                      displayValue={filterForm.values.destination_name}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("destination", value || null);
+                        filterForm.setFieldValue(
+                          "destination_name",
+                          selectedData?.label || null,
+                        );
+                      }}
+                      minSearchLength={3}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <Dropdown
-                    size="xs"
-                    label="Schedule"
-                    placeholder="Select schedule"
-                    searchable
-                    clearable
-                    data={[
-                      { value: "Weekly", label: "Weekly" },
-                      { value: "Monthly", label: "Monthly" },
-                      { value: "Daily", label: "Daily" },
-                      { value: "Quarterly", label: "Quarterly" },
-                    ]}
-                    {...filterForm.getInputProps("schedule")}
-                    styles={filterFieldStyles}
-                    classNames={{
-                      label: ERP_LIST_GEIST_ROOT_CLASS,
-                      input: ERP_LIST_GEIST_ROOT_CLASS,
-                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
-                      option: ERP_LIST_GEIST_ROOT_CLASS,
-                    }}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Schedule"
+                      placeholder="Select schedule"
+                      searchable
+                      clearable
+                      data={[
+                        { value: "Weekly", label: "Weekly" },
+                        { value: "Monthly", label: "Monthly" },
+                        { value: "Daily", label: "Daily" },
+                        { value: "Quarterly", label: "Quarterly" },
+                      ]}
+                      {...filterForm.getInputProps("schedule")}
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SingleDateInput
-                    key={`eta-${filterForm.values.eta}`}
-                    label="ETA"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    value={filterForm.values.eta}
-                    onChange={(d) => filterForm.setFieldValue("eta", d)}
-                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={filterFieldStyles}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      key={`eta-${filterForm.values.eta}`}
+                      label="ETA"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.eta}
+                      onChange={(d) => filterForm.setFieldValue("eta", d)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SingleDateInput
-                    key={`etd-${filterForm.values.etd}`}
-                    label="ETD"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    value={filterForm.values.etd}
-                    onChange={(d) => filterForm.setFieldValue("etd", d)}
-                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={filterFieldStyles}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      key={`etd-${filterForm.values.etd}`}
+                      label="ETD"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.etd}
+                      onChange={(d) => filterForm.setFieldValue("etd", d)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SingleDateInput
-                    key={`cut-off-${filterForm.values.cut_off_date}`}
-                    label="Cut Off Date"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    value={filterForm.values.cut_off_date}
-                    onChange={(d) => filterForm.setFieldValue("cut_off_date", d)}
-                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={filterFieldStyles}
-                  />
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      key={`cut-off-${filterForm.values.cut_off_date}`}
+                      label="Cut Off Date"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.cut_off_date}
+                      onChange={(d) => filterForm.setFieldValue("cut_off_date", d)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Status"
+                      placeholder="Select status"
+                      searchable
+                      clearable
+                      data={[...AIR_JOB_STATUS_FILTER_OPTIONS]}
+                      {...filterForm.getInputProps("status")}
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
                 </Grid.Col>
               </Grid>
             ),
@@ -723,64 +848,338 @@ function AirJobGenerationMaster() {
                 pageSizeOptions={["10", "15", "25", "50"]}
               />
             ),
-            children: bookingError ? (
-              <Box px="md" py={48} style={{ textAlign: "center" }}>
-                <Text c="red" size="sm" style={{ fontFamily: theme.fontSans }}>
-                  Error loading air job data. Please try refreshing the page.
-                </Text>
-              </Box>
-            ) : isLoading ? (
-              <ERPListTableLoading theme={theme} message="Loading air job schedules…" />
-            ) : (
+            children: (
               <Box style={{ position: "relative", flex: 1, minHeight: 0 }}>
-                {bookingFetching && displayData.length > 0 ? (
-                  <Box
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      backgroundColor: "rgba(255, 255, 255, 0.8)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 10,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Stack align="center" gap="md">
-                      <Loader size="lg" color={primary} />
-                      <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
-                        Refreshing…
-                      </Text>
-                    </Stack>
-                  </Box>
-                ) : null}
                 <table style={erpListBookingMasterTableStyle(theme)}>
                   <thead>
                     <tr>
-                      {visibleColumns.sno && <th style={erpListThStyle(theme)}>S.No</th>}
+                      {visibleColumns.sno && (
+                        <th style={mergeTh(70, 70)}>S.No</th>
+                      )}
                       {visibleColumns.flight_no && (
-                        <th style={erpListThStyle(theme)}>Flight No</th>
+                        <th style={mergeTh(140, 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="Flight No"
+                            value={filterForm.values.flight_no ?? ""}
+                            displayValue={filterForm.values.flight_no ?? ""}
+                            theme={theme}
+                            placeholder="Filter Flight No"
+                            isEditing={editingHeaderId === "flight_no"}
+                            onStartEdit={() => openHeaderEditor("flight_no")}
+                            onStopEdit={() => collapseHeaderEditor("flight_no")}
+                            onChange={(next) =>
+                              commitHeaderFilters({ flight_no: next || null })
+                            }
+                          />
+                        </th>
                       )}
                       {visibleColumns.carrier_name && (
-                        <th style={erpListThStyle(theme)}>Carrier</th>
+                        <th style={mergeTh(160, 160)}>
+                          <ERPListColumnHeaderFilter
+                            label="Carrier"
+                            value={filterForm.values.carrier_name ?? ""}
+                            displayValue={filterForm.values.carrier_name ?? ""}
+                            theme={theme}
+                            placeholder="Filter Carrier"
+                            isEditing={editingHeaderId === "carrier_name"}
+                            onStartEdit={() => openHeaderEditor("carrier_name")}
+                            onStopEdit={() => collapseHeaderEditor("carrier_name")}
+                            onChange={(next) =>
+                              commitHeaderFilters({ carrier_name: next || null })
+                            }
+                          />
+                        </th>
                       )}
                       {visibleColumns.route && (
-                        <th style={erpListThStyle(theme)}>Route</th>
+                        <th style={mergeTh(220, 220)}>
+                          <ERPListColumnHeaderFilter
+                            label="Route"
+                            value={
+                              (filterForm.values.origin ?? "") +
+                              (filterForm.values.destination ?? "")
+                            }
+                            displayValue={
+                              filterForm.values.origin || filterForm.values.destination
+                                ? `${filterForm.values.origin ?? "—"} → ${
+                                    filterForm.values.destination ?? "—"
+                                  }`
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={theme}
+                            isEditing={editingHeaderId === "route"}
+                            onStartEdit={() => openHeaderEditor("route")}
+                            onStopEdit={() => collapseHeaderEditor("route")}
+                            renderEditor={({ autoFocus }) => (
+                              <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    autoFocus={autoFocus}
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={airTransportParams}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Origin"
+                                    displayFormat={(item: Record<string, unknown>) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={filterForm.values.origin}
+                                    displayValue={filterForm.values.origin_name}
+                                    onChange={(value, selectedData) =>
+                                      commitHeaderFilters({
+                                        origin: value || null,
+                                        origin_name: selectedData?.label || null,
+                                      })
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    classNames={erpListGeistSelectClassNames}
+                                    styles={filterFieldStyles}
+                                  />
+                                </Box>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={airTransportParams}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Destination"
+                                    displayFormat={(item: Record<string, unknown>) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={filterForm.values.destination}
+                                    displayValue={filterForm.values.destination_name}
+                                    onChange={(value, selectedData) =>
+                                      commitHeaderFilters({
+                                        destination: value || null,
+                                        destination_name: selectedData?.label || null,
+                                      })
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    classNames={erpListGeistSelectClassNames}
+                                    styles={filterFieldStyles}
+                                  />
+                                </Box>
+                              </Group>
+                            )}
+                          />
+                        </th>
                       )}
-                      {visibleColumns.eta && <th style={erpListThStyle(theme)}>ETA</th>}
-                      {visibleColumns.etd && <th style={erpListThStyle(theme)}>ETD</th>}
+                      {visibleColumns.eta && (
+                        <th style={mergeTh(140, 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="ETA"
+                            value={
+                              filterForm.values.eta
+                                ? dayjs(filterForm.values.eta).format("YYYY-MM-DD")
+                                : ""
+                            }
+                            displayValue={
+                              filterForm.values.eta
+                                ? dayjs(filterForm.values.eta).format(dateFormat)
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={theme}
+                            isEditing={editingHeaderId === "eta"}
+                            onStartEdit={() => openHeaderEditor("eta")}
+                            onStopEdit={() => collapseHeaderEditor("eta")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                key={`eta-h-${filterForm.values.eta}`}
+                                placeholder="YYYY-MM-DD"
+                                size="xs"
+                                value={filterForm.values.eta}
+                                onChange={(d) => {
+                                  commitHeaderFilters({ eta: d });
+                                  if (d) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.etd && (
+                        <th style={mergeTh(140, 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="ETD"
+                            value={
+                              filterForm.values.etd
+                                ? dayjs(filterForm.values.etd).format("YYYY-MM-DD")
+                                : ""
+                            }
+                            displayValue={
+                              filterForm.values.etd
+                                ? dayjs(filterForm.values.etd).format(dateFormat)
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={theme}
+                            isEditing={editingHeaderId === "etd"}
+                            onStartEdit={() => openHeaderEditor("etd")}
+                            onStopEdit={() => collapseHeaderEditor("etd")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                key={`etd-h-${filterForm.values.etd}`}
+                                placeholder="YYYY-MM-DD"
+                                size="xs"
+                                value={filterForm.values.etd}
+                                onChange={(d) => {
+                                  commitHeaderFilters({ etd: d });
+                                  if (d) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
                       {visibleColumns.cut_off_date && (
-                        <th style={erpListThStyle(theme)}>Cutoff Date</th>
+                        <th style={mergeTh(150, 150)}>
+                          <ERPListColumnHeaderFilter
+                            label="Cutoff Date"
+                            value={
+                              filterForm.values.cut_off_date
+                                ? dayjs(filterForm.values.cut_off_date).format("YYYY-MM-DD")
+                                : ""
+                            }
+                            displayValue={
+                              filterForm.values.cut_off_date
+                                ? dayjs(filterForm.values.cut_off_date).format(dateFormat)
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={theme}
+                            isEditing={editingHeaderId === "cut_off_date"}
+                            onStartEdit={() => openHeaderEditor("cut_off_date")}
+                            onStopEdit={() => collapseHeaderEditor("cut_off_date")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                key={`cod-h-${filterForm.values.cut_off_date}`}
+                                placeholder="YYYY-MM-DD"
+                                size="xs"
+                                value={filterForm.values.cut_off_date}
+                                onChange={(d) => {
+                                  commitHeaderFilters({ cut_off_date: d });
+                                  if (d) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
                       )}
                       {visibleColumns.schedule && (
-                        <th style={erpListThStyle(theme)}>Schedule</th>
+                        <th style={mergeTh(140, 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="Schedule"
+                            value={filterForm.values.schedule ?? ""}
+                            displayValue={filterForm.values.schedule ?? ""}
+                            onChange={() => {}}
+                            theme={theme}
+                            isEditing={editingHeaderId === "schedule"}
+                            onStartEdit={() => openHeaderEditor("schedule")}
+                            onStopEdit={() => collapseHeaderEditor("schedule")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <Select
+                                autoFocus={autoFocus}
+                                placeholder="Select schedule"
+                                searchable
+                                clearable
+                                size="xs"
+                                data={[
+                                  { value: "Weekly", label: "Weekly" },
+                                  { value: "Monthly", label: "Monthly" },
+                                  { value: "Daily", label: "Daily" },
+                                  { value: "Quarterly", label: "Quarterly" },
+                                ]}
+                                value={filterForm.values.schedule}
+                                onChange={(value) => {
+                                  commitHeaderFilters({ schedule: value ?? null });
+                                  if (value) onClose();
+                                }}
+                                comboboxProps={{ zIndex: 1000 }}
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        </th>
                       )}
-                      <th style={erpListThStyle(theme)}>Status</th>
-                      <th style={erpListBookingMasterTrailingHeaderTh(theme)} />
+                      <th style={mergeTh(150, 150)}>
+                        <ERPListColumnHeaderFilter
+                          label="Status"
+                          value={filterForm.values.status ?? ""}
+                          displayValue={airJobStatusFilterLabel(filterForm.values.status)}
+                          onChange={() => {}}
+                          theme={theme}
+                          isEditing={editingHeaderId === "status"}
+                          onStartEdit={() => openHeaderEditor("status")}
+                          onStopEdit={() => collapseHeaderEditor("status")}
+                          renderEditor={({ autoFocus, onClose }) => (
+                            <Select
+                              autoFocus={autoFocus}
+                              placeholder="Select status"
+                              searchable
+                              clearable
+                              size="xs"
+                              data={[...AIR_JOB_STATUS_FILTER_OPTIONS]}
+                              value={filterForm.values.status}
+                              onChange={(value) => {
+                                commitHeaderFilters({ status: value ?? null });
+                                onClose();
+                              }}
+                              comboboxProps={{ zIndex: 1000 }}
+                              classNames={erpListGeistSelectClassNames}
+                              styles={filterFieldStyles}
+                            />
+                          )}
+                        />
+                      </th>
+                      <th
+                        style={{
+                          ...erpListStickyActionThStyle(theme, 80),
+                          minHeight: 52.4,
+                          height: 52.4,
+                          verticalAlign: "middle",
+                          boxSizing: "border-box",
+                        }}
+                      />
                     </tr>
                   </thead>
                   <tbody>
-                    {displayData.length === 0 ? (
+                    {bookingError ? (
+                      <tr>
+                        <td colSpan={20} style={{ padding: 48, textAlign: "center" }}>
+                          <Text c="red" size="sm" style={{ fontFamily: theme.fontSans }}>
+                            Error loading air job data. Please try refreshing the page.
+                          </Text>
+                        </td>
+                      </tr>
+                    ) : isLoading ? (
+                      <tr>
+                        <td colSpan={20} style={{ padding: 80, textAlign: "center" }}>
+                          <Center className="erp-header-filter-fade">
+                            <Stack align="center" gap="sm">
+                              <Loader size="lg" color={primary} />
+                              <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
+                                Loading air job schedules…
+                              </Text>
+                            </Stack>
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : displayData.length === 0 ? (
                       <tr>
                         <td
                           colSpan={20}
@@ -897,7 +1296,7 @@ function AirJobGenerationMaster() {
                             <td style={tdPad}>
                               <ERPListJobStatusPill status={row.status} />
                             </td>
-                            <td style={erpListRowActionMenuTdStyle()}>
+                            <td style={erpListStickyActionTdStyle(theme)}>
                               <Menu
                                 withinPortal
                                 position="bottom-end"
