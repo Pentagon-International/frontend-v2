@@ -36,11 +36,13 @@ import { postAPICall } from "../../service/postApiCall";
 import { useListFilterStore } from "../../store/listFilterStore";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
+import useDateFormat from "../../hooks/useDateFormat";
 import {
   ToastNotification,
   SearchableSelect,
   SingleDateInput,
   BookingMasterListTable,
+  ERPListColumnHeaderFilter,
   DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
   getBookingRowPW,
   ERPListColumnToggleMenu,
@@ -48,7 +50,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   DEFAULT_ERP_LIST_THEME,
   erpListGeistMantineTheme,
   ERP_LIST_GEIST_ROOT_CLASS,
@@ -57,6 +58,7 @@ import {
   erpListGeistSelectClassNames,
   erpToolbarOutlineButtonStyles,
   erpToolbarSelectStyles,
+  type BookingMasterHeaderRenderers,
   type BookingMasterTableRowModel,
   type BookingMasterVisibleColumns,
 } from "../../components";
@@ -65,7 +67,8 @@ import { ERP_LIST_GEIST_MONO_CLASS } from "../../components/ERPListPage";
 import dayjs from "dayjs";
 import { getBookingShipmentFilterListTotal } from "../../utils/bookingShipmentFilterListTotal";
 
-const I2E_FILTER_UNIFIED_STYLES = {
+/** Matches `OCEAN_EXPORT_FILTER_UNIFIED_STYLES` in OceanExportBookingMaster (filter drawer + header editors). */
+const BOOKING_MASTER_FILTER_UNIFIED_STYLES = {
   label: {
     fontFamily: DEFAULT_ERP_LIST_THEME.fontSans,
     fontSize: 12,
@@ -230,6 +233,9 @@ type FilterState = {
   origin: string | null;
   destination: string | null;
   date: Date | null;
+  houseno: string | null;
+  customer_service_name: string | null;
+  mawb_no: string | null;
 };
 
 const LIST_KEY = "OCEAN_IMPORT_TO_EXPORT_BOOKING";
@@ -243,6 +249,9 @@ type PersistedI2EFilters = {
   origin: string | null;
   destination: string | null;
   date: string | null;
+  houseno: string | null;
+  customer_service_name: string | null;
+  mawb_no: string | null;
   filtersApplied: boolean;
   showFilters: boolean;
   pageIndex: number;
@@ -326,6 +335,7 @@ function OceanImportToExportBooking() {
   const queryClient = useQueryClient();
   const theme = DEFAULT_ERP_LIST_THEME;
   const { muted, fg, primary, headerBg, fontSans, border } = theme;
+  const dateFormat = useDateFormat();
 
   const getStoreState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
@@ -357,7 +367,7 @@ function OceanImportToExportBooking() {
   const [destinationDisplayName, setDestinationDisplayName] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
 
   const filterForm = useForm<FilterState>({
     initialValues: {
@@ -368,8 +378,18 @@ function OceanImportToExportBooking() {
       origin: null,
       destination: null,
       date: null,
+      houseno: null,
+      customer_service_name: null,
+      mawb_no: null,
     },
   });
+
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
+  const collapseHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
+    [],
+  );
 
   // Restore filters/search/page from the global store on navigation back.
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -397,6 +417,9 @@ function OceanImportToExportBooking() {
         origin: f.origin ?? null,
         destination: f.destination ?? null,
         date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
+        houseno: f.houseno ?? null,
+        customer_service_name: f.customer_service_name ?? null,
+        mawb_no: f.mawb_no ?? null,
       });
     }
 
@@ -426,6 +449,10 @@ function OceanImportToExportBooking() {
     if (values.origin) payload.origin_code = values.origin;
     if (values.destination) payload.destination_code = values.destination;
     if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
+    if (values.houseno?.trim()) payload.houseno = values.houseno.trim();
+    if (values.customer_service_name?.trim())
+      payload.customer_service_name = values.customer_service_name.trim();
+    if (values.mawb_no?.trim()) payload.masterno = values.mawb_no.trim();
     return payload;
   };
 
@@ -641,6 +668,9 @@ function OceanImportToExportBooking() {
       date: filterForm.values.date
         ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
         : null,
+      houseno: filterForm.values.houseno,
+      customer_service_name: filterForm.values.customer_service_name,
+      mawb_no: filterForm.values.mawb_no,
       filtersApplied,
       showFilters,
       pageIndex,
@@ -671,6 +701,326 @@ function OceanImportToExportBooking() {
     setShouldRestore,
   ]);
 
+  const commitHeaderFilters = useCallback(
+    (
+      updates: Partial<FilterState>,
+      displayUpdates?: {
+        customer?: string | null;
+        origin?: string | null;
+        destination?: string | null;
+      },
+    ) => {
+      const nextValues = { ...filterForm.values, ...updates };
+      filterForm.setValues(updates);
+      setFiltersApplied(true);
+      setPageIndex(0);
+      const nextCustomerDisplay =
+        displayUpdates && "customer" in displayUpdates
+          ? (displayUpdates.customer ?? null)
+          : customerDisplayName;
+      const nextOriginDisplay =
+        displayUpdates && "origin" in displayUpdates
+          ? (displayUpdates.origin ?? null)
+          : originDisplayName;
+      const nextDestinationDisplay =
+        displayUpdates && "destination" in displayUpdates
+          ? (displayUpdates.destination ?? null)
+          : destinationDisplayName;
+      if (displayUpdates && "customer" in displayUpdates) {
+        setCustomerDisplayName(nextCustomerDisplay);
+      }
+      if (displayUpdates && "origin" in displayUpdates) {
+        setOriginDisplayName(nextOriginDisplay);
+      }
+      if (displayUpdates && "destination" in displayUpdates) {
+        setDestinationDisplayName(nextDestinationDisplay);
+      }
+      const persisted: PersistedI2EFilters = {
+        statusFilter,
+        booking_id: nextValues.booking_id,
+        enquiry_id: nextValues.enquiry_id,
+        customer: nextValues.customer,
+        service: nextValues.service,
+        origin: nextValues.origin,
+        destination: nextValues.destination,
+        date: nextValues.date ? dayjs(nextValues.date).format("YYYY-MM-DD") : null,
+        houseno: nextValues.houseno,
+        customer_service_name: nextValues.customer_service_name,
+        mawb_no: nextValues.mawb_no,
+        filtersApplied: true,
+        showFilters,
+        pageIndex: 0,
+        pageSize,
+      };
+      setStoreFilters(LIST_KEY, persisted);
+      setStoreDisplayValues(LIST_KEY, {
+        customer: nextCustomerDisplay,
+        origin: nextOriginDisplay,
+        destination: nextDestinationDisplay,
+      });
+    },
+    [
+      filterForm,
+      statusFilter,
+      showFilters,
+      pageSize,
+      customerDisplayName,
+      originDisplayName,
+      destinationDisplayName,
+      setStoreFilters,
+      setStoreDisplayValues,
+    ],
+  );
+
+  const headerRenderers: BookingMasterHeaderRenderers = useMemo(
+    () => ({
+      shipment: (
+        <ERPListColumnHeaderFilter
+          label="Booking ID"
+          value={filterForm.values.booking_id ?? ""}
+          displayValue={filterForm.values.booking_id ?? ""}
+          theme={theme}
+          placeholder="Filter Booking ID"
+          isEditing={editingHeaderId === "shipment"}
+          onStartEdit={() => openHeaderEditor("shipment")}
+          onStopEdit={() => collapseHeaderEditor("shipment")}
+          onChange={(next) => commitHeaderFilters({ booking_id: next || null })}
+        />
+      ),
+      houseno: (
+        <ERPListColumnHeaderFilter
+          label="House No"
+          value={filterForm.values.houseno ?? ""}
+          displayValue={filterForm.values.houseno ?? ""}
+          theme={theme}
+          placeholder="Filter House No"
+          isEditing={editingHeaderId === "houseno"}
+          onStartEdit={() => openHeaderEditor("houseno")}
+          onStopEdit={() => collapseHeaderEditor("houseno")}
+          onChange={(next) => commitHeaderFilters({ houseno: next || null })}
+        />
+      ),
+      customer: (
+        <ERPListColumnHeaderFilter
+          label="Customer"
+          value={filterForm.values.customer ?? ""}
+          displayValue={customerDisplayName ?? filterForm.values.customer ?? ""}
+          onChange={() => {}}
+          theme={theme}
+          isEditing={editingHeaderId === "customer"}
+          onStartEdit={() => openHeaderEditor("customer")}
+          onStopEdit={() => collapseHeaderEditor("customer")}
+          renderEditor={({ autoFocus, onClose }) => (
+            <SearchableSelect
+              autoFocus={autoFocus}
+              size="xs"
+              apiEndpoint={URL.allCustomers}
+              searchFields={["customer_name", "customer_code"]}
+              placeholder="Type customer"
+              displayFormat={(item: Record<string, unknown>) => ({
+                value: String(item.customer_code),
+                label: String(item.customer_name),
+              })}
+              value={filterForm.values.customer}
+              displayValue={customerDisplayName}
+              onChange={(value, selectedData) => {
+                commitHeaderFilters(
+                  { customer: value || null },
+                  { customer: selectedData?.label ?? null },
+                );
+                if (value) onClose();
+              }}
+              minSearchLength={2}
+              dropdownZIndex={1000}
+              classNames={erpListGeistSelectClassNames}
+              styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+            />
+          )}
+        />
+      ),
+      date: (
+        <ERPListColumnHeaderFilter
+          label="Date"
+          value={
+            filterForm.values.date
+              ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+              : ""
+          }
+          displayValue={
+            filterForm.values.date
+              ? dayjs(filterForm.values.date).format(dateFormat)
+              : ""
+          }
+          onChange={() => {}}
+          theme={theme}
+          isEditing={editingHeaderId === "date"}
+          onStartEdit={() => openHeaderEditor("date")}
+          onStopEdit={() => collapseHeaderEditor("date")}
+          renderEditor={({ autoFocus, onClose }) => (
+            <SingleDateInput
+              key={`date-h-${filterForm.values.date}`}
+              size="xs"
+              value={filterForm.values.date}
+              onChange={(d) => {
+                commitHeaderFilters({ date: d });
+                if (d) onClose();
+              }}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+              {...(autoFocus ? { autoFocus: true } : {})}
+            />
+          )}
+        />
+      ),
+      route: (
+        <ERPListColumnHeaderFilter
+          label="Route"
+          value={
+            (filterForm.values.origin ?? "") + (filterForm.values.destination ?? "")
+          }
+          displayValue={
+            filterForm.values.origin || filterForm.values.destination
+              ? `${filterForm.values.origin ?? "—"} → ${filterForm.values.destination ?? "—"}`
+              : ""
+          }
+          onChange={() => {}}
+          theme={theme}
+          isEditing={editingHeaderId === "route"}
+          onStartEdit={() => openHeaderEditor("route")}
+          onStopEdit={() => collapseHeaderEditor("route")}
+          renderEditor={({ autoFocus }) => (
+            <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <SearchableSelect
+                  autoFocus={autoFocus}
+                  size="xs"
+                  apiEndpoint={URL.portMaster}
+                  additionalParams={oceanTransportParams}
+                  searchFields={["port_code", "port_name"]}
+                  placeholder="Origin"
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.origin}
+                  displayValue={originDisplayName}
+                  onChange={(value, selectedData) =>
+                    commitHeaderFilters(
+                      { origin: value || null },
+                      { origin: selectedData?.label ?? null },
+                    )
+                  }
+                  minSearchLength={3}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                />
+              </Box>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <SearchableSelect
+                  size="xs"
+                  apiEndpoint={URL.portMaster}
+                  additionalParams={oceanTransportParams}
+                  searchFields={["port_code", "port_name"]}
+                  placeholder="Destination"
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.destination}
+                  displayValue={destinationDisplayName}
+                  onChange={(value, selectedData) =>
+                    commitHeaderFilters(
+                      { destination: value || null },
+                      { destination: selectedData?.label ?? null },
+                    )
+                  }
+                  minSearchLength={3}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                />
+              </Box>
+            </Group>
+          )}
+        />
+      ),
+      service: (
+        <ERPListColumnHeaderFilter
+          label="Service"
+          value={filterForm.values.service ?? ""}
+          displayValue={filterForm.values.service ?? ""}
+          theme={theme}
+          placeholder="All services"
+          isEditing={editingHeaderId === "service"}
+          onStartEdit={() => openHeaderEditor("service")}
+          onStopEdit={() => collapseHeaderEditor("service")}
+          onChange={() => {}}
+          renderEditor={({ autoFocus, onClose }) => (
+            <Select
+              size="xs"
+              placeholder="All"
+              clearable
+              data={[
+                { value: "FCL", label: "FCL" },
+                { value: "LCL", label: "LCL" },
+              ]}
+              value={filterForm.values.service}
+              onChange={(v) => {
+                commitHeaderFilters({ service: v || null });
+                onClose();
+              }}
+              autoFocus={autoFocus}
+              classNames={erpListGeistSelectClassNames}
+              styles={erpToolbarSelectStyles(theme)}
+            />
+          )}
+        />
+      ),
+      mawb: (
+        <ERPListColumnHeaderFilter
+          label="MAWB"
+          value={filterForm.values.mawb_no ?? ""}
+          displayValue={filterForm.values.mawb_no ?? ""}
+          theme={theme}
+          placeholder="Filter MAWB"
+          isEditing={editingHeaderId === "mawb"}
+          onStartEdit={() => openHeaderEditor("mawb")}
+          onStopEdit={() => collapseHeaderEditor("mawb")}
+          onChange={(next) => commitHeaderFilters({ mawb_no: next || null })}
+        />
+      ),
+      handler: (
+        <ERPListColumnHeaderFilter
+          label="Customer Service"
+          value={filterForm.values.customer_service_name ?? ""}
+          displayValue={filterForm.values.customer_service_name ?? ""}
+          theme={theme}
+          placeholder="Filter Customer Service"
+          isEditing={editingHeaderId === "handler"}
+          onStartEdit={() => openHeaderEditor("handler")}
+          onStopEdit={() => collapseHeaderEditor("handler")}
+          onChange={(next) =>
+            commitHeaderFilters({ customer_service_name: next || null })
+          }
+        />
+      ),
+    }),
+    [
+      filterForm.values,
+      theme,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      customerDisplayName,
+      originDisplayName,
+      destinationDisplayName,
+      oceanTransportParams,
+      dateFormat,
+    ],
+  );
+
   const handlePageSizeChange = (size: number) => {
     setPageIndex(0);
     setPageSize(size);
@@ -685,7 +1035,10 @@ function OceanImportToExportBooking() {
       values.service ||
       values.origin ||
       values.destination ||
-      values.date;
+      values.date ||
+      (values.houseno && values.houseno.trim()) ||
+      (values.customer_service_name && values.customer_service_name.trim()) ||
+      (values.mawb_no && values.mawb_no.trim());
 
     if (!hasFilterValues) {
       setFiltersApplied(false);
@@ -707,6 +1060,9 @@ function OceanImportToExportBooking() {
       origin: values.origin,
       destination: values.destination,
       date: values.date ? dayjs(values.date).format("YYYY-MM-DD") : null,
+      houseno: values.houseno,
+      customer_service_name: values.customer_service_name,
+      mawb_no: values.mawb_no,
       filtersApplied: true,
       showFilters: false,
       pageIndex: 0,
@@ -733,7 +1089,10 @@ function OceanImportToExportBooking() {
         values.service ||
         values.origin ||
         values.destination ||
-        values.date;
+        values.date ||
+        (values.houseno && values.houseno.trim()) ||
+        (values.customer_service_name && values.customer_service_name.trim()) ||
+        (values.mawb_no && values.mawb_no.trim());
       if (!hasFilterValues) {
         setFiltersApplied(false);
         setPageIndex(0);
@@ -1343,7 +1702,8 @@ function OceanImportToExportBooking() {
             filters={{
               opened: showFilters,
               title: "Filters",
-              subtitle: "Refine import-to-export bookings by reference, customer, service, route, or date",
+              subtitle:
+                "Refine ocean import-to-export bookings by reference, customer, service, route, or date",
               onClose: () => setShowFilters(false),
               footer: (
                 <ERPListFilterActionsFooter
@@ -1361,7 +1721,7 @@ function OceanImportToExportBooking() {
                       size="xs"
                       label="Booking ID"
                       placeholder="Enter Booking ID"
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.booking_id ?? ""}
                       onChange={(e) =>
                         filterForm.setFieldValue(
@@ -1376,7 +1736,7 @@ function OceanImportToExportBooking() {
                       size="xs"
                       label="Enquiry ID"
                       placeholder="Enter Enquiry ID"
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.enquiry_id ?? ""}
                       onChange={(e) =>
                         filterForm.setFieldValue(
@@ -1406,7 +1766,7 @@ function OceanImportToExportBooking() {
                       minSearchLength={2}
                       dropdownZIndex={1000}
                       classNames={erpListGeistSelectClassNames}
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
@@ -1419,12 +1779,10 @@ function OceanImportToExportBooking() {
                         { value: "FCL", label: "FCL" },
                         { value: "LCL", label: "LCL" },
                       ]}
-                      value={filterForm.values.service}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("service", value || null)
-                      }
+                      value={filterForm.values.service ?? null}
+                      onChange={(v) => filterForm.setFieldValue("service", v ?? null)}
                       classNames={erpListGeistSelectClassNames}
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={erpToolbarSelectStyles(theme)}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
@@ -1435,7 +1793,7 @@ function OceanImportToExportBooking() {
                       size="xs"
                       value={filterForm.values.date}
                       onChange={(d) => filterForm.setFieldValue("date", d)}
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
@@ -1460,7 +1818,7 @@ function OceanImportToExportBooking() {
                       additionalParams={oceanTransportParams}
                       dropdownZIndex={1000}
                       classNames={erpListGeistSelectClassNames}
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
@@ -1485,7 +1843,52 @@ function OceanImportToExportBooking() {
                       additionalParams={oceanTransportParams}
                       dropdownZIndex={1000}
                       classNames={erpListGeistSelectClassNames}
-                      styles={I2E_FILTER_UNIFIED_STYLES}
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <FormTextInput
+                      size="xs"
+                      label="House No"
+                      placeholder="Enter House No"
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.houseno ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "houseno",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <FormTextInput
+                      size="xs"
+                      label="Customer Service"
+                      placeholder="Enter Customer Service"
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.customer_service_name ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "customer_service_name",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <FormTextInput
+                      size="xs"
+                      label="MAWB"
+                      placeholder="Enter MAWB"
+                      styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.mawb_no ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "mawb_no",
+                          e.currentTarget.value || null,
+                        )
+                      }
                     />
                   </Grid.Col>
                 </Grid>
@@ -1504,12 +1907,7 @@ function OceanImportToExportBooking() {
                   pageSizeOptions={["10", "15", "25", "50"]}
                 />
               ),
-              children: isDataLoading ? (
-                <ERPListTableLoading
-                  theme={theme}
-                  message="Loading import-to-export bookings…"
-                />
-              ) : (
+              children: (
                 <BookingMasterListTable
                   theme={theme}
                   geistRootClass={ERP_LIST_GEIST_ROOT_CLASS}
@@ -1521,6 +1919,11 @@ function OceanImportToExportBooking() {
                   renderActions={renderRowActions}
                   emptyTitle="No bookings to display"
                   emptySubtitle="Try switching between Pending and Completed or adjust your filters"
+                  stickyActions
+                  // dateCellFormat={dateFormat}
+                  isLoading={isDataLoading}
+                  loadingMessage="Loading import-to-export bookings…"
+                  headerRenderers={headerRenderers}
                 />
               ),
             }}

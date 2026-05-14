@@ -36,12 +36,12 @@ import {
   BookingMasterListTable,
   DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
   getBookingRowPW,
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   erpListGeistMantineTheme,
   erpListGeistMenuDropdownStyles,
   erpListGeistRootTypography,
@@ -51,6 +51,7 @@ import {
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   DEFAULT_ERP_LIST_THEME,
+  type BookingMasterHeaderRenderers,
   type BookingMasterTableRowModel,
   type BookingMasterVisibleColumns,
   type ErpListTheme,
@@ -64,6 +65,7 @@ import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_IMPORT_BOOKING_MASTER";
 
@@ -144,6 +146,8 @@ type ImportShipmentData = {
   is_direct?: boolean;
   is_coload?: boolean;
   mawb_no?: string | null;
+  /** House number on list row (when API provides it). */
+  houseno?: string | null;
   carrier_booking_no?: string | null;
   origin_code?: string | null;
   destination_code?: string | null;
@@ -227,6 +231,12 @@ type FilterState = {
   origin: string | null;
   destination: string | null;
   date: Date | null;
+  /** Backend `houseno` filter (icontains on shipment house reference). */
+  houseno: string | null;
+  /** Backend `customer_service_name` filter for the handler column. */
+  customer_service_name: string | null;
+  /** Backend `masterno` filter for the MAWB column. */
+  mawb_no: string | null;
 };
 
 type PersistedListFilters = {
@@ -237,6 +247,9 @@ type PersistedListFilters = {
   origin: string | null;
   destination: string | null;
   date: string | null;
+  houseno: string | null;
+  customer_service_name: string | null;
+  mawb_no: string | null;
   filtersApplied: boolean;
   showFilters: boolean;
   pageIndex: number;
@@ -296,6 +309,7 @@ function airImportRowToTableModel(
     pieces: pw.pieces,
     weight: pw.weight,
     customer_service_name: r.customer_service_name,
+    houseno: r.houseno?.trim() ?? "",
   };
 }
 
@@ -323,6 +337,7 @@ function AirImportBookingMaster() {
   const clearAllStore = useListFilterStore((s) => s.clearAll);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
+  const dateFormat = useDateFormat();
   const airTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   const [isRestoring, setIsRestoring] = useState(true);
@@ -331,7 +346,7 @@ function AirImportBookingMaster() {
 
   // Pagination states
   const [pageIndex, setPageIndex] = useState(0); // 0-based index for API
-  const [pageSize, setPageSize] = useState(25); // Default page size
+  const [pageSize, setPageSize] = useState(15); // Aligned with air export master default
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [visibleColumns, setVisibleColumns] = useState<BookingMasterVisibleColumns>({
@@ -361,11 +376,29 @@ function AirImportBookingMaster() {
       origin: null,
       destination: null,
       date: null,
+      houseno: null,
+      customer_service_name: null,
+      mawb_no: null,
     },
   });
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 1000);
+
+  /**
+   * Column-header filtering: which header is currently in "edit" mode.
+   * Lifted here so opening one header collapses any other open editor and
+   * the editor survives the table re-renders driven by query/state updates.
+   */
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId(id),
+    [],
+  );
+  const collapseHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
+    [],
+  );
 
   // Check if we're on the create or edit route
   const isCreateRoute = location.pathname.endsWith("/create");
@@ -412,6 +445,10 @@ function AirImportBookingMaster() {
     if (values.origin) payload.origin_code = values.origin;
     if (values.destination) payload.destination_code = values.destination;
     if (values.date) payload.date = dayjs(values.date).format("YYYY-MM-DD");
+    if (values.houseno?.trim()) payload.houseno = values.houseno.trim();
+    if (values.customer_service_name?.trim())
+      payload.customer_service_name = values.customer_service_name.trim();
+    if (values.mawb_no?.trim()) payload.masterno = values.mawb_no.trim();
     return payload;
   };
 
@@ -425,6 +462,80 @@ function AirImportBookingMaster() {
     if (trimmed) extra.search = trimmed;
     return extra;
   };
+
+  /**
+   * Header-filter writes update form values, immediately mark filters as
+   * applied (so `buildBookingRequestFilters` includes them), reset
+   * pagination, and persist to the global list-filter store. Display labels
+   * (customer / origin / destination names) are also captured for proper
+   * restoration on navigation.
+   */
+  const commitHeaderFilters = useCallback(
+    (
+      updates: Partial<FilterState>,
+      displayUpdates?: {
+        customer?: string | null;
+        origin?: string | null;
+        destination?: string | null;
+      },
+    ) => {
+      const nextValues = { ...filterForm.values, ...updates };
+      filterForm.setValues(updates);
+      setFiltersApplied(true);
+      setPageIndex(0);
+      const nextCustomerDisplay =
+        displayUpdates && "customer" in displayUpdates
+          ? (displayUpdates.customer ?? null)
+          : customerDisplayName;
+      const nextOriginDisplay =
+        displayUpdates && "origin" in displayUpdates
+          ? (displayUpdates.origin ?? null)
+          : originDisplayName;
+      const nextDestinationDisplay =
+        displayUpdates && "destination" in displayUpdates
+          ? (displayUpdates.destination ?? null)
+          : destinationDisplayName;
+      if (displayUpdates && "customer" in displayUpdates) {
+        setCustomerDisplayName(nextCustomerDisplay);
+      }
+      if (displayUpdates && "origin" in displayUpdates) {
+        setOriginDisplayName(nextOriginDisplay);
+      }
+      if (displayUpdates && "destination" in displayUpdates) {
+        setDestinationDisplayName(nextDestinationDisplay);
+      }
+      const persisted: PersistedListFilters = {
+        booking_id: nextValues.booking_id,
+        enquiry_id: nextValues.enquiry_id,
+        customer: nextValues.customer,
+        service: nextValues.service,
+        origin: nextValues.origin,
+        destination: nextValues.destination,
+        date: nextValues.date ? dayjs(nextValues.date).format("YYYY-MM-DD") : null,
+        houseno: nextValues.houseno,
+        customer_service_name: nextValues.customer_service_name,
+        mawb_no: nextValues.mawb_no,
+        filtersApplied: true,
+        showFilters,
+        pageIndex: 0,
+      };
+      setStoreFilters(LIST_KEY, persisted);
+      setStoreDisplayValues(LIST_KEY, {
+        customer: nextCustomerDisplay,
+        origin: nextOriginDisplay,
+        destination: nextDestinationDisplay,
+      });
+    },
+    [
+      filterForm,
+      customerDisplayName,
+      originDisplayName,
+      destinationDisplayName,
+      showFilters,
+      setStoreFilters,
+      setStoreDisplayValues,
+    ],
+  );
 
   const {
     data: importShipmentsResponse,
@@ -635,6 +746,9 @@ function AirImportBookingMaster() {
         origin: f.origin ?? null,
         destination: f.destination ?? null,
         date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
+        houseno: f.houseno ?? null,
+        customer_service_name: f.customer_service_name ?? null,
+        mawb_no: f.mawb_no ?? null,
       });
       setFiltersApplied(Boolean(f.filtersApplied));
       setShowFilters(Boolean(f.showFilters));
@@ -666,6 +780,9 @@ function AirImportBookingMaster() {
       date: filterForm.values.date
         ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
         : null,
+      houseno: filterForm.values.houseno,
+      customer_service_name: filterForm.values.customer_service_name,
+      mawb_no: filterForm.values.mawb_no,
       filtersApplied,
       showFilters,
       pageIndex,
@@ -783,7 +900,10 @@ function AirImportBookingMaster() {
         formValues.service ||
         formValues.origin ||
         formValues.destination ||
-        formValues.date;
+        formValues.date ||
+        (formValues.houseno?.trim() ?? "") !== "" ||
+        (formValues.customer_service_name?.trim() ?? "") !== "" ||
+        (formValues.mawb_no?.trim() ?? "") !== "";
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
@@ -809,6 +929,9 @@ function AirImportBookingMaster() {
         date: formValues.date
           ? dayjs(formValues.date).format("YYYY-MM-DD")
           : null,
+        houseno: formValues.houseno,
+        customer_service_name: formValues.customer_service_name,
+        mawb_no: formValues.mawb_no,
         filtersApplied: true,
         showFilters: false,
         pageIndex: 0,
@@ -842,7 +965,10 @@ function AirImportBookingMaster() {
         formValues.service ||
         formValues.origin ||
         formValues.destination ||
-        formValues.date;
+        formValues.date ||
+        (formValues.houseno?.trim() ?? "") !== "" ||
+        (formValues.customer_service_name?.trim() ?? "") !== "" ||
+        (formValues.mawb_no?.trim() ?? "") !== "";
 
       if (!hasFilterValues) {
         setFiltersApplied(false);
@@ -979,6 +1105,236 @@ function AirImportBookingMaster() {
     cardBg,
     fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
   };
+
+  /**
+   * Column-header filter slots wired into the existing filter form. Each
+   * filterable column mirrors the equivalent control in the advanced
+   * filter panel so the payload shape stays identical and both surfaces
+   * remain synchronized through `filterForm.values`.
+   */
+  const headerRenderers: BookingMasterHeaderRenderers = useMemo(
+    () => ({
+      shipment: (
+        <ERPListColumnHeaderFilter
+          label="Booking ID"
+          value={filterForm.values.booking_id ?? ""}
+          displayValue={filterForm.values.booking_id ?? ""}
+          theme={erpTheme}
+          placeholder="Filter Booking ID"
+          isEditing={editingHeaderId === "shipment"}
+          onStartEdit={() => openHeaderEditor("shipment")}
+          onStopEdit={() => collapseHeaderEditor("shipment")}
+          onChange={(next) => commitHeaderFilters({ booking_id: next || null })}
+        />
+      ),
+      houseno: (
+        <ERPListColumnHeaderFilter
+          label="House No"
+          value={filterForm.values.houseno ?? ""}
+          displayValue={filterForm.values.houseno ?? ""}
+          theme={erpTheme}
+          placeholder="Filter House No"
+          isEditing={editingHeaderId === "houseno"}
+          onStartEdit={() => openHeaderEditor("houseno")}
+          onStopEdit={() => collapseHeaderEditor("houseno")}
+          onChange={(next) => commitHeaderFilters({ houseno: next || null })}
+        />
+      ),
+      date: (
+        <ERPListColumnHeaderFilter
+          label="Date"
+          value={
+            filterForm.values.date
+              ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+              : ""
+          }
+          displayValue={
+            filterForm.values.date
+              ? dayjs(filterForm.values.date).format(dateFormat)
+              : ""
+          }
+          onChange={() => {}}
+          theme={erpTheme}
+          isEditing={editingHeaderId === "date"}
+          onStartEdit={() => openHeaderEditor("date")}
+          onStopEdit={() => collapseHeaderEditor("date")}
+          renderEditor={({ autoFocus, onClose }) => (
+            <SingleDateInput
+              key={`date-h-${filterForm.values.date}`}
+              size="xs"
+              value={filterForm.values.date}
+              onChange={(d) => {
+                commitHeaderFilters({ date: d });
+                if (d) onClose();
+              }}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+              {...(autoFocus ? { autoFocus: true } : {})}
+            />
+          )}
+        />
+      ),
+      customer: (
+        <ERPListColumnHeaderFilter
+          label="Customer"
+          value={filterForm.values.customer ?? ""}
+          displayValue={
+            customerDisplayName ?? filterForm.values.customer ?? ""
+          }
+          onChange={() => {}}
+          theme={erpTheme}
+          isEditing={editingHeaderId === "customer"}
+          onStartEdit={() => openHeaderEditor("customer")}
+          onStopEdit={() => collapseHeaderEditor("customer")}
+          renderEditor={({ autoFocus, onClose }) => (
+            <SearchableSelect
+              autoFocus={autoFocus}
+              size="xs"
+              apiEndpoint={URL.customer}
+              searchFields={["customer_name", "customer_code"]}
+              placeholder="Type customer"
+              displayFormat={(item: Record<string, unknown>) => ({
+                value: String(item.customer_code),
+                label: String(item.customer_name),
+              })}
+              value={filterForm.values.customer}
+              displayValue={customerDisplayName}
+              onChange={(value, selectedData) => {
+                commitHeaderFilters(
+                  { customer: value || null },
+                  { customer: selectedData?.label ?? null },
+                );
+                if (value) onClose();
+              }}
+              minSearchLength={1}
+              dropdownZIndex={1000}
+              classNames={erpListGeistSelectClassNames}
+              styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+            />
+          )}
+        />
+      ),
+      route: (
+        <ERPListColumnHeaderFilter
+          label="Route"
+          value={
+            (filterForm.values.origin ?? "") +
+            (filterForm.values.destination ?? "")
+          }
+          displayValue={
+            filterForm.values.origin || filterForm.values.destination
+              ? `${filterForm.values.origin ?? "—"} → ${
+                  filterForm.values.destination ?? "—"
+                }`
+              : ""
+          }
+          onChange={() => {}}
+          theme={erpTheme}
+          isEditing={editingHeaderId === "route"}
+          onStartEdit={() => openHeaderEditor("route")}
+          onStopEdit={() => collapseHeaderEditor("route")}
+          renderEditor={({ autoFocus }) => (
+            <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <SearchableSelect
+                  autoFocus={autoFocus}
+                  size="xs"
+                  apiEndpoint={URL.portMaster}
+                  additionalParams={airTransportParams}
+                  searchFields={["port_code", "port_name"]}
+                  placeholder="Origin"
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.origin}
+                  displayValue={originDisplayName}
+                  onChange={(value, selectedData) =>
+                    commitHeaderFilters(
+                      { origin: value || null },
+                      { origin: selectedData?.label ?? null },
+                    )
+                  }
+                  minSearchLength={1}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                />
+              </Box>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <SearchableSelect
+                  size="xs"
+                  apiEndpoint={URL.portMaster}
+                  additionalParams={airTransportParams}
+                  searchFields={["port_code", "port_name"]}
+                  placeholder="Destination"
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.port_code),
+                    label: `${item.port_name} (${item.port_code})`,
+                  })}
+                  value={filterForm.values.destination}
+                  displayValue={destinationDisplayName}
+                  onChange={(value, selectedData) =>
+                    commitHeaderFilters(
+                      { destination: value || null },
+                      { destination: selectedData?.label ?? null },
+                    )
+                  }
+                  minSearchLength={1}
+                  dropdownZIndex={1000}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                />
+              </Box>
+            </Group>
+          )}
+        />
+      ),
+      mawb: (
+        <ERPListColumnHeaderFilter
+          label="MAWB"
+          value={filterForm.values.mawb_no ?? ""}
+          displayValue={filterForm.values.mawb_no ?? ""}
+          theme={erpTheme}
+          placeholder="Filter MAWB"
+          isEditing={editingHeaderId === "mawb"}
+          onStartEdit={() => openHeaderEditor("mawb")}
+          onStopEdit={() => collapseHeaderEditor("mawb")}
+          onChange={(next) => commitHeaderFilters({ mawb_no: next || null })}
+        />
+      ),
+      handler: (
+        <ERPListColumnHeaderFilter
+          label="Customer Service"
+          value={filterForm.values.customer_service_name ?? ""}
+          displayValue={filterForm.values.customer_service_name ?? ""}
+          theme={erpTheme}
+          placeholder="Filter Customer Service"
+          isEditing={editingHeaderId === "handler"}
+          onStartEdit={() => openHeaderEditor("handler")}
+          onStopEdit={() => collapseHeaderEditor("handler")}
+          onChange={(next) =>
+            commitHeaderFilters({
+              customer_service_name: next || null,
+            })
+          }
+        />
+      ),
+    }),
+    [
+      filterForm.values,
+      erpTheme,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      customerDisplayName,
+      originDisplayName,
+      destinationDisplayName,
+      airTransportParams,
+      dateFormat,
+    ],
+  );
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
@@ -1124,14 +1480,14 @@ function AirImportBookingMaster() {
                   styles={erpToolbarPrimaryButtonStyles(erpTheme)}
                   onClick={persistListAndNavigate}
                 >
-                  Create New
+                  New Booking
                 </Button>
               </>
           }}
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine import bookings by reference, customer, route, or date",
+            subtitle: "Refine bookings by reference, customer, route, or date",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1145,118 +1501,251 @@ function AirImportBookingMaster() {
             children: (
               <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                 <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <FormTextInput
-                    size="xs"
-                    label="Booking ID"
-                    placeholder="Enter Booking ID"
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                    value={filterForm.values.booking_id ?? ""}
-                    onChange={(e) =>
-                      filterForm.setFieldValue(
-                        "booking_id",
-                        e.currentTarget.value || null
-                      )
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <FormTextInput
-                    size="xs"
-                    label="Enquiry ID"
-                    placeholder="Enter Enquiry ID"
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                    value={filterForm.values.enquiry_id ?? ""}
-                    onChange={(e) =>
-                      filterForm.setFieldValue(
-                        "enquiry_id",
-                        e.currentTarget.value || null
-                      )
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Customer"
-                    placeholder="Type customer name"
-                    apiEndpoint={URL.allCustomers}
-                    searchFields={["customer_name", "customer_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
-                    value={filterForm.values.customer}
-                    displayValue={customerDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("customer", value || "");
-                      setCustomerDisplayName(selectedData?.label || null);
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
                     }}
-                    minSearchLength={2}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                  />
+                  >
+                    <FormTextInput
+                      size="xs"
+                      label="Booking ID"
+                      placeholder="Enter Booking ID"
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.booking_id ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "booking_id",
+                          e.currentTarget.value || null
+                        )
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SingleDateInput
-                    key={`date-${filterForm.values.date}`}
-                    label="Date"
-                    placeholder="YYYY-MM-DD"
-                    size="xs"
-                    value={filterForm.values.date}
-                    onChange={(d) => filterForm.setFieldValue("date", d)}
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Origin"
-                    placeholder="Type origin code or name"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.origin}
-                    displayValue={originDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("origin", value || "");
-                      setOriginDisplayName(selectedData?.label || null);
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
                     }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                    additionalParams={airTransportParams}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                  />
+                  >
+                    <FormTextInput
+                      size="xs"
+                      label="Enquiry ID"
+                      placeholder="Enter Enquiry ID"
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.enquiry_id ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "enquiry_id",
+                          e.currentTarget.value || null
+                        )
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Destination"
-                    placeholder="Type destination code or name"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.port_code),
-                      label: `${item.port_name} (${item.port_code})`,
-                    })}
-                    value={filterForm.values.destination}
-                    displayValue={destinationDisplayName}
-                    onChange={(value, selectedData) => {
-                      filterForm.setFieldValue("destination", value || "");
-                      setDestinationDisplayName(selectedData?.label || null);
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
                     }}
-                    minSearchLength={3}
-                    className="filter-searchable-select"
-                    additionalParams={airTransportParams}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
-                  />
+                  >
+                    <SearchableSelect
+                      size="xs"
+                      label="Customer"
+                      placeholder="Type customer name"
+                      apiEndpoint={URL.allCustomers}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code),
+                        label: String(item.customer_name),
+                      })}
+                      value={filterForm.values.customer}
+                      displayValue={customerDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("customer", value || "");
+                        setCustomerDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <SingleDateInput
+                      key={`date-${filterForm.values.date}`}
+                      label="Date"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={filterForm.values.date}
+                      onChange={(d) => filterForm.setFieldValue("date", d)}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...AIR_IMPORT_FILTER_UNIFIED_STYLES,
+                        input: {
+                          ...AIR_IMPORT_FILTER_UNIFIED_STYLES.input,
+                          minHeight: 32,
+                        },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <SearchableSelect
+                      size="xs"
+                      label="Origin"
+                      placeholder="Type origin code or name"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_code", "port_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.origin}
+                      displayValue={originDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("origin", value || "");
+                        setOriginDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      className="filter-searchable-select"
+                      additionalParams={airTransportParams}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <SearchableSelect
+                      size="xs"
+                      label="Destination"
+                      placeholder="Type destination code or name"
+                      apiEndpoint={URL.portMaster}
+                      searchFields={["port_code", "port_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.port_code),
+                        label: `${item.port_name} (${item.port_code})`,
+                      })}
+                      value={filterForm.values.destination}
+                      displayValue={destinationDisplayName}
+                      onChange={(value, selectedData) => {
+                        filterForm.setFieldValue("destination", value || "");
+                        setDestinationDisplayName(selectedData?.label || null);
+                      }}
+                      minSearchLength={3}
+                      className="filter-searchable-select"
+                      additionalParams={airTransportParams}
+                      dropdownZIndex={1000}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <FormTextInput
+                      size="xs"
+                      label="House No"
+                      placeholder="Enter House No"
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.houseno ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "houseno",
+                          e.currentTarget.value || null
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <FormTextInput
+                      size="xs"
+                      label="Customer Service"
+                      placeholder="Enter Customer Service"
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.customer_service_name ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "customer_service_name",
+                          e.currentTarget.value || null
+                        )
+                      }
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                  <Box
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      minHeight: 0,
+                    }}
+                  >
+                    <FormTextInput
+                      size="xs"
+                      label="MAWB"
+                      placeholder="Enter MAWB"
+                      styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
+                      value={filterForm.values.mawb_no ?? ""}
+                      onChange={(e) =>
+                        filterForm.setFieldValue(
+                          "mawb_no",
+                          e.currentTarget.value || null
+                        )
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
               </Grid>
             ),
@@ -1274,9 +1763,7 @@ function AirImportBookingMaster() {
                 selectClassNames={erpListGeistSelectClassNames}
               />
             ),
-            children: isDataLoading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading air import bookings..." />
-            ) : (
+            children: (
               <BookingMasterListTable
                 theme={erpTheme}
                 geistRootClass={ERP_LIST_GEIST_ROOT_CLASS}
@@ -1286,6 +1773,11 @@ function AirImportBookingMaster() {
                 visibleColumns={visibleColumns}
                 showServiceColumn={false}
                 renderActions={renderRowActions}
+                headerRenderers={headerRenderers}
+                stickyActions
+                // dateCellFormat={dateFormat}
+                isLoading={isDataLoading}
+                loadingMessage="Loading air import bookings..."
               />
             ),
           }}

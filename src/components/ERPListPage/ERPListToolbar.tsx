@@ -54,7 +54,7 @@ export function ERPListToolbar({
             WebkitOverflowScrolling: "touch",
           }}
         >
-          <Flex align="center" gap={32} wrap="nowrap" style={{ flexShrink: 0 }}>
+          <Flex align="center" gap={20} wrap="nowrap" style={{ flexShrink: 0 }}>
             {leading}
           </Flex>
 
@@ -68,7 +68,7 @@ export function ERPListToolbar({
                   flexShrink: 0,
                 }}
               />
-              <Flex align="center" gap={24} wrap="nowrap" style={{ flexShrink: 0 }}>
+              <Flex align="center" gap={20} wrap="nowrap" style={{ flexShrink: 0 }}>
                 {secondary}
               </Flex>
             </>

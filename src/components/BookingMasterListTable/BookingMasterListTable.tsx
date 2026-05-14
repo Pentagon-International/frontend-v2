@@ -1,9 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Box,
+  Center,
   Drawer,
   Flex,
   Group,
+  Loader,
   Stack,
   Text,
   Tooltip,
@@ -11,6 +13,10 @@ import {
 import { IconArrowRight, IconPackage } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import type { ErpListTheme } from "../ERPListPage";
+import {
+  erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
+} from "../ERPListPage";
 import {
   BOOKING_EXPORT_MILESTONES,
   type BookingMilestoneRow,
@@ -145,8 +151,9 @@ function countVisibleDataColumns(
   let n = 0;
   if (v.sno) n++;
   if (v.shipment) n++;
-  if (v.date) n++;
+  if (v.houseno) n++;
   if (v.customer) n++;
+  if (v.date) n++;
   if (v.route) n++;
   if (showServiceColumn && v.service) n++;
   if (v.status) n++;
@@ -160,6 +167,43 @@ function countVisibleDataColumns(
   return n;
 }
 
+/**
+ * Optional column-header overrides. When a key is present, that node replaces
+ * the default header text inside the `<th>` cell while preserving the cell's
+ * styling (padding, background, border, alignment). This is the integration
+ * point for the {@link ERPListColumnHeaderFilter} pattern.
+ */
+export type BookingMasterHeaderRenderers = Partial<
+  Record<keyof BookingMasterVisibleColumns, ReactNode>
+>;
+
+/** Optional per-column header min/width hints (in px) to keep column widths stable
+ * across label/editor toggling and across pages with sortable header content. */
+export type BookingMasterHeaderWidths = Partial<
+  Record<keyof BookingMasterVisibleColumns, number>
+>;
+
+/** Matches {@link AirExportBookingMaster} native table column min/width hints. */
+const DEFAULT_BOOKING_MASTER_HEADER_WIDTHS: BookingMasterHeaderWidths = {
+  sno: 40,
+  shipment: 140,
+  houseno: 140,
+  customer: 220,
+  date: 140,
+  route: 200,
+  status: 120,
+  mawb: 140,
+  flight: 100,
+  pieces: 100,
+  weight: 100,
+  handler: 150,
+  lastMilestone: 150,
+  service: 100,
+};
+
+/** Same as Air Export booking `<thead><tr>` height for visual parity. */
+const BOOKING_MASTER_TABLE_HEADER_ROW_HEIGHT_PX = 52.4;
+
 export type BookingMasterListTableProps<TRaw> = {
   theme: ErpListTheme;
   geistRootClass: string;
@@ -171,6 +215,25 @@ export type BookingMasterListTableProps<TRaw> = {
   renderActions: (row: TRaw) => ReactNode;
   emptyTitle?: string;
   emptySubtitle?: string;
+  /** Custom header content keyed by visibility column. Defaults to the column label. */
+  headerRenderers?: BookingMasterHeaderRenderers;
+  /** Stable min/width hints (px) keyed by visibility column. */
+  headerWidths?: BookingMasterHeaderWidths;
+  /**
+   * If true, the trailing actions column is pinned to the right side
+   * (sticky header + body cells) with consistent 80px width.
+   */
+  stickyActions?: boolean;
+  /**
+   * If true, the table body shows a centered loader row (header remains
+   * visible). Used for body-only loading UX while filters/search debounce.
+   */
+  isLoading?: boolean;
+  loadingMessage?: string;
+  /**
+   * `dayjs` format for the Date column body cells. Defaults to `DD MMM` when omitted.
+   */
+  dateCellFormat?: string;
 };
 
 export function BookingMasterListTable<TRaw>({
@@ -184,6 +247,12 @@ export function BookingMasterListTable<TRaw>({
   renderActions,
   emptyTitle = "No bookings found",
   emptySubtitle = "Try adjusting your search or filters",
+  headerRenderers,
+  headerWidths,
+  stickyActions = false,
+  isLoading = false,
+  loadingMessage = "Loading…",
+  dateCellFormat = "DD MMM",
 }: BookingMasterListTableProps<TRaw>) {
   const { border, muted, fg, primary, headerBg, cardBg } = theme;
   const [drawerModel, setDrawerModel] = useState<BookingMasterTableRowModel<TRaw> | null>(
@@ -194,6 +263,60 @@ export function BookingMasterListTable<TRaw>({
     () => countVisibleDataColumns(v, showServiceColumn),
     [v, showServiceColumn],
   );
+
+  const effectiveHeaderWidths = useMemo(
+    () => ({ ...DEFAULT_BOOKING_MASTER_HEADER_WIDTHS, ...headerWidths }),
+    [headerWidths],
+  );
+
+  /**
+   * Body `<td>` base — matches Air Export `bodyTdStyle()` (padding 10×14).
+   */
+  const bodyTdStyle = (opts?: {
+    align?: "left" | "right" | "center";
+    color?: string;
+    fontSize?: number;
+    fontWeight?: number;
+    maxWidth?: number;
+    verticalAlign?: "top" | "middle" | "bottom";
+  }): CSSProperties => ({
+    padding: "10px 14px",
+    ...(opts?.align ? { textAlign: opts.align } : {}),
+    ...(opts?.color ? { color: opts.color } : {}),
+    ...(opts?.fontSize ? { fontSize: opts.fontSize } : {}),
+    ...(opts?.fontWeight ? { fontWeight: opts.fontWeight } : {}),
+    ...(opts?.maxWidth ? { maxWidth: opts.maxWidth } : {}),
+    ...(opts?.verticalAlign ? { verticalAlign: opts.verticalAlign } : {}),
+  });
+
+  /**
+   * Build a `<th>` style with stable min/width — defaults match
+   * {@link AirExportBookingMaster} `headerThStyle`.
+   */
+  const thStyle = (
+    align: "left" | "right",
+    key?: keyof BookingMasterVisibleColumns,
+  ) => {
+    const widthPx = key ? effectiveHeaderWidths[key] : undefined;
+    return {
+      padding: "10px 14px",
+      textAlign: align,
+      verticalAlign: "middle" as const,
+      minHeight: BOOKING_MASTER_TABLE_HEADER_ROW_HEIGHT_PX,
+      fontWeight: 500,
+      fontSize: 14,
+      color: muted,
+      backgroundColor: headerBg,
+      borderBottom: `1px solid ${border}`,
+      whiteSpace: "nowrap" as const,
+      userSelect: "none" as const,
+      ...(typeof widthPx === "number" ? { minWidth: widthPx, width: widthPx } : {}),
+    };
+  };
+  const renderHeader = (
+    key: keyof BookingMasterVisibleColumns,
+    defaultLabel: ReactNode,
+  ) => headerRenderers?.[key] ?? defaultLabel;
 
   return (
     <>
@@ -207,242 +330,95 @@ export function BookingMasterListTable<TRaw>({
         }}
       >
         <thead>
-          <tr>
-            {v.sno && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                S.No
-              </th>
-            )}
+          <tr style={{ height: BOOKING_MASTER_TABLE_HEADER_ROW_HEIGHT_PX }}>
+            {v.sno && <th style={thStyle("left", "sno")}>{renderHeader("sno", "S.No")}</th>}
             {v.shipment && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Booking ID
+              <th style={thStyle("left", "shipment")}>
+                {renderHeader("shipment", "Booking ID")}
               </th>
             )}
             {v.houseno && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                House No
-              </th>
-            )}
-            {v.date && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Date
+              <th style={thStyle("left", "houseno")}>
+                {renderHeader("houseno", "House No")}
               </th>
             )}
             {v.customer && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Customer
+              <th style={thStyle("left", "customer")}>
+                {renderHeader("customer", "Customer")}
               </th>
+            )}
+            {v.date && (
+              <th style={thStyle("left", "date")}>{renderHeader("date", "Date")}</th>
             )}
             {v.route && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Route
-              </th>
+              <th style={thStyle("left", "route")}>{renderHeader("route", "Route")}</th>
             )}
             {showServiceColumn && v.service && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Service
+              <th style={thStyle("left", "service")}>
+                {renderHeader("service", "Service")}
               </th>
             )}
             {v.status && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Status
+              <th style={thStyle("left", "status")}>
+                {renderHeader("status", "Status")}
               </th>
             )}
             {v.mawb && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                MAWB
-              </th>
+              <th style={thStyle("left", "mawb")}>{renderHeader("mawb", "MAWB")}</th>
             )}
             {v.flight && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Flight
-              </th>
+              <th style={thStyle("left", "flight")}>{renderHeader("flight", "Flight")}</th>
             )}
             {v.pieces && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "right",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Pcs
-              </th>
+              <th style={thStyle("right", "pieces")}>{renderHeader("pieces", "Pcs")}</th>
             )}
             {v.weight && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "right",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Weight
-              </th>
+              <th style={thStyle("right", "weight")}>{renderHeader("weight", "Weight")}</th>
             )}
             {v.handler && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Customer Service
+              <th style={thStyle("left", "handler")}>
+                {renderHeader("handler", "Customer Service")}
               </th>
             )}
             {v.lastMilestone && (
-              <th
-                style={{
-                  padding: "10px 14px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: muted,
-                  backgroundColor: headerBg,
-                  borderBottom: `1px solid ${border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Last Milestone
+              <th style={thStyle("left", "lastMilestone")}>
+                {renderHeader("lastMilestone", "Last Milestone")}
               </th>
             )}
             <th
-              style={{
-                width: 44,
-                backgroundColor: headerBg,
-                borderBottom: `1px solid ${border}`,
-              }}
-            />
+              style={
+                stickyActions
+                  ? {
+                      ...erpListStickyActionThStyle(theme, 80),
+                      minHeight: BOOKING_MASTER_TABLE_HEADER_ROW_HEIGHT_PX,
+                      verticalAlign: "middle",
+                    }
+                  : {
+                      width: 44,
+                      backgroundColor: headerBg,
+                      borderBottom: `1px solid ${border}`,
+                    }
+              }
+            >
+              {stickyActions ? "Actions" : null}
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
+          {isLoading ? (
+            <tr>
+              <td colSpan={emptyColSpan} style={{ padding: 80, textAlign: "center" }}>
+                <Center>
+                  <Stack align="center" gap="sm">
+                    <Loader size="lg" color={primary} />
+                    <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
+                      {loadingMessage}
+                    </Text>
+                  </Stack>
+                </Center>
+              </td>
+            </tr>
+          ) : rows.length === 0 ? (
             <tr>
               <td colSpan={emptyColSpan} style={{ padding: 60, textAlign: "center" }}>
                 <Stack align="center" gap="md">
@@ -490,14 +466,14 @@ export function BookingMasterListTable<TRaw>({
                   }}
                 >
                   {v.sno && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <Text fw={600} size="sm" c={fg}>
                         {booking.sno}
                       </Text>
                     </td>
                   )}
                   {v.shipment && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <Text fw={600} size="sm" c={fg}>
                         {booking.shipment_code}
                       </Text>
@@ -509,19 +485,12 @@ export function BookingMasterListTable<TRaw>({
                     </td>
                   )}
                   {v.houseno && (
-                    <td style={{ padding: "10px 14px" }}>
-                      <Text fw={600} size="sm" c={fg}>
-                        {booking.houseno}
-                      </Text>
-                    </td>
-                  )}
-                  {v.date && (
-                    <td style={{ padding: "10px 14px", color: muted }}>
-                      {booking.date ? dayjs(booking.date).format("DD MMM") : "—"}
+                    <td style={bodyTdStyle({ color: muted })}>
+                      {booking.houseno ? booking.houseno : "—"}
                     </td>
                   )}
                   {v.customer && (
-                    <td style={{ padding: "10px 14px", maxWidth: 200 }}>
+                    <td style={bodyTdStyle({ maxWidth: 200 })}>
                       <Tooltip
                         label={booking.customer_name ?? ""}
                         withArrow
@@ -533,8 +502,13 @@ export function BookingMasterListTable<TRaw>({
                       </Tooltip>
                     </td>
                   )}
+                  {v.date && (
+                    <td style={bodyTdStyle({ color: muted })}>
+                      {booking.date ? dayjs(booking.date).format(dateCellFormat) : "—"}
+                    </td>
+                  )}
                   {v.route && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <Group gap={6} wrap="nowrap">
                         <Text fw={600} size="sm" c={primary}>
                           {booking.originCode || "—"}
@@ -547,21 +521,21 @@ export function BookingMasterListTable<TRaw>({
                     </td>
                   )}
                   {showServiceColumn && v.service && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <Text size="sm" c={fg}>
                         {booking.service?.trim() ? booking.service : "—"}
                       </Text>
                     </td>
                   )}
                   {v.status && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <StatusPill status={booking.status} />
                     </td>
                   )}
                   {v.mawb && (
                     <td
                       className={monoClass}
-                      style={{ padding: "10px 14px", fontSize: 12, color: muted }}
+                      style={bodyTdStyle({ fontSize: 12, color: muted })}
                     >
                       {booking.mawb ? (
                         <Text size="xs" fw={500} c={fg}>
@@ -575,7 +549,7 @@ export function BookingMasterListTable<TRaw>({
                     </td>
                   )}
                   {v.flight && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       {booking.flight ? (
                         <Text size="xs" fw={500} c={fg}>
                           {booking.flight}
@@ -588,32 +562,24 @@ export function BookingMasterListTable<TRaw>({
                     </td>
                   )}
                   {v.pieces && (
-                    <td
-                      style={{
-                        padding: "10px 14px",
-                        textAlign: "right",
-                        fontSize: 14,
-                        color: muted,
-                      }}
-                    >
+                    <td style={bodyTdStyle({ align: "right", fontSize: 14, color: muted })}>
                       {booking.pieces}
                     </td>
                   )}
                   {v.weight && (
                     <td
-                      style={{
-                        padding: "10px 14px",
-                        textAlign: "right",
+                      style={bodyTdStyle({
+                        align: "right",
                         fontSize: 14,
                         fontWeight: 500,
                         color: fg,
-                      }}
+                      })}
                     >
                       {booking.weight.toFixed(1)}
                     </td>
                   )}
                   {v.handler && (
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={bodyTdStyle()}>
                       <Group gap={8} wrap="nowrap">
                         <Box
                           style={{
@@ -627,7 +593,7 @@ export function BookingMasterListTable<TRaw>({
                             flexShrink: 0,
                           }}
                         >
-                          <Text size={10} fw={600} c={primary}>
+                          <Text fz={10} fw={600} c={primary}>
                             {initials(booking.customer_service_name)}
                           </Text>
                         </Box>
@@ -638,7 +604,7 @@ export function BookingMasterListTable<TRaw>({
                     </td>
                   )}
                   {v.lastMilestone && (
-                    <td style={{ padding: "10px 14px", maxWidth: 260, verticalAlign: "top" }}>
+                    <td style={bodyTdStyle({ maxWidth: 260, verticalAlign: "top" })}>
                       <Box
                         component="button"
                         type="button"
@@ -717,7 +683,13 @@ export function BookingMasterListTable<TRaw>({
                       </Box>
                     </td>
                   )}
-                  <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                  <td
+                    style={
+                      stickyActions
+                        ? erpListStickyActionTdStyle(theme)
+                        : { padding: "10px 8px", textAlign: "center" }
+                    }
+                  >
                     {renderActions(booking.raw)}
                   </td>
                 </tr>
