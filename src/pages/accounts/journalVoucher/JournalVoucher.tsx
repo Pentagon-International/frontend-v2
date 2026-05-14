@@ -30,7 +30,13 @@ import {
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -95,9 +101,9 @@ type JVChargeRow = {
   charge_name: string;
   account_id: number | null;
   account_code: string;
-  /** Plain chart `account_name` from selection; sent as API `account_name` (not the composite label). */
+  /** Plain chart account title from selection (middle segment); optional hint when `account_name` is composite. */
   account_display: string;
-  /** Composite "gl_code - account_name - gl_name" for row state / hints; payload uses `accountNameForPayload`. */
+  /** Composite `gl_account_code - account_name - gl_name` (three parts; gl_name may contain ` - `); sent as API `account_name`. */
   account_name: string;
   subledger_code: string;
   code: string;
@@ -160,35 +166,49 @@ function clampAmt(v: number | null | undefined): number | null {
   return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
 }
 
-/** Chart of accounts dropdown label (same order as ReceiptCreate). */
-function formatChartOfAccountsLabel(
-  glName: string | null | undefined,
-  glAccountCode: string | null | undefined,
+/**
+ * Journal voucher chart row label / API `account_name`: exactly three segments joined with ` - `:
+ * `gl_account_code - account_name - gl_name`. The third segment is a single `gl_name` value and may
+ * contain additional ` - ` (e.g. "Overseas Debtors - Freight Forwarding").
+ */
+function formatJournalVoucherAccountLabel(
+  accountCode: string | null | undefined,
   accountName: string | null | undefined,
+  glName: string | null | undefined,
 ): string {
-  const a = String(glName ?? "").trim();
-  const b = String(glAccountCode ?? "").trim();
-  const c = String(accountName ?? "").trim();
-  return [c, b, a].filter(Boolean).join(" - ");
+  const code = String(accountCode ?? "").trim();
+  const name = String(accountName ?? "").trim();
+  const gl = String(glName ?? "").trim();
+  return [code, name, gl].filter(Boolean).join(" - ");
 }
 
 /**
- * Stored `account_name` on JV lines is "gl_code - account_name - gl_name" from selection.
- * Derive the middle segment for read-only hint when `account_display` is empty (e.g. loaded from API).
+ * Derive the middle segment (chart `account_name`) from stored JV `account_name`.
+ * The string is three outer parts separated by ` - `; the third part (gl_name) may itself contain ` - `,
+ * so we split only on the first two ` - ` boundaries — never split the gl_name substring.
  */
 function accountNameHintFromStored(stored: string): string {
   const s = String(stored ?? "").trim();
   if (!s) return "";
-  const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 2) return parts[1] ?? parts[0] ?? "";
-  return parts[0] ?? "";
+  const sep = " - ";
+  const i0 = s.indexOf(sep);
+  if (i0 === -1) return s;
+  const i1 = s.indexOf(sep, i0 + sep.length);
+  if (i1 === -1) {
+    return s.slice(i0 + sep.length).trim() || s;
+  }
+  return s.slice(i0 + sep.length, i1).trim() || s;
 }
 
-/** API `account_name`: plain chart account name only (not gl_code - name - gl_name composite). */
+/** API `account_name`: same composite as the account field label (three-part ` - ` format). */
 function accountNameForPayload(row: JVChargeRow): string {
-  const fromDisplay = String(row.account_display ?? "").trim();
-  if (fromDisplay) return fromDisplay;
-  return accountNameHintFromStored(String(row.account_name ?? ""));
+  const composite = String(row.account_name ?? "").trim();
+  if (composite) return composite;
+  return formatJournalVoucherAccountLabel(
+    row.account_code,
+    row.account_display,
+    "",
+  );
 }
 
 const STATUS_OPTIONS = [
@@ -221,7 +241,9 @@ const cellStyle: React.CSSProperties = {
   padding: "3px 3px 3px 0",
   verticalAlign: "top",
 };
-const inputCell = { input: { fontSize: "12px", fontFamily: "Inter", height: "34px" } };
+const inputCell = {
+  input: { fontSize: "12px", fontFamily: "Inter", height: "34px" },
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -236,7 +258,9 @@ function JournalVoucher() {
 
   const defaultBranch = user?.branches?.find(
     (b: { is_default?: boolean }) => b.is_default === true,
-  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  ) as
+    | { currency?: { currency_id?: number; currency_code?: string } }
+    | undefined;
   const defaultCurrencyCode = defaultBranch?.currency?.currency_code ?? "";
   const defaultCurrencyId =
     defaultBranch?.currency?.currency_id != null
@@ -247,8 +271,10 @@ function JournalVoucher() {
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
-  const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
-    useDisclosure(false);
+  const [
+    documentsModalOpened,
+    { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
   const [supportingDocuments, setSupportingDocuments] = useState<
     Array<{
       name: string;
@@ -276,7 +302,9 @@ function JournalVoucher() {
   const reversalSourceId = (location.state as any)?.reversalOf?.id;
   const isReversalMode = Boolean(reversalSourceId) && !recordId;
   // The ID to fetch for edit / view / reversal pre-fill
-  const fetchId = recordId ?? (reversalSourceId != null ? String(reversalSourceId) : undefined);
+  const fetchId =
+    recordId ??
+    (reversalSourceId != null ? String(reversalSourceId) : undefined);
 
   // ─── Queries ─────────────────────────────────────────────────────────────
 
@@ -342,7 +370,7 @@ function JournalVoucher() {
         value: String(item.id ?? ""),
         id: item.id ?? "",
         gl_account_code: item.gl_account_code ?? "",
-        label: item.account_name ??  "",
+        label: item.account_name ?? "",
         sl_code: item.sl_code ?? "",
         account_name: item.account_name ?? "",
       }))
@@ -392,7 +420,10 @@ function JournalVoucher() {
   useEffect(() => {
     if (!jvFetchRes) return;
 
-    const d = (jvFetchRes as any)?.data?.data ?? (jvFetchRes as any)?.data ?? jvFetchRes;
+    const d =
+      (jvFetchRes as any)?.data?.data ??
+      (jvFetchRes as any)?.data ??
+      jvFetchRes;
     if (!d || typeof d !== "object" || Array.isArray(d)) return;
 
     const parseDate = (v: string | null | undefined): Date | null => {
@@ -434,7 +465,9 @@ function JournalVoucher() {
               charge_name: chargeLabel,
               account_id: null,
               account_code: c.code ?? "",
-              account_display: accountNameHintFromStored(String(c.account_name ?? "")),
+              account_display: accountNameHintFromStored(
+                String(c.account_name ?? ""),
+              ),
               account_name: c.account_name ?? "",
               subledger_code: c.subledger ?? "",
               code: c.code ?? "",
@@ -443,9 +476,12 @@ function JournalVoucher() {
               currency_code: "",
               roe: c.roe != null ? Number(c.roe) : null,
               amount: c.amount != null ? Number(c.amount) : null,
-              local_amount: c.local_amount != null ? Number(c.local_amount) : null,
+              local_amount:
+                c.local_amount != null ? Number(c.local_amount) : null,
               dr_cr: isReversalMode
-                ? c.dr_cr === "Dr" ? "Cr" : "Dr"
+                ? c.dr_cr === "Dr"
+                  ? "Cr"
+                  : "Dr"
                 : (c.dr_cr ?? "Dr"),
               narration: c.narration ?? "",
             };
@@ -453,12 +489,14 @@ function JournalVoucher() {
         : [emptyRow()];
 
     form.setValues({
-      document_id: isReversalMode ? "" : (d.id ? String(d.id) : ""),
+      document_id: isReversalMode ? "" : d.id ? String(d.id) : "",
       journal_no: isReversalMode ? "" : (d.document_no ?? ""),
       day_book_id: d.daybook_id != null ? String(d.daybook_id) : "",
       note: d.note ?? "",
       narration: d.narration ?? "",
-      journal_date: isReversalMode ? new Date() : (parseDate(d.journal_date) ?? new Date()),
+      journal_date: isReversalMode
+        ? new Date()
+        : (parseDate(d.journal_date) ?? new Date()),
       status: isReversalMode ? "UNPOSTED" : (d.status ?? "UNPOSTED"),
       file_name: "",
       reversal_daybook_id: "",
@@ -467,12 +505,16 @@ function JournalVoucher() {
     });
 
     // Populate supporting documents for edit/view (skip for reversal)
-    if (!isReversalMode && Array.isArray(d.documents) && d.documents.length > 0) {
+    if (
+      !isReversalMode &&
+      Array.isArray(d.documents) &&
+      d.documents.length > 0
+    ) {
       setSupportingDocuments(
         d.documents.map((doc: any) => ({
-          name: doc.document_name ??  "",
+          name: doc.document_name ?? "",
           file: null,
-          document_url:  doc.document_url ?? "",
+          document_url: doc.document_url ?? "",
           document_id: doc.id ?? undefined,
           original_document_name: doc.document_name ?? "",
         })),
@@ -516,7 +558,7 @@ function JournalVoucher() {
     const creditTotal = Math.round(credit * 1000) / 1000;
     const difference = Math.round((debit - credit) * 1000) / 1000;
 
-    // Top-level account_name: first charge's plain account name (not full chart label).
+    // Top-level account_name: first charge's composite label (same as line `account_name`).
     const firstAccountName = (() => {
       for (const c of values.charges) {
         const n = accountNameForPayload(c);
@@ -607,7 +649,10 @@ function JournalVoucher() {
             journal_no: d?.journal_no ?? prev?.journal_no,
             status: d?.status ?? prev?.status,
           }));
-          ToastNotification({ message: "Journal voucher updated successfully", type: "success" });
+          ToastNotification({
+            message: "Journal voucher updated successfully",
+            type: "success",
+          });
         }
       } else {
         const res = (await apiCallProtected.post(
@@ -618,16 +663,25 @@ function JournalVoucher() {
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
           if (d?.id) {
-            setSaveResponse({ id: d.id, journal_no: d.journal_no ?? "", status: d.status });
+            setSaveResponse({
+              id: d.id,
+              journal_no: d.journal_no ?? "",
+              status: d.status,
+            });
             form.setFieldValue("document_id", String(d.id));
             form.setFieldValue("journal_no", d.journal_no ?? "");
           }
-          ToastNotification({ message: "Journal voucher saved successfully", type: "success" });
+          ToastNotification({
+            message: "Journal voucher saved successfully",
+            type: "success",
+          });
         }
       }
     } catch (err: unknown) {
       ToastNotification({
-        message: (err as { message?: string })?.message ?? "Failed to save journal voucher",
+        message:
+          (err as { message?: string })?.message ??
+          "Failed to save journal voucher",
         type: "error",
       });
     } finally {
@@ -658,7 +712,10 @@ function JournalVoucher() {
             status: "POSTED",
           }));
           form.setFieldValue("status", "POSTED");
-          ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+          ToastNotification({
+            message: "Journal voucher posted successfully",
+            type: "success",
+          });
           navigate("/journal-voucher");
         }
       } else {
@@ -670,18 +727,27 @@ function JournalVoucher() {
         if (res) {
           const d = res?.data?.data ?? res?.data ?? res;
           if (d?.id) {
-            setSaveResponse({ id: d.id, journal_no: d.journal_no ?? "", status: "POSTED" });
+            setSaveResponse({
+              id: d.id,
+              journal_no: d.journal_no ?? "",
+              status: "POSTED",
+            });
             form.setFieldValue("document_id", String(d.id));
             form.setFieldValue("journal_no", d.journal_no ?? "");
             form.setFieldValue("status", "POSTED");
           }
-          ToastNotification({ message: "Journal voucher posted successfully", type: "success" });
+          ToastNotification({
+            message: "Journal voucher posted successfully",
+            type: "success",
+          });
           navigate("/journal-voucher");
         }
       }
     } catch (err: unknown) {
       ToastNotification({
-        message: (err as { message?: string })?.message ?? "Failed to post journal voucher",
+        message:
+          (err as { message?: string })?.message ??
+          "Failed to post journal voucher",
         type: "error",
       });
     } finally {
@@ -777,7 +843,12 @@ function JournalVoucher() {
               <Group gap="sm" wrap="nowrap">
                 {(saveResponse.id || form.values.document_id) && (
                   <Group gap="xs" wrap="nowrap" align="center">
-                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                    <Text
+                      size="sm"
+                      fw={500}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter" }}
+                    >
                       Document ID
                     </Text>
                     <Badge
@@ -792,7 +863,12 @@ function JournalVoucher() {
                 )}
                 {saveResponse.journal_no && (
                   <Group gap="xs" wrap="nowrap" align="center">
-                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                    <Text
+                      size="sm"
+                      fw={500}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter" }}
+                    >
                       Journal No
                     </Text>
                     <Badge
@@ -807,13 +883,20 @@ function JournalVoucher() {
                 )}
                 {saveResponse.status && (
                   <Group gap="xs" wrap="nowrap">
-                    <Text size="sm" fw={500} c="dimmed" style={{ fontFamily: "Inter" }}>
+                    <Text
+                      size="sm"
+                      fw={500}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter" }}
+                    >
                       Status:
                     </Text>
                     <Badge
                       size="sm"
                       variant="light"
-                      color={saveResponse.status === "POSTED" ? "green" : "orange"}
+                      color={
+                        saveResponse.status === "POSTED" ? "green" : "orange"
+                      }
                       styles={{ root: { textTransform: "none" } }}
                     >
                       {saveResponse.status}
@@ -859,10 +942,17 @@ function JournalVoucher() {
         {/* ── Form ── */}
         <Box
           component="form"
-          onSubmit={isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)}
+          onSubmit={
+            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+          }
           style={
             isReadOnly
-              ? { opacity: 0.92, backgroundColor: "#f5f5f5", borderRadius: 8, padding: 16 }
+              ? {
+                  opacity: 0.92,
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: 8,
+                  padding: 16,
+                }
               : undefined
           }
         >
@@ -890,7 +980,11 @@ function JournalVoucher() {
                 size="xs"
                 fw={600}
                 c="white"
-                style={{ fontFamily: "Inter", letterSpacing: "0.8px", textTransform: "uppercase" }}
+                style={{
+                  fontFamily: "Inter",
+                  letterSpacing: "0.8px",
+                  textTransform: "uppercase",
+                }}
               >
                 Journal Voucher Details
               </Text>
@@ -939,8 +1033,8 @@ function JournalVoucher() {
             <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
               {/* ── Row 1: Daybook | Note | JV Reversal ── */}
               {/* <Grid columns={12} gutter="md"> */}
-                {/* Daybook */}
-                {/* <Grid.Col span={2}>
+              {/* Daybook */}
+              {/* <Grid.Col span={2}>
                   <Dropdown
                     label="Day Book"
                     placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
@@ -955,10 +1049,8 @@ function JournalVoucher() {
                   />
                 </Grid.Col> */}
 
-
-
-                {/* JV Reversal box */}
-                {/* <Grid.Col span={3}>
+              {/* JV Reversal box */}
+              {/* <Grid.Col span={3}>
                   <Box
                     p="sm"
                     style={{
@@ -1035,12 +1127,14 @@ function JournalVoucher() {
               {/* </Grid> */}
 
               {/* ── Row 2: Journal Date | Status | File Name | Upload | Download ── */}
-              <Grid columns={12}  >
-                                {/* Daybook */}
-                                <Grid.Col span={2}>
+              <Grid columns={12}>
+                {/* Daybook */}
+                <Grid.Col span={2}>
                   <Dropdown
                     label="Day Book"
-                    placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
+                    placeholder={
+                      isDaybookLoading ? "Loading..." : "Select day book"
+                    }
                     data={daybookOptions}
                     value={form.values.day_book_id || null}
                     onChange={(v) => form.setFieldValue("day_book_id", v ?? "")}
@@ -1075,13 +1169,15 @@ function JournalVoucher() {
                     placeholder="Select status"
                     data={STATUS_OPTIONS}
                     value={form.values.status || null}
-                    onChange={(v) => form.setFieldValue("status", v ?? "UNPOSTED")}
+                    onChange={(v) =>
+                      form.setFieldValue("status", v ?? "UNPOSTED")
+                    }
                     disabled={isReadOnly}
                     styles={inputStyles}
                   />
                 </Grid.Col>
 
-                                {/* Note */}
+                {/* Note */}
                 <Grid.Col span={3}>
                   <Textarea
                     label="Note"
@@ -1302,7 +1398,10 @@ function JournalVoucher() {
                             placeholder="Job"
                             value={row.job_no}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.job_no`, e.target.value)
+                              form.setFieldValue(
+                                `charges.${index}.job_no`,
+                                e.target.value,
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1328,7 +1427,10 @@ function JournalVoucher() {
                             placeholder="Booking No."
                             value={row.shipment_id}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.shipment_id`, e.target.value)
+                              form.setFieldValue(
+                                `charges.${index}.shipment_id`,
+                                e.target.value,
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1342,7 +1444,10 @@ function JournalVoucher() {
                             data={CN_R_OPTIONS}
                             value={row.cn_r || null}
                             onChange={(v) =>
-                              form.setFieldValue(`charges.${index}.cn_r`, v ?? "")
+                              form.setFieldValue(
+                                `charges.${index}.cn_r`,
+                                v ?? "",
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1359,7 +1464,11 @@ function JournalVoucher() {
                               value: String(item.id ?? ""),
                               label: String(item.charge_name ?? ""),
                             })}
-                            value={row.charge_id != null ? String(row.charge_id) : null}
+                            value={
+                              row.charge_id != null
+                                ? String(row.charge_id)
+                                : null
+                            }
                             displayValue={row.charge_name || undefined}
                             onChange={(value, selectedData) => {
                               form.setFieldValue(
@@ -1393,7 +1502,11 @@ function JournalVoucher() {
                               <SearchableSelect
                                 placeholder="Account name"
                                 apiEndpoint={URL.chartOfAccounts}
-                                value={row.account_id != null ? String(row.account_id) : null}
+                                value={
+                                  row.account_id != null
+                                    ? String(row.account_id)
+                                    : null
+                                }
                                 dropdownZIndex={1100}
                                 minSearchLength={1}
                                 searchFields={[
@@ -1402,37 +1515,68 @@ function JournalVoucher() {
                                   "account_name",
                                   "id",
                                 ]}
-                                displayFormat={(item: Record<string, unknown>) => {
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => {
                                   const id = String(item.id ?? "").trim();
-                                  const glName = String(item.gl_name ?? "").trim();
-                                  const gl = String(item.gl_account_code ?? "").trim();
-                                  const name = String(item.account_name ?? "").trim();
+                                  const glName = String(
+                                    item.gl_name ?? "",
+                                  ).trim();
+                                  const gl = String(
+                                    item.gl_account_code ?? "",
+                                  ).trim();
+                                  const name = String(
+                                    item.account_name ?? "",
+                                  ).trim();
                                   return {
                                     value: id,
-                                    label: formatChartOfAccountsLabel(glName, gl, name),
+                                    label: formatJournalVoucherAccountLabel(
+                                      gl,
+                                      name,
+                                      glName,
+                                    ),
                                   };
                                 }}
                                 displayValue={
-                                  row.account_display.trim()
-                                    ? row.account_display
-                                    : undefined
+                                  String(row.account_name ?? "").trim()
+                                    ? row.account_name
+                                    : String(row.account_display ?? "").trim()
+                                      ? row.account_display
+                                      : undefined
                                 }
                                 returnOriginalData
-                                onChange={(value, _selectedData, originalData) => {
+                                onChange={(
+                                  value,
+                                  _selectedData,
+                                  originalData,
+                                ) => {
                                   if (!value || !originalData) {
-                                    form.setFieldValue(`charges.${index}.account_code`, "");
-                                    form.setFieldValue(`charges.${index}.subledger_code`, "");
-                                    form.setFieldValue(`charges.${index}.account_name`, "");
-                                    form.setFieldValue(`charges.${index}.account_display`, "");
+                                    form.setFieldValue(
+                                      `charges.${index}.account_code`,
+                                      "",
+                                    );
+                                    form.setFieldValue(
+                                      `charges.${index}.subledger_code`,
+                                      "",
+                                    );
+                                    form.setFieldValue(
+                                      `charges.${index}.account_name`,
+                                      "",
+                                    );
+                                    form.setFieldValue(
+                                      `charges.${index}.account_display`,
+                                      "",
+                                    );
                                     return;
                                   }
                                   const displayName = String(
-                                    (originalData as { account_name?: string }).account_name ??
-                                      "",
+                                    (originalData as { account_name?: string })
+                                      .account_name ?? "",
                                   ).trim();
                                   form.setFieldValue(
                                     `charges.${index}.account_code`,
-                                    originalData.gl_account_code !== undefined &&
+                                    originalData.gl_account_code !==
+                                      undefined &&
                                       originalData.gl_account_code !== null
                                       ? String(originalData.gl_account_code)
                                       : "",
@@ -1446,13 +1590,19 @@ function JournalVoucher() {
                                   );
                                   form.setFieldValue(
                                     `charges.${index}.account_name`,
-                                    [
-                                      String((originalData as any).gl_account_code ?? "").trim(),
-                                      String((originalData as any).account_name ?? "").trim(),
-                                      String((originalData as any).gl_name ?? "").trim(),
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" - "),
+                                    formatJournalVoucherAccountLabel(
+                                      String(
+                                        (originalData as any).gl_account_code ??
+                                          "",
+                                      ).trim(),
+                                      String(
+                                        (originalData as any).account_name ??
+                                          "",
+                                      ).trim(),
+                                      String(
+                                        (originalData as any).gl_name ?? "",
+                                      ).trim(),
+                                    ),
                                   );
                                   form.setFieldValue(
                                     `charges.${index}.account_display`,
@@ -1508,7 +1658,10 @@ function JournalVoucher() {
                             placeholder="Code"
                             value={row.code}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.code`, e.target.value)
+                              form.setFieldValue(
+                                `charges.${index}.code`,
+                                e.target.value,
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1521,7 +1674,10 @@ function JournalVoucher() {
                             placeholder="Key"
                             value={row.key}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.key`, e.target.value)
+                              form.setFieldValue(
+                                `charges.${index}.key`,
+                                e.target.value,
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1538,10 +1694,18 @@ function JournalVoucher() {
                             readOnly={isReadOnly}
                             onChange={(v) => {
                               const val = v ?? "";
-                              form.setFieldValue(`charges.${index}.currency_id`, val);
-                              const opt = currencyOptions.find((o) => o.value === val);
+                              form.setFieldValue(
+                                `charges.${index}.currency_id`,
+                                val,
+                              );
+                              const opt = currencyOptions.find(
+                                (o) => o.value === val,
+                              );
                               const code = opt?.label ?? val;
-                              form.setFieldValue(`charges.${index}.currency_code`, code);
+                              form.setFieldValue(
+                                `charges.${index}.currency_code`,
+                                code,
+                              );
                               const roe = code ? getRoe(code) : null;
                               if (roe != null) {
                                 form.setFieldValue(`charges.${index}.roe`, roe);
@@ -1570,7 +1734,12 @@ function JournalVoucher() {
                               const roe = v as number | null;
                               form.setFieldValue(`charges.${index}.roe`, roe);
                               const amt = form.values.charges[index].amount;
-                              if (amt != null && amt > 0 && roe != null && roe > 0) {
+                              if (
+                                amt != null &&
+                                amt > 0 &&
+                                roe != null &&
+                                roe > 0
+                              ) {
                                 form.setFieldValue(
                                   `charges.${index}.local_amount`,
                                   clampAmt(amt * roe),
@@ -1591,7 +1760,10 @@ function JournalVoucher() {
                             value={row.amount ?? undefined}
                             onChange={(v) => {
                               const amt = v as number | null;
-                              form.setFieldValue(`charges.${index}.amount`, amt);
+                              form.setFieldValue(
+                                `charges.${index}.amount`,
+                                amt,
+                              );
                               const roe = form.values.charges[index].roe;
                               if (amt != null && roe != null && roe > 0) {
                                 form.setFieldValue(
@@ -1627,7 +1799,10 @@ function JournalVoucher() {
                             data={DR_CR_OPTIONS}
                             value={row.dr_cr || "Dr"}
                             onChange={(v) =>
-                              form.setFieldValue(`charges.${index}.dr_cr`, v ?? "Dr")
+                              form.setFieldValue(
+                                `charges.${index}.dr_cr`,
+                                v ?? "Dr",
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1640,7 +1815,10 @@ function JournalVoucher() {
                             placeholder="Narration"
                             value={row.narration}
                             onChange={(e) =>
-                              form.setFieldValue(`charges.${index}.narration`, e.target.value)
+                              form.setFieldValue(
+                                `charges.${index}.narration`,
+                                e.target.value,
+                              )
                             }
                             readOnly={isReadOnly}
                             styles={inputCell}
@@ -1675,7 +1853,9 @@ function JournalVoucher() {
                                       ...emptyRow(),
                                       currency_id: defaultCurrencyId,
                                       currency_code: defaultCurrencyCode,
-                                      roe: defaultCurrencyCode ? getRoe(defaultCurrencyCode) : null,
+                                      roe: defaultCurrencyCode
+                                        ? getRoe(defaultCurrencyCode)
+                                        : null,
                                     });
                                   }}
                                 >
@@ -1706,10 +1886,20 @@ function JournalVoucher() {
                       gap: 12,
                     }}
                   >
-                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 70 }}>
+                    <Text
+                      size="xs"
+                      fw={600}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter", minWidth: 70 }}
+                    >
                       Debit Total
                     </Text>
-                    <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+                    <Text
+                      size="sm"
+                      fw={700}
+                      c="#105476"
+                      style={{ fontFamily: "Inter" }}
+                    >
                       {totals.debit.toFixed(2)}
                     </Text>
                   </Box>
@@ -1726,10 +1916,20 @@ function JournalVoucher() {
                       gap: 12,
                     }}
                   >
-                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 75 }}>
+                    <Text
+                      size="xs"
+                      fw={600}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter", minWidth: 75 }}
+                    >
                       Credit Total
                     </Text>
-                    <Text size="sm" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+                    <Text
+                      size="sm"
+                      fw={700}
+                      c="#105476"
+                      style={{ fontFamily: "Inter" }}
+                    >
                       {totals.credit.toFixed(2)}
                     </Text>
                   </Box>
@@ -1740,19 +1940,29 @@ function JournalVoucher() {
                     style={{
                       border: `1px solid ${Math.abs(totals.difference) > 0.005 ? "#ffe3e3" : "#e3f2fc"}`,
                       borderRadius: 6,
-                      backgroundColor: Math.abs(totals.difference) > 0.005 ? "#fff5f5" : "white",
+                      backgroundColor:
+                        Math.abs(totals.difference) > 0.005
+                          ? "#fff5f5"
+                          : "white",
                       display: "flex",
                       alignItems: "center",
                       gap: 12,
                     }}
                   >
-                    <Text size="xs" fw={600} c="dimmed" style={{ fontFamily: "Inter", minWidth: 70 }}>
+                    <Text
+                      size="xs"
+                      fw={600}
+                      c="dimmed"
+                      style={{ fontFamily: "Inter", minWidth: 70 }}
+                    >
                       Difference
                     </Text>
                     <Text
                       size="sm"
                       fw={700}
-                      c={Math.abs(totals.difference) > 0.005 ? "red" : "#105476"}
+                      c={
+                        Math.abs(totals.difference) > 0.005 ? "red" : "#105476"
+                      }
                       style={{ fontFamily: "Inter" }}
                     >
                       {totals.difference.toFixed(2)}
@@ -1785,7 +1995,8 @@ function JournalVoucher() {
                     const newErrors: { [key: number]: string } = {};
                     supportingDocuments.forEach((doc, idx) => {
                       if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[idx] =
+                          `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                       }
                     });
                     setFileErrors(newErrors);
@@ -1808,7 +2019,7 @@ function JournalVoucher() {
                   {isUpdate ? "Update" : "Save"}
                 </Button>
               )}
-              {(!isReadOnly &&  isUpdate) && (
+              {!isReadOnly && isUpdate && (
                 <Button
                   variant="filled"
                   color="green"
@@ -1845,7 +2056,10 @@ function JournalVoucher() {
                   value={doc.name}
                   onChange={(e) => {
                     const updated = [...supportingDocuments];
-                    updated[index] = { ...updated[index], name: e.target.value };
+                    updated[index] = {
+                      ...updated[index],
+                      name: e.target.value,
+                    };
                     setSupportingDocuments(updated);
                   }}
                   styles={inputStyles}
@@ -1853,7 +2067,12 @@ function JournalVoucher() {
               </Grid.Col>
               <Grid.Col span={5.5}>
                 <Box>
-                  <Text size="sm" fw={500} mb={4} style={{ fontFamily: "Inter", fontSize: "13px" }}>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    mb={4}
+                    style={{ fontFamily: "Inter", fontSize: "13px" }}
+                  >
                     File
                   </Text>
                   <Dropzone
@@ -1867,9 +2086,13 @@ function JournalVoucher() {
                       }
                       if (file.size > MAX_FILE_SIZE) {
                         const newErrors = { ...fileErrors };
-                        newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[index] =
+                          `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                         setFileErrors(newErrors);
-                        ToastNotification({ type: "error", message: `File "${file.name}" exceeds 5MB limit` });
+                        ToastNotification({
+                          type: "error",
+                          message: `File "${file.name}" exceeds 5MB limit`,
+                        });
                         return;
                       }
                       const updated = [...supportingDocuments];
@@ -1883,7 +2106,11 @@ function JournalVoucher() {
                     }}
                     onReject={(files: any[]) => {
                       const rejection = files[0];
-                      if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
+                      if (
+                        rejection?.errors?.some(
+                          (e: any) => e.code === "file-too-large",
+                        )
+                      ) {
                         const newErrors = { ...fileErrors };
                         newErrors[index] = "File size exceeds 5MB limit";
                         setFileErrors(newErrors);
@@ -1907,19 +2134,36 @@ function JournalVoucher() {
                       justify="space-between"
                       gap="xs"
                       px="sm"
-                      style={{ minHeight: "36px", pointerEvents: "none", cursor: "pointer" }}
+                      style={{
+                        minHeight: "36px",
+                        pointerEvents: "none",
+                        cursor: "pointer",
+                      }}
                     >
                       <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
                         {doc.file ? (
                           <>
-                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
-                            <Text size="sm" truncate style={{ flex: 1, color: "var(--mantine-color-dark)" }}>
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
+                            <Text
+                              size="sm"
+                              truncate
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-dark)",
+                              }}
+                            >
                               {doc.file.name}
                             </Text>
                           </>
                         ) : doc.document_url ? (
                           <>
-                            <IconDownload size={16} color="var(--mantine-color-blue-6)" />
+                            <IconDownload
+                              size={16}
+                              color="var(--mantine-color-blue-6)"
+                            />
                             <Text
                               size="sm"
                               truncate
@@ -1932,8 +2176,14 @@ function JournalVoucher() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (doc.document_url && doc.original_document_name) {
-                                  downloadFile(doc.document_url, doc.original_document_name);
+                                if (
+                                  doc.document_url &&
+                                  doc.original_document_name
+                                ) {
+                                  downloadFile(
+                                    doc.document_url,
+                                    doc.original_document_name,
+                                  );
                                 }
                               }}
                             >
@@ -1942,8 +2192,16 @@ function JournalVoucher() {
                           </>
                         ) : (
                           <>
-                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
-                            <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
+                            <Text
+                              size="sm"
+                              c="dimmed"
+                              truncate
+                              style={{ flex: 1 }}
+                            >
                               Drag and drop or click to select file
                             </Text>
                           </>
@@ -1998,13 +2256,17 @@ function JournalVoucher() {
                     if (supportingDocuments.length === 1) {
                       setSupportingDocuments([{ name: "", file: null }]);
                     } else {
-                      const updated = supportingDocuments.filter((_, i) => i !== index);
+                      const updated = supportingDocuments.filter(
+                        (_, i) => i !== index,
+                      );
                       setSupportingDocuments(updated);
                       const newErrors: { [key: number]: string } = {};
                       Object.keys(fileErrors).forEach((key) => {
                         const keyNum = parseInt(key);
-                        if (keyNum < index) newErrors[keyNum] = fileErrors[keyNum];
-                        else if (keyNum > index) newErrors[keyNum - 1] = fileErrors[keyNum];
+                        if (keyNum < index)
+                          newErrors[keyNum] = fileErrors[keyNum];
+                        else if (keyNum > index)
+                          newErrors[keyNum - 1] = fileErrors[keyNum];
                       });
                       setFileErrors(newErrors);
                     }
@@ -2019,7 +2281,10 @@ function JournalVoucher() {
                     variant="light"
                     color="#105476"
                     onClick={() => {
-                      setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
+                      setSupportingDocuments([
+                        ...supportingDocuments,
+                        { name: "", file: null },
+                      ]);
                     }}
                   >
                     <IconPlus size={16} />
