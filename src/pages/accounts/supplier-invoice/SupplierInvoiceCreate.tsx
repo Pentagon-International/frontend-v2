@@ -395,6 +395,12 @@ export default function SupplierInvoiceCreate({
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate =
     isReversal && pathname.includes("/reversal/create");
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const supplierInvoiceResolvedBackPath =
+    isReversalCreate && !financeReturnTo
+      ? "/supplier-invoice"
+      : financeReturnTo || backPath;
   /** Loaded via `/supplier-invoice/view|edit/:id` (e.g. opened from Payment allocation modal). */
   const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
     useState<SupplierInvoiceListItem | null>(null);
@@ -1844,7 +1850,7 @@ export default function SupplierInvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(supplierInvoiceResolvedBackPath)}
             >
               Back
             </Button>

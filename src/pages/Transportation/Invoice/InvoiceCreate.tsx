@@ -412,6 +412,12 @@ function InvoiceCreate({
 }: InvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const handleInvoiceBack = () => {
+    if (financeReturnTo) navigate(financeReturnTo);
+    else navigate(-1);
+  };
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const isViewMode = location.pathname.includes("/view/");
@@ -1229,7 +1235,11 @@ function InvoiceCreate({
             )
               .trim()
               .toUpperCase();
-            if (!currency && rawCurrencyId != null && Array.isArray(currencyData)) {
+            if (
+              !currency &&
+              rawCurrencyId != null &&
+              Array.isArray(currencyData)
+            ) {
               const row = (
                 currencyData as {
                   id?: number;
@@ -3068,7 +3078,7 @@ function InvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={() => handleInvoiceBack()}
             >
               Back
             </Button>
@@ -4660,7 +4670,7 @@ function InvoiceCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={() => handleInvoiceBack()}
             >
               Cancel
             </Button>

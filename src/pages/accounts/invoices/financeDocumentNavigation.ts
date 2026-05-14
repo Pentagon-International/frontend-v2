@@ -10,6 +10,10 @@ export type FinanceDocumentListRow = {
   document_date?: string;
   status?: string;
   customer_name?: string;
+  daybook_type?: string;
+  branch_code?: string;
+  company_code?: string;
+  created_by?: string;
   api_endpoint?: string;
   filter_id_key?: string;
 };

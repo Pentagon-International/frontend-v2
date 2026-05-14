@@ -15,6 +15,7 @@ import {
   Loader,
   MantineProvider,
   Menu,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -55,6 +56,8 @@ import {
 import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
+import { postAPICall } from "../../../service/postApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import {
@@ -78,6 +81,9 @@ type UnpostedListFilters = {
   customer_name: string;
   customer_display: string | null;
   customer_code: string | null;
+  document_no: string;
+  /** Day book document type code (e.g. GLJ); sent as `filters.daybook_type`. */
+  daybook_type: string | null;
   document_date_from: Date | null;
   document_date_to: Date | null;
 };
@@ -86,6 +92,8 @@ const EMPTY_UNPOSTED_FILTERS: UnpostedListFilters = {
   customer_name: "",
   customer_display: null,
   customer_code: null,
+  document_no: "",
+  daybook_type: null,
   document_date_from: null,
   document_date_to: null,
 };
@@ -94,6 +102,7 @@ const columnLabels = {
   sno: "S.No",
   record_type: "Type",
   customer_name: "Customer / party",
+  daybook_type: "Daybook",
   document_no: "Document No",
   document_date: "Document date",
 } as const;
@@ -104,11 +113,14 @@ const columnDefault: Record<ColumnKey, boolean> = {
   sno: true,
   record_type: false,
   customer_name: true,
+  daybook_type: true,
   document_no: true,
   document_date: true,
 };
 
-function columnId<T extends Record<string, unknown>>(col: MRT_ColumnDef<T>): string {
+function columnId<T extends Record<string, unknown>>(
+  col: MRT_ColumnDef<T>,
+): string {
   if (col.id) return col.id;
   if ("accessorKey" in col && col.accessorKey) return String(col.accessorKey);
   return "";
@@ -137,9 +149,9 @@ export default function UnpostedDocumentsList() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
-  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(
-    () => ({ ...columnDefault }),
-  );
+  const [visibleColumns, setVisibleColumns] = useState<
+    Record<ColumnKey, boolean>
+  >(() => ({ ...columnDefault }));
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] = useState<UnpostedListFilters>({
     ...EMPTY_UNPOSTED_FILTERS,
@@ -154,16 +166,63 @@ export default function UnpostedDocumentsList() {
       JSON.stringify({
         customer_name: appliedFilters.customer_name,
         customer_code: appliedFilters.customer_code ?? "",
-        document_date_from: appliedFilters.document_date_from?.toISOString() ?? "",
+        document_no: appliedFilters.document_no,
+        daybook_type: appliedFilters.daybook_type ?? "",
+        document_date_from:
+          appliedFilters.document_date_from?.toISOString() ?? "",
         document_date_to: appliedFilters.document_date_to?.toISOString() ?? "",
       }),
     [appliedFilters],
   );
 
+  const { data: daybookMasterRows = [] } = useQuery({
+    queryKey: ["daybook-master", "unposted-documents-filter"],
+    queryFn: async () => {
+      const response = await postAPICall(
+        URL.daybook,
+        { filters: {} },
+        API_HEADER,
+      );
+      return (response as { data?: unknown[] })?.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const daybookFilterOptions = useMemo(() => {
+    const rows = daybookMasterRows as {
+      document_type?: string;
+      daybook_type?: string;
+      type?: string;
+      name?: string;
+      daybook_name?: string;
+    }[];
+    if (!Array.isArray(rows)) return [];
+    const map = new Map<string, string>();
+    for (const item of rows) {
+      const typeVal = String(
+        item.document_type ?? item.daybook_type ?? item.type ?? "",
+      ).trim();
+      if (!typeVal) continue;
+      const displayName = String(item.name ?? item.daybook_name ?? "").trim();
+      const label =
+        displayName && displayName !== typeVal
+          ? `${displayName} (${typeVal})`
+          : typeVal;
+      if (!map.has(typeVal)) map.set(typeVal, label);
+    }
+    return [...map.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [daybookMasterRows]);
+
   const index = pagination.pageIndex * pagination.pageSize;
 
   useEffect(() => {
-    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }));
+    setPagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
   }, [debouncedSearch]);
 
   const applyFilters = () => {
@@ -189,14 +248,20 @@ export default function UnpostedDocumentsList() {
       filters.customer_name = appliedFilters.customer_name.trim();
     }
     if (appliedFilters.document_date_from) {
-      filters.document_date_from = dayjs(appliedFilters.document_date_from).format(
-        "YYYY-MM-DD",
-      );
+      filters.document_date_from = dayjs(
+        appliedFilters.document_date_from,
+      ).format("YYYY-MM-DD");
     }
     if (appliedFilters.document_date_to) {
       filters.document_date_to = dayjs(appliedFilters.document_date_to).format(
         "YYYY-MM-DD",
       );
+    }
+    if (appliedFilters.document_no.trim()) {
+      filters.document_no = appliedFilters.document_no.trim();
+    }
+    if (appliedFilters.daybook_type?.trim()) {
+      filters.daybook_type = appliedFilters.daybook_type.trim();
     }
     return { filters };
   };
@@ -224,17 +289,23 @@ export default function UnpostedDocumentsList() {
         const raw = response as { data?: unknown };
         const bodyCandidate =
           raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
-        const body = bodyCandidate != null
-          ? (bodyCandidate as FinanceDocumentsFilterResponse | FinanceDocumentListRow[])
-          : null;
+        const body =
+          bodyCandidate != null
+            ? (bodyCandidate as
+                | FinanceDocumentsFilterResponse
+                | FinanceDocumentListRow[])
+            : null;
 
         if (!body) {
           setTotalRecords(0);
           return { data: [] };
         }
 
-        const list = Array.isArray((body as FinanceDocumentsFilterResponse).data)
-          ? ((body as FinanceDocumentsFilterResponse).data as FinanceDocumentListRow[])
+        const list = Array.isArray(
+          (body as FinanceDocumentsFilterResponse).data,
+        )
+          ? ((body as FinanceDocumentsFilterResponse)
+              .data as FinanceDocumentListRow[])
           : Array.isArray(body)
             ? (body as FinanceDocumentListRow[])
             : [];
@@ -246,11 +317,16 @@ export default function UnpostedDocumentsList() {
           ("total" in body || "index" in body)
             ? (body as unknown as Record<string, unknown>)
             : (raw as Record<string, unknown>);
-        const listTotal = getBookingShipmentFilterListTotal(totalEnvelope, list, index);
+        const listTotal = getBookingShipmentFilterListTotal(
+          totalEnvelope,
+          list,
+          index,
+        );
         setTotalRecords(listTotal);
         return { data: list };
       } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
+        const status = (err as { response?: { status?: number } })?.response
+          ?.status;
         if (status === 404) {
           setTotalRecords(0);
           return { data: [] };
@@ -271,7 +347,10 @@ export default function UnpostedDocumentsList() {
   const tableData = listResult?.data ?? [];
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const totalPages = Math.max(
+      1,
+      Math.ceil(totalRecords / pagination.pageSize),
+    );
     const maxPageIndex = totalPages - 1;
     if (pagination.pageIndex > maxPageIndex) {
       setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
@@ -343,6 +422,16 @@ export default function UnpostedDocumentsList() {
         ),
       },
       {
+        accessorKey: "daybook_type",
+        header: "Daybook",
+        size: 120,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
         accessorKey: "document_no",
         header: "Document No",
         size: 180,
@@ -374,7 +463,11 @@ export default function UnpostedDocumentsList() {
           const busy = openingKey === key;
           if (id == null) {
             return (
-              <Text size="xs" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
+              <Text
+                size="xs"
+                c="dimmed"
+                style={{ fontFamily: erpTheme.fontSans }}
+              >
                 —
               </Text>
             );
@@ -403,7 +496,12 @@ export default function UnpostedDocumentsList() {
               classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
             >
               <Menu.Target>
-                <ActionIcon variant="subtle" color="gray" size="sm" loading={busy}>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  loading={busy}
+                >
                   <IconDots size={16} />
                 </ActionIcon>
               </Menu.Target>
@@ -423,7 +521,10 @@ export default function UnpostedDocumentsList() {
                     <UnstyledButton onClick={() => void run("edit")}>
                       <Group gap="sm">
                         <IconEdit size={16} color={primary} />
-                        <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: erpTheme.fontSans }}
+                        >
                           Edit
                         </Text>
                       </Group>
@@ -554,7 +655,13 @@ export default function UnpostedDocumentsList() {
     <MantineProvider theme={erpListGeistMantineTheme}>
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
-        style={{ ...erpListGeistRootTypography, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+        style={{
+          ...erpListGeistRootTypography,
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         {openingKey != null && (
           <Box
@@ -570,7 +677,12 @@ export default function UnpostedDocumentsList() {
           >
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text size="sm" fw={500} c="#105476" style={{ fontFamily: erpTheme.fontSans }}>
+              <Text
+                size="sm"
+                fw={500}
+                c="#105476"
+                style={{ fontFamily: erpTheme.fontSans }}
+              >
                 Opening document…
               </Text>
             </Stack>
@@ -668,7 +780,7 @@ export default function UnpostedDocumentsList() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Customer name, document date range",
+            subtitle: "Customer, document no, daybook, document date range",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -681,6 +793,54 @@ export default function UnpostedDocumentsList() {
             ),
             children: (
               <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Document no"
+                      placeholder="e.g. JV-2605-0078"
+                      value={draftFilters.document_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          document_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Select
+                      label="Daybook"
+                      placeholder="All daybooks"
+                      clearable
+                      searchable
+                      data={daybookFilterOptions}
+                      value={draftFilters.daybook_type}
+                      onChange={(v) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          daybook_type: v,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
@@ -700,7 +860,9 @@ export default function UnpostedDocumentsList() {
                       searchFields={["customer_code", "customer_name", "name"]}
                       displayFormat={(item) => ({
                         value: String(item.customer_code ?? item.id ?? ""),
-                        label: String(item.customer_name ?? item.name ?? "").trim(),
+                        label: String(
+                          item.customer_name ?? item.name ?? "",
+                        ).trim(),
                       })}
                       minSearchLength={1}
                       dropdownZIndex={1000}
@@ -757,7 +919,14 @@ export default function UnpostedDocumentsList() {
           }}
           table={{
             footer: (
-              <Box px="md" py={0} style={{ borderTop: `1px solid ${border}`, backgroundColor: cardBg }}>
+              <Box
+                px="md"
+                py={0}
+                style={{
+                  borderTop: `1px solid ${border}`,
+                  backgroundColor: cardBg,
+                }}
+              >
                 <PaginationBar
                   pageSize={pagination.pageSize}
                   currentPage={pagination.pageIndex + 1}
@@ -771,13 +940,24 @@ export default function UnpostedDocumentsList() {
               </Box>
             ),
             children: listError ? (
-              <Center py="xl" style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}>
-                <Text size="sm" c="dimmed" style={{ fontFamily: erpTheme.fontSans }}>
-                  Error loading unposted documents. Please try refreshing the page.
+              <Center
+                py="xl"
+                style={{ backgroundColor: cardBg, flex: 1, minHeight: 200 }}
+              >
+                <Text
+                  size="sm"
+                  c="dimmed"
+                  style={{ fontFamily: erpTheme.fontSans }}
+                >
+                  Error loading unposted documents. Please try refreshing the
+                  page.
                 </Text>
               </Center>
             ) : loading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading unposted documents…" />
+              <ERPListTableLoading
+                theme={erpTheme}
+                message="Loading unposted documents…"
+              />
             ) : (
               <MantineReactTable table={table} />
             ),

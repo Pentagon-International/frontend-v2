@@ -525,8 +525,10 @@ export default function PaymentCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
-  const [isOpeningSupplierInvoiceFromModal, setIsOpeningSupplierInvoiceFromModal] =
-    useState(false);
+  const [
+    isOpeningSupplierInvoiceFromModal,
+    setIsOpeningSupplierInvoiceFromModal,
+  ] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -675,6 +677,13 @@ export default function PaymentCreate({
     (pathname.includes("/reversal/edit") ||
       pathname.includes("/reversal/view"));
   const isReversalCreate = _isReversal && pathname.includes("/reversal/create");
+
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const paymentResolvedBackPath =
+    isReversalCreate && !financeReturnTo
+      ? "/payment"
+      : financeReturnTo || backPath;
 
   // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
@@ -1122,7 +1131,9 @@ export default function PaymentCreate({
             : null;
 
       const statusUpper = record
-        ? String(record.status ?? "").trim().toUpperCase()
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
         : "";
       const mode = statusUpper === "POSTED" ? "view" : "edit";
 
@@ -2022,7 +2033,7 @@ export default function PaymentCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(paymentResolvedBackPath)}
             >
               Back
             </Button>
@@ -2879,7 +2890,9 @@ export default function PaymentCreate({
                               {inv.document_no ?? "—"}
                             </Text>
                           ) : (
-                            <Text component="span">{inv.document_no ?? "—"}</Text>
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
                           )}
                         </Table.Td>
                         <Table.Td>
@@ -2900,9 +2913,7 @@ export default function PaymentCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {formatOutstandingDocumentAmountInLocal(
-                            inv.amount,
-                          )}
+                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -3289,7 +3300,7 @@ export default function PaymentCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(paymentResolvedBackPath)}
             >
               Cancel
             </Button>

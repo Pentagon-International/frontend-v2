@@ -256,6 +256,13 @@ function JournalVoucher() {
   const isViewMode = location.pathname.includes("/view/");
   const isReadOnly = isViewMode;
 
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const handleFinanceDocumentBack = () => {
+    if (financeReturnTo) navigate(financeReturnTo);
+    else navigate(-1);
+  };
+
   const defaultBranch = user?.branches?.find(
     (b: { is_default?: boolean }) => b.is_default === true,
   ) as
@@ -931,7 +938,7 @@ function JournalVoucher() {
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={() => handleFinanceDocumentBack()}
               styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
             >
               Back
@@ -1978,7 +1985,7 @@ function JournalVoucher() {
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={() => handleFinanceDocumentBack()}
               styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
             >
               Cancel

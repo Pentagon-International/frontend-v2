@@ -219,9 +219,7 @@ const fetchOutstandingAllocations = async (payload: {
     payload,
     API_HEADER,
   );
-  const res = response as
-    | { data?: unknown }
-    | InvoiceCombinedItem[];
+  const res = response as { data?: unknown } | InvoiceCombinedItem[];
   const raw = Array.isArray(res) ? res : res?.data;
   if (Array.isArray(raw)) return raw as InvoiceCombinedItem[];
   if (raw && typeof raw === "object") {
@@ -485,18 +483,21 @@ function isPartyTdsCalculatedRecord(p: {
   is_tds_calcualted_record?: unknown;
   is_tds_calculated_record?: unknown;
 }): boolean {
-  const raw =
-    p.is_tds_calcualted_record ?? p.is_tds_calculated_record;
+  const raw = p.is_tds_calcualted_record ?? p.is_tds_calculated_record;
   if (raw === true || raw === 1) return true;
   if (raw === false || raw === 0) return false;
-  const s = String(raw ?? "").trim().toLowerCase();
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   return s === "true" || s === "1" || s === "yes";
 }
 
-function receiptPartyDrCrToSide(
-  drCr: string | undefined | null,
-): "Dr" | "Cr" {
-  return String(drCr ?? "").trim().toLowerCase() === "dr" ? "Dr" : "Cr";
+function receiptPartyDrCrToSide(drCr: string | undefined | null): "Dr" | "Cr" {
+  return String(drCr ?? "")
+    .trim()
+    .toLowerCase() === "dr"
+    ? "Dr"
+    : "Cr";
 }
 
 function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
@@ -753,7 +754,9 @@ export default function ReceiptCreate({
               p.subledger_id != null ? String(p.subledger_id) : null,
             account_code: String(p.account_code ?? "").trim(),
             customer_code: String(p.subledger_code ?? "").trim(),
-            customer_display: String(p.account_name ?? p.subledger_name ?? "").trim(),
+            customer_display: String(
+              p.account_name ?? p.subledger_name ?? "",
+            ).trim(),
             narration: String(p.narration ?? "").trim(),
             currency: (p.currency_code ?? localCurrency).toString().trim(),
             roe: parseNum(p.roe) ?? 1,
@@ -1018,7 +1021,10 @@ export default function ReceiptCreate({
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency, _isReversal));
+    form.insertListItem(
+      "details",
+      getDefaultDetailRow(localCurrency, _isReversal),
+    );
   };
 
   const removeDetailRow = (idx: number) => {
@@ -1138,7 +1144,9 @@ export default function ReceiptCreate({
             : null;
 
       const statusUpper = record
-        ? String(record.status ?? "").trim().toUpperCase()
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
         : "";
       const mode = statusUpper === "POSTED" ? "view" : "edit";
 
@@ -1418,7 +1426,10 @@ export default function ReceiptCreate({
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "Dr").toString(),
+        dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr"
+          ? d.dr_cr
+          : "Dr"
+        ).toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
@@ -1943,10 +1954,12 @@ export default function ReceiptCreate({
               ? "Create Receipt"
               : titleOverride;
 
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const effectiveBackPath =
-    _isReversal && pathname.includes("/reversal/create")
+    _isReversal && pathname.includes("/reversal/create") && !financeReturnTo
       ? "/receipt"
-      : backPath;
+      : financeReturnTo || backPath;
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -2413,7 +2426,8 @@ export default function ReceiptCreate({
                                 };
                                 const name = orig?.account_name ?? "";
                                 const subledgerCode = orig?.sl_code ?? "";
-                                const glAccountCode = orig?.gl_account_code ?? "";
+                                const glAccountCode =
+                                  orig?.gl_account_code ?? "";
                                 const sid =
                                   orig?.id != null
                                     ? orig.id
@@ -2453,12 +2467,20 @@ export default function ReceiptCreate({
                                   account_name?: string;
                                 };
                                 const id = String(i.id ?? "").trim();
-                                const gl = String(i.gl_account_code ?? "").trim();
-                                const name = String(i.account_name ?? "").trim();
+                                const gl = String(
+                                  i.gl_account_code ?? "",
+                                ).trim();
+                                const name = String(
+                                  i.account_name ?? "",
+                                ).trim();
                                 const glName = String(i.gl_name ?? "").trim();
                                 return {
                                   value: id,
-                                  label: formatChartOfAccountsLabel(glName, gl, name),
+                                  label: formatChartOfAccountsLabel(
+                                    glName,
+                                    gl,
+                                    name,
+                                  ),
                                 };
                               }}
                               searchFields={[
@@ -2472,14 +2494,22 @@ export default function ReceiptCreate({
                             />
 
                             {(() => {
-                              const accountCode = row?.account_code?.toString().trim();
-                              const subledgerCode = row?.customer_code?.toString().trim();
+                              const accountCode = row?.account_code
+                                ?.toString()
+                                .trim();
+                              const subledgerCode = row?.customer_code
+                                ?.toString()
+                                .trim();
                               if (!accountCode && !subledgerCode) return null;
                               return (
                                 <Text size="xs" c="dimmed" mt={4}>
-                                  {accountCode ? `Account Code: ${accountCode}` : ""}
+                                  {accountCode
+                                    ? `Account Code: ${accountCode}`
+                                    : ""}
                                   {accountCode && subledgerCode ? "  |  " : ""}
-                                  {subledgerCode ? `Subledger Code: ${subledgerCode}` : ""}
+                                  {subledgerCode
+                                    ? `Subledger Code: ${subledgerCode}`
+                                    : ""}
                                 </Text>
                               );
                             })()}
@@ -3012,13 +3042,17 @@ export default function ReceiptCreate({
                                 textDecoration: "underline",
                                 cursor: "pointer",
                               }}
-                              onClick={() => void openInvoiceFromAllocationRow(inv)}
+                              onClick={() =>
+                                void openInvoiceFromAllocationRow(inv)
+                              }
                               title="Open invoice"
                             >
                               {inv.document_no ?? "—"}
                             </Text>
                           ) : (
-                            <Text component="span">{inv.document_no ?? "—"}</Text>
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
                           )}
                         </Table.Td>
                         <Table.Td>
@@ -3039,9 +3073,7 @@ export default function ReceiptCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {formatOutstandingDocumentAmountInLocal(
-                            inv.amount,
-                          )}
+                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                       </Table.Tr>
                     ))}
