@@ -14,10 +14,20 @@ export type PipelineProductByServiceRow = {
   expected: number;
 };
 
+export type PipelineProductByServiceSummary = {
+  total_expected: number;
+  total_potential: number;
+  total_pipeline: number;
+  total_quoted: number;
+  total_gained: number;
+  total_lost: number;
+} | null;
+
 export interface PipelineProductByServiceTableProps {
   title?: string;
   subtitle?: string;
   rows: PipelineProductByServiceRow[];
+  summary?: PipelineProductByServiceSummary;
   loading?: boolean;
   onRowClick?: (row: PipelineProductByServiceRow) => void;
   emptyMessage?: string;
@@ -193,6 +203,7 @@ export default function PipelineProductByServiceTable({
   title = "By product",
   subtitle,
   rows,
+  summary,
   loading,
   onRowClick,
   emptyMessage = "No product pipeline data",
@@ -383,9 +394,108 @@ export default function PipelineProductByServiceTable({
                 </Box>
               );
             })}
+
+            {summary ? (
+              <TotalsFooterRow
+                gridTemplate={GRID_TEMPLATE}
+                labelLeading="Total"
+                labelTrailing={`${prepared.sorted.length} products`}
+                potential={summary.total_potential}
+                pipeline={summary.total_pipeline}
+                gained={summary.total_gained}
+                inProgress={
+                  Math.max(0, summary.total_quoted) +
+                  Math.max(0, summary.total_expected)
+                }
+                lost={summary.total_lost}
+                formatAmount={formatAmount}
+              />
+            ) : null}
           </Box>
         </Box>
       </Stack>
+    </Box>
+  );
+}
+
+function TotalsFooterRow({
+  gridTemplate,
+  labelLeading,
+  labelTrailing,
+  potential,
+  pipeline,
+  gained,
+  inProgress,
+  lost,
+  formatAmount,
+}: {
+  gridTemplate: string;
+  labelLeading: string;
+  labelTrailing?: string;
+  potential: number;
+  pipeline: number;
+  gained: number;
+  inProgress: number;
+  lost: number;
+  formatAmount: (n: number) => string;
+}) {
+  const TOTAL_NUMBER_STYLE: React.CSSProperties = {
+    ...BASE_NUMBER_STYLE,
+    fontSize: 13,
+    fontWeight: 700,
+    color: enquiryConversionColors.heading,
+    textAlign: "center",
+    fontVariantNumeric: "tabular-nums",
+  };
+
+  return (
+    <Box
+      style={{
+        display: "grid",
+        gridTemplateColumns: gridTemplate,
+        columnGap: 8,
+        alignItems: "center",
+        padding: "12px 0",
+        marginTop: 4,
+        borderTop: "2px solid #cbd5e1",
+        background: "#f8fafc",
+        borderRadius: 6,
+      }}
+    >
+      <Box
+        style={{
+          minWidth: 0,
+          textAlign: "left",
+          padding: "4px 12px",
+        }}
+      >
+        <Text
+          fz={13}
+          fw={800}
+          tt="uppercase"
+          c={enquiryConversionColors.heading}
+          lh={1.35}
+          style={{ letterSpacing: "0.04em" }}
+        >
+          {labelLeading}
+        </Text>
+        {labelTrailing ? (
+          <Text
+            fz={11}
+            fw={500}
+            c={enquiryConversionColors.muted}
+            mt={2}
+            lh={1.35}
+          >
+            {labelTrailing}
+          </Text>
+        ) : null}
+      </Box>
+      <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(potential)}</Text>
+      <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(pipeline)}</Text>
+      <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(gained)}</Text>
+      <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(inProgress)}</Text>
+      <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(lost)}</Text>
     </Box>
   );
 }

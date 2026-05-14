@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -13,8 +13,11 @@ import {
   Center,
   Grid,
   Group,
+  Loader,
   MantineProvider,
   Menu,
+  Select,
+  Stack,
   Text,
   TextInput,
   UnstyledButton,
@@ -40,12 +43,12 @@ import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
   Dropdown,
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   SingleDateInput,
   erpListFilterFieldCellStyle,
   erpListFilterUnifiedMantineStyles,
@@ -230,10 +233,44 @@ function JournalVoucherMaster() {
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
 
   const [visibleColumns, setVisibleColumns] = useState<JournalVoucherColumnVisibility>(
     () => ({ ...journalVoucherColumnDefault }),
+  );
+
+  /**
+   * Column-header filtering: which header is currently in "edit" mode.
+   * Lifted to the page so opening a new header collapses any prior editor,
+   * and so the editor state survives MRT re-renders triggered by filter
+   * changes flowing through the column memo's deps.
+   */
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  /**
+   * Header-filter writes update BOTH draftFilters and appliedFilters at once
+   * (instant filtering, mirroring the EnquiryMaster column-header UX). This
+   * keeps the advanced filter section visually in sync, resets pagination to
+   * page 1, and persists the new filter to the global list-filter store so
+   * the value is preserved when navigating back from associated pages.
+   */
+  const commitHeaderFilters = useCallback(
+    (updater: (prev: JournalVoucherFilters) => JournalVoucherFilters) => {
+      setDraftFilters((prev) => {
+        const next = updater(prev);
+        setAppliedFilters(next);
+        setStoreFilters(LIST_KEY, next);
+        return next;
+      });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
+    [setStoreFilters],
   );
 
   useEffect(() => {
@@ -506,6 +543,21 @@ function JournalVoucherMaster() {
         accessorKey: "document_no",
         header: "Document No",
         size: 150,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Document No"
+            value={appliedFilters.document_no}
+            displayValue={appliedFilters.document_no}
+            theme={erpTheme}
+            placeholder="Filter Document No"
+            isEditing={editingHeaderId === "document_no"}
+            onStartEdit={() => openHeaderEditor("document_no")}
+            onStopEdit={() => collapseHeaderEditor("document_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, document_no: next }))
+            }
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" fw={600} c={primary} style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() || "-"}
@@ -528,6 +580,21 @@ function JournalVoucherMaster() {
         accessorKey: "account_name",
         header: "Account Name",
         size: 170,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Account Name"
+            value={appliedFilters.account_name}
+            displayValue={appliedFilters.account_name}
+            theme={erpTheme}
+            placeholder="Filter Account Name"
+            isEditing={editingHeaderId === "account_name"}
+            onStartEdit={() => openHeaderEditor("account_name")}
+            onStopEdit={() => collapseHeaderEditor("account_name")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, account_name: next }))
+            }
+          />
+        ),
         Cell: ({ cell }) => cell.getValue<string>() || "-",
       },
       {
@@ -603,6 +670,39 @@ function JournalVoucherMaster() {
         accessorKey: "status",
         header: "Status",
         size: 110,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Status"
+            value={appliedFilters.status}
+            displayValue={appliedFilters.status}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "status"}
+            onStartEdit={() => openHeaderEditor("status")}
+            onStopEdit={() => collapseHeaderEditor("status")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Status"
+                searchable
+                clearable
+                size="xs"
+                data={["POSTED", "UNPOSTED"]}
+                value={appliedFilters.status || ""}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => {
           const val = cell.getValue<string>();
           if (!val) return "-";
@@ -723,6 +823,11 @@ function JournalVoucherMaster() {
       erpTheme,
       dateFormat,
       primary,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      filterFieldStyles,
     ],
   );
 
@@ -740,7 +845,13 @@ function JournalVoucherMaster() {
 
   const table = useMantineReactTable({
     columns,
-    data: tableData,
+    /*
+     * During a fetch we pass an empty data array so MRT renders
+     * `renderEmptyRowsFallback` (the loader) inside `<tbody>` while keeping
+     * `<thead>` (with the column-header filter inputs) and the pagination
+     * footer mounted. Mirrors EnquiryListNativeTables' loader-in-body UX.
+     */
+    data: isLoading ? [] : tableData,
     state: { pagination },
     enableColumnFilters: false,
     enablePagination: true,
@@ -778,47 +889,80 @@ function JournalVoucherMaster() {
         backgroundColor: "transparent",
       },
     },
-    mantineTableBodyCellProps: ({ column }) => ({
-      style: {
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: cardBg,
-        ...(column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "30px",
-              zIndex: 2,
-              borderLeft: `1px solid ${border}`,
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {}),
-      },
-    }),
-    mantineTableHeadCellProps: ({ column }) => ({
-      style: {
-        padding: "8px 16px",
-        fontSize: 14,
-        fontFamily: erpTheme.fontSans,
-        color: muted,
-        backgroundColor: erpTheme.headerBg,
-        top: 0,
-        zIndex: 3,
-        borderBottom: `1px solid ${border}`,
-        ...(column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              zIndex: 4,
-              minWidth: "80px",
-              backgroundColor: erpTheme.headerBg,
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {}),
-      },
-    }),
+    mantineTableBodyCellProps: ({ column }) => {
+      const colSize = column.getSize();
+      return {
+        style: {
+          /*
+           * Pin cell width to the column's declared `size` so the column
+           * cannot resize when its header swaps between the static label
+           * and the inline filter editor.
+           */
+          width: colSize,
+          minWidth: colSize,
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: cardBg,
+          ...(column.id === "actions"
+            ? {
+                // Pinned-right Actions cell. `minWidth: 80px` matches the
+                // head cell so the sticky body cell and sticky head cell
+                // stay the same width. `zIndex: 2` stays BELOW the sticky
+                // head (`zIndex: 4`) so the head paints over the body cell
+                // at the bottom-right corner during horizontal scroll.
+                position: "sticky" as const,
+                right: 0,
+                minWidth: "80px",
+                zIndex: 2,
+                borderLeft: `1px solid ${border}`,
+                boxShadow: "1px -2px 4px 0px #00000040",
+              }
+            : {}),
+        },
+      };
+    },
+    mantineTableHeadCellProps: ({ column }) => {
+      const colSize = column.getSize();
+      return {
+        style: {
+          /*
+           * Pin head cell width to the column's declared `size` (matches the
+           * body cell width) so toggling between the column label and the
+           * inline filter editor never resizes the header.
+           */
+          width: colSize,
+          minWidth: colSize,
+          padding: "8px 16px",
+          fontSize: 14,
+          fontFamily: erpTheme.fontSans,
+          color: muted,
+          backgroundColor: erpTheme.headerBg,
+          top: 0,
+          zIndex: 3,
+          borderBottom: `1px solid ${border}`,
+          /*
+           * Stable header cell height so swapping between the column label
+           * and the inline filter editor never resizes the row. Matches the
+           * EnquiryMaster header row height (52.4 → 52).
+           */
+          minHeight: 52,
+          height: 52,
+          verticalAlign: "middle" as const,
+          ...(column.id === "actions"
+            ? {
+                position: "sticky" as const,
+                right: 0,
+                zIndex: 4,
+                minWidth: "80px",
+                backgroundColor: erpTheme.headerBg,
+                boxShadow: "0px -2px 4px 0px #00000040",
+              }
+            : {}),
+        },
+      };
+    },
     mantineTableContainerProps: {
       style: {
         height: "100%",
@@ -829,15 +973,24 @@ function JournalVoucherMaster() {
       },
     },
     renderEmptyRowsFallback: () => (
-      <tr>
-        <td colSpan={columns.length}>
-          <Center py="xl" style={{ backgroundColor: cardBg }}>
+      <Center
+        py={80}
+        style={{ width: "100%", backgroundColor: cardBg }}
+        className="erp-header-filter-fade"
+      >
+        {isLoading ? (
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
             <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              No journal vouchers found
+              Loading journal vouchers…
             </Text>
-          </Center>
-        </td>
-      </tr>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            No journal vouchers found
+          </Text>
+        )}
+      </Center>
     ),
   });
 
@@ -1090,9 +1243,13 @@ function JournalVoucherMaster() {
                   Error loading journal vouchers. Please try refreshing the page.
                 </Text>
               </Center>
-            ) : isLoading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading journal vouchers…" />
             ) : (
+              /*
+               * Always render the table so `<thead>` (column-header filters)
+               * and the pagination footer stay visible. While loading, MRT
+               * shows `renderEmptyRowsFallback` (the loader) inside `<tbody>`
+               * only — matching EnquiryListNativeTables' UX.
+               */
               <MantineReactTable table={table} />
             ),
           }}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -13,8 +13,11 @@ import {
   Center,
   Grid,
   Group,
+  Loader,
   MantineProvider,
   Menu,
+  Select,
+  Stack,
   Text,
   TextInput,
   UnstyledButton,
@@ -39,12 +42,12 @@ import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
   Dropdown,
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
   SearchableSelect,
   SingleDateInput,
   erpListFilterFieldCellStyle,
@@ -187,10 +190,40 @@ export default function OverseasReceiptMaster() {
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
 
   const [visibleColumns, setVisibleColumns] = useState<OverseasReceiptColumnVisibility>(
     () => ({ ...overseasReceiptColumnDefault }),
+  );
+
+  /**
+   * Column-header filtering: which header is currently in "edit" mode.
+   * Mirrors the EnquiryMaster click-to-filter UX.
+   */
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  /**
+   * Header-filter writes update BOTH draftFilters and appliedFilters at once
+   * (instant filtering), reset pagination, and persist to the global store so
+   * filters survive navigation to associated pages.
+   */
+  const commitHeaderFilters = useCallback(
+    (updater: (prev: OverseasReceiptFilters) => OverseasReceiptFilters) => {
+      setDraftFilters((prev) => {
+        const next = updater(prev);
+        setAppliedFilters(next);
+        setStoreFilters(LIST_KEY, next);
+        return next;
+      });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
+    [setStoreFilters],
   );
 
   useEffect(() => {
@@ -406,7 +439,8 @@ export default function OverseasReceiptMaster() {
   );
 
   const allColumns = useMemo<MRT_ColumnDef<ReceiptRow>[]>(
-    () => [
+    () => {
+      return [
       {
         id: "sno",
         header: "S.No",
@@ -419,11 +453,87 @@ export default function OverseasReceiptMaster() {
         accessorKey: "day_book_name",
         header: "Day Book",
         size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Day Book"
+            value={appliedFilters.day_book_id}
+            displayValue={appliedFilters.day_book_name}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "day_book_name"}
+            onStartEdit={() => openHeaderEditor("day_book_name")}
+            onStopEdit={() => collapseHeaderEditor("day_book_name")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <SearchableSelect
+                apiEndpoint={URL.daybookGet}
+                placeholder="Day Book"
+                value={appliedFilters.day_book_id}
+                displayValue={appliedFilters.day_book_name}
+                onChange={(val, selectedData) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    day_book_id: val || "",
+                    day_book_name: selectedData?.label || "",
+                  }));
+                  if (val) onClose();
+                }}
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.id ?? ""),
+                  label: String(item.name ?? ""),
+                })}
+                searchFields={["name"]}
+                size="xs"
+                autoFocus={autoFocus}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
       },
       {
         accessorKey: "receipt_no",
         header: "Receipt No",
         size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Receipt No"
+            value={appliedFilters.receipt_no}
+            displayValue={appliedFilters.receipt_no}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "receipt_no"}
+            onStartEdit={() => openHeaderEditor("receipt_no")}
+            onStopEdit={() => collapseHeaderEditor("receipt_no")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <SearchableSelect
+                apiEndpoint={URL.receipt}
+                placeholder="Receipt No"
+                value={appliedFilters.receipt_no}
+                onChange={(val) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    receipt_no: val || "",
+                  }));
+                  if (val) onClose();
+                }}
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                displayFormat={(item) => ({
+                  value: String(item.receipt_no ?? ""),
+                  label: String(item.receipt_no ?? ""),
+                })}
+                searchFields={["receipt_no"]}
+                size="xs"
+                autoFocus={autoFocus}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
       },
       {
         accessorKey: "date",
@@ -441,6 +551,39 @@ export default function OverseasReceiptMaster() {
         accessorKey: "type",
         header: "Type",
         size: 100,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Type"
+            value={appliedFilters.type}
+            displayValue={appliedFilters.type}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "type"}
+            onStartEdit={() => openHeaderEditor("type")}
+            onStopEdit={() => collapseHeaderEditor("type")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Type"
+                searchable
+                clearable
+                size="xs"
+                data={typeOptions}
+                value={appliedFilters.type || ""}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    type: value || "",
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
       },
       {
         accessorKey: "amount",
@@ -456,6 +599,39 @@ export default function OverseasReceiptMaster() {
         accessorKey: "status",
         header: "Status",
         size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Status"
+            value={appliedFilters.status}
+            displayValue={appliedFilters.status}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "status"}
+            onStartEdit={() => openHeaderEditor("status")}
+            onStopEdit={() => collapseHeaderEditor("status")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Status"
+                searchable
+                clearable
+                size="xs"
+                data={statusOptions}
+                value={appliedFilters.status || ""}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    status: value || "",
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null) return "-";
@@ -597,7 +773,8 @@ export default function OverseasReceiptMaster() {
           );
         },
       },
-    ],
+    ];
+    },
     [
       index,
       navigate,
@@ -609,6 +786,11 @@ export default function OverseasReceiptMaster() {
       erpTheme,
       dateFormat,
       primary,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      filterFieldStyles,
     ],
   );
 
@@ -624,7 +806,13 @@ export default function OverseasReceiptMaster() {
 
   const table = useMantineReactTable({
     columns,
-    data: tableData,
+    /*
+     * During a fetch we pass an empty data array so MRT renders
+     * `renderEmptyRowsFallback` (the loader) inside `<tbody>` while keeping
+     * `<thead>` (with the column-header filter inputs) and the pagination
+     * footer mounted. Mirrors EnquiryListNativeTables' loader-in-body UX.
+     */
+    data: isLoading ? [] : tableData,
     enableColumnFilters: false,
     enablePagination: true,
     enableTopToolbar: false,
@@ -643,6 +831,26 @@ export default function OverseasReceiptMaster() {
     state: {
       pagination,
     },
+    renderEmptyRowsFallback: () => (
+      <Center
+        py={80}
+        style={{ width: "100%", backgroundColor: cardBg }}
+        className="erp-header-filter-fade"
+      >
+        {isLoading ? (
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
+            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              Loading overseas receipt data…
+            </Text>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            No overseas receipt data found
+          </Text>
+        )}
+      </Center>
+    ),
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -663,20 +871,32 @@ export default function OverseasReceiptMaster() {
       },
     },
     mantineTableBodyCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "30px",
-              zIndex: 2,
-              borderLeft: `1px solid ${border}`,
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {};
+      const colSize = column.getSize();
+      const isActions = column.id === "actions";
+      const extraStyles = isActions
+        ? {
+            // Pinned-right Actions cell. `minWidth: 80px` matches the head
+            // cell so the sticky body cell and sticky head cell stay the
+            // same width. `zIndex: 2` stays BELOW the sticky head
+            // (`zIndex: 4`) so the head paints over the body cell at the
+            // bottom-right corner during horizontal scroll.
+            position: "sticky" as const,
+            right: 0,
+            minWidth: "80px",
+            zIndex: 2,
+            borderLeft: `1px solid ${border}`,
+            boxShadow: "1px -2px 4px 0px #00000040",
+          }
+        : {};
       return {
         style: {
-          width: "fit-content",
+          /*
+           * Pin cell width to the column's declared `size` so the column
+           * cannot resize when its header swaps between the static label
+           * and the inline filter editor.
+           */
+          width: colSize,
+          minWidth: colSize,
           padding: "8px 16px",
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
@@ -687,26 +907,44 @@ export default function OverseasReceiptMaster() {
       };
     },
     mantineTableHeadCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "80px",
-              zIndex: 2,
-              backgroundColor: erpTheme.headerBg,
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {};
+      const colSize = column.getSize();
+      const isActions = column.id === "actions";
+      const extraStyles = isActions
+        ? {
+            // Pinned-right Actions header. `zIndex: 4` keeps the sticky
+            // head cell above the sticky body cell (`zIndex: 2`) at the
+            // bottom-right corner.
+            position: "sticky" as const,
+            right: 0,
+            minWidth: "80px",
+            zIndex: 4,
+            backgroundColor: erpTheme.headerBg,
+            boxShadow: "0px -2px 4px 0px #00000040",
+          }
+        : {};
       return {
         style: {
-          width: "fit-content",
+          /*
+           * Pin head cell width to the column's declared `size` (matches the
+           * body cell width) so toggling between the column label and the
+           * inline filter editor never resizes the header.
+           */
+          width: colSize,
+          minWidth: colSize,
           padding: "8px 16px",
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: erpTheme.headerBg,
           borderBottom: `1px solid ${border}`,
+          /*
+           * Stable header cell height so swapping between the column label
+           * and the inline filter editor never resizes the row. Matches the
+           * EnquiryMaster header row height (52.4 → 52).
+           */
+          minHeight: 52,
+          height: 52,
+          verticalAlign: "middle" as const,
           ...extraStyles,
         },
       };
@@ -975,9 +1213,13 @@ export default function OverseasReceiptMaster() {
                   Error loading overseas receipt data. Please try refreshing the page.
                 </Text>
               </Center>
-            ) : isLoading ? (
-              <ERPListTableLoading theme={erpTheme} message="Loading overseas receipt data…" />
             ) : (
+              /*
+               * Always render the table so `<thead>` (column-header filters)
+               * and the pagination footer stay visible. While loading, MRT
+               * shows `renderEmptyRowsFallback` (the loader) inside `<tbody>`
+               * only — matching EnquiryListNativeTables' UX.
+               */
               <MantineReactTable table={table} />
             ),
           }}
