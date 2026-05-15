@@ -31,6 +31,8 @@ export const URL = {
   frequency: "frequency-master/",
   customerType: "customertype-master/",
   branchMaster: "branch-master/",
+  filterBranchMaster: "filter/branch-master/",
+  coordinatorsUser: "coordinators-user/",
   serviceMaster: "service-master/",
   nearbyCustomers: "potential/nearbycustomer/",
   enquiry: "enquiry/",

@@ -60,6 +60,8 @@ interface PipelineReportProps {
   globalSearch?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  branchCode?: string | null;
+  coordinatorName?: string | null;
 }
 
 const PipelineReport: React.FC<PipelineReportProps> = ({
@@ -68,6 +70,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   globalSearch,
   fromDate,
   toDate,
+  branchCode,
+  coordinatorName,
 }) => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -94,6 +98,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   );
   type PipelineSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     potential: number;
     pipeline: number;
     gained: number;
@@ -138,6 +144,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   type PipelineProductSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     service: string; // Combined: "FCL Import", "FCL Export", etc.
     service_type: string;
     service_original?: string; // Original service value for click handling
@@ -151,6 +159,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   type PipelineSectorSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     potential: number;
     pipeline: number;
     gained: number;
@@ -317,6 +327,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     return dateFilters;
   };
 
+  const buildPipelineCommonFilters = () => ({
+    ...buildDateFilters(),
+    ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+    ...(user?.pulse_id === "P2CCI" && { calculation }),
+    ...(branchCode?.trim() && { branch_code: branchCode.trim() }),
+    ...(coordinatorName?.trim() && {
+      coordinator_name: coordinatorName.trim(),
+    }),
+  });
+
   // Helper function to replace null/undefined values with '-' for display
   const transformNullValues = <T extends Record<string, any>>(
     data: T[]
@@ -409,10 +429,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           salesperson: selectedSalesperson,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
         if (selectedCustomerCode) filters.customer_code = selectedCustomerCode;
@@ -452,7 +469,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalSearch, fromDate, toDate]);
+  }, [globalSearch, fromDate, toDate, branchCode, coordinatorName]);
 
   // Restore pipeline state based on drill level
   const restorePipelineState = async (state: {
@@ -539,10 +556,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                   salesperson: state.selectedSalesperson || "",
                   customer_code: state.selectedCustomerCode || undefined,
                   type: state.selectedColumnType,
-                  ...buildDateFilters(),
-                  ...(user?.pulse_id === "P2CCI" && { calculation }),
-                  ...(globalSearch &&
-                    globalSearch.trim() && { search: globalSearch.trim() }),
+                  ...buildPipelineCommonFilters(),
                 };
 
                 const response =
@@ -630,10 +644,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                   salesperson: state.selectedSalesperson || "",
                   customer_code: state.selectedCustomerCode || undefined,
                   type: state.selectedColumnType,
-                  ...buildDateFilters(),
-                  ...(user?.pulse_id === "P2CCI" && { calculation }),
-                  ...(globalSearch &&
-                    globalSearch.trim() && { search: globalSearch.trim() }),
+                  ...buildPipelineCommonFilters(),
                 };
 
                 const response =
@@ -707,10 +718,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             salesperson: state.selectedSalesperson || "",
             type: state.selectedColumnType || "",
             // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
+            ...buildPipelineCommonFilters(),
           };
 
           const response = await getPotentialCustomersData(filters);
@@ -751,11 +759,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const filters: PipelineReportFilters = {
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(salesperson && { salesperson }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       };
 
       const response = await getPipelineReportData(filters);
@@ -786,6 +791,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         const salespersonData = (response.data as PipelineReportItem[]).map(
           (item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             potential: item.potential_profit || 0,
             pipeline: item.pipeline_profit || 0,
             gained: item.gained_profit || 0,
@@ -830,12 +837,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportRegionalData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(region && { region }),
         ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       if (region) {
@@ -849,6 +853,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               data as unknown as PipelineReportItem[]
             ).map((item) => ({
               salesperson: item.salesperson || "-",
+              coordinator_name: item.coordinator_name || undefined,
+              branch_code: item.branch_code || undefined,
               potential: item.potential_profit || 0,
               pipeline: item.pipeline_profit || 0,
               gained: item.gained_profit || 0,
@@ -938,13 +944,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportRegionalData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         region: selectedSector,
         salesperson: salesperson,
         ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       const data = response.data || [];
@@ -979,6 +982,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           // Still try to display it
           const salespersonData = (data as any[]).map((item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             potential: item.potential_profit || item.potential || 0,
             pipeline: item.pipeline_profit || item.pipeline || 0,
             gained: item.gained_profit || item.gained || 0,
@@ -1026,13 +1031,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportProductData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(service && { service }),
         ...(serviceType && { service_type: toTitleCase(serviceType) }),
         ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       const data = response.data || [];
@@ -1044,6 +1046,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             data as PipelineReportProductSalespersonItem[]
           ).map((item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             service: `${item.service || "-"} ${item.service_type || "-"}`, // Combined: "FCL Import", "FCL Export", etc.
             service_type: item.service_type || "-", // Keep for reference but will be hidden
             service_original: item.service || "-", // Store original service for click handling
@@ -1163,16 +1167,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportProductData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         service: selectedService,
         service_type: selectedServiceType
           ? toTitleCase(selectedServiceType)
           : undefined,
         salesperson: salesperson,
         ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       const data = response.data || [];
@@ -1277,10 +1278,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             salesperson: salespersonData.salesperson,
             type: normalizedColumnType,
             // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
+            ...buildPipelineCommonFilters(),
           };
 
           const response = await getPotentialCustomersData(filters);
@@ -1337,10 +1335,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             salesperson: selectedSalesperson || "",
             type: normalizedColumnType,
             // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
+            ...buildPipelineCommonFilters(),
           };
           if (customerData.customer_code) {
             filters.customer_code = customerData.customer_code;
@@ -1539,10 +1534,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           region: sectorData.region,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
@@ -1598,10 +1590,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           salesperson: salespersonName,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
@@ -1662,10 +1651,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           customer_code: customerCode,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
         const response = await getPotentialCustomersDataForRegional(filters);
@@ -1870,10 +1856,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         salesperson: selectedSalesperson || "",
         type: normalizedColumnType,
         // period, // Commented out - can be used in future case
-        ...buildDateFilters(),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
+        ...buildPipelineCommonFilters(),
       };
 
       if (
@@ -2301,10 +2284,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           customer_code: customerCode,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
         const response = await getPotentialCustomersDataForProduct(filters);
@@ -2567,9 +2547,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           company: companyName,
           salesperson: selectedSalesperson || "",
           type: selectedColumnType || undefined,
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
           period: value,
         };
         // Include region for sector drilldown

@@ -13,6 +13,8 @@ type DrawerSummary = {
 
 export type PipelineSalespersonBreakdownRow = {
   salesperson: string;
+  coordinator_name?: string;
+  branch_code?: string;
   potential: number;
   pipeline: number;
   gained: number;
@@ -171,11 +173,20 @@ export default function PipelineSalespersonBreakdownDrawerTable({
         }}
       >
         <Box style={{ overflowX: "auto" }}>
-          <Table horizontalSpacing="md" verticalSpacing={12} style={{ minWidth: 640 }}>
+          <Table horizontalSpacing="md" verticalSpacing={12} style={{ minWidth: 880 }}>
             <Table.Thead>
               <Table.Tr style={{ background: "#F8FAFC" }}>
-                {["Salesman", "Potential", "Pipeline", "Quoted", "Gained", "Lost", "Expected"].map(
-                  (label, idx) => (
+                {[
+                  "Salesman",
+                  "Reporting to",
+                  "Branch",
+                  "Potential",
+                  "Pipeline",
+                  "Quoted",
+                  "Gained",
+                  "Lost",
+                  "Expected",
+                ].map((label, idx) => (
                     <Table.Th
                       key={label}
                       fz={10}
@@ -186,14 +197,13 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                     >
                       {label}
                     </Table.Th>
-                  )
-                )}
+                  ))}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {tableRows.length === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={7}>
+                  <Table.Td colSpan={9}>
                     <Text fz={13} c="#94A3B8" py={8}>
                       {emptyMessage}
                     </Text>
@@ -205,6 +215,16 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                     <Table.Td style={{ textAlign: "left" }}>
                       <Text fz={13} fw={700} c="#0F172A">
                         {r.salesperson}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="center">
+                      <Text fz={12} fw={500} c="#0F172A" lineClamp={2}>
+                        {r.coordinator_name?.trim() || "—"}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="center">
+                      <Text fz={12} fw={500} c="#0F172A">
+                        {r.branch_code?.trim() || "—"}
                       </Text>
                     </Table.Td>
                     <Table.Td ta="center"><MetricText n={r.potential} /></Table.Td>

@@ -1,4 +1,11 @@
-import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
+import {
+  useMemo,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
 import * as XLSX from "xlsx";
 import {
   Group,
@@ -65,10 +72,12 @@ import {
   erpToolbarOutlineButtonStyles,
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
+  BookingCreateJobLoader,
   type ErpListTheme,
 } from "../../../components";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
+import { createJobFromBooking } from "../../../utils/bookingCreateJob";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
@@ -322,10 +331,25 @@ type AirExportListQueryResult = {
 /** Air export journey steps — order is fixed; index drives timeline state. */
 const EXPORT_MILESTONES = [
   { label: "Booked", Icon: IconBook2, accent: "#4f46e5", soft: "#eef2ff" },
-  { label: "Picked up", Icon: IconTruckDelivery, accent: "#0284c7", soft: "#e0f2fe" },
+  {
+    label: "Picked up",
+    Icon: IconTruckDelivery,
+    accent: "#0284c7",
+    soft: "#e0f2fe",
+  },
   { label: "Received", Icon: IconPackage, accent: "#7c3aed", soft: "#f3e8ff" },
-  { label: "Departure", Icon: IconPlaneDeparture, accent: "#0891b2", soft: "#ecfeff" },
-  { label: "Arrived", Icon: IconPlaneArrival, accent: "#059669", soft: "#ecfdf5" },
+  {
+    label: "Departure",
+    Icon: IconPlaneDeparture,
+    accent: "#0891b2",
+    soft: "#ecfeff",
+  },
+  {
+    label: "Arrived",
+    Icon: IconPlaneArrival,
+    accent: "#059669",
+    soft: "#ecfdf5",
+  },
   { label: "Delivered", Icon: IconMapPin, accent: "#16a34a", soft: "#f0fdf4" },
 ] as const;
 
@@ -339,7 +363,13 @@ function milestonePhase(i: number, activeIdx: number): MilestonePhase {
 
 function rgbaFromHex(hex: string, a: number): string {
   const x = hex.replace("#", "");
-  const v = x.length === 3 ? x.split("").map((c) => c + c).join("") : x;
+  const v =
+    x.length === 3
+      ? x
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : x;
   const r = Number.parseInt(v.slice(0, 2), 16);
   const g = Number.parseInt(v.slice(2, 4), 16);
   const b = Number.parseInt(v.slice(4, 6), 16);
@@ -351,14 +381,21 @@ function mapEventStringToMilestoneIndex(s: string): number | null {
   const u = s.toUpperCase();
   if (/\bDELIVER|HANDOVER|\bPOD\b|PROOF\s+OF\s+DELIVERY/.test(u)) return 5;
   if (/\bARRIV|\bATA\b|\bLAND(ED|ING)?\b/.test(u)) return 4;
-  if (/\bDEPART|\bATD\b|TAKE[\s-]?OFF|AIRBORNE|EXPORT\s+FLIGHT|FLIGHT\s+DEP/.test(u)) return 3;
+  if (
+    /\bDEPART|\bATD\b|TAKE[\s-]?OFF|AIRBORNE|EXPORT\s+FLIGHT|FLIGHT\s+DEP/.test(
+      u,
+    )
+  )
+    return 3;
   if (/\bRECEIV|GATE\s+IN|TERMINAL|WAREHOUSE\s+IN|ACCEPTANCE/.test(u)) return 2;
   if (/\bPICK|COLLECT|COLLECTION|CARGO\s+READY|GATE\s+OUT/.test(u)) return 1;
   if (/\bBOOK|CONFIRM|BOOKING/.test(u)) return 0;
   return null;
 }
 
-function getMaxMilestoneIndexFromEvents(events: ExportShipmentData["events"]): number | null {
+function getMaxMilestoneIndexFromEvents(
+  events: ExportShipmentData["events"],
+): number | null {
   if (!Array.isArray(events) || events.length === 0) return null;
   let max = -1;
   for (const e of events) {
@@ -393,12 +430,19 @@ function mapMilestoneCodeToIndex(code: string | null | undefined): number {
   return m[c] ?? 0;
 }
 
-function getExportMilestoneStyleByIndex(i: number): (typeof EXPORT_MILESTONES)[number] {
-  return EXPORT_MILESTONES[Math.min(Math.max(i, 0), EXPORT_MILESTONES.length - 1)];
+function getExportMilestoneStyleByIndex(
+  i: number,
+): (typeof EXPORT_MILESTONES)[number] {
+  return EXPORT_MILESTONES[
+    Math.min(Math.max(i, 0), EXPORT_MILESTONES.length - 1)
+  ];
 }
 
 /** `when` for one API route milestone (date + optional time). */
-function formatRouteMilestoneWhen(m: { date?: string | null; time?: string | null }): string {
+function formatRouteMilestoneWhen(m: {
+  date?: string | null;
+  time?: string | null;
+}): string {
   if (!hasTruthyDate(m.date)) return "—";
   const dayPart = String(m.date).split("T")[0];
   const d = dayjs(dayPart);
@@ -473,7 +517,11 @@ function getLastMilestoneIndex(row: ExportShipmentData): number {
   if (row.ata?.trim()) idx = Math.max(idx, 4);
 
   if (row.atd?.trim()) idx = Math.max(idx, 3);
-  if (/\b(DEPART|DEPARTED|DISPATCH|DISPATCHED|IN\s*TRANSIT|EXPORTED|FLT\s*DEP)\b/i.test(raw)) {
+  if (
+    /\b(DEPART|DEPARTED|DISPATCH|DISPATCHED|IN\s*TRANSIT|EXPORTED|FLT\s*DEP)\b/i.test(
+      raw,
+    )
+  ) {
     idx = Math.max(idx, 3);
   }
 
@@ -484,7 +532,10 @@ function getLastMilestoneIndex(row: ExportShipmentData): number {
   }
   if (hasTruthyDate(row.actual_pickup_date)) idx = Math.max(idx, 1);
 
-  if (st === "BOOKED" && (row.mawb_no?.trim() || row.carrier_booking_no?.trim())) {
+  if (
+    st === "BOOKED" &&
+    (row.mawb_no?.trim() || row.carrier_booking_no?.trim())
+  ) {
     idx = Math.max(idx, 1);
   }
 
@@ -508,22 +559,36 @@ function getLastMilestoneDisplayLabel(row: ExportShipmentData): string {
   if (row.last_milestone) {
     const m = row.route_milestones?.find((x) => x.code === row.last_milestone);
     if (m?.label) return m.label;
-    return getExportMilestoneStyleByIndex(mapMilestoneCodeToIndex(row.last_milestone)).label;
+    return getExportMilestoneStyleByIndex(
+      mapMilestoneCodeToIndex(row.last_milestone),
+    ).label;
   }
   return getLastMilestoneLabel(row);
 }
 
 /** Milestone meta for table — same `accent` / `soft` / `Icon` as the sidebar timeline, keyed by API code when present. */
-function getLastMilestoneStep(row: ExportShipmentData): (typeof EXPORT_MILESTONES)[number] {
+function getLastMilestoneStep(
+  row: ExportShipmentData,
+): (typeof EXPORT_MILESTONES)[number] {
   if (row.last_milestone) {
-    return getExportMilestoneStyleByIndex(mapMilestoneCodeToIndex(row.last_milestone));
+    return getExportMilestoneStyleByIndex(
+      mapMilestoneCodeToIndex(row.last_milestone),
+    );
   }
   return getExportMilestoneStyleByIndex(getLastMilestoneIndex(row));
 }
 
-function getMilestoneDrawerDetail(row: ExportShipmentData, index: number): { detail: string; when: string } {
-  const oc = row.origin_name || row.origin_code_read || row.origin_code || "Origin";
-  const dc = row.destination_name || row.destination_code_read || row.destination_code || "Destination";
+function getMilestoneDrawerDetail(
+  row: ExportShipmentData,
+  index: number,
+): { detail: string; when: string } {
+  const oc =
+    row.origin_name || row.origin_code_read || row.origin_code || "Origin";
+  const dc =
+    row.destination_name ||
+    row.destination_code_read ||
+    row.destination_code ||
+    "Destination";
   switch (index) {
     case 0:
       return {
@@ -591,8 +656,14 @@ function getLastMilestoneWhen(row: ExportShipmentData): string {
 function getRowPW(row: ExportShipmentData): { pieces: number; weight: number } {
   const cargo = row.cargo_details;
   if (Array.isArray(cargo) && cargo.length > 0) {
-    const pieces = cargo.reduce((s, c) => s + Number((c as Record<string, unknown>).no_of_packages ?? 0), 0);
-    const weight = cargo.reduce((s, c) => s + Number((c as Record<string, unknown>).gross_weight ?? 0), 0);
+    const pieces = cargo.reduce(
+      (s, c) => s + Number((c as Record<string, unknown>).no_of_packages ?? 0),
+      0,
+    );
+    const weight = cargo.reduce(
+      (s, c) => s + Number((c as Record<string, unknown>).gross_weight ?? 0),
+      0,
+    );
     return { pieces, weight };
   }
   return { pieces: 0, weight: 0 };
@@ -600,7 +671,13 @@ function getRowPW(row: ExportShipmentData): { pieces: number; weight: number } {
 
 function initials(name: string | undefined | null): string {
   if (!name?.trim()) return "?";
-  return name.trim().split(/\s+/).map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 function firstName(name: string | undefined | null): string {
@@ -671,15 +748,28 @@ function MilestoneDrawerStepRow({
           }}
         />
       ) : (
-        <Box style={{ width: 2, height: 32, marginTop: 4, backgroundColor: "#e2e8f0", borderRadius: 1 }} />
+        <Box
+          style={{
+            width: 2,
+            height: 32,
+            marginTop: 4,
+            backgroundColor: "#e2e8f0",
+            borderRadius: 1,
+          }}
+        />
       )
     ) : null;
 
-  const phaseLabel = phase === "completed" ? "Done" : phase === "current" ? "Active" : "Pending";
+  const phaseLabel =
+    phase === "completed" ? "Done" : phase === "current" ? "Active" : "Pending";
 
   return (
     <Group align="flex-start" wrap="nowrap" gap="md">
-      <Flex direction="column" align="center" style={{ width: 40, flexShrink: 0 }}>
+      <Flex
+        direction="column"
+        align="center"
+        style={{ width: 40, flexShrink: 0 }}
+      >
         <Box mt={2}>
           {phase === "completed" ? (
             <Box
@@ -737,7 +827,8 @@ function MilestoneDrawerStepRow({
         style={{
           flex: 1,
           minWidth: 0,
-          padding: phase === "upcoming" ? "4px 0 12px 0" : "10px 12px 12px 12px",
+          padding:
+            phase === "upcoming" ? "4px 0 12px 0" : "10px 12px 12px 12px",
           borderRadius: 10,
           ...(phase === "completed"
             ? {
@@ -754,7 +845,12 @@ function MilestoneDrawerStepRow({
             : {}),
         }}
       >
-        <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
+        <Group
+          justify="space-between"
+          gap="xs"
+          wrap="nowrap"
+          align="flex-start"
+        >
           <Group gap={8} wrap="nowrap" align="center">
             <Text
               fw={phase === "current" ? 700 : phase === "completed" ? 600 : 500}
@@ -827,8 +923,18 @@ function StatusPill({ status }: { status: string | undefined | null }) {
       : n === "RECEIVED"
         ? { label: "Received", dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
         : n === "CANCEL"
-          ? { label: "Cancelled", dot: "#ef4444", bg: "#fef2f2", color: "#b91c1c" }
-          : { label: "Generated", dot: "#f59e0b", bg: "#fffbeb", color: "#b45309" };
+          ? {
+              label: "Cancelled",
+              dot: "#ef4444",
+              bg: "#fef2f2",
+              color: "#b91c1c",
+            }
+          : {
+              label: "Generated",
+              dot: "#f59e0b",
+              bg: "#fffbeb",
+              color: "#b45309",
+            };
 
   return (
     <Box
@@ -845,7 +951,15 @@ function StatusPill({ status }: { status: string | undefined | null }) {
         whiteSpace: "nowrap",
       }}
     >
-      <Box style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: cfg.dot, flexShrink: 0 }} />
+      <Box
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: cfg.dot,
+          flexShrink: 0,
+        }}
+      />
       {cfg.label}
     </Box>
   );
@@ -880,22 +994,41 @@ function AirExportBookingMaster() {
   const [totalRecords, setTotalRecords] = useState(0);
 
   // ---- display names ----
-  const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(null);
-  const [originDisplayName, setOriginDisplayName] = useState<string | null>(null);
-  const [destinationDisplayName, setDestinationDisplayName] = useState<string | null>(null);
+  const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
+    null,
+  );
+  const [originDisplayName, setOriginDisplayName] = useState<string | null>(
+    null,
+  );
+  const [destinationDisplayName, setDestinationDisplayName] = useState<
+    string | null
+  >(null);
 
   // ---- table state ----
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
-    shipment: true, houseno: true, date: true, customer: true, route: true, status: true,
-    mawb: true, flight: true, pieces: true, weight: true, handler: true,
+    shipment: true,
+    houseno: true,
+    date: true,
+    customer: true,
+    route: true,
+    status: true,
+    mawb: true,
+    flight: true,
+    pieces: true,
+    weight: true,
+    handler: true,
     lastMilestone: true,
   });
 
-  const [milestoneDrawerRow, setMilestoneDrawerRow] = useState<ExportShipmentData | null>(null);
+  const [milestoneDrawerRow, setMilestoneDrawerRow] =
+    useState<ExportShipmentData | null>(null);
 
   // ---- search ----
   const [searchQuery, setSearchQuery] = useState("");
@@ -917,14 +1050,13 @@ function AirExportBookingMaster() {
   );
 
   // ---- cancel modal ----
-  const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportShipmentData | null>(null);
+  const [cancelConfirmRow, setCancelConfirmRow] =
+    useState<ExportShipmentData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  // ---- create job modal ----
-  const [createJobLoading, setCreateJobLoading] = useState(false);
-  const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
-  const [createJobResponse, setCreateJobResponse] = useState<Record<string, unknown> | null>(null);
-  const [createJobError, setCreateJobError] = useState<string | null>(null);
+  const [createJobBookingId, setCreateJobBookingId] = useState<number | null>(
+    null,
+  );
 
   // ---- filter form ----
   const filterForm = useForm<FilterState>({
@@ -1024,7 +1156,9 @@ function AirExportBookingMaster() {
         service: nextValues.service,
         origin: nextValues.origin,
         destination: nextValues.destination,
-        date: nextValues.date ? dayjs(nextValues.date).format("YYYY-MM-DD") : null,
+        date: nextValues.date
+          ? dayjs(nextValues.date).format("YYYY-MM-DD")
+          : null,
         houseno: nextValues.houseno,
         customer_service_name: nextValues.customer_service_name,
         mawb_no: nextValues.mawb_no,
@@ -1057,28 +1191,48 @@ function AirExportBookingMaster() {
     isFetching,
     refetch: refetchExportShipments,
   } = useQuery<AirExportListQueryResult>({
-    queryKey: ["air-export-booking/filter/", pageIndex, pageSize, filtersApplied,
-      filtersApplied ? JSON.stringify(filterForm.values) : "-", debouncedSearch, statusFilter],
+    queryKey: [
+      "air-export-booking/filter/",
+      pageIndex,
+      pageSize,
+      filtersApplied,
+      filtersApplied ? JSON.stringify(filterForm.values) : "-",
+      debouncedSearch,
+      statusFilter,
+    ],
     enabled: !isRestoring && searchQuery === debouncedSearch,
     queryFn: async (): Promise<AirExportListQueryResult> => {
       try {
         const offset = pageIndex * pageSize;
         const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pageSize}`;
         const response = (await apiCallProtected.post(url, {
-          filters: { service_type: "EXPORT", service: "AIR", ...buildRequestFilters(debouncedSearch) },
+          filters: {
+            service_type: "EXPORT",
+            service: "AIR",
+            ...buildRequestFilters(debouncedSearch),
+          },
         })) as Record<string, unknown>;
 
         if (response && typeof response === "object") {
           let data: ExportShipmentData[] = [];
-          if (Array.isArray(response.data)) data = response.data as ExportShipmentData[];
-          else if (Array.isArray(response.results)) data = response.results as ExportShipmentData[];
-          else if (Array.isArray(response.result)) data = response.result as ExportShipmentData[];
+          if (Array.isArray(response.data))
+            data = response.data as ExportShipmentData[];
+          else if (Array.isArray(response.results))
+            data = response.results as ExportShipmentData[];
+          else if (Array.isArray(response.result))
+            data = response.result as ExportShipmentData[];
 
-          const listTotal = getBookingShipmentFilterListTotal(response, data, offset);
+          const listTotal = getBookingShipmentFilterListTotal(
+            response,
+            data,
+            offset,
+          );
 
           const rawSummary = response.summary;
           const summary: AirExportShipmentListSummary | undefined =
-            rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+            rawSummary &&
+            typeof rawSummary === "object" &&
+            !Array.isArray(rawSummary)
               ? (rawSummary as AirExportShipmentListSummary)
               : undefined;
 
@@ -1112,7 +1266,10 @@ function AirExportBookingMaster() {
     }
   }, [totalRecords, pageSize, pageIndex]);
 
-  const displayData = useMemo(() => exportShipmentsResponse?.data ?? [], [exportShipmentsResponse]);
+  const displayData = useMemo(
+    () => exportShipmentsResponse?.data ?? [],
+    [exportShipmentsResponse],
+  );
 
   // ---- derived table data ----
   const tableRows = useMemo(() => {
@@ -1121,14 +1278,27 @@ function AirExportBookingMaster() {
       rows.sort((a, b) => {
         let aVal: string | number = "";
         let bVal: string | number = "";
-        if (sortConfig.key === "shipment") { aVal = a.shipment_code || ""; bVal = b.shipment_code || ""; }
-        else if (sortConfig.key === "date") { aVal = a.date || ""; bVal = b.date || ""; }
-        else if (sortConfig.key === "customer") { aVal = a.customer_name || ""; bVal = b.customer_name || ""; }
-        else if (sortConfig.key === "weight") { aVal = getRowPW(a).weight; bVal = getRowPW(b).weight; }
-        if (typeof aVal === "string") {
-          return sortConfig.direction === "asc" ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
+        if (sortConfig.key === "shipment") {
+          aVal = a.shipment_code || "";
+          bVal = b.shipment_code || "";
+        } else if (sortConfig.key === "date") {
+          aVal = a.date || "";
+          bVal = b.date || "";
+        } else if (sortConfig.key === "customer") {
+          aVal = a.customer_name || "";
+          bVal = b.customer_name || "";
+        } else if (sortConfig.key === "weight") {
+          aVal = getRowPW(a).weight;
+          bVal = getRowPW(b).weight;
         }
-        return sortConfig.direction === "asc" ? aVal - (bVal as number) : (bVal as number) - aVal;
+        if (typeof aVal === "string") {
+          return sortConfig.direction === "asc"
+            ? aVal.localeCompare(bVal as string)
+            : (bVal as string).localeCompare(aVal);
+        }
+        return sortConfig.direction === "asc"
+          ? aVal - (bVal as number)
+          : (bVal as number) - aVal;
       });
     }
     return rows;
@@ -1164,9 +1334,14 @@ function AirExportBookingMaster() {
     const { totalPieces, totalWeight } = fromRows();
     return {
       total: totalRecords,
-      booked: rows.filter((r) => normalizeBookingStatus(r.status) === "BOOKED").length,
-      received: rows.filter((r) => normalizeBookingStatus(r.status) === "RECEIVED").length,
-      generated: rows.filter((r) => normalizeBookingStatus(r.status) === "GENERATED").length,
+      booked: rows.filter((r) => normalizeBookingStatus(r.status) === "BOOKED")
+        .length,
+      received: rows.filter(
+        (r) => normalizeBookingStatus(r.status) === "RECEIVED",
+      ).length,
+      generated: rows.filter(
+        (r) => normalizeBookingStatus(r.status) === "GENERATED",
+      ).length,
       canceled: rows.filter((r) => {
         const s = normalizeBookingStatus(r.status);
         return s === "CANCEL" || s === "CANCELED" || s === "CANCELLED";
@@ -1178,16 +1353,18 @@ function AirExportBookingMaster() {
 
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
-        id: String(key),
-        label: String(key),
-        checked: visibleColumns[key],
-        onToggle: () =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: !prev[key],
-          })),
-      })),
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map(
+        (key) => ({
+          id: String(key),
+          label: String(key),
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
     [visibleColumns],
   );
 
@@ -1211,14 +1388,20 @@ function AirExportBookingMaster() {
   useEffect(() => {
     const stored = getState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
-    if (!shouldRestore) { setIsRestoring(false); return; }
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
 
     const f = stored.filters as PersistedListFilters | undefined;
     if (f && typeof f === "object") {
       filterForm.setValues({
-        booking_id: f.booking_id ?? null, enquiry_id: f.enquiry_id ?? null,
-        customer: f.customer ?? null, service: f.service ?? null,
-        origin: f.origin ?? null, destination: f.destination ?? null,
+        booking_id: f.booking_id ?? null,
+        enquiry_id: f.enquiry_id ?? null,
+        customer: f.customer ?? null,
+        service: f.service ?? null,
+        origin: f.origin ?? null,
+        destination: f.destination ?? null,
         date: f.date ? dayjs(f.date, "YYYY-MM-DD").toDate() : null,
         houseno: f.houseno ?? null,
         customer_service_name: f.customer_service_name ?? null,
@@ -1244,20 +1427,44 @@ function AirExportBookingMaster() {
   // ---- persist & navigate ----
   const persistListState = useCallback(() => {
     const persisted: PersistedListFilters = {
-      booking_id: filterForm.values.booking_id, enquiry_id: filterForm.values.enquiry_id,
-      customer: filterForm.values.customer, service: filterForm.values.service,
-      origin: filterForm.values.origin, destination: filterForm.values.destination,
-      date: filterForm.values.date ? dayjs(filterForm.values.date).format("YYYY-MM-DD") : null,
+      booking_id: filterForm.values.booking_id,
+      enquiry_id: filterForm.values.enquiry_id,
+      customer: filterForm.values.customer,
+      service: filterForm.values.service,
+      origin: filterForm.values.origin,
+      destination: filterForm.values.destination,
+      date: filterForm.values.date
+        ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
+        : null,
       houseno: filterForm.values.houseno,
       customer_service_name: filterForm.values.customer_service_name,
       mawb_no: filterForm.values.mawb_no,
-      filtersApplied, showFilters, pageIndex,
+      filtersApplied,
+      showFilters,
+      pageIndex,
     };
     setStoreFilters(LIST_KEY, persisted);
-    setStoreDisplayValues(LIST_KEY, { customer: customerDisplayName, origin: originDisplayName, destination: destinationDisplayName });
+    setStoreDisplayValues(LIST_KEY, {
+      customer: customerDisplayName,
+      origin: originDisplayName,
+      destination: destinationDisplayName,
+    });
     setStoreSearch(LIST_KEY, searchQuery);
     setShouldRestore(LIST_KEY, true);
-  }, [filterForm.values, filtersApplied, showFilters, pageIndex, customerDisplayName, originDisplayName, destinationDisplayName, searchQuery, setStoreFilters, setStoreDisplayValues, setStoreSearch, setShouldRestore]);
+  }, [
+    filterForm.values,
+    filtersApplied,
+    showFilters,
+    pageIndex,
+    customerDisplayName,
+    originDisplayName,
+    destinationDisplayName,
+    searchQuery,
+    setStoreFilters,
+    setStoreDisplayValues,
+    setStoreSearch,
+    setShouldRestore,
+  ]);
 
   const persistListAndNavigate = useCallback(() => {
     persistListState();
@@ -1267,21 +1474,40 @@ function AirExportBookingMaster() {
   // ---- refetch effects ----
   useEffect(() => {
     if (shouldRefetch) {
-      queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
+      queryClient.invalidateQueries({
+        queryKey: ["air-export-booking/filter/"],
+      });
       const newSearchParams = new URLSearchParams(location.search);
       newSearchParams.delete("refetch");
       const newSearch = newSearchParams.toString();
-      navigate(newSearch ? `${location.pathname}?${newSearch}` : location.pathname, { replace: true });
+      navigate(
+        newSearch ? `${location.pathname}?${newSearch}` : location.pathname,
+        { replace: true },
+      );
     }
-  }, [shouldRefetch, queryClient, location.search, location.pathname, navigate]);
+  }, [
+    shouldRefetch,
+    queryClient,
+    location.search,
+    location.pathname,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (location.state?.refreshData) {
       queryClient.removeQueries({ queryKey: ["air-export-booking/filter/"] });
-      setTimeout(() => { void refetchExportShipments(); }, 50);
+      setTimeout(() => {
+        void refetchExportShipments();
+      }, 50);
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, refetchExportShipments, navigate, location.pathname, queryClient]);
+  }, [
+    location.state,
+    refetchExportShipments,
+    navigate,
+    location.pathname,
+    queryClient,
+  ]);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -1289,31 +1515,41 @@ function AirExportBookingMaster() {
 
   // ---- handlers ----
   const handleExport = (rows: ExportShipmentData[]) => {
-    if (rows.length === 0) { ToastNotification({ type: "info", message: "No rows to export" }); return; }
+    if (rows.length === 0) {
+      ToastNotification({ type: "info", message: "No rows to export" });
+      return;
+    }
     const sheetRows = rows.map((r) => {
       const pw = getRowPW(r);
       return {
-        Shipment: r.shipment_code, "Enquiry ID": r.enquiry_id ?? "",
+        Shipment: r.shipment_code,
+        "Enquiry ID": r.enquiry_id ?? "",
         Date: r.date ? dayjs(r.date).format("DD MMM YYYY") : "",
         Customer: r.customer_name ?? "",
         Origin: r.origin_code_read || r.origin_code || "",
         Destination: r.destination_code_read || r.destination_code || "",
         Status: normalizeBookingStatus(r.status),
         "Last Milestone": getLastMilestoneLabel(r),
-        MAWB: r.mawb_no ?? "", Flight: r.flight_no ?? "",
-        Pcs: pw.pieces, "Weight kg": pw.weight,
+        MAWB: r.mawb_no ?? "",
+        Flight: r.flight_no ?? "",
+        Pcs: pw.pieces,
+        "Weight kg": pw.weight,
         Handler: r.customer_service_name ?? "",
       };
     });
     const ws = XLSX.utils.json_to_sheet(sheetRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Export Bookings");
-    XLSX.writeFile(wb, `air_export_bookings_${dayjs().format("YYYY-MM-DD_HH-mm")}.xlsx`);
+    XLSX.writeFile(
+      wb,
+      `air_export_bookings_${dayjs().format("YYYY-MM-DD_HH-mm")}.xlsx`,
+    );
   };
 
   const handleSort = (key: string) => {
     setSortConfig((prev) => {
-      if (prev?.key === key) return prev.direction === "asc" ? { key, direction: "desc" } : null;
+      if (prev?.key === key)
+        return prev.direction === "asc" ? { key, direction: "desc" } : null;
       return { key, direction: "asc" };
     });
   };
@@ -1321,20 +1557,23 @@ function AirExportBookingMaster() {
   const applyFilters = () => {
     const v = filterForm.values;
     const hasValues =
-      (v.booking_id?.trim()) ||
-      (v.enquiry_id?.trim()) ||
+      v.booking_id?.trim() ||
+      v.enquiry_id?.trim() ||
       v.customer ||
       v.service ||
       v.origin ||
       v.destination ||
       v.date ||
-      (v.houseno?.trim()) ||
-      (v.customer_service_name?.trim()) ||
-      (v.mawb_no?.trim());
+      v.houseno?.trim() ||
+      v.customer_service_name?.trim() ||
+      v.mawb_no?.trim();
     if (!hasValues) {
       setFiltersApplied(false);
       setPageIndex(0);
-      ToastNotification({ type: "info", message: "No filters selected, showing all data" });
+      ToastNotification({
+        type: "info",
+        message: "No filters selected, showing all data",
+      });
     } else {
       setPageIndex(0);
       setFiltersApplied(true);
@@ -1387,89 +1626,33 @@ function AirExportBookingMaster() {
       await putAPICall(URL.customerServiceShipment, payload, API_HEADER);
       ToastNotification({ type: "success", message: "Booking cancelled" });
       setCancelConfirmRow(null);
-      queryClient.invalidateQueries({ queryKey: ["air-export-booking/filter/"] });
+      queryClient.invalidateQueries({
+        queryKey: ["air-export-booking/filter/"],
+      });
       void refetchExportShipments();
     } catch (err: unknown) {
-      ToastNotification({ type: "error", message: err instanceof Error ? err.message : "Failed to cancel" });
-    } finally { setIsCancelling(false); }
+      ToastNotification({
+        type: "error",
+        message: err instanceof Error ? err.message : "Failed to cancel",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const handleCreateJob = async (booking: ExportShipmentData) => {
-    const routingDetails = Array.isArray(booking.routing_details) ? booking.routing_details : [];
-    const payload: Record<string, unknown> = {
-      service: booking.service || "AIR", service_type: booking.service_type || "Export",
-      agent: booking.destination_agent_code || "", origin_code: booking.origin_code || "",
-      destination_code: booking.destination_code || "", etd: null, eta: null, atd: null, ata: null,
-      carrier_code: "", flightno: "", is_direct: false, mawb_no: booking.mawb_no || "",
-      mbl_date: null, carrier_booking_no: booking.carrier_booking_no || "",
-      voyage_number: booking.voyage_no || "", estimates: [],
-      ocean_routings: routingDetails.map((r) => ({
-        transport_type: "Air",
-        from_port_code: r.from_port_code || "", to_port_code: r.to_port_code || "",
-        carrier_code: r.carrier_code || "", flight: r.flight || "",
-        rail_no: r.rail_no || "", truck_no: r.truck_no || "",
-        voyage_number: r.voyage_number || "", vessel: r.vessel || "",
-        etd: r.etd && dayjs(r.etd as string).isValid() ? dayjs(r.etd as string).format("YYYY-MM-DD") : null,
-        eta: r.eta && dayjs(r.eta as string).isValid() ? dayjs(r.eta as string).format("YYYY-MM-DD") : null,
-        atd: r.atd && dayjs(r.atd as string).isValid() ? dayjs(r.atd as string).format("YYYY-MM-DD") : null,
-        ata: r.ata && dayjs(r.ata as string).isValid() ? dayjs(r.ata as string).format("YYYY-MM-DD") : null,
-      })),
-      housing_details: [{
-        hawb_no: booking.mawb_no || "", origin_code: booking.origin_code || "",
-        destination_code: booking.destination_code || "", trade: "Re Export",
-        routed: booking.routed || "", routed_by: booking.routed_by || "",
-        customer_service: booking.customer_service_name || "",
-        agent_name: booking.destination_agent_name || "", agent_address: booking.destination_agent_address || "",
-        agent_email: booking.destination_agent_email || "",
-        shipper_name: booking.shipper_name || "", shipper_address: booking.shipper_address || "",
-        shipper_email: booking.shipper_email || "", consignee_name: booking.consignee_name || "",
-        consignee_address: booking.consignee_address || "", consignee_email: booking.consignee_email || "",
-        notify1_customer_name: booking.notify1_customer_name || "",
-        notify1_customer_address: booking.notify1_customer_address || "",
-        notify1_customer_email: booking.notify1_customer_email || "",
-        cha_name: booking.cha || "", cha_address: booking.cha_address || "",
-        commodity_description: booking.commodity_description || "", marks_no: booking.marks_no || "",
-        shipment_terms_code: booking.shipment_terms_code || "",
-        cargo_details: Array.isArray(booking.cargo_details)
-          ? booking.cargo_details.map((c: Record<string, unknown>) => ({
-              no_of_packages: c.no_of_packages || "", gross_weight: c.gross_weight || "",
-              volume: c.volume || "", chargeable_weight: c.chargeable_weight || "",
-              haz: booking.is_hazardous || "",
-            }))
-          : [],
-        mawb_charges: Array.isArray(booking.rate_details)
-          ? booking.rate_details.map((c: Record<string, unknown>) => ({
-              charge_id: c.charge_id || "", supplier_code: "", pp_cc: c.pp_cc || "",
-              unit_id: c.unit_id || "", no_of_unit: c.no_of_units || "",
-              amount: c.min_sell || "", amount_per_unit: c.sell_per_unit || "",
-              cost_local_amount: "", currency_id: c.currency_id || "", roe: c.roe || "",
-              sell_local_amount: "", total_cost: c.total_cost || "", unit_cost: c.cost_per_unit || "",
-            }))
-          : [],
-        events: Array.isArray(booking.events)
-          ? booking.events.map((e: Record<string, unknown>) => ({
-              event_id: e.event_id || "", event_name: e.event_name || "", event_date: e.event_date || "",
-              event_status: e.event_status || "", event_description: e.event_description || "",
-              event_type: e.event_type || "", event_priority: e.event_priority || "", event_location: e.event_location || "",
-            }))
-          : [],
-      }],
-    };
-
-    setCreateJobModalOpen(true);
-    setCreateJobLoading(true);
-    setCreateJobResponse(null);
-    setCreateJobError(null);
-
-    try {
-      const response = (await apiCallProtected.post(URL.jobCreate, payload)) as Record<string, unknown>;
-      setCreateJobResponse(response);
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string; detail?: string; error?: string } }; message?: string };
-      const errMsg = axiosErr?.response?.data?.message || axiosErr?.response?.data?.detail ||
-        axiosErr?.response?.data?.error || (err instanceof Error ? err.message : "Failed to create job");
-      setCreateJobError(String(errMsg));
-    } finally { setCreateJobLoading(false); }
+    await createJobFromBooking(booking as unknown as Record<string, unknown>, {
+      navigate,
+      mode: "air-export",
+      onStart: () => setCreateJobBookingId(booking.id),
+      onEnd: () => setCreateJobBookingId(null),
+      invalidateList: () => {
+        queryClient.invalidateQueries({
+          queryKey: ["air-export-booking/filter/"],
+        });
+        void refetchExportShipments();
+      },
+    });
   };
 
   // ---- Row action menu ----
@@ -1492,12 +1675,28 @@ function AirExportBookingMaster() {
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item leftSection={<IconEye size={14} />} disabled={isCancel}
-            onClick={() => { if (!isCancel) { persistListState(); navigate("./edit", { state: { job: row } }); } }}>
+          <Menu.Item
+            leftSection={<IconEye size={14} />}
+            disabled={isCancel}
+            onClick={() => {
+              if (!isCancel) {
+                persistListState();
+                navigate("./edit", { state: { job: row } });
+              }
+            }}
+          >
             View Details
           </Menu.Item>
-          <Menu.Item leftSection={<IconEdit size={14} />} disabled={isCancel}
-            onClick={() => { if (!isCancel) { persistListState(); navigate("./edit", { state: { job: row } }); } }}>
+          <Menu.Item
+            leftSection={<IconEdit size={14} />}
+            disabled={isCancel}
+            onClick={() => {
+              if (!isCancel) {
+                persistListState();
+                navigate("./edit", { state: { job: row } });
+              }
+            }}
+          >
             Edit Booking
           </Menu.Item>
           {/* <Menu.Item leftSection={<IconCopy size={14} />}
@@ -1510,13 +1709,23 @@ function AirExportBookingMaster() {
             Generate AWB
           </Menu.Item> */}
           {isBooked && (
-            <Menu.Item leftSection={<IconBriefcase size={14} />} onClick={() => handleCreateJob(row)}>
-              Create Job
+            <Menu.Item
+              leftSection={<IconBriefcase size={14} />}
+              disabled={createJobBookingId === row.id}
+              onClick={() => void handleCreateJob(row)}
+            >
+              {createJobBookingId === row.id ? "Creating job…" : "Create Job"}
             </Menu.Item>
           )}
           <Menu.Divider />
-          <Menu.Item leftSection={<IconCircleX size={14} />} color="red" disabled={!canCancel}
-            onClick={() => { if (canCancel) setCancelConfirmRow(row); }}>
+          <Menu.Item
+            leftSection={<IconCircleX size={14} />}
+            color="red"
+            disabled={!canCancel}
+            onClick={() => {
+              if (canCancel) setCancelConfirmRow(row);
+            }}
+          >
             Cancel Booking
           </Menu.Item>
         </Menu.Dropdown>
@@ -1540,7 +1749,12 @@ function AirExportBookingMaster() {
   }) => {
     const active = sortConfig?.key === col;
     return (
-      <th style={{ ...headerThStyle(align), minWidth: minwidth ? minwidth : undefined }}>
+      <th
+        style={{
+          ...headerThStyle(align),
+          minWidth: minwidth ? minwidth : undefined,
+        }}
+      >
         {sortable ? (
           <button
             type="button"
@@ -1645,1051 +1859,1267 @@ function AirExportBookingMaster() {
   return (
     <MantineProvider theme={airExportV0MantineTheme}>
       <Box className={AIR_EXPORT_GEIST_ROOT_CLASS} style={v0RootTypography}>
-      {showMasterTable && (
-        <ERPListScreen
-          theme={erpTheme}
-          toolbar={{
-            leading:
-              <>
-                <ERPListStatPill
+        {showMasterTable && (
+          <ERPListScreen
+            theme={erpTheme}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconPackage size={14} color={primary} />}
+                    value={stats.total}
+                    label="Total"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCircleCheck size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={stats.booked}
+                    label="Booked"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconPackage size={14} color="#105476" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#105476"
+                    value={stats.received}
+                    label="Received"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconClock size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={stats.generated}
+                    label="Generated"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCircleX size={14} color="#dc2626" />}
+                    iconBackground="#fee2e2"
+                    iconColor="#dc2626"
+                    value={stats.canceled}
+                    label="Canceled"
+                  />
+                </>
+              ),
+              secondary: (
+                <>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2
+                      size={16}
+                      color={muted}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalPieces.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      pcs
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconScale
+                      size={16}
+                      color={muted}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {stats.totalWeight.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      kg
+                    </Text>
+                  </Group>
+                </>
+              ),
+              actions: (
+                <>
+                  <Select
+                    size="xs"
+                    w={130}
+                    value={statusFilter}
+                    onChange={(v) => {
+                      setStatusFilter(v || "all");
+                      setPageIndex(0);
+                    }}
+                    data={[
+                      { value: "all", label: "All Status" },
+                      { value: "BOOKED", label: "Booked" },
+                      { value: "RECEIVED", label: "Received" },
+                      { value: "GENERATED", label: "Generated" },
+                      { value: "CLOSED", label: "Closed" },
+                      { value: "CANCEL", label: "Cancelled" },
+                    ]}
+                    classNames={{
+                      dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                      option: AIR_EXPORT_GEIST_ROOT_CLASS,
+                    }}
+                    styles={erpToolbarSelectStyles(erpTheme)}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={columnToggleItems}
+                    menuStyles={v0MenuStyles}
+                    classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                  />
+                  <FormTextInput
+                    placeholder="Search..."
+                    leftSection={<IconSearch size={14} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => setSearchQuery("")}
+                          aria-label="Clear search"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={220}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    styles={{
+                      input: {
+                        height: 32,
+                        minHeight: 32,
+                        fontSize: 12,
+                        borderColor: border,
+                        fontFamily: V0_FONT_SANS,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                    onClick={persistListAndNavigate}
+                  >
+                    New Booking
+                  </Button>
+                </>
+              ),
+            }}
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle:
+                "Refine bookings by reference, customer, route, or date",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
                   theme={erpTheme}
-                  icon={<IconPackage size={14} color={primary} />}
-                  value={stats.total}
-                  label="Total"
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={isDataLoading}
+                  applyDisabled={isDataLoading}
                 />
-                <ERPListStatPill
+              ),
+              children: (
+                <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <FormTextInput
+                        size="xs"
+                        label="Booking ID"
+                        placeholder="Enter Booking ID"
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        value={filterForm.values.booking_id ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "booking_id",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <FormTextInput
+                        size="xs"
+                        label="Enquiry ID"
+                        placeholder="Enter Enquiry ID"
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        value={filterForm.values.enquiry_id ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "enquiry_id",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SearchableSelect
+                        size="xs"
+                        label="Customer"
+                        placeholder="Type customer name"
+                        apiEndpoint={URL.allCustomers}
+                        searchFields={["customer_name", "customer_code"]}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.customer_code),
+                          label: String(item.customer_name),
+                        })}
+                        value={filterForm.values.customer}
+                        displayValue={customerDisplayName}
+                        onChange={(value, selectedData) => {
+                          filterForm.setFieldValue("customer", value || "");
+                          setCustomerDisplayName(selectedData?.label || null);
+                        }}
+                        minSearchLength={2}
+                        dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SingleDateInput
+                        key={`date-${filterForm.values.date}`}
+                        label="Date"
+                        placeholder="YYYY-MM-DD"
+                        size="xs"
+                        value={filterForm.values.date}
+                        onChange={(d) => filterForm.setFieldValue("date", d)}
+                        classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
+                        styles={{
+                          ...AIR_EXPORT_FILTER_UNIFIED_STYLES,
+                          input: {
+                            ...AIR_EXPORT_FILTER_UNIFIED_STYLES.input,
+                            minHeight: 32,
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SearchableSelect
+                        size="xs"
+                        label="Origin"
+                        placeholder="Type origin code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.port_code),
+                          label: `${item.port_name} (${item.port_code})`,
+                        })}
+                        value={filterForm.values.origin}
+                        displayValue={originDisplayName}
+                        onChange={(value, selectedData) => {
+                          filterForm.setFieldValue("origin", value || "");
+                          setOriginDisplayName(selectedData?.label || null);
+                        }}
+                        minSearchLength={3}
+                        additionalParams={airTransportParams}
+                        dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <SearchableSelect
+                        size="xs"
+                        label="Destination"
+                        placeholder="Type destination code or name"
+                        apiEndpoint={URL.portMaster}
+                        searchFields={["port_code", "port_name"]}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.port_code),
+                          label: `${item.port_name} (${item.port_code})`,
+                        })}
+                        value={filterForm.values.destination}
+                        displayValue={destinationDisplayName}
+                        onChange={(value, selectedData) => {
+                          filterForm.setFieldValue("destination", value || "");
+                          setDestinationDisplayName(
+                            selectedData?.label || null,
+                          );
+                        }}
+                        minSearchLength={3}
+                        additionalParams={airTransportParams}
+                        dropdownZIndex={1000}
+                        classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <FormTextInput
+                        size="xs"
+                        label="House No"
+                        placeholder="Enter House No"
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        value={filterForm.values.houseno ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "houseno",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <FormTextInput
+                        size="xs"
+                        label="Customer Service"
+                        placeholder="Enter Customer Service"
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        value={filterForm.values.customer_service_name ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "customer_service_name",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <FormTextInput
+                        size="xs"
+                        label="MAWB"
+                        placeholder="Enter MAWB"
+                        styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                        value={filterForm.values.mawb_no ?? ""}
+                        onChange={(e) =>
+                          filterForm.setFieldValue(
+                            "mawb_no",
+                            e.currentTarget.value || null,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                </Grid>
+              ),
+            }}
+            table={{
+              selectionBar:
+                selectedIds.length > 0 ? (
+                  <ERPListBulkSelectionBar
+                    theme={erpTheme}
+                    count={selectedIds.length}
+                    entityLabel="booking"
+                  >
+                    <Button
+                      variant="default"
+                      size="xs"
+                      leftSection={<IconFileText size={13} />}
+                      onClick={() =>
+                        ToastNotification({
+                          type: "info",
+                          message: "Generate AWB coming soon",
+                        })
+                      }
+                    >
+                      Generate AWB
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="xs"
+                      leftSection={<IconDownload size={13} />}
+                      onClick={() =>
+                        handleExport(
+                          tableRows.filter((r) => selectedIds.includes(r.id)),
+                        )
+                      }
+                    >
+                      Export Selected
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      color="red"
+                      size="xs"
+                      onClick={() => setSelectedIds([])}
+                    >
+                      Clear
+                    </Button>
+                  </ERPListBulkSelectionBar>
+                ) : undefined,
+              footer: (
+                <ERPListPaginationFooter
                   theme={erpTheme}
-                  icon={<IconCircleCheck size={14} color="#059669" />}
-                  iconBackground="#d1fae5"
-                  iconColor="#059669"
-                  value={stats.booked}
-                  label="Booked"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconPackage size={14} color="#105476" />}
-                  iconBackground="#dbeafe"
-                  iconColor="#105476"
-                  value={stats.received}
-                  label="Received"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconClock size={14} color="#d97706" />}
-                  iconBackground="#fef3c7"
-                  iconColor="#d97706"
-                  value={stats.generated}
-                  label="Generated"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconCircleX size={14} color="#dc2626" />}
-                  iconBackground="#fee2e2"
-                  iconColor="#dc2626"
-                  value={stats.canceled}
-                  label="Canceled"
-                />
-              </>
-            ,
-            secondary:
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {stats.totalPieces.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    pcs
-                  </Text>
-                </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconScale size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {stats.totalWeight.toLocaleString(undefined, {
-                      maximumFractionDigits: 1,
-                    })}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    kg
-                  </Text>
-                </Group>
-              </>
-            ,
-            actions:
-              <>
-                <Select
-                  size="xs"
-                  w={130}
-                  value={statusFilter}
-                  onChange={(v) => {
-                    setStatusFilter(v || "all");
-                    setPageIndex(0);
-                  }}
-                  data={[
-                    { value: "all", label: "All Status" },
-                    { value: "BOOKED", label: "Booked" },
-                    { value: "RECEIVED", label: "Received" },
-                    { value: "GENERATED", label: "Generated" },
-                    { value: "CLOSED", label: "Closed" },
-                    { value: "CANCEL", label: "Cancelled" },
-                  ]}
-                  classNames={{
+                  totalRecords={totalRecords}
+                  pageIndex={pageIndex}
+                  pageSize={pageSize}
+                  onPageIndexChange={setPageIndex}
+                  onPageSizeChange={setPageSize}
+                  selectClassNames={{
                     dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
                     option: AIR_EXPORT_GEIST_ROOT_CLASS,
                   }}
-                  styles={erpToolbarSelectStyles(erpTheme)}
                 />
-                <ERPListColumnToggleMenu
-                  theme={erpTheme}
-                  items={columnToggleItems}
-                  menuStyles={v0MenuStyles}
-                  classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
-                />
-                <FormTextInput
-                  placeholder="Search..."
-                  leftSection={<IconSearch size={14} />}
-                  rightSection={
-                    searchQuery ? (
-                      <ActionIcon
-                        variant="transparent"
-                        size="sm"
-                        onClick={() => setSearchQuery("")}
-                        aria-label="Clear search"
-                      >
-                        <IconX size={14} />
-                      </ActionIcon>
-                    ) : null
-                  }
-                  w={220}
-                  size="xs"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                  styles={{
-                    input: {
-                      height: 32,
-                      minHeight: 32,
-                      fontSize: 12,
-                      borderColor: border,
-                      fontFamily: V0_FONT_SANS,
-                    },
+              ),
+              children: (
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 14,
+                    backgroundColor: cardBg,
                   }}
-                />
-                <Button
-                  variant="default"
-                  size="xs"
-                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
-                  leftSection={<IconFilter size={14} />}
-                  onClick={() => setShowFilters((s) => !s)}
                 >
-                  {showFilters ? "Hide filters" : "Filters"}
-                </Button>
-                <Button
-                  size="xs"
-                  leftSection={<IconPlus size={14} />}
-                  styles={erpToolbarPrimaryButtonStyles(erpTheme)}
-                  onClick={persistListAndNavigate}
-                >
-                  New Booking
-                </Button>
-              </>
-            ,
-          }}
-          filters={{
-            opened: showFilters,
-            title: "Filters",
-            subtitle: "Refine bookings by reference, customer, route, or date",
-            onClose: () => setShowFilters(false),
-            footer: (
-              <ERPListFilterActionsFooter
-                theme={erpTheme}
-                onClear={clearAllFilters}
-                onApply={applyFilters}
-                applyLoading={isDataLoading}
-                applyDisabled={isDataLoading}
-              />
-            ),
-            children: (
-                  <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <FormTextInput
-                          size="xs"
-                          label="Booking ID"
-                          placeholder="Enter Booking ID"
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                          value={filterForm.values.booking_id ?? ""}
-                          onChange={(e) =>
-                            filterForm.setFieldValue(
-                              "booking_id",
-                              e.currentTarget.value || null
-                            )
-                          }
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <FormTextInput
-                          size="xs"
-                          label="Enquiry ID"
-                          placeholder="Enter Enquiry ID"
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                          value={filterForm.values.enquiry_id ?? ""}
-                          onChange={(e) =>
-                            filterForm.setFieldValue(
-                              "enquiry_id",
-                              e.currentTarget.value || null
-                            )
-                          }
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <SearchableSelect
-                          size="xs"
-                          label="Customer"
-                          placeholder="Type customer name"
-                          apiEndpoint={URL.allCustomers}
-                          searchFields={["customer_name", "customer_code"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.customer_code),
-                            label: String(item.customer_name),
-                          })}
-                          value={filterForm.values.customer}
-                          displayValue={customerDisplayName}
-                          onChange={(value, selectedData) => {
-                            filterForm.setFieldValue("customer", value || "");
-                            setCustomerDisplayName(selectedData?.label || null);
-                          }}
-                          minSearchLength={2}
-                          dropdownZIndex={1000}
-                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <SingleDateInput
-                          key={`date-${filterForm.values.date}`}
-                          label="Date"
-                          placeholder="YYYY-MM-DD"
-                          size="xs"
-                          value={filterForm.values.date}
-                          onChange={(d) => filterForm.setFieldValue("date", d)}
-                          classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
-                          styles={{
-                            ...AIR_EXPORT_FILTER_UNIFIED_STYLES,
-                            input: {
-                              ...AIR_EXPORT_FILTER_UNIFIED_STYLES.input,
-                              minHeight: 32,
-                            },
-                          }}
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <SearchableSelect
-                          size="xs"
-                          label="Origin"
-                          placeholder="Type origin code or name"
-                          apiEndpoint={URL.portMaster}
-                          searchFields={["port_code", "port_name"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.port_code),
-                            label: `${item.port_name} (${item.port_code})`,
-                          })}
-                          value={filterForm.values.origin}
-                          displayValue={originDisplayName}
-                          onChange={(value, selectedData) => {
-                            filterForm.setFieldValue("origin", value || "");
-                            setOriginDisplayName(selectedData?.label || null);
-                          }}
-                          minSearchLength={3}
-                          additionalParams={airTransportParams}
-                          dropdownZIndex={1000}
-                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <SearchableSelect
-                          size="xs"
-                          label="Destination"
-                          placeholder="Type destination code or name"
-                          apiEndpoint={URL.portMaster}
-                          searchFields={["port_code", "port_name"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.port_code),
-                            label: `${item.port_name} (${item.port_code})`,
-                          })}
-                          value={filterForm.values.destination}
-                          displayValue={destinationDisplayName}
-                          onChange={(value, selectedData) => {
-                            filterForm.setFieldValue("destination", value || "");
-                            setDestinationDisplayName(selectedData?.label || null);
-                          }}
-                          minSearchLength={3}
-                          additionalParams={airTransportParams}
-                          dropdownZIndex={1000}
-                          classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <FormTextInput
-                          size="xs"
-                          label="House No"
-                          placeholder="Enter House No"
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                          value={filterForm.values.houseno ?? ""}
-                          onChange={(e) =>
-                            filterForm.setFieldValue(
-                              "houseno",
-                              e.currentTarget.value || null,
-                            )
-                          }
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <FormTextInput
-                          size="xs"
-                          label="Customer Service"
-                          placeholder="Enter Customer Service"
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                          value={filterForm.values.customer_service_name ?? ""}
-                          onChange={(e) =>
-                            filterForm.setFieldValue(
-                              "customer_service_name",
-                              e.currentTarget.value || null,
-                            )
-                          }
-                        />
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
-                      <Box
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          width: "100%",
-                          minHeight: 0,
-                        }}
-                      >
-                        <FormTextInput
-                          size="xs"
-                          label="MAWB"
-                          placeholder="Enter MAWB"
-                          styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                          value={filterForm.values.mawb_no ?? ""}
-                          onChange={(e) =>
-                            filterForm.setFieldValue(
-                              "mawb_no",
-                              e.currentTarget.value || null,
-                            )
-                          }
-                        />
-                      </Box>
-                    </Grid.Col>
-                  </Grid>
-            ),
-          }}
-          table={{
-            selectionBar:
-              selectedIds.length > 0 ? (
-                <ERPListBulkSelectionBar theme={erpTheme} count={selectedIds.length} entityLabel="booking">
-                  <Button variant="default" size="xs" leftSection={<IconFileText size={13} />}
-                    onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
-                    Generate AWB
-                  </Button>
-                  <Button variant="default" size="xs" leftSection={<IconDownload size={13} />}
-                    onClick={() => handleExport(tableRows.filter((r) => selectedIds.includes(r.id)))}>
-                    Export Selected
-                  </Button>
-                  <Button variant="subtle" color="red" size="xs" onClick={() => setSelectedIds([])}>Clear</Button>
-                </ERPListBulkSelectionBar>
-              ) : undefined,
-            footer: (
-              <ERPListPaginationFooter
-                theme={erpTheme}
-                totalRecords={totalRecords}
-                pageIndex={pageIndex}
-                pageSize={pageSize}
-                onPageIndexChange={setPageIndex}
-                onPageSizeChange={setPageSize}
-                selectClassNames={{
-                  dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
-                  option: AIR_EXPORT_GEIST_ROOT_CLASS,
-                }}
-              />
-            ),
-            children: (
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, backgroundColor: cardBg }}>
-                    <thead>
-                      <tr style={{height:52.4}}>
-                        {visibleColumns.sno && <Th col="sno" label="S.No" minwidth={40} />}
-                        {visibleColumns.shipment && (
-                          <th style={headerThStyle("left", 160)}>
-                            <ERPListColumnHeaderFilter
-                              label="Booking ID"
-                              value={filterForm.values.booking_id ?? ""}
-                              displayValue={filterForm.values.booking_id ?? ""}
-                              theme={erpTheme}
-                              placeholder="Filter Booking ID"
-                              isEditing={editingHeaderId === "shipment"}
-                              onStartEdit={() => openHeaderEditor("shipment")}
-                              onStopEdit={() => collapseHeaderEditor("shipment")}
-                              onChange={(next) =>
-                                commitHeaderFilters({ booking_id: next || null })
-                              }
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.houseno && (
-                          <th style={headerThStyle("left", 140)}>
-                            <ERPListColumnHeaderFilter
-                              label="House No"
-                              value={filterForm.values.houseno ?? ""}
-                              displayValue={filterForm.values.houseno ?? ""}
-                              theme={erpTheme}
-                              placeholder="Filter House No"
-                              isEditing={editingHeaderId === "houseno"}
-                              onStartEdit={() => openHeaderEditor("houseno")}
-                              onStopEdit={() => collapseHeaderEditor("houseno")}
-                              onChange={(next) =>
-                                commitHeaderFilters({ houseno: next || null })
-                              }
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.customer && (
-                          <th style={headerThStyle("left", 220)}>
-                            <ERPListColumnHeaderFilter
-                              label="Customer"
-                              value={filterForm.values.customer ?? ""}
-                              displayValue={
-                                customerDisplayName ?? filterForm.values.customer ?? ""
-                              }
-                              onChange={() => {}}
-                              theme={erpTheme}
-                              isEditing={editingHeaderId === "customer"}
-                              onStartEdit={() => openHeaderEditor("customer")}
-                              onStopEdit={() => collapseHeaderEditor("customer")}
-                              renderEditor={({ autoFocus, onClose }) => (
-                                <SearchableSelect
-                                  autoFocus={autoFocus}
-                                  size="xs"
-                                  apiEndpoint={URL.customer}
-                                  searchFields={["customer_name", "customer_code"]}
-                                  placeholder="Type customer"
-                                  displayFormat={(item: Record<string, unknown>) => ({
-                                    value: String(item.customer_code),
-                                    label: String(item.customer_name),
-                                  })}
-                                  value={filterForm.values.customer}
-                                  displayValue={customerDisplayName}
-                                  onChange={(value, selectedData) => {
-                                    commitHeaderFilters(
-                                      { customer: value || null },
-                                      { customer: selectedData?.label ?? null },
-                                    );
-                                    if (value) onClose();
-                                  }}
-                                  minSearchLength={1}
-                                  dropdownZIndex={1000}
-                                  classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                                  styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                                />
-                              )}
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.date && (
-                          <th style={headerThStyle("left", 140)}>
-                            <ERPListColumnHeaderFilter
-                              label="Date"
-                              value={
-                                filterForm.values.date
-                                  ? dayjs(filterForm.values.date).format("YYYY-MM-DD")
-                                  : ""
-                              }
-                              displayValue={
-                                filterForm.values.date
-                                  ? dayjs(filterForm.values.date).format(dateFormat)
-                                  : ""
-                              }
-                              onChange={() => {}}
-                              theme={erpTheme}
-                              isEditing={editingHeaderId === "date"}
-                              onStartEdit={() => openHeaderEditor("date")}
-                              onStopEdit={() => collapseHeaderEditor("date")}
-                              renderEditor={({ autoFocus, onClose }) => (
-                                <SingleDateInput
-                                  key={`date-h-${filterForm.values.date}`}
-                                  // placeholder="YYYY-MM-DD"
-                                  size="xs"
-                                  value={filterForm.values.date}
-                                  onChange={(d) => {
-                                    commitHeaderFilters({ date: d });
-                                    if (d) onClose();
-                                  }}
-                                  classNames={{ dropdown: AIR_EXPORT_GEIST_ROOT_CLASS }}
-                                  styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                                  {...(autoFocus ? { autoFocus: true } : {})}
-                                />
-                              )}
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.route && (
-                          <th style={headerThStyle("left", 200)}>
-                            <ERPListColumnHeaderFilter
-                              label="Route"
-                              value={
-                                (filterForm.values.origin ?? "") +
-                                (filterForm.values.destination ?? "")
-                              }
-                              displayValue={
-                                filterForm.values.origin || filterForm.values.destination
-                                  ? `${filterForm.values.origin ?? "—"} → ${
-                                      filterForm.values.destination ?? "—"
-                                    }`
-                                  : ""
-                              }
-                              onChange={() => {}}
-                              theme={erpTheme}
-                              isEditing={editingHeaderId === "route"}
-                              onStartEdit={() => openHeaderEditor("route")}
-                              onStopEdit={() => collapseHeaderEditor("route")}
-                              renderEditor={({ autoFocus }) => (
-                                <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
-                                  <Box style={{ flex: 1, minWidth: 0 }}>
-                                    <SearchableSelect
-                                      autoFocus={autoFocus}
-                                      size="xs"
-                                      apiEndpoint={URL.portMaster}
-                                      additionalParams={airTransportParams}
-                                      searchFields={["port_code", "port_name"]}
-                                      placeholder="Origin"
-                                      displayFormat={(item: Record<string, unknown>) => ({
-                                        value: String(item.port_code),
-                                        label: `${item.port_name} (${item.port_code})`,
-                                      })}
-                                      value={filterForm.values.origin}
-                                      displayValue={originDisplayName}
-                                      onChange={(value, selectedData) =>
-                                        commitHeaderFilters(
-                                          { origin: value || null },
-                                          { origin: selectedData?.label ?? null },
-                                        )
-                                      }
-                                      minSearchLength={1}
-                                      dropdownZIndex={1000}
-                                      classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                                      styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                                    />
-                                  </Box>
-                                  <Box style={{ flex: 1, minWidth: 0 }}>
-                                    <SearchableSelect
-                                      size="xs"
-                                      apiEndpoint={URL.portMaster}
-                                      additionalParams={airTransportParams}
-                                      searchFields={["port_code", "port_name"]}
-                                      placeholder="Destination"
-                                      displayFormat={(item: Record<string, unknown>) => ({
-                                        value: String(item.port_code),
-                                        label: `${item.port_name} (${item.port_code})`,
-                                      })}
-                                      value={filterForm.values.destination}
-                                      displayValue={destinationDisplayName}
-                                      onChange={(value, selectedData) =>
-                                        commitHeaderFilters(
-                                          { destination: value || null },
-                                          { destination: selectedData?.label ?? null },
-                                        )
-                                      }
-                                      minSearchLength={1}
-                                      dropdownZIndex={1000}
-                                      classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
-                                      styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
-                                    />
-                                  </Box>
-                                </Group>
-                              )}
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.status && <Th col="status" label="Status" />}
-                        {visibleColumns.mawb && (
-                          <th style={headerThStyle("left", 160)}>
-                            <ERPListColumnHeaderFilter
-                              label="MAWB"
-                              value={filterForm.values.mawb_no ?? ""}
-                              displayValue={filterForm.values.mawb_no ?? ""}
-                              theme={erpTheme}
-                              placeholder="Filter MAWB"
-                              isEditing={editingHeaderId === "mawb"}
-                              onStartEdit={() => openHeaderEditor("mawb")}
-                              onStopEdit={() => collapseHeaderEditor("mawb")}
-                              onChange={(next) =>
-                                commitHeaderFilters({ mawb_no: next || null })
-                              }
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.flight && <Th col="flight" label="Flight" />}
-                        {visibleColumns.pieces && <Th col="pieces" label="Pcs" align="right" />}
-                        {visibleColumns.weight && <Th col="weight" label="Weight"  align="right" />}
-                        {visibleColumns.handler && (
-                          <th style={headerThStyle("left", 120)}>
-                            <ERPListColumnHeaderFilter
-                              label="Customer Service"
-                              value={filterForm.values.customer_service_name ?? ""}
-                              displayValue={filterForm.values.customer_service_name ?? ""}
-                              theme={erpTheme}
-                              placeholder="Filter Customer Service"
-                              isEditing={editingHeaderId === "handler"}
-                              onStartEdit={() => openHeaderEditor("handler")}
-                              onStopEdit={() => collapseHeaderEditor("handler")}
-                              onChange={(next) =>
-                                commitHeaderFilters({
-                                  customer_service_name: next || null,
-                                })
-                              }
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.lastMilestone && <Th col="lastMilestone" label="Last Milestone" />}
-                        <th style={erpListStickyActionThStyle(erpTheme, 80)}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isDataLoading ? (
-                        <tr>
-                          <td colSpan={20} style={{ padding: 80, textAlign: "center" }}>
-                            <Center>
-                              <Stack align="center" gap="sm">
-                                <Loader size="lg" color={primary} />
-                                <Text c="dimmed" size="sm" style={{ fontFamily: V0_FONT_SANS }}>
-                                  Loading export bookings...
-                                </Text>
-                              </Stack>
-                            </Center>
-                          </td>
-                        </tr>
-                      ) : tableRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={20} style={{ padding: 60, textAlign: "center" }}>
-                            <Stack align="center" gap="md">
-                              <Box style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <IconPackage size={24} color={muted} />
-                              </Box>
-                              <Box>
-                                <Text fw={500} c={fg}>No bookings found</Text>
-                                <Text size="sm" c={muted} mt={4}>Try adjusting your search or filters</Text>
-                              </Box>
+                  <thead>
+                    <tr style={{ height: 52.4 }}>
+                      {visibleColumns.sno && (
+                        <Th col="sno" label="S.No" minwidth={40} />
+                      )}
+                      {visibleColumns.shipment && (
+                        <th style={headerThStyle("left", 160)}>
+                          <ERPListColumnHeaderFilter
+                            label="Booking ID"
+                            value={filterForm.values.booking_id ?? ""}
+                            displayValue={filterForm.values.booking_id ?? ""}
+                            theme={erpTheme}
+                            placeholder="Filter Booking ID"
+                            isEditing={editingHeaderId === "shipment"}
+                            onStartEdit={() => openHeaderEditor("shipment")}
+                            onStopEdit={() => collapseHeaderEditor("shipment")}
+                            onChange={(next) =>
+                              commitHeaderFilters({ booking_id: next || null })
+                            }
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.houseno && (
+                        <th style={headerThStyle("left", 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="House No"
+                            value={filterForm.values.houseno ?? ""}
+                            displayValue={filterForm.values.houseno ?? ""}
+                            theme={erpTheme}
+                            placeholder="Filter House No"
+                            isEditing={editingHeaderId === "houseno"}
+                            onStartEdit={() => openHeaderEditor("houseno")}
+                            onStopEdit={() => collapseHeaderEditor("houseno")}
+                            onChange={(next) =>
+                              commitHeaderFilters({ houseno: next || null })
+                            }
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.customer && (
+                        <th style={headerThStyle("left", 220)}>
+                          <ERPListColumnHeaderFilter
+                            label="Customer"
+                            value={filterForm.values.customer ?? ""}
+                            displayValue={
+                              customerDisplayName ??
+                              filterForm.values.customer ??
+                              ""
+                            }
+                            onChange={() => {}}
+                            theme={erpTheme}
+                            isEditing={editingHeaderId === "customer"}
+                            onStartEdit={() => openHeaderEditor("customer")}
+                            onStopEdit={() => collapseHeaderEditor("customer")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SearchableSelect
+                                autoFocus={autoFocus}
+                                size="xs"
+                                apiEndpoint={URL.customer}
+                                searchFields={[
+                                  "customer_name",
+                                  "customer_code",
+                                ]}
+                                placeholder="Type customer"
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => ({
+                                  value: String(item.customer_code),
+                                  label: String(item.customer_name),
+                                })}
+                                value={filterForm.values.customer}
+                                displayValue={customerDisplayName}
+                                onChange={(value, selectedData) => {
+                                  commitHeaderFilters(
+                                    { customer: value || null },
+                                    { customer: selectedData?.label ?? null },
+                                  );
+                                  if (value) onClose();
+                                }}
+                                minSearchLength={1}
+                                dropdownZIndex={1000}
+                                classNames={AIR_EXPORT_FILTER_SELECT_CLASSNAMES}
+                                styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.date && (
+                        <th style={headerThStyle("left", 140)}>
+                          <ERPListColumnHeaderFilter
+                            label="Date"
+                            value={
+                              filterForm.values.date
+                                ? dayjs(filterForm.values.date).format(
+                                    "YYYY-MM-DD",
+                                  )
+                                : ""
+                            }
+                            displayValue={
+                              filterForm.values.date
+                                ? dayjs(filterForm.values.date).format(
+                                    dateFormat,
+                                  )
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={erpTheme}
+                            isEditing={editingHeaderId === "date"}
+                            onStartEdit={() => openHeaderEditor("date")}
+                            onStopEdit={() => collapseHeaderEditor("date")}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                key={`date-h-${filterForm.values.date}`}
+                                // placeholder="YYYY-MM-DD"
+                                size="xs"
+                                value={filterForm.values.date}
+                                onChange={(d) => {
+                                  commitHeaderFilters({ date: d });
+                                  if (d) onClose();
+                                }}
+                                classNames={{
+                                  dropdown: AIR_EXPORT_GEIST_ROOT_CLASS,
+                                }}
+                                styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.route && (
+                        <th style={headerThStyle("left", 200)}>
+                          <ERPListColumnHeaderFilter
+                            label="Route"
+                            value={
+                              (filterForm.values.origin ?? "") +
+                              (filterForm.values.destination ?? "")
+                            }
+                            displayValue={
+                              filterForm.values.origin ||
+                              filterForm.values.destination
+                                ? `${filterForm.values.origin ?? "—"} → ${
+                                    filterForm.values.destination ?? "—"
+                                  }`
+                                : ""
+                            }
+                            onChange={() => {}}
+                            theme={erpTheme}
+                            isEditing={editingHeaderId === "route"}
+                            onStartEdit={() => openHeaderEditor("route")}
+                            onStopEdit={() => collapseHeaderEditor("route")}
+                            renderEditor={({ autoFocus }) => (
+                              <Group
+                                gap={4}
+                                wrap="nowrap"
+                                style={{ width: "100%" }}
+                              >
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    autoFocus={autoFocus}
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={airTransportParams}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Origin"
+                                    displayFormat={(
+                                      item: Record<string, unknown>,
+                                    ) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={filterForm.values.origin}
+                                    displayValue={originDisplayName}
+                                    onChange={(value, selectedData) =>
+                                      commitHeaderFilters(
+                                        { origin: value || null },
+                                        { origin: selectedData?.label ?? null },
+                                      )
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    classNames={
+                                      AIR_EXPORT_FILTER_SELECT_CLASSNAMES
+                                    }
+                                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                                  />
+                                </Box>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <SearchableSelect
+                                    size="xs"
+                                    apiEndpoint={URL.portMaster}
+                                    additionalParams={airTransportParams}
+                                    searchFields={["port_code", "port_name"]}
+                                    placeholder="Destination"
+                                    displayFormat={(
+                                      item: Record<string, unknown>,
+                                    ) => ({
+                                      value: String(item.port_code),
+                                      label: `${item.port_name} (${item.port_code})`,
+                                    })}
+                                    value={filterForm.values.destination}
+                                    displayValue={destinationDisplayName}
+                                    onChange={(value, selectedData) =>
+                                      commitHeaderFilters(
+                                        { destination: value || null },
+                                        {
+                                          destination:
+                                            selectedData?.label ?? null,
+                                        },
+                                      )
+                                    }
+                                    minSearchLength={1}
+                                    dropdownZIndex={1000}
+                                    classNames={
+                                      AIR_EXPORT_FILTER_SELECT_CLASSNAMES
+                                    }
+                                    styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
+                                  />
+                                </Box>
+                              </Group>
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.status && (
+                        <Th col="status" label="Status" />
+                      )}
+                      {visibleColumns.mawb && (
+                        <th style={headerThStyle("left", 160)}>
+                          <ERPListColumnHeaderFilter
+                            label="MAWB"
+                            value={filterForm.values.mawb_no ?? ""}
+                            displayValue={filterForm.values.mawb_no ?? ""}
+                            theme={erpTheme}
+                            placeholder="Filter MAWB"
+                            isEditing={editingHeaderId === "mawb"}
+                            onStartEdit={() => openHeaderEditor("mawb")}
+                            onStopEdit={() => collapseHeaderEditor("mawb")}
+                            onChange={(next) =>
+                              commitHeaderFilters({ mawb_no: next || null })
+                            }
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.flight && (
+                        <Th col="flight" label="Flight" />
+                      )}
+                      {visibleColumns.pieces && (
+                        <Th col="pieces" label="Pcs" align="right" />
+                      )}
+                      {visibleColumns.weight && (
+                        <Th col="weight" label="Weight" align="right" />
+                      )}
+                      {visibleColumns.handler && (
+                        <th style={headerThStyle("left", 120)}>
+                          <ERPListColumnHeaderFilter
+                            label="Customer Service"
+                            value={
+                              filterForm.values.customer_service_name ?? ""
+                            }
+                            displayValue={
+                              filterForm.values.customer_service_name ?? ""
+                            }
+                            theme={erpTheme}
+                            placeholder="Filter Customer Service"
+                            isEditing={editingHeaderId === "handler"}
+                            onStartEdit={() => openHeaderEditor("handler")}
+                            onStopEdit={() => collapseHeaderEditor("handler")}
+                            onChange={(next) =>
+                              commitHeaderFilters({
+                                customer_service_name: next || null,
+                              })
+                            }
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.lastMilestone && (
+                        <Th col="lastMilestone" label="Last Milestone" />
+                      )}
+                      <th style={erpListStickyActionThStyle(erpTheme, 80)}>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isDataLoading ? (
+                      <tr>
+                        <td
+                          colSpan={20}
+                          style={{ padding: 80, textAlign: "center" }}
+                        >
+                          <Center>
+                            <Stack align="center" gap="sm">
+                              <Loader size="lg" color={primary} />
+                              <Text
+                                c="dimmed"
+                                size="sm"
+                                style={{ fontFamily: V0_FONT_SANS }}
+                              >
+                                Loading export bookings...
+                              </Text>
                             </Stack>
-                          </td>
-                        </tr>
-                      ) : (
-                        tableRows.map((booking) => {
-                          const pw = getRowPW(booking);
-                          const lastMs = getLastMilestoneStep(booking);
-                          const LastMilestoneColIcon = lastMs.Icon;
-                          const lastMilestoneWhen = getLastMilestoneWhen(booking);
-                          const oc = booking.origin_code_read || booking.origin_code || "";
-                          const dc = booking.destination_code_read || booking.destination_code || "";
-                          const sel = selectedIds.includes(booking.id);
-                          return (
-                            <tr key={booking.id} style={{
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : tableRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={20}
+                          style={{ padding: 60, textAlign: "center" }}
+                        >
+                          <Stack align="center" gap="md">
+                            <Box
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                backgroundColor: "#f1f5f9",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconPackage size={24} color={muted} />
+                            </Box>
+                            <Box>
+                              <Text fw={500} c={fg}>
+                                No bookings found
+                              </Text>
+                              <Text size="sm" c={muted} mt={4}>
+                                Try adjusting your search or filters
+                              </Text>
+                            </Box>
+                          </Stack>
+                        </td>
+                      </tr>
+                    ) : (
+                      tableRows.map((booking) => {
+                        const pw = getRowPW(booking);
+                        const lastMs = getLastMilestoneStep(booking);
+                        const LastMilestoneColIcon = lastMs.Icon;
+                        const lastMilestoneWhen = getLastMilestoneWhen(booking);
+                        const oc =
+                          booking.origin_code_read || booking.origin_code || "";
+                        const dc =
+                          booking.destination_code_read ||
+                          booking.destination_code ||
+                          "";
+                        const sel = selectedIds.includes(booking.id);
+                        return (
+                          <tr
+                            key={booking.id}
+                            style={{
                               borderBottom: `1px solid ${border}`,
                               backgroundColor: sel ? `${primary}08` : undefined,
                               transition: "background 0.12s",
                             }}
-                              onMouseEnter={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc"; }}
-                              onMouseLeave={(e) => { if (!sel) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ""; }}
-                            >
-                              {/* <td style={{ padding: "10px 14px" }}>
+                            onMouseEnter={(e) => {
+                              if (!sel)
+                                (
+                                  e.currentTarget as HTMLTableRowElement
+                                ).style.backgroundColor = "#f8fafc";
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!sel)
+                                (
+                                  e.currentTarget as HTMLTableRowElement
+                                ).style.backgroundColor = "";
+                            }}
+                          >
+                            {/* <td style={{ padding: "10px 14px" }}>
                                 <Checkbox size="xs" checked={sel} onChange={() => { toggleRow(booking.id); }} />
                               </td> */}
-                              {visibleColumns.sno && (
-                                <td style={bodyTdStyle()}>
-                                  <Text fw={600} size="sm" c={fg}>{booking.sno}</Text>
-                                </td>
-                              )}
-                              {visibleColumns.shipment && (
-                                <td style={bodyTdStyle()}>
-                                  <Text fw={600} size="sm" c={fg}>{booking.shipment_code}</Text>
-                                  {booking.enquiry_id ? <Text fz={10} c={muted}>{booking.enquiry_id}</Text> : null}
-                                </td>
-                              )}
-                              {visibleColumns.houseno && (
-                                <td style={bodyTdStyle({ color: muted })}>
-                                  {booking.houseno ? booking.houseno : "—"}
-                                </td>
-                              )}
-                              {visibleColumns.customer && (
-                                <td style={bodyTdStyle({ maxWidth: 200 })}>
-                                  <Tooltip
-                                    label={booking.customer_name ?? ""}
-                                    withArrow
-                                    styles={{ tooltip: { fontFamily: V0_FONT_SANS, fontSize: 12 } }}
-                                  >
-                                    <Text size="sm" c={fg} lineClamp={1} style={{ cursor: "default" }}>
-                                      {booking.customer_name ?? "—"}
-                                    </Text>
-                                  </Tooltip>
-                                </td>
-                              )}
-                              {visibleColumns.date && (
-                                <td style={bodyTdStyle({ color: muted })}>
-                                  {booking.date ? dayjs(booking.date).format("DD MMM") : "—"}
-                                </td>
-                              )}
-                              {visibleColumns.route && (
-                                <td style={bodyTdStyle()}>
-                                  <Group gap={6} wrap="nowrap">
-                                    <Text fw={600} size="sm" c={primary}>{oc || "—"}</Text>
-                                    <IconArrowRight size={12} color={muted} />
-                                    <Text fw={500} size="sm" c={fg}>{dc || "—"}</Text>
-                                  </Group>
-                                </td>
-                              )}
-                              {visibleColumns.status && (
-                                <td style={bodyTdStyle()}>
-                                  <StatusPill status={booking.status} />
-                                </td>
-                              )}
-                              {visibleColumns.mawb && (
-                                <td
-                                  className={AIR_EXPORT_GEIST_MONO_CLASS}
-                                  style={bodyTdStyle({ fontSize: 12, color: muted })}
-                                >
-                                  {booking.mawb_no ? <Text size="xs" fw={500} c={fg}>{booking.mawb_no}</Text>
-                                    : <Text size="sm" c={muted}>—</Text>}
-                                </td>
-                              )}
-                              {visibleColumns.flight && (
-                                <td style={bodyTdStyle()}>
-                                  {booking.flight_no
-                                    ? <Text size="xs" fw={500} c={fg}>{booking.flight_no}</Text>
-                                    : <Text size="sm" c={muted}>—</Text>}
-                                </td>
-                              )}
-                              {visibleColumns.pieces && (
-                                <td style={bodyTdStyle({ align: "right", fontSize: 14, color: muted })}>{pw.pieces}</td>
-                              )}
-                              {visibleColumns.weight && (
-                                <td style={bodyTdStyle({ align: "right", fontSize: 14, fontWeight: 500, color: fg })}>{pw.weight.toFixed(1)}</td>
-                              )}
-                              {visibleColumns.handler && (
-                                <td style={bodyTdStyle()}>
-                                  <Group gap={8} wrap="nowrap">
-                                    <Box style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: `${primary}1a`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                      <Text fz={10} fw={600} c={primary}>{initials(booking.customer_service_name)}</Text>
-                                    </Box>
-                                    <Text size="xs" c={muted} lineClamp={1} maw={100}>{firstName(booking.customer_service_name)}</Text>
-                                  </Group>
-                                </td>
-                              )}
-                              {visibleColumns.lastMilestone && (
-                                <td style={bodyTdStyle({ maxWidth: 260, verticalAlign: "top" })}>
-                                  <Box
-                                    component="button"
-                                    type="button"
-                                    onClick={() => setMilestoneDrawerRow(booking)}
-                                    style={{
-                                      display: "grid",
-                                      gridTemplateColumns: "22px minmax(0, 1fr)",
-                                      columnGap: 8,
-                                      rowGap: 4,
-                                      alignItems: "start",
-                                      justifyItems: "stretch",
-                                      width: "100%",
-                                      margin: 0,
-                                      padding: "4px 0",
+                            {visibleColumns.sno && (
+                              <td style={bodyTdStyle()}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {booking.sno}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.shipment && (
+                              <td style={bodyTdStyle()}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {booking.shipment_code}
+                                </Text>
+                                {booking.enquiry_id ? (
+                                  <Text fz={10} c={muted}>
+                                    {booking.enquiry_id}
+                                  </Text>
+                                ) : null}
+                              </td>
+                            )}
+                            {visibleColumns.houseno && (
+                              <td style={bodyTdStyle({ color: muted })}>
+                                {booking.houseno ? booking.houseno : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.customer && (
+                              <td style={bodyTdStyle({ maxWidth: 200 })}>
+                                <Tooltip
+                                  label={booking.customer_name ?? ""}
+                                  withArrow
+                                  styles={{
+                                    tooltip: {
                                       fontFamily: V0_FONT_SANS,
-                                      cursor: "pointer",
-                                      textAlign: "left",
-                                      background: "transparent",
-                                      border: "none",
-                                      boxShadow: "none",
-                                      transition: "opacity 0.12s",
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      (e.currentTarget as HTMLButtonElement).style.opacity = "0.82";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+                                      fontSize: 12,
+                                    },
+                                  }}
+                                >
+                                  <Text
+                                    size="sm"
+                                    c={fg}
+                                    lineClamp={1}
+                                    style={{ cursor: "default" }}
+                                  >
+                                    {booking.customer_name ?? "—"}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
+                            {visibleColumns.date && (
+                              <td style={bodyTdStyle({ color: muted })}>
+                                {booking.date
+                                  ? dayjs(booking.date).format("DD MMM")
+                                  : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.route && (
+                              <td style={bodyTdStyle()}>
+                                <Group gap={6} wrap="nowrap">
+                                  <Text fw={600} size="sm" c={primary}>
+                                    {oc || "—"}
+                                  </Text>
+                                  <IconArrowRight size={12} color={muted} />
+                                  <Text fw={500} size="sm" c={fg}>
+                                    {dc || "—"}
+                                  </Text>
+                                </Group>
+                              </td>
+                            )}
+                            {visibleColumns.status && (
+                              <td style={bodyTdStyle()}>
+                                <StatusPill status={booking.status} />
+                              </td>
+                            )}
+                            {visibleColumns.mawb && (
+                              <td
+                                className={AIR_EXPORT_GEIST_MONO_CLASS}
+                                style={bodyTdStyle({
+                                  fontSize: 12,
+                                  color: muted,
+                                })}
+                              >
+                                {booking.mawb_no ? (
+                                  <Text size="xs" fw={500} c={fg}>
+                                    {booking.mawb_no}
+                                  </Text>
+                                ) : (
+                                  <Text size="sm" c={muted}>
+                                    —
+                                  </Text>
+                                )}
+                              </td>
+                            )}
+                            {visibleColumns.flight && (
+                              <td style={bodyTdStyle()}>
+                                {booking.flight_no ? (
+                                  <Text size="xs" fw={500} c={fg}>
+                                    {booking.flight_no}
+                                  </Text>
+                                ) : (
+                                  <Text size="sm" c={muted}>
+                                    —
+                                  </Text>
+                                )}
+                              </td>
+                            )}
+                            {visibleColumns.pieces && (
+                              <td
+                                style={bodyTdStyle({
+                                  align: "right",
+                                  fontSize: 14,
+                                  color: muted,
+                                })}
+                              >
+                                {pw.pieces}
+                              </td>
+                            )}
+                            {visibleColumns.weight && (
+                              <td
+                                style={bodyTdStyle({
+                                  align: "right",
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  color: fg,
+                                })}
+                              >
+                                {pw.weight.toFixed(1)}
+                              </td>
+                            )}
+                            {visibleColumns.handler && (
+                              <td style={bodyTdStyle()}>
+                                <Group gap={8} wrap="nowrap">
+                                  <Box
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: "50%",
+                                      backgroundColor: `${primary}1a`,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      flexShrink: 0,
                                     }}
                                   >
-                                    <Box
-                                      style={{
-                                        gridColumn: 1,
-                                        gridRow: 1,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        width: 22,
-                                        paddingTop: 2,
-                                      }}
-                                      aria-hidden
-                                    >
-                                      <LastMilestoneColIcon size={15} color={lastMs.accent} stroke={2} />
-                                    </Box>
-                                    <Text
-                                      component="span"
-                                      size="sm"
-                                      fw={600}
-                                      c={lastMs.accent}
-                                      lh={1.35}
-                                      style={{
-                                        gridColumn: 2,
-                                        gridRow: 1,
-                                        minWidth: 0,
-                                        textAlign: "left",
-                                      }}
-                                    >
-                                      {getLastMilestoneDisplayLabel(booking)}
-                                    </Text>
-                                    <Text
-                                      size="xs"
-                                      lh={1.35}
-                                      style={{
-                                        gridColumn: 2,
-                                        gridRow: 2,
-                                        minWidth: 0,
-                                        textAlign: "left",
-                                        color: lastMilestoneWhen === "—" ? muted : rgbaFromHex(lastMs.accent, 0.92),
-                                        fontWeight: lastMilestoneWhen === "—" ? 400 : 500,
-                                      }}
-                                    >
-                                      {lastMilestoneWhen}
+                                    <Text fz={10} fw={600} c={primary}>
+                                      {initials(booking.customer_service_name)}
                                     </Text>
                                   </Box>
-                                </td>
-                              )}
-                              <td style={erpListStickyActionTdStyle(erpTheme)}>
-                                <RowMenu row={booking} />
+                                  <Text
+                                    size="xs"
+                                    c={muted}
+                                    lineClamp={1}
+                                    maw={100}
+                                  >
+                                    {firstName(booking.customer_service_name)}
+                                  </Text>
+                                </Group>
                               </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                ),
+                            )}
+                            {visibleColumns.lastMilestone && (
+                              <td
+                                style={bodyTdStyle({
+                                  maxWidth: 260,
+                                  verticalAlign: "top",
+                                })}
+                              >
+                                <Box
+                                  component="button"
+                                  type="button"
+                                  onClick={() => setMilestoneDrawerRow(booking)}
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "22px minmax(0, 1fr)",
+                                    columnGap: 8,
+                                    rowGap: 4,
+                                    alignItems: "start",
+                                    justifyItems: "stretch",
+                                    width: "100%",
+                                    margin: 0,
+                                    padding: "4px 0",
+                                    fontFamily: V0_FONT_SANS,
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    background: "transparent",
+                                    border: "none",
+                                    boxShadow: "none",
+                                    transition: "opacity 0.12s",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.opacity = "0.82";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.opacity = "1";
+                                  }}
+                                >
+                                  <Box
+                                    style={{
+                                      gridColumn: 1,
+                                      gridRow: 1,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      width: 22,
+                                      paddingTop: 2,
+                                    }}
+                                    aria-hidden
+                                  >
+                                    <LastMilestoneColIcon
+                                      size={15}
+                                      color={lastMs.accent}
+                                      stroke={2}
+                                    />
+                                  </Box>
+                                  <Text
+                                    component="span"
+                                    size="sm"
+                                    fw={600}
+                                    c={lastMs.accent}
+                                    lh={1.35}
+                                    style={{
+                                      gridColumn: 2,
+                                      gridRow: 1,
+                                      minWidth: 0,
+                                      textAlign: "left",
+                                    }}
+                                  >
+                                    {getLastMilestoneDisplayLabel(booking)}
+                                  </Text>
+                                  <Text
+                                    size="xs"
+                                    lh={1.35}
+                                    style={{
+                                      gridColumn: 2,
+                                      gridRow: 2,
+                                      minWidth: 0,
+                                      textAlign: "left",
+                                      color:
+                                        lastMilestoneWhen === "—"
+                                          ? muted
+                                          : rgbaFromHex(lastMs.accent, 0.92),
+                                      fontWeight:
+                                        lastMilestoneWhen === "—" ? 400 : 500,
+                                    }}
+                                  >
+                                    {lastMilestoneWhen}
+                                  </Text>
+                                </Box>
+                              </td>
+                            )}
+                            <td style={erpListStickyActionTdStyle(erpTheme)}>
+                              <RowMenu row={booking} />
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              ),
+            }}
+          />
+        )}
+
+        {/* ===== MILESTONE TIMELINE DRAWER ===== */}
+        <Drawer
+          opened={!!milestoneDrawerRow}
+          onClose={() => setMilestoneDrawerRow(null)}
+          position="right"
+          size="md"
+          title={
+            milestoneDrawerRow ? (
+              <Stack gap={2}>
+                <Text fw={700} size="md" c={fg}>
+                  {milestoneDrawerRow.shipment_code}
+                </Text>
+                {milestoneDrawerRow.enquiry_id ? (
+                  <Text size="xs" c="dimmed">
+                    {milestoneDrawerRow.enquiry_id}
+                  </Text>
+                ) : null}
+              </Stack>
+            ) : null
+          }
+          classNames={{
+            content: AIR_EXPORT_GEIST_ROOT_CLASS,
+            body: AIR_EXPORT_GEIST_ROOT_CLASS,
+            header: AIR_EXPORT_GEIST_ROOT_CLASS,
           }}
-        />
-      )}
-
-      {/* ===== MILESTONE TIMELINE DRAWER ===== */}
-      <Drawer
-        opened={!!milestoneDrawerRow}
-        onClose={() => setMilestoneDrawerRow(null)}
-        position="right"
-        size="md"
-        title={
-          milestoneDrawerRow ? (
-            <Stack gap={2}>
-              <Text fw={700} size="md" c={fg}>{milestoneDrawerRow.shipment_code}</Text>
-              {milestoneDrawerRow.enquiry_id ? (
-                <Text size="xs" c="dimmed">{milestoneDrawerRow.enquiry_id}</Text>
-              ) : null}
-            </Stack>
-          ) : null
-        }
-        classNames={{
-          content: AIR_EXPORT_GEIST_ROOT_CLASS,
-          body: AIR_EXPORT_GEIST_ROOT_CLASS,
-          header: AIR_EXPORT_GEIST_ROOT_CLASS,
-        }}
-        styles={{
-          content: { fontFamily: V0_FONT_SANS },
-          body: { fontFamily: V0_FONT_SANS },
-          header: { fontFamily: V0_FONT_SANS },
-        }}
-      >
-        {milestoneDrawerRow ? (
-          <Stack gap="md">
-            <Text fw={600} size="sm" c={fg}>Route milestones</Text>
-            <Stack gap={0}>
-              {(() => {
-                const row = milestoneDrawerRow;
-                const api = row.route_milestones;
-                if (api && api.length > 0) {
-                  const activeIdx = getRouteMilestonesActiveIndex(api, row);
-                  return api.map((rm, i) => (
-                    <MilestoneDrawerStepRow
-                      key={`${rm.code}-${i}`}
-                      step={getExportMilestoneStyleByIndex(mapMilestoneCodeToIndex(rm.code))}
-                      displayLabel={rm.label}
-                      detail={rm.note?.trim() ? rm.note : "—"}
-                      when={formatRouteMilestoneWhen(rm)}
-                      i={i}
-                      total={api.length}
-                      activeIdx={activeIdx}
-                      currentStageHint=""
-                      fg={fg}
-                      muted={muted}
-                      primary={primary}
-                      border={border}
-                      bg={bg}
-                    />
-                  ));
-                }
-                const activeIdx = getLastMilestoneIndex(row);
-                return EXPORT_MILESTONES.map((step, i) => {
-                  const { detail, when } = getMilestoneDrawerDetail(row, i);
-                  return (
-                    <MilestoneDrawerStepRow
-                      key={step.label}
-                      step={step}
-                      displayLabel={step.label}
-                      detail={detail}
-                      when={when}
-                      i={i}
-                      total={EXPORT_MILESTONES.length}
-                      activeIdx={activeIdx}
-                      currentStageHint=""
-                      fg={fg}
-                      muted={muted}
-                      primary={primary}
-                      border={border}
-                      bg={bg}
-                    />
-                  );
-                });
-              })()}
-            </Stack>
-          </Stack>
-        ) : null}
-      </Drawer>
-
-      {/* ===== CANCEL MODAL ===== */}
-      <Modal opened={!!cancelConfirmRow} onClose={() => !isCancelling && setCancelConfirmRow(null)}
-        title={<Text fw={600} size="md">Cancel Booking</Text>} centered size="sm" styles={v0ModalStyles} classNames={v0ModalClassNames}>
-        <Text size="sm" c="dimmed" mb="md">
-          Are you sure you want to cancel booking{" "}
-          <Text span fw={600} c={fg}>{cancelConfirmRow?.shipment_code}</Text>?
-          This action cannot be undone.
-        </Text>
-        <Group justify="flex-end" gap={8}>
-          <Button variant="default" onClick={() => setCancelConfirmRow(null)} disabled={isCancelling}>Keep Booking</Button>
-          <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>Cancel Booking</Button>
-        </Group>
-      </Modal>
-
-      {/* ===== CREATE JOB MODAL ===== */}
-      <Modal opened={createJobModalOpen}
-        onClose={() => { if (!createJobLoading) { setCreateJobModalOpen(false); setCreateJobResponse(null); setCreateJobError(null); } }}
-        title={<Text fw={600} size="md" c={fg}>Create Job</Text>}
-        centered size="md" closeOnClickOutside={!createJobLoading} closeOnEscape={!createJobLoading} withCloseButton={!createJobLoading} styles={v0ModalStyles} classNames={v0ModalClassNames}>
-        {createJobLoading ? (
-          <Center py="xl"><Stack align="center" gap="md"><Loader size="md" color={primary} /><Text c="dimmed" size="sm">Creating job, please wait...</Text></Stack></Center>
-        ) : createJobError ? (
-          <Stack gap="md">
-            <Box style={{ border: "1px solid #FFCDD2", borderRadius: 6, padding: "12px 16px", backgroundColor: "#FFF5F5" }}>
-              <Text size="sm" c="red">{createJobError}</Text>
-            </Box>
-            <Group justify="flex-end">
-              <Button size="sm" variant="outline" styles={{ root: { borderColor: primary, color: primary } }}
-                onClick={() => { setCreateJobModalOpen(false); setCreateJobError(null); }}>Close</Button>
-            </Group>
-          </Stack>
-        ) : createJobResponse ? (() => {
-          const r = createJobResponse as { success?: boolean; message?: string; data?: { job_details_id?: number; id?: number; job_id?: string; job_no?: string }; job_details_id?: number; id?: number; job_id?: string };
-          const isSuccess = r?.success === true || r?.success === undefined;
-          const message = r?.message || (isSuccess ? "Job created successfully!" : "Job creation failed.");
-          const jobId = r?.data?.job_details_id ?? r?.data?.id ?? r?.job_details_id ?? r?.id;
-          const jobNo = r?.data?.job_id || r?.data?.job_no || r?.job_id;
-          return (
+          styles={{
+            content: { fontFamily: V0_FONT_SANS },
+            body: { fontFamily: V0_FONT_SANS },
+            header: { fontFamily: V0_FONT_SANS },
+          }}
+        >
+          {milestoneDrawerRow ? (
             <Stack gap="md">
-              <Box style={{ border: `1px solid ${isSuccess ? "#C8E6C9" : "#FFCDD2"}`, borderRadius: 6, padding: "12px 16px", backgroundColor: isSuccess ? "#F1F8E9" : "#FFF5F5" }}>
-                <Text size="sm" fw={600} c={isSuccess ? "green" : "red"}>{message}</Text>
-              </Box>
-              {(jobId != null || jobNo) && (
-                <Box style={{ border: `1px solid ${border}`, borderRadius: 6, padding: "12px 16px", backgroundColor: bg }}>
-                  <Stack gap="xs">
-                    {jobId != null && <Group gap="xs"><Text size="sm" fw={600} c={fg}>Job ID:</Text><Text size="sm" c="#334155">{String(jobId)}</Text></Group>}
-                    {jobNo && <Group gap="xs"><Text size="sm" fw={600} c={fg}>Job No:</Text><Text size="sm" c="#334155">{String(jobNo)}</Text></Group>}
-                  </Stack>
-                </Box>
-              )}
-              <Group justify="flex-end">
-                <Button size="sm" styles={{ root: { backgroundColor: primary } }}
-                  onClick={() => { setCreateJobModalOpen(false); setCreateJobResponse(null); }}>Close</Button>
-              </Group>
+              <Text fw={600} size="sm" c={fg}>
+                Route milestones
+              </Text>
+              <Stack gap={0}>
+                {(() => {
+                  const row = milestoneDrawerRow;
+                  const api = row.route_milestones;
+                  if (api && api.length > 0) {
+                    const activeIdx = getRouteMilestonesActiveIndex(api, row);
+                    return api.map((rm, i) => (
+                      <MilestoneDrawerStepRow
+                        key={`${rm.code}-${i}`}
+                        step={getExportMilestoneStyleByIndex(
+                          mapMilestoneCodeToIndex(rm.code),
+                        )}
+                        displayLabel={rm.label}
+                        detail={rm.note?.trim() ? rm.note : "—"}
+                        when={formatRouteMilestoneWhen(rm)}
+                        i={i}
+                        total={api.length}
+                        activeIdx={activeIdx}
+                        currentStageHint=""
+                        fg={fg}
+                        muted={muted}
+                        primary={primary}
+                        border={border}
+                        bg={bg}
+                      />
+                    ));
+                  }
+                  const activeIdx = getLastMilestoneIndex(row);
+                  return EXPORT_MILESTONES.map((step, i) => {
+                    const { detail, when } = getMilestoneDrawerDetail(row, i);
+                    return (
+                      <MilestoneDrawerStepRow
+                        key={step.label}
+                        step={step}
+                        displayLabel={step.label}
+                        detail={detail}
+                        when={when}
+                        i={i}
+                        total={EXPORT_MILESTONES.length}
+                        activeIdx={activeIdx}
+                        currentStageHint=""
+                        fg={fg}
+                        muted={muted}
+                        primary={primary}
+                        border={border}
+                        bg={bg}
+                      />
+                    );
+                  });
+                })()}
+              </Stack>
             </Stack>
-          );
-        })() : null}
-      </Modal>
+          ) : null}
+        </Drawer>
 
-      <Outlet />
+        {/* ===== CANCEL MODAL ===== */}
+        <Modal
+          opened={!!cancelConfirmRow}
+          onClose={() => !isCancelling && setCancelConfirmRow(null)}
+          title={
+            <Text fw={600} size="md">
+              Cancel Booking
+            </Text>
+          }
+          centered
+          size="sm"
+          styles={v0ModalStyles}
+          classNames={v0ModalClassNames}
+        >
+          <Text size="sm" c="dimmed" mb="md">
+            Are you sure you want to cancel booking{" "}
+            <Text span fw={600} c={fg}>
+              {cancelConfirmRow?.shipment_code}
+            </Text>
+            ? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap={8}>
+            <Button
+              variant="default"
+              onClick={() => setCancelConfirmRow(null)}
+              disabled={isCancelling}
+            >
+              Keep Booking
+            </Button>
+            <Button
+              color="red"
+              onClick={handleConfirmCancel}
+              loading={isCancelling}
+            >
+              Cancel Booking
+            </Button>
+          </Group>
+        </Modal>
+
+        <BookingCreateJobLoader active={createJobBookingId != null} />
+        <Outlet />
       </Box>
     </MantineProvider>
   );

@@ -1,10 +1,20 @@
 import { useMemo } from "react";
-import { Box, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import {
+  Box,
+  Center,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  Tooltip,
+} from "@mantine/core";
 import { shortNameLabel } from "./DrilldownHorizontalBarChart";
 import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 
 export type PipelineSalespersonRepRow = {
   salesperson: string;
+  coordinator_name?: string;
+  branch_code?: string;
   potential: number;
   pipeline: number;
   gained: number;
@@ -62,12 +72,14 @@ const BAR_FILLS = {
 const STRIPED_TRACK =
   "repeating-linear-gradient(-45deg, #f1f5f9, #f1f5f9 4px, #e8ecf1 4px, #e8ecf1 8px)";
 
-/** Tighter salesman + metrics; compact bar columns (Gained | In progress | Lost) */
+/** Salesman ~80px; reporting slightly narrower so names fit on one line */
 const GRID_TEMPLATE =
-  "minmax(68px, 0.75fr) minmax(72px, 0.48fr) minmax(72px, 0.48fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr)";
+  "minmax(0, 80px) minmax(0, 0.95fr) minmax(0, 0.34fr) minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.64fr) minmax(0, 0.64fr) minmax(0, 0.64fr)";
+
+const GRID_COLUMN_GAP = 4;
 
 /** Max width of striped bar track (values carry precision) */
-const BAR_TRACK_W = 80;
+const BAR_TRACK_W = 64;
 
 const BAR_H = 16;
 
@@ -127,7 +139,7 @@ function ValueAndCompactBar({
 }) {
   return (
     <Group
-      gap={6}
+      gap={4}
       justify="center"
       align="center"
       wrap="nowrap"
@@ -144,6 +156,39 @@ function ValueAndCompactBar({
         {children}
       </Box>
     </Group>
+  );
+}
+
+function CoordinatorCell({ name }: { name?: string }) {
+  const display = name?.trim() || "—";
+  const text = (
+    <Text
+      fz={11}
+      fw={500}
+      c={enquiryConversionColors.heading}
+      lineClamp={2}
+      style={{
+        textAlign: "center",
+        minWidth: 0,
+        lineHeight: 1.3,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+      }}
+    >
+      {display}
+    </Text>
+  );
+
+  if (display === "—") {
+    return <Box style={{ minWidth: 0, paddingInline: 2 }}>{text}</Box>;
+  }
+
+  return (
+    <Tooltip label={display} multiline w={280} withArrow position="top">
+      <Box style={{ minWidth: 0, paddingInline: 2, cursor: "default" }}>
+        {text}
+      </Box>
+    </Tooltip>
   );
 }
 
@@ -213,11 +258,12 @@ function PipelineSalespersonByRepTable({
 }: PipelineSalespersonByRepTableProps) {
   const prepared = useMemo(() => {
     const list = rows.filter(
-      (r) => r.salesperson && r.salesperson !== "-" && r.salesperson !== "TOTAL"
+      (r) =>
+        r.salesperson && r.salesperson !== "-" && r.salesperson !== "TOTAL",
     );
     const maxInProgress = Math.max(
       1,
-      ...list.map((r) => Math.max(0, r.quote) + Math.max(0, r.expected))
+      ...list.map((r) => Math.max(0, r.quote) + Math.max(0, r.expected)),
     );
     const maxGained = Math.max(1, ...list.map((r) => Math.max(0, r.gained)));
     const maxLost = Math.max(1, ...list.map((r) => Math.max(0, r.lost)));
@@ -273,12 +319,11 @@ function PipelineSalespersonByRepTable({
   );
 
   return (
-    <Box style={{ overflowX: "auto", width: "100%" }}>
     <Stack
       gap="md"
       style={{
-        width: "max-content",
-        minWidth: "100%",
+        width: "100%",
+        minWidth: 0,
         boxSizing: "border-box",
         padding: "16px 14px",
         borderRadius: 12,
@@ -304,16 +349,20 @@ function PipelineSalespersonByRepTable({
             style={{
               display: "grid",
               gridTemplateColumns: GRID_TEMPLATE,
-              columnGap: 8,
+              columnGap: GRID_COLUMN_GAP,
               alignItems: "center",
               paddingBottom: 8,
               borderBottom: "1px solid #e2e8f0",
               marginBottom: 2,
             }}
           >
-            <Box style={{ paddingInline: 12 }}>
+            <Box style={{ paddingInline: "4px 2px", minWidth: 0 }}>
               {headerCell("Salesman", "left")}
             </Box>
+            <Box style={{ minWidth: 0, paddingInline: 2 }}>
+              {headerCell("Reporting to")}
+            </Box>
+            {headerCell("Branch")}
             {headerCell("Potential")}
             {headerCell("Pipeline")}
             {headerCell("Gained")}
@@ -339,7 +388,7 @@ function PipelineSalespersonByRepTable({
                 style={{
                   display: "grid",
                   gridTemplateColumns: GRID_TEMPLATE,
-                  columnGap: 8,
+                  columnGap: GRID_COLUMN_GAP,
                   alignItems: "center",
                   padding: "8px 0",
                   borderBottom: "1px solid #eef2f7",
@@ -350,26 +399,58 @@ function PipelineSalespersonByRepTable({
                   style={{
                     minWidth: 0,
                     textAlign: "left",
-                    padding: "11px 12px",
+                    padding: "6px 2px 6px 4px",
                   }}
                 >
-                  <Text fz={13} fw={700} c={enquiryConversionColors.heading} lh={1.35}>
-                    {shortNameLabel(row.salesperson)}
-                  </Text>
+                  <Tooltip
+                    label={row.salesperson.trim()}
+                    disabled={!row.salesperson?.trim()}
+                    withArrow
+                    position="top"
+                  >
+                    <Text
+                      fz={12}
+                      fw={700}
+                      c={enquiryConversionColors.heading}
+                      lh={1.25}
+                      truncate
+                      style={{ minWidth: 0, display: "block" }}
+                    >
+                      {shortNameLabel(row.salesperson)}
+                    </Text>
+                  </Tooltip>
                   {sub ? (
                     <Text
-                      fz={11}
+                      fz={10}
                       fw={500}
                       c={enquiryConversionColors.muted}
                       mt={2}
-                      lh={1.35}
+                      lh={1.25}
+                      lineClamp={1}
                     >
                       {sub}
                     </Text>
                   ) : null}
                 </Box>
-                <Text style={METRIC_NUMERIC}>{formatAmount(row.potential)}</Text>
-                <Text style={METRIC_NUMERIC}>{formatAmount(row.pipeline)}</Text>
+                <CoordinatorCell name={row.coordinator_name} />
+                <Text
+                  fz={12}
+                  fw={500}
+                  c={enquiryConversionColors.heading}
+                  style={{
+                    ...METRIC_NUMERIC,
+                    textAlign: "center",
+                    minWidth: 0,
+                  }}
+                >
+                  {row.branch_code?.trim() || "—"}
+                </Text>
+                <Text style={{ ...METRIC_NUMERIC, minWidth: 0 }}>
+                  {formatAmount(row.potential)}
+                </Text>
+                <Text style={{ ...METRIC_NUMERIC, minWidth: 0 }}>
+                  {formatAmount(row.pipeline)}
+                </Text>
                 <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
                   <SingleBar
                     value={row.gained}
@@ -414,7 +495,6 @@ function PipelineSalespersonByRepTable({
         </Box>
       </Box>
     </Stack>
-    </Box>
   );
 }
 
@@ -453,7 +533,7 @@ function TotalsFooterRow({
       style={{
         display: "grid",
         gridTemplateColumns: gridTemplate,
-        columnGap: 8,
+        columnGap: GRID_COLUMN_GAP,
         alignItems: "center",
         padding: "12px 0",
         marginTop: 4,
@@ -466,7 +546,7 @@ function TotalsFooterRow({
         style={{
           minWidth: 0,
           textAlign: "left",
-          padding: "4px 12px",
+          padding: "4px 4px",
         }}
       >
         <Text
@@ -491,6 +571,8 @@ function TotalsFooterRow({
           </Text>
         ) : null}
       </Box>
+      <Box />
+      <Box />
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(potential)}</Text>
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(pipeline)}</Text>
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(gained)}</Text>
