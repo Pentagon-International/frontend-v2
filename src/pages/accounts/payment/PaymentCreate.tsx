@@ -1309,6 +1309,7 @@ export default function PaymentCreate({
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1391,6 +1392,7 @@ export default function PaymentCreate({
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
       dr_cr: "Dr",
       parties: details.map((d) => ({
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,

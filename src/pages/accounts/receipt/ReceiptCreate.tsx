@@ -1342,6 +1342,7 @@ export default function ReceiptCreate({
       dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1420,6 +1421,7 @@ export default function ReceiptCreate({
       dr_cr: "Cr",
       // Party: label = customer_display; payload = subledger_code. dr_cr from UI (default Dr for reversal rows).
       parties: details.map((d) => ({
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
