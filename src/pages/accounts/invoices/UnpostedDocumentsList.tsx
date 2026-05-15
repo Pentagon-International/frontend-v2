@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -33,15 +33,15 @@ import {
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import {
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListTableLoading,
-  SearchableSelect,
   SingleDateInput,
   erpListFilterFieldCellStyle,
   erpListFilterUnifiedMantineStyles,
@@ -59,11 +59,14 @@ import { apiCallProtected } from "../../../api/axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import useDateFormat from "../../../hooks/useDateFormat";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import {
   type FinanceDocumentListRow,
   openFinanceDocument,
 } from "./financeDocumentNavigation";
+
+const LIST_KEY = "UNPOSTED_DOCUMENTS_LIST";
 
 type FinanceDocumentsFilterResponse = {
   index?: number;
@@ -97,6 +100,34 @@ const EMPTY_UNPOSTED_FILTERS: UnpostedListFilters = {
   document_date_from: null,
   document_date_to: null,
 };
+
+function restoreUnpostedFilters(
+  raw: Record<string, unknown>,
+): UnpostedListFilters {
+  return {
+    ...EMPTY_UNPOSTED_FILTERS,
+    customer_name: String(raw.customer_name ?? ""),
+    customer_display:
+      raw.customer_display != null && raw.customer_display !== ""
+        ? String(raw.customer_display)
+        : null,
+    customer_code:
+      raw.customer_code != null && raw.customer_code !== ""
+        ? String(raw.customer_code)
+        : null,
+    document_no: String(raw.document_no ?? ""),
+    daybook_type:
+      raw.daybook_type != null && raw.daybook_type !== ""
+        ? String(raw.daybook_type)
+        : null,
+    document_date_from: raw.document_date_from
+      ? new Date(String(raw.document_date_from))
+      : null,
+    document_date_to: raw.document_date_to
+      ? new Date(String(raw.document_date_to))
+      : null,
+  };
+}
 
 const columnLabels = {
   sno: "S.No",
@@ -142,13 +173,51 @@ function humanizeRecordType(recordType: string): string {
 
 export default function UnpostedDocumentsList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
   });
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
+  const [isRestoring, setIsRestoring] = useState(true);
+
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+  const dateFormat = useDateFormat();
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const commitHeaderFilters = useCallback(
+    (updater: (prev: UnpostedListFilters) => UnpostedListFilters) => {
+      setAppliedFilters((prev) => {
+        const next = updater(prev);
+        setDraftFilters(next);
+        setStoreFilters(LIST_KEY, next);
+        return next;
+      });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
+    [setStoreFilters],
+  );
+
+  const formatFilterDateLabel = useCallback(
+    (value: Date | null) => {
+      if (!value) return "";
+      return dayjs(value).format(dateFormat);
+    },
+    [dateFormat],
+  );
   const [visibleColumns, setVisibleColumns] = useState<
     Record<ColumnKey, boolean>
   >(() => ({ ...columnDefault }));
@@ -220,51 +289,86 @@ export default function UnpostedDocumentsList() {
   const index = pagination.pageIndex * pagination.pageSize;
 
   useEffect(() => {
+    if (isRestoring) return;
     setPagination((prev) =>
       prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
     );
-  }, [debouncedSearch]);
+  }, [debouncedSearch, appliedFiltersKey, isRestoring]);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const restored = restoreUnpostedFilters(
+        stored.filters as Record<string, unknown>,
+      );
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key, getState, clearAllExcept, setShouldRestore]);
 
   const applyFilters = () => {
     setAppliedFilters({ ...draftFilters });
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
 
   const clearAllFilters = () => {
     setDraftFilters({ ...EMPTY_UNPOSTED_FILTERS });
     setAppliedFilters({ ...EMPTY_UNPOSTED_FILTERS });
+    setEditingHeaderId(null);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
   };
 
   const handlePageSizeChange = (size: number) => {
     setPagination({ pageIndex: 0, pageSize: size });
   };
 
-  const buildListPayload = () => {
-    const filters: Record<string, string> = { status: "UNPOSTED" };
-    if (debouncedSearch.trim()) filters.search = debouncedSearch.trim();
-    if (appliedFilters.customer_name.trim()) {
-      filters.customer_name = appliedFilters.customer_name.trim();
-    }
-    if (appliedFilters.document_date_from) {
-      filters.document_date_from = dayjs(
-        appliedFilters.document_date_from,
-      ).format("YYYY-MM-DD");
-    }
-    if (appliedFilters.document_date_to) {
-      filters.document_date_to = dayjs(appliedFilters.document_date_to).format(
-        "YYYY-MM-DD",
-      );
-    }
-    if (appliedFilters.document_no.trim()) {
-      filters.document_no = appliedFilters.document_no.trim();
-    }
-    if (appliedFilters.daybook_type?.trim()) {
-      filters.daybook_type = appliedFilters.daybook_type.trim();
-    }
-    return { filters };
-  };
+  const buildListPayload = useCallback(
+    (filtersState: UnpostedListFilters, searchValue: string) => {
+      const filters: Record<string, string> = { status: "UNPOSTED" };
+      if (searchValue.trim()) filters.search = searchValue.trim();
+      if (filtersState.customer_name.trim()) {
+        filters.customer_name = filtersState.customer_name.trim();
+      }
+      if (filtersState.document_date_from) {
+        filters.document_date_from = dayjs(filtersState.document_date_from).format(
+          "YYYY-MM-DD",
+        );
+      }
+      if (filtersState.document_date_to) {
+        filters.document_date_to = dayjs(filtersState.document_date_to).format(
+          "YYYY-MM-DD",
+        );
+      }
+      if (filtersState.document_no.trim()) {
+        filters.document_no = filtersState.document_no.trim();
+      }
+      if (filtersState.daybook_type?.trim()) {
+        filters.daybook_type = filtersState.daybook_type.trim();
+      }
+      return { filters };
+    },
+    [],
+  );
 
   const {
     data: listResult,
@@ -280,7 +384,7 @@ export default function UnpostedDocumentsList() {
     ],
     queryFn: async (): Promise<FinanceListQueryResult> => {
       try {
-        const payload = buildListPayload();
+        const payload = buildListPayload(appliedFilters, debouncedSearch);
         const response = (await apiCallProtected.post(
           `${URL.financeDocumentsFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
@@ -334,9 +438,9 @@ export default function UnpostedDocumentsList() {
         throw err;
       }
     },
-    enabled: search === debouncedSearch,
-    // Do not refetch when the browser tab regains focus; refetch when this screen mounts (route navigation).
-    staleTime: 60_000,
+    // Fetch whenever filters/pagination change; search is debounced via queryKey only.
+    enabled: !isRestoring,
+    staleTime: 0,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -415,6 +519,26 @@ export default function UnpostedDocumentsList() {
         accessorKey: "customer_name",
         header: "Customer / party",
         size: 320,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Customer / party"
+            value={appliedFilters.customer_name}
+            displayValue={appliedFilters.customer_name}
+            theme={erpTheme}
+            placeholder="Filter customer"
+            isEditing={editingHeaderId === "customer_name"}
+            onStartEdit={() => openHeaderEditor("customer_name")}
+            onStopEdit={() => collapseHeaderEditor("customer_name")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                customer_name: next,
+                customer_code: null,
+                customer_display: null,
+              }))
+            }
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
@@ -424,7 +548,47 @@ export default function UnpostedDocumentsList() {
       {
         accessorKey: "daybook_type",
         header: "Daybook",
-        size: 120,
+        size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Daybook"
+            value={appliedFilters.daybook_type ?? ""}
+            displayValue={
+              daybookFilterOptions.find((o) => o.value === appliedFilters.daybook_type)?.label ??
+              appliedFilters.daybook_type ??
+              ""
+            }
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "daybook_type"}
+            onStartEdit={() => openHeaderEditor("daybook_type")}
+            onStopEdit={() => collapseHeaderEditor("daybook_type")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="All daybooks"
+                clearable
+                searchable
+                size="xs"
+                data={daybookFilterOptions}
+                value={appliedFilters.daybook_type}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    daybook_type: value,
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={{
+                  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                  input: ERP_LIST_GEIST_ROOT_CLASS,
+                }}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
@@ -435,6 +599,24 @@ export default function UnpostedDocumentsList() {
         accessorKey: "document_no",
         header: "Document No",
         size: 180,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Document No"
+            value={appliedFilters.document_no}
+            displayValue={appliedFilters.document_no}
+            theme={erpTheme}
+            placeholder="Filter document no"
+            isEditing={editingHeaderId === "document_no"}
+            onStartEdit={() => openHeaderEditor("document_no")}
+            onStopEdit={() => collapseHeaderEditor("document_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                document_no: next,
+              }))
+            }
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
@@ -445,9 +627,46 @@ export default function UnpostedDocumentsList() {
         accessorKey: "document_date",
         header: "Document date",
         size: 140,
+        Header: () => {
+          const from = appliedFilters.document_date_from;
+          const to = appliedFilters.document_date_to;
+          const dateFilterDisplay =
+            from && to && !dayjs(from).isSame(to, "day")
+              ? `${formatFilterDateLabel(from)} – ${formatFilterDateLabel(to)}`
+              : formatFilterDateLabel(from ?? to);
+          return (
+            <ERPListColumnHeaderFilter
+              label="Document date"
+              value={from ? dayjs(from).format("YYYY-MM-DD") : ""}
+              displayValue={dateFilterDisplay}
+              onChange={() => {}}
+              theme={erpTheme}
+              isEditing={editingHeaderId === "document_date"}
+              onStartEdit={() => openHeaderEditor("document_date")}
+              onStopEdit={() => collapseHeaderEditor("document_date")}
+              renderEditor={({ autoFocus, onClose }) => (
+                <SingleDateInput
+                  size="xs"
+                  value={from}
+                  onChange={(date) => {
+                    commitHeaderFilters((prev) => ({
+                      ...prev,
+                      document_date_from: date,
+                      document_date_to: date ?? prev.document_date_to,
+                    }));
+                    if (date) onClose();
+                  }}
+                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={filterFieldStyles}
+                  {...(autoFocus ? { autoFocus: true } : {})}
+                />
+              )}
+            />
+          );
+        },
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
+            {dayjs(formatCell(cell.getValue())).format(dateFormat)}
           </Text>
         ),
       },
@@ -476,6 +695,9 @@ export default function UnpostedDocumentsList() {
           const canEdit = status === "" || status === "UNPOSTED";
 
           const run = async (mode: "edit" | "view") => {
+            setStoreFilters(LIST_KEY, appliedFilters);
+            setStoreSearch(LIST_KEY, search);
+            setShouldRestore(LIST_KEY, true);
             setOpeningKey(key);
             try {
               await openFinanceDocument(navigate, r, mode, {
@@ -537,7 +759,25 @@ export default function UnpostedDocumentsList() {
         },
       },
     ],
-    [erpTheme.fontSans, index, navigate, openingKey, primary],
+    [
+      appliedFilters,
+      commitHeaderFilters,
+      collapseHeaderEditor,
+      daybookFilterOptions,
+      editingHeaderId,
+      erpTheme,
+      filterFieldStyles,
+      formatFilterDateLabel,
+      index,
+      navigate,
+      openHeaderEditor,
+      openingKey,
+      primary,
+      search,
+      setShouldRestore,
+      setStoreFilters,
+      setStoreSearch,
+    ],
   );
 
   const columns = useMemo(
@@ -552,7 +792,7 @@ export default function UnpostedDocumentsList() {
 
   const table = useMantineReactTable({
     columns,
-    data: tableData,
+    data: loading ? [] : tableData,
     enableColumnFilters: false,
     enablePagination: true,
     enableTopToolbar: false,
@@ -572,6 +812,26 @@ export default function UnpostedDocumentsList() {
     state: {
       pagination,
     },
+    renderEmptyRowsFallback: () => (
+      <Center
+        py={80}
+        style={{ width: "100%", backgroundColor: cardBg }}
+        className="erp-header-filter-fade"
+      >
+        {loading ? (
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
+            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              Loading unposted documents…
+            </Text>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            No unposted documents found
+          </Text>
+        )}
+      </Center>
+    ),
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -592,20 +852,22 @@ export default function UnpostedDocumentsList() {
       },
     },
     mantineTableBodyCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "30px",
-              zIndex: 2,
-              borderLeft: `1px solid ${border}`,
-              boxShadow: "1px -2px 4px 0px #00000040",
-            }
-          : {};
+      const colSize = column.getSize();
+      const isActions = column.id === "actions";
+      const extraStyles = isActions
+        ? {
+            position: "sticky" as const,
+            right: 0,
+            minWidth: "80px",
+            zIndex: 2,
+            borderLeft: `1px solid ${border}`,
+            boxShadow: "1px -2px 4px 0px #00000040",
+          }
+        : {};
       return {
         style: {
-          width: "fit-content",
+          width: colSize,
+          minWidth: colSize,
           padding: "8px 16px",
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
@@ -616,26 +878,30 @@ export default function UnpostedDocumentsList() {
       };
     },
     mantineTableHeadCellProps: ({ column }) => {
-      const extraStyles =
-        column.id === "actions"
-          ? {
-              position: "sticky" as const,
-              right: 0,
-              minWidth: "80px",
-              zIndex: 2,
-              backgroundColor: erpTheme.headerBg,
-              boxShadow: "0px -2px 4px 0px #00000040",
-            }
-          : {};
+      const colSize = column.getSize();
+      const isActions = column.id === "actions";
+      const extraStyles = isActions
+        ? {
+            position: "sticky" as const,
+            right: 0,
+            minWidth: "80px",
+            zIndex: 4,
+            backgroundColor: erpTheme.headerBg,
+            boxShadow: "0px -2px 4px 0px #00000040",
+          }
+        : {};
       return {
         style: {
-          width: "fit-content",
+          width: colSize,
+          minWidth: colSize,
           padding: "8px 16px",
-          fontSize: 14,
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: erpTheme.headerBg,
           borderBottom: `1px solid ${border}`,
+          minHeight: 52,
+          height: 52,
+          verticalAlign: "middle" as const,
           ...extraStyles,
         },
       };
@@ -843,32 +1109,24 @@ export default function UnpostedDocumentsList() {
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
-                    <SearchableSelect
-                      apiEndpoint={URL.customer}
+                    <TextInput
                       label="Customer name"
-                      placeholder="Search customer"
-                      value={draftFilters.customer_code || null}
-                      displayValue={draftFilters.customer_display}
-                      onChange={(_val, selected) => {
+                      placeholder="Customer / party name"
+                      value={draftFilters.customer_name}
+                      onChange={(e) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          customer_code: _val ?? null,
-                          customer_display: selected?.label ?? null,
-                          customer_name: (selected?.label ?? "").trim(),
-                        }));
-                      }}
-                      searchFields={["customer_code", "customer_name", "name"]}
-                      displayFormat={(item) => ({
-                        value: String(item.customer_code ?? item.id ?? ""),
-                        label: String(
-                          item.customer_name ?? item.name ?? "",
-                        ).trim(),
-                      })}
-                      minSearchLength={1}
-                      dropdownZIndex={1000}
+                          customer_name: e.currentTarget.value,
+                          customer_code: null,
+                          customer_display: null,
+                        }))
+                      }
                       size="xs"
-                      classNames={erpListGeistSelectClassNames}
-                      styles={filterFieldStyles}
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
                     />
                   </Box>
                 </Grid.Col>
@@ -876,7 +1134,7 @@ export default function UnpostedDocumentsList() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="Document date from"
-                      placeholder="YYYY-MM-DD"
+                      // placeholder="YYYY-MM-DD"
                       value={draftFilters.document_date_from}
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
@@ -897,7 +1155,7 @@ export default function UnpostedDocumentsList() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="Document date to"
-                      placeholder="YYYY-MM-DD"
+                      // placeholder="YYYY-MM-DD"
                       value={draftFilters.document_date_to}
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
@@ -919,25 +1177,18 @@ export default function UnpostedDocumentsList() {
           }}
           table={{
             footer: (
-              <Box
-                px="md"
-                py={0}
-                style={{
-                  borderTop: `1px solid ${border}`,
-                  backgroundColor: cardBg,
-                }}
-              >
-                <PaginationBar
-                  pageSize={pagination.pageSize}
-                  currentPage={pagination.pageIndex + 1}
-                  totalRecords={totalRecords}
-                  onPageSizeChange={handlePageSizeChange}
-                  onPageChange={(page) =>
-                    setPagination((prev) => ({ ...prev, pageIndex: page - 1 }))
-                  }
-                  pageSizeOptions={["10", "25", "50"]}
-                />
-              </Box>
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                onPageIndexChange={(idx) =>
+                  setPagination((prev) => ({ ...prev, pageIndex: idx }))
+                }
+                onPageSizeChange={handlePageSizeChange}
+                pageSizeOptions={["10", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
+              />
             ),
             children: listError ? (
               <Center
@@ -953,11 +1204,6 @@ export default function UnpostedDocumentsList() {
                   page.
                 </Text>
               </Center>
-            ) : loading ? (
-              <ERPListTableLoading
-                theme={erpTheme}
-                message="Loading unposted documents…"
-              />
             ) : (
               <MantineReactTable table={table} />
             ),

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Text, Button, TextInput, Menu, Checkbox, ActionIcon } from "@mantine/core";
+import { useState, useEffect, useCallback, useRef, useMemo, type CSSProperties } from "react";
+import { Box, Center, Flex, Group, Text, Button, TextInput, ActionIcon, Loader } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
-import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../api/axios";
@@ -13,23 +13,22 @@ import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
 import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
 import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
-import { ERPListTableLoading } from "../../components/ERPListPage/ERPListTableLoading";
 import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
-import { erpToolbarOutlineButtonStyles } from "../../components";
+import {
+  ERPListColumnHeaderFilter,
+  ERPListColumnToggleMenu,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMenuDropdownStyles,
+  erpListThStyle,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../components";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_EXPORT_DSR";
 
-type PersistedDsrFilters = {
-  date_from: string | null;
-  date_to: string | null;
-  page: number;
-  pageSize: number;
-};
-
 function buildListUrl(offset: number, limit: number): string {
-  // Air Import & Export DSR share the same endpoint; service_type in the payload
-  // distinguishes between them.
   return `${URL.airImportBooked}?index=${offset}&limit=${limit}`;
 }
 
@@ -46,8 +45,8 @@ const TABLE_BODY: CSSProperties = {
 };
 
 const COLUMNS = [
-  { key: "sr_no", label: "Sr. No.", width: 60 },
-  { key: "shipment_received_date", label: "Shipment received Date", width: 140 },
+  { key: "sr_no", label: "S.No", width: 55 },
+  { key: "shipment_received_date", label: "Shipment received Date", width: 180 },
   { key: "sales_person", label: "Sales Person", width: 110 },
   { key: "enq_reference_no", label: "Enq.Reference No.", width: 130 },
   { key: "customer_name", label: "Customer Name", width: 140 },
@@ -78,6 +77,90 @@ type ColumnKey = (typeof COLUMNS)[number]["key"];
 type Row = Record<ColumnKey, string> & { __source?: Record<string, unknown> };
 type EditableKey = "etd" | "eta" | "remark" | "shipment_status" | "hawb" | "mawb";
 
+/**
+ * Backend `filters` keys for air-import-booked (matches API).
+ * `shipment_received_date` is handled by the date-range drawer, not column headers.
+ */
+const EXPORT_BACKEND_FILTER_KEYS = [
+  "sales_person",
+  "enq_reference_no",
+  "customer_name",
+  "shipper_name",
+  "cnee_name",
+  "overseas_agent",
+  "pol",
+  "pod",
+  "terms",
+  "pkgs",
+  "weight_in_kg",
+  "shipping_bill_number_date",
+  "invoice_number_date",
+  "hawb",
+  "mawb",
+  "etd",
+  "eta",
+  "haz_non_haz",
+  "iata",
+  "remark",
+  "shipment_status",
+  "job_number",
+  "job_month",
+  "job_submitted_date",
+] as const;
+
+type ExportBackendFilterKey = (typeof EXPORT_BACKEND_FILTER_KEYS)[number];
+
+/** Column keys that match backend `filters` keys one-to-one. */
+const EXPORT_COLUMN_TO_BACKEND_FILTER_KEY: Partial<
+  Record<ColumnKey, ExportBackendFilterKey>
+> = Object.fromEntries(
+  EXPORT_BACKEND_FILTER_KEYS.map((key) => [key, key]),
+) as Partial<Record<ColumnKey, ExportBackendFilterKey>>;
+
+const EXPORT_NON_FILTERABLE_COLUMN_KEYS = new Set<ColumnKey>([
+  "sr_no",
+  "shipment_received_date",
+]);
+
+function exportColumnKeyToBackendFilterKey(
+  columnKey: ColumnKey,
+): ExportBackendFilterKey | null {
+  if (EXPORT_NON_FILTERABLE_COLUMN_KEYS.has(columnKey)) return null;
+  return EXPORT_COLUMN_TO_BACKEND_FILTER_KEY[columnKey] ?? null;
+}
+
+function buildExportBackendFiltersPayload(
+  applied: Partial<Record<ColumnKey, string>>,
+): Record<string, string> {
+  const filters: Record<string, string> = {};
+  for (const [columnKey, raw] of Object.entries(applied) as [ColumnKey, string][]) {
+    const backendKey = exportColumnKeyToBackendFilterKey(columnKey);
+    if (!backendKey) continue;
+    const v = String(raw ?? "").trim();
+    if (v) filters[backendKey] = v;
+  }
+  return filters;
+}
+
+/** Use cleared `applied` immediately; otherwise debounced values (avoids 1s lag after Clear). */
+function columnFiltersForApiRequest(
+  applied: Partial<Record<ColumnKey, string>>,
+  debounced: Partial<Record<ColumnKey, string>>,
+): Partial<Record<ColumnKey, string>> {
+  const appliedActive = Object.values(applied).some((v) => String(v ?? "").trim() !== "");
+  const debouncedActive = Object.values(debounced).some((v) => String(v ?? "").trim() !== "");
+  if (!appliedActive && debouncedActive) return applied;
+  return debounced;
+}
+
+type PersistedDsrFilters = {
+  date_from: string | null;
+  date_to: string | null;
+  page: number;
+  pageSize: number;
+  column_filters?: Partial<Record<ColumnKey, string>>;
+};
+
 function getIdentity(source: unknown): string {
   const src = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
   const bookingId = src["booking_id"] ?? "";
@@ -105,6 +188,29 @@ export default function AirExportDsr() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
+  const compactFilterFieldStyles = {
+    ...filterFieldStyles,
+    input: {
+      ...filterFieldStyles.input,
+      height: 26,
+      minHeight: 26,
+    },
+  } as const;
+  const mergeTh = (minW: number, widthPx: number) => ({
+    ...erpListThStyle(theme),
+    minHeight: 40,
+    height: 40,
+    verticalAlign: "middle" as const,
+    boxSizing: "border-box" as const,
+    minWidth: minW,
+    width: widthPx,
+    fontSize: 12,
+    fontWeight: 500,
+    color: theme.fg,
+  });
+
   const [fromDate, setFromDate] = useState<Date | null>(() => dayjs().startOf("month").toDate());
   const [toDate, setToDate] = useState<Date | null>(() => dayjs().toDate());
   const [rows, setRows] = useState<Row[]>([]);
@@ -114,14 +220,82 @@ export default function AirExportDsr() {
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
     Object.fromEntries(COLUMNS.map((column) => [column.key, true])) as Record<ColumnKey, boolean>
   );
+  const [appliedColumnFilters, setAppliedColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
+  const [debouncedColumnFilters] = useDebouncedValue(appliedColumnFilters, 1000);
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
+
+  const dateFormat = useDateFormat();
+  const formatFilterDateLabel = useCallback(
+    (iso: string) => {
+      if (!iso?.trim()) return "";
+      const d = dayjs(iso);
+      return d.isValid() ? d.format(dateFormat) : iso;
+    },
+    [dateFormat],
+  );
+
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const persistDsrListState = useCallback(
+    (nextColumnFilters: Partial<Record<ColumnKey, string>>, nextPage: number) => {
+      setStoreFilters(LIST_KEY, {
+        date_from: fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null,
+        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : null,
+        page: nextPage,
+        pageSize,
+        column_filters: nextColumnFilters,
+      });
+    },
+    [fromDate, toDate, pageSize, setStoreFilters],
+  );
+
+  const commitColumnFilter = useCallback(
+    (patch: Partial<Record<ColumnKey, string>>) => {
+      setAppliedColumnFilters((prev) => {
+        const next: Partial<Record<ColumnKey, string>> = { ...prev };
+        for (const [k, v] of Object.entries(patch)) {
+          const key = k as ColumnKey;
+          if (key === "sr_no") continue;
+          const trimmed = String(v ?? "").trim();
+          if (!trimmed) delete next[key];
+          else next[key] = trimmed;
+        }
+        persistDsrListState(next, 1);
+        return next;
+      });
+      setPage(1);
+    },
+    [persistDsrListState],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      COLUMNS.map((column) => ({
+        id: column.key,
+        label: column.label,
+        checked: visibleColumns[column.key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [column.key]: !prev[column.key],
+          })),
+      })),
+    [visibleColumns],
+  );
+
   const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
 
   // Restore filters/search from global store on mount
@@ -148,6 +322,9 @@ export default function AirExportDsr() {
       setDraftToDate(restoredTo ?? null);
       if (typeof f.page === "number" && f.page > 0) setPage(f.page);
       if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
+      if (f.column_filters && typeof f.column_filters === "object") {
+        setAppliedColumnFilters(f.column_filters as Partial<Record<ColumnKey, string>>);
+      }
     }
 
     clearAllExcept(LIST_KEY);
@@ -165,12 +342,15 @@ export default function AirExportDsr() {
       const currentPage = Math.max(1, Math.trunc(Number(page)) || 1);
       const offset = (currentPage - 1) * size;
       const listUrl = buildListUrl(offset, size);
-      const payload: Record<string, string> = {
+      const payload = {
         service_type: "export",
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
+        search: debouncedSearch.trim(),
+        filters: buildExportBackendFiltersPayload(
+          columnFiltersForApiRequest(appliedColumnFilters, debouncedColumnFilters),
+        ),
       };
-      if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
 
       const response = await apiCallProtected.post(listUrl, payload);
       const body = response as { data?: Record<string, unknown>[]; total?: number; count?: number };
@@ -228,12 +408,19 @@ export default function AirExportDsr() {
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, page, pageSize, debouncedSearch]);
+  }, [
+    fromDate,
+    toDate,
+    page,
+    pageSize,
+    debouncedSearch,
+    appliedColumnFilters,
+    debouncedColumnFilters,
+  ]);
 
   useEffect(() => setPage(1), [fromDate, toDate]);
 
   // Reset to first page whenever the search term changes (after debounce).
-  // Skip the initial value (and any restore-driven update) so we don't clobber a restored page.
   const lastDebouncedSearchRef = useRef<string | null>(null);
   useEffect(() => {
     if (isRestoring) return;
@@ -246,6 +433,19 @@ export default function AirExportDsr() {
     setPage(1);
   }, [debouncedSearch, isRestoring]);
 
+  const lastDebouncedColumnFiltersRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    const serialized = JSON.stringify(debouncedColumnFilters);
+    if (lastDebouncedColumnFiltersRef.current === null) {
+      lastDebouncedColumnFiltersRef.current = serialized;
+      return;
+    }
+    if (lastDebouncedColumnFiltersRef.current === serialized) return;
+    lastDebouncedColumnFiltersRef.current = serialized;
+    setPage(1);
+  }, [debouncedColumnFilters, isRestoring]);
+
   useEffect(() => {
     if (isRestoring) return;
     void fetchData();
@@ -254,9 +454,6 @@ export default function AirExportDsr() {
   const onFieldChange = useCallback((identity: string, field: ColumnKey, value: string) => {
     setRows((prev) => prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)));
   }, []);
-
-  // Search is now applied server-side via the API payload; render rows directly.
-  const filteredRows = rows;
 
   const submitUpdates = useCallback(async () => {
     try {
@@ -300,13 +497,17 @@ export default function AirExportDsr() {
     }
   }, [rows, fetchData]);
 
-  const theme = DEFAULT_ERP_LIST_THEME;
   const summary = {
     total: rows.length,
     active: rows.filter((r) => r.shipment_status?.toUpperCase() === "ACTIVE").length,
     closed: rows.filter((r) => r.shipment_status?.toUpperCase() === "CLOSED").length,
     cancel: rows.filter((r) => r.shipment_status?.toUpperCase() === "CANCEL").length,
   };
+
+  const visibleColumnCount = useMemo(
+    () => COLUMNS.filter((c) => visibleColumns[c.key]).length,
+    [visibleColumns],
+  );
 
   return (
     <ERPListScreen
@@ -325,7 +526,7 @@ export default function AirExportDsr() {
             <TextInput
               size="xs"
               leftSection={<IconSearch size={14} />}
-              placeholder="Search..."
+              placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               rightSection={
@@ -341,26 +542,22 @@ export default function AirExportDsr() {
                 ) : null
               }
               w={220}
+              classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={{
+                input: {
+                  fontFamily: theme.fontSans,
+                  fontSize: 12,
+                  height: 32,
+                  minHeight: 32,
+                },
+              }}
             />
-            <Menu shadow="md" width={220} position="bottom-end">
-              <Menu.Target>
-                <Button
-                  variant="default"
-                  size="xs"
-                  leftSection={<IconSettings size={14} />}
-                  styles={erpToolbarOutlineButtonStyles(theme)}
-                >
-                  Columns
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {COLUMNS.map((column) => (
-                  <Menu.Item key={column.key} closeMenuOnClick={false}>
-                    <Checkbox label={column.label} checked={visibleColumns[column.key]} onChange={(e) => setVisibleColumns((prev) => ({ ...prev, [column.key]: e.currentTarget.checked }))} />
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
+            <ERPListColumnToggleMenu
+              theme={theme}
+              items={columnToggleItems}
+              menuStyles={erpListGeistMenuDropdownStyles}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+            />
             <Button
               variant="default"
               size="xs"
@@ -389,6 +586,9 @@ export default function AirExportDsr() {
               setFromDate(defFrom);
               setToDate(defTo);
               setPage(1);
+              setAppliedColumnFilters({});
+              setEditingHeaderId(null);
+              lastDebouncedColumnFiltersRef.current = "{}";
               clearAllStore(LIST_KEY);
             }}
             onApply={() => {
@@ -401,6 +601,7 @@ export default function AirExportDsr() {
                 date_to: draftToDate ? dayjs(draftToDate).format("YYYY-MM-DD") : null,
                 page: 1,
                 pageSize,
+                column_filters: appliedColumnFilters,
               };
               setStoreFilters(LIST_KEY, persisted);
               setStoreSearch(LIST_KEY, search);
@@ -409,8 +610,22 @@ export default function AirExportDsr() {
         ),
         children: (
           <Group align="end" gap="sm">
-            <SingleDateInput label="From date" value={draftFromDate} onChange={setDraftFromDate} size="xs" />
-            <SingleDateInput label="To date" value={draftToDate} onChange={setDraftToDate} size="xs" />
+            <SingleDateInput
+              label="From date"
+              value={draftFromDate}
+              onChange={setDraftFromDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={compactFilterFieldStyles}
+            />
+            <SingleDateInput
+              label="To date"
+              value={draftToDate}
+              onChange={setDraftToDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={compactFilterFieldStyles}
+            />
           </Group>
         ),
       }}
@@ -435,45 +650,171 @@ export default function AirExportDsr() {
         ),
         children: (
           <Box style={TABLE_BODY}>
-            {isRestoring || isLoading ? (
-              <ERPListTableLoading theme={theme} message="Loading air export DSR..." />
-            ) : filteredRows.length === 0 ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}><Text size="sm" c="dimmed">No data available for this criteria.</Text></Flex>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 2600 }}>
-                <thead>
-                  <tr>
-                    {COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => (
-                      <th key={column.key} style={{ textAlign: "left", padding: "4px 6px", fontSize: 11, borderBottom: "1px solid #e2e8f0", background: "#f8fafc", whiteSpace: "nowrap", width: column.width, maxWidth: column.width }}>
-                        {column.label}
+            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 2600 }}>
+              <thead>
+                <tr>
+                  {COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => {
+                    const w = column.width ?? 80;
+                    const isDateHeader =
+                      column.key === "etd" ||
+                      column.key === "eta" ||
+                      column.key === "job_submitted_date";
+                    const isFilterable = !EXPORT_NON_FILTERABLE_COLUMN_KEYS.has(column.key);
+                    return (
+                      <th key={column.key} style={mergeTh(w, w)}>
+                        {!isFilterable ? (
+                          column.label
+                        ) : isDateHeader ? (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={formatFilterDateLabel(appliedColumnFilters[column.key] ?? "")}
+                            theme={theme}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                size="xs"
+                                value={
+                                  appliedColumnFilters[column.key]
+                                    ? dayjs(appliedColumnFilters[column.key]).toDate()
+                                    : null
+                                }
+                                onChange={(date) => {
+                                  commitColumnFilter({
+                                    [column.key]: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={compactFilterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        ) : (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={appliedColumnFilters[column.key] ?? ""}
+                            theme={theme}
+                            placeholder={`Filter ${column.label}`}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={(next) => commitColumnFilter({ [column.key]: next })}
+                          />
+                        )}
                       </th>
-                    ))}
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {isRestoring || isLoading ? (
+                  <tr>
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        py={48}
+                        gap={8}
+                        justify="center"
+                        align="center"
+                        className="erp-header-filter-fade"
+                        style={{
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
+                        }}
+                      >
+                        <Loader color={theme.primary} />
+
+                        <Text
+                          size="sm"
+                          c="dimmed"
+                          style={{ fontFamily: theme.fontSans }}
+                        >
+                          Loading air export DSR…
+                        </Text>
+                      </Flex>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, rowIndex) => {
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        justify="center"
+                        align="center"
+                        style={{
+                          minHeight: 200,
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
+                        }}
+                      >
+                        <Text size="sm" c="dimmed">
+                          No data available for this criteria.
+                        </Text>
+                      </Flex>
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, rowIndex) => {
                     const identity = getIdentity(row.__source) || `row-${row.sr_no}-${rowIndex}`;
                     return (
                       <tr key={identity}>
                         {COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => (
-                          <td key={`${identity}-${column.key}`} style={{ padding: "0px", borderBottom: "1px solid #f1f5f9", width: column.width, maxWidth: column.width }}>
-                            {column.key === "etd" || column.key === "eta" || column.key === "shipment_received_date" || column.key === "job_submitted_date" ? (
+                          <td
+                            key={`${identity}-${column.key}`}
+                            style={{
+                              padding: "0px",
+                              borderBottom: "1px solid #f1f5f9",
+                              width: column.width,
+                              maxWidth: column.width,
+                            }}
+                          >
+                            {column.key === "etd" ||
+                            column.key === "eta" ||
+                            column.key === "shipment_received_date" ||
+                            column.key === "job_submitted_date" ? (
                               <SingleDateInput
                                 value={parseDateValue(row[column.key])}
                                 onChange={(d) => {
-                                  if (column.key === "etd" || column.key === "eta") onFieldChange(identity, column.key, d ? dayjs(d).format("YYYY-MM-DD") : "");
+                                  if (column.key === "etd" || column.key === "eta")
+                                    onFieldChange(identity, column.key, d ? dayjs(d).format("YYYY-MM-DD") : "");
                                 }}
                                 size="xs"
                                 readOnly={column.key !== "etd" && column.key !== "eta"}
-                                styles={{ input: { width: column.width ?? 110, minWidth: column.width ?? 110, fontSize: 11, height: 28, ...(column.key !== "etd" && column.key !== "eta" ? { backgroundColor: "#f8fafc", borderColor: "#dbe4ff" } : {}) } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 110,
+                                    minWidth: column.width ?? 110,
+                                    fontSize: 11,
+                                    height: 26,
+                                    ...(column.key !== "etd" && column.key !== "eta"
+                                      ? { backgroundColor: "#f8fafc", borderColor: "#dbe4ff" }
+                                      : {}),
+                                  },
+                                }}
                               />
-                            ) : column.key === "remark" || column.key === "shipment_status" || column.key === "hawb" || column.key === "mawb" ? (
+                            ) : column.key === "remark" ||
+                              column.key === "shipment_status" ||
+                              column.key === "hawb" ||
+                              column.key === "mawb" ? (
                               <FormTextInput
                                 value={row[column.key]}
                                 onChange={(event) => onFieldChange(identity, column.key, event.currentTarget.value)}
                                 format="normal"
                                 size="xs"
-                                styles={{ input: { width: column.width ?? 120, minWidth: column.width ?? 120, fontSize: 11, height: 28 } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 120,
+                                    minWidth: column.width ?? 120,
+                                    fontSize: 11,
+                                    height: 26,
+                                  },
+                                }}
                               />
                             ) : (
                               <FormTextInput
@@ -481,17 +822,27 @@ export default function AirExportDsr() {
                                 format="normal"
                                 size="xs"
                                 readOnly
-                                styles={{ input: { width: column.width ?? 120, minWidth: column.width ?? 120, fontSize: 11, height: 28, backgroundColor: "#f8fafc", borderColor: "#dbe4ff" } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 120,
+                                    minWidth: column.width ?? 120,
+                                    fontSize: 11,
+                                    height: 26,
+                                    textAlign: column.key === "sr_no" ? "center" : "left",
+                                    backgroundColor: "#f8fafc",
+                                    borderColor: "#dbe4ff",
+                                  },
+                                }}
                               />
                             )}
                           </td>
                         ))}
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            )}
+                  })
+                )}
+              </tbody>
+            </table>
           </Box>
         ),
       }}

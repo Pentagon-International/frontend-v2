@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
-import { Box, Group, Text, Button, TextInput, Menu, Checkbox, ActionIcon } from "@mantine/core";
+import { useState, useEffect, useCallback, useRef, useMemo, type CSSProperties } from "react";
+import { Box, Center, Flex, Group, Text, Button, TextInput, ActionIcon, Loader } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
-import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
 import { useLocation } from "react-router-dom";
 import { useDebouncedValue } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
@@ -12,10 +12,18 @@ import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
 import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
 import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
-import { ERPListTableLoading } from "../../components/ERPListPage/ERPListTableLoading";
 import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
-import { erpToolbarOutlineButtonStyles } from "../../components";
+import {
+  ERPListColumnHeaderFilter,
+  ERPListColumnToggleMenu,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMenuDropdownStyles,
+  erpListThStyle,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../components";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 const DSR_PRIMARY = "#105476";
 const DSR_BORDER = "#e2e8f0";
@@ -30,36 +38,131 @@ const TABLE_BODY: CSSProperties = {
 };
 
 const COLUMNS = [
-  { key: "sr_no", label: "SR NO", width: 50 },
-  { key: "booking_no", label: "BOOKING NO.", width: 100 },
-  { key: "nomination_date", label: "NOMINATION DATE", width: 105 },
-  { key: "sales_person", label: "SALES PERSON", width: 90 },
-  { key: "cnee", label: "CNEE", width: 120 },
-  { key: "shipper", label: "SHIPPER", width: 120 },
-  { key: "agent", label: "AGENT", width: 110 },
-  { key: "equip", label: "EQUIP", width: 70 },
-  { key: "lcl_fcl", label: "LCL/FCL", width: 70 },
-  { key: "pol", label: "POL", width: 60 },
-  { key: "pod", label: "POD", width: 60 },
-  { key: "terms", label: "TERMS", width: 70 },
-  { key: "etd", label: "ETD", width: 105 },
-  { key: "eta", label: "ETA", width: 105 },
-  { key: "vsl_name", label: "VSL NAME", width: 120 },
-  { key: "container_number", label: "CONTAINER NUMBER", width: 130 },
-  { key: "remark", label: "Remarks", width: 120 },
-  { key: "buy_rates", label: "BUY RATES", width: 80 },
-  { key: "sell_rates", label: "SELL RATES", width: 80 },
+  { key: "sr_no", label: "S.No", width: 55 },
+{ key: "booking_no", label: "Booking No.", width: 120 },
+{ key: "nomination_date", label: "Nomination Date", width: 120 },
+{ key: "sales_person", label: "Sales Person", width: 100 },
+{ key: "cnee", label: "Cnee", width: 120 },
+{ key: "shipper", label: "Shipper", width: 120 },
+{ key: "agent", label: "Agent", width: 110 },
+{ key: "equip", label: "Equip", width: 80 },
+{ key: "lcl_fcl", label: "Lcl/Fcl", width: 80 },
+{ key: "pol", label: "POL", width: 90 },
+{ key: "pod", label: "POD", width: 90 },
+{ key: "terms", label: "Terms", width: 80 },
+{ key: "etd", label: "ETD", width: 105 },
+{ key: "eta", label: "ETA", width: 105 },
+{ key: "vsl_name", label: "Vsl Name", width: 120 },
+{ key: "container_number", label: "Container Number", width: 130 },
+{ key: "remark", label: "Remark", width: 120 },
+{ key: "row_type", label: "Row Type", width: 90 },
+{ key: "status", label: "Status", width: 90 },
+{ key: "buy_rates", label: "Buy Rates", width: 90 },
+{ key: "sell_rates", label: "Sell Rates", width: 90 },
 ] as const;
 
 type ColumnKey = (typeof COLUMNS)[number]["key"];
 type Row = Record<ColumnKey, string> & { __source?: Record<string, unknown> };
 type EditableKey = "etd" | "eta" | "remark";
 
+const OCEAN_DATE_FILTER_COLUMN_KEYS = new Set<ColumnKey>(["etd", "eta"]);
+
+/**
+ * Backend `filters` keys for ocean DSR (matches API).
+ * `nomination_date` is handled by the date-range drawer, not column headers.
+ */
+const OCEAN_BACKEND_FILTER_KEYS = [
+  "booking_no",
+  "cnee",
+  "shipper",
+  "equip",
+  "lcl_fcl",
+  "pol",
+  "pod",
+  "terms",
+  "etd",
+  "eta",
+  "vsl_name",
+  "container_number",
+  "remarks",
+  "row_type",
+  "status",
+] as const;
+
+type OceanBackendFilterKey = (typeof OCEAN_BACKEND_FILTER_KEYS)[number];
+
+type OceanExtendedFilterKey =
+  | OceanBackendFilterKey
+  | "sales_person"
+  | "agent"
+  | "buy_rates"
+  | "sell_rates";
+
+const OCEAN_COLUMN_TO_BACKEND_FILTER_KEY: Partial<
+  Record<ColumnKey, OceanExtendedFilterKey>
+> = {
+  booking_no: "booking_no",
+  sales_person: "sales_person",
+  cnee: "cnee",
+  shipper: "shipper",
+  agent: "agent",
+  equip: "equip",
+  lcl_fcl: "lcl_fcl",
+  pol: "pol",
+  pod: "pod",
+  terms: "terms",
+  etd: "etd",
+  eta: "eta",
+  vsl_name: "vsl_name",
+  container_number: "container_number",
+  remark: "remarks",
+  row_type: "row_type",
+  status: "status",
+  buy_rates: "buy_rates",
+  sell_rates: "sell_rates",
+};
+
+const OCEAN_NON_FILTERABLE_COLUMN_KEYS = new Set<ColumnKey>([
+  "sr_no",
+  "nomination_date",
+]);
+
+function oceanColumnKeyToBackendFilterKey(
+  columnKey: ColumnKey,
+): OceanExtendedFilterKey | null {
+  if (OCEAN_NON_FILTERABLE_COLUMN_KEYS.has(columnKey)) return null;
+  return OCEAN_COLUMN_TO_BACKEND_FILTER_KEY[columnKey] ?? null;
+}
+
+function buildOceanBackendFiltersPayload(
+  applied: Partial<Record<ColumnKey, string>>,
+): Record<string, string> {
+  const filters: Record<string, string> = {};
+  for (const [columnKey, raw] of Object.entries(applied) as [ColumnKey, string][]) {
+    const backendKey = oceanColumnKeyToBackendFilterKey(columnKey);
+    if (!backendKey) continue;
+    const v = String(raw ?? "").trim();
+    if (v) filters[backendKey] = v;
+  }
+  return filters;
+}
+
+function columnFiltersForApiRequest(
+  applied: Partial<Record<ColumnKey, string>>,
+  debounced: Partial<Record<ColumnKey, string>>,
+): Partial<Record<ColumnKey, string>> {
+  const appliedActive = Object.values(applied).some((v) => String(v ?? "").trim() !== "");
+  const debouncedActive = Object.values(debounced).some((v) => String(v ?? "").trim() !== "");
+  if (!appliedActive && debouncedActive) return applied;
+  return debounced;
+}
+
 type PersistedDsrFilters = {
   date_from?: string | null;
   date_to?: string | null;
   page?: number;
   pageSize?: number;
+  column_filters?: Partial<Record<ColumnKey, string>>;
 };
 
 function getIdentity(source: unknown): string {
@@ -100,6 +203,29 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
+  const compactFilterFieldStyles = {
+    ...filterFieldStyles,
+    input: {
+      ...filterFieldStyles.input,
+      height: 26,
+      minHeight: 26,
+    },
+  } as const;
+  const mergeTh = (minW: number, widthPx: number) => ({
+    ...erpListThStyle(theme),
+    minHeight: 40,
+    height: 40,
+    verticalAlign: "middle" as const,
+    boxSizing: "border-box" as const,
+    minWidth: minW,
+    width: widthPx,
+    fontSize: 12,
+    fontWeight: 500,
+    color: theme.fg,
+  });
+
   const [fromDate, setFromDate] = useState<Date | null>(() => dayjs().startOf("month").toDate());
   const [toDate, setToDate] = useState<Date | null>(() => dayjs().toDate());
   const [rows, setRows] = useState<Row[]>([]);
@@ -109,17 +235,89 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
   const [pageSize, setPageSize] = useState(25);
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
-  const [isRestoring, setIsRestoring] = useState(true);
-  const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
     Object.fromEntries(COLUMNS.map((c) => [c.key, true])) as Record<ColumnKey, boolean>,
   );
+  const [appliedColumnFilters, setAppliedColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
+  const [debouncedColumnFilters] = useDebouncedValue(appliedColumnFilters, 1000);
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const originalEditableRef = useRef<Map<string, Pick<Row, EditableKey>>>(new Map());
 
-  // Restore filters/search/page from the global store on navigation back.
+  const dateFormat = useDateFormat();
+  const formatFilterDateLabel = useCallback(
+    (iso: string) => {
+      if (!iso?.trim()) return "";
+      const d = dayjs(iso);
+      return d.isValid() ? d.format(dateFormat) : iso;
+    },
+    [dateFormat],
+  );
+
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const persistDsrListState = useCallback(
+    (nextColumnFilters: Partial<Record<ColumnKey, string>>, nextPage: number) => {
+      setStoreFilters(LIST_KEY, {
+        date_from: fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null,
+        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : null,
+        page: nextPage,
+        pageSize,
+        column_filters: nextColumnFilters,
+      });
+    },
+    [fromDate, toDate, pageSize, setStoreFilters, LIST_KEY],
+  );
+
+  const commitColumnFilter = useCallback(
+    (patch: Partial<Record<ColumnKey, string>>) => {
+      setAppliedColumnFilters((prev) => {
+        const next: Partial<Record<ColumnKey, string>> = { ...prev };
+        for (const [k, v] of Object.entries(patch)) {
+          const key = k as ColumnKey;
+          if (key === "sr_no") continue;
+          const trimmed = String(v ?? "").trim();
+          if (!trimmed) delete next[key];
+          else next[key] = trimmed;
+        }
+        persistDsrListState(next, 1);
+        return next;
+      });
+      setPage(1);
+    },
+    [persistDsrListState],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      COLUMNS.map((column) => ({
+        id: column.key,
+        label: column.label,
+        checked: visibleColumns[column.key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [column.key]: !prev[column.key],
+          })),
+      })),
+    [visibleColumns],
+  );
+
+  const visibleColumnCount = useMemo(
+    () => COLUMNS.filter((c) => visibleColumns[c.key]).length,
+    [visibleColumns],
+  );
+
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     const stored = getStoreState(LIST_KEY);
     const shouldRestore = stored?.shouldRestore === true;
@@ -127,6 +325,10 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     if (!shouldRestore) {
       setIsRestoring(false);
       return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
     }
 
     if (stored?.filters && typeof stored.filters === "object") {
@@ -143,41 +345,47 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
       }
       if (typeof f.page === "number" && f.page > 0) setPage(f.page);
       if (typeof f.pageSize === "number" && f.pageSize > 0) setPageSize(f.pageSize);
-    }
-
-    if (typeof stored?.search === "string") {
-      setSearch(stored.search);
+      if (f.column_filters && typeof f.column_filters === "object") {
+        setAppliedColumnFilters(f.column_filters as Partial<Record<ColumnKey, string>>);
+      }
     }
 
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore runs on navigation key
   }, [location.key]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchData = useCallback(async () => {
-    if (isRestoring) return;
-    if (search !== debouncedSearch) return;
     try {
       setIsLoading(true);
       if (!fromDate || !toDate) return;
+
       const size = Math.max(1, Math.trunc(Number(pageSize)) || 25);
       const currentPage = Math.max(1, Math.trunc(Number(page)) || 1);
       const offset = (currentPage - 1) * size;
       const listUrl = `${endpoint}?index=${offset}&limit=${size}`;
 
-      const trimmedSearch = debouncedSearch.trim();
-      const payload: Record<string, unknown> = {
+      const payload = {
         service_type: serviceType,
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
+        search: debouncedSearch.trim(),
+        filters: buildOceanBackendFiltersPayload(
+          columnFiltersForApiRequest(appliedColumnFilters, debouncedColumnFilters),
+        ),
       };
-      if (trimmedSearch) payload.search = trimmedSearch;
 
       const response = await apiCallProtected.post(listUrl, payload);
       const body = response as { data?: Record<string, unknown>[]; total?: number; count?: number };
       const list = Array.isArray(body.data) ? body.data : [];
-      setTotalRecords(typeof body.total === "number" ? body.total : typeof body.count === "number" ? body.count : list.length);
+      setTotalRecords(
+        typeof body.total === "number"
+          ? body.total
+          : typeof body.count === "number"
+            ? body.count
+            : list.length,
+      );
 
       const mapped: Row[] = list.map((item, idx) => ({
         __source: item,
@@ -198,6 +406,8 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         vsl_name: asString(item["vsl_name"]),
         container_number: asString(item["container_number"]),
         remark: asString(item["remark"] ?? item["remarks"]),
+        row_type: asString(item["row_type"]),
+        status: asString(item["status"]),
         buy_rates: asString(item["buy_rates"] ?? item["buy"]),
         sell_rates: asString(item["sell_rates"] ?? item["sell"]),
       }));
@@ -225,12 +435,12 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     serviceType,
     title,
     debouncedSearch,
-    search,
-    isRestoring,
+    appliedColumnFilters,
+    debouncedColumnFilters,
   ]);
 
-  // Reset to first page whenever the search term changes (after debounce).
-  // Skip the initial value (and any restore-driven update) so we don't clobber a restored page.
+  useEffect(() => setPage(1), [fromDate, toDate]);
+
   const lastDebouncedSearchRef = useRef<string | null>(null);
   useEffect(() => {
     if (isRestoring) return;
@@ -240,15 +450,31 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     }
     if (lastDebouncedSearchRef.current === debouncedSearch) return;
     lastDebouncedSearchRef.current = debouncedSearch;
-    setPage((prev) => (prev === 1 ? prev : 1));
+    setPage(1);
   }, [debouncedSearch, isRestoring]);
 
+  const lastDebouncedColumnFiltersRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isRestoring) return;
+    const serialized = JSON.stringify(debouncedColumnFilters);
+    if (lastDebouncedColumnFiltersRef.current === null) {
+      lastDebouncedColumnFiltersRef.current = serialized;
+      return;
+    }
+    if (lastDebouncedColumnFiltersRef.current === serialized) return;
+    lastDebouncedColumnFiltersRef.current = serialized;
+    setPage(1);
+  }, [debouncedColumnFilters, isRestoring]);
+
+  useEffect(() => {
+    if (isRestoring) return;
     void fetchData();
-  }, [fetchData]);
+  }, [fetchData, isRestoring]);
 
   const onFieldChange = useCallback((identity: string, field: ColumnKey, value: string) => {
-    setRows((prev) => prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)));
+    setRows((prev) =>
+      prev.map((row) => (getIdentity(row.__source) === identity ? { ...row, [field]: value } : row)),
+    );
   }, []);
 
   const summary = {
@@ -257,7 +483,6 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
     closed: rows.filter((r) => String(r.__source?.status ?? "").toUpperCase() === "CLOSED").length,
     cancel: rows.filter((r) => String(r.__source?.status ?? "").toUpperCase() === "CANCEL").length,
   };
-  const theme = DEFAULT_ERP_LIST_THEME;
 
   const submitUpdates = useCallback(async () => {
     try {
@@ -327,36 +552,36 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                   </ActionIcon>
                 ) : null
               }
-              placeholder="Search..."
+              placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               w={220}
+              classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={{
+                input: {
+                  fontFamily: theme.fontSans,
+                  fontSize: 12,
+                  height: 32,
+                  minHeight: 32,
+                },
+              }}
             />
-            <Menu shadow="md" width={220} position="bottom-end">
-              <Menu.Target>
-                <Button
-                  variant="default"
-                  size="xs"
-                  leftSection={<IconSettings size={14} />}
-                  styles={erpToolbarOutlineButtonStyles(theme)}
-                >
-                  Columns
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {COLUMNS.map((column) => (
-                  <Menu.Item key={column.key} closeMenuOnClick={false}>
-                    <Checkbox label={column.label} checked={visibleColumns[column.key]} onChange={(e) => setVisibleColumns((prev) => ({ ...prev, [column.key]: e.currentTarget.checked }))} />
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
+            <ERPListColumnToggleMenu
+              theme={theme}
+              items={columnToggleItems}
+              menuStyles={erpListGeistMenuDropdownStyles}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+            />
             <Button
               variant="default"
               size="xs"
               leftSection={<IconFilter size={14} />}
               styles={erpToolbarOutlineButtonStyles(theme)}
-              onClick={() => { setDraftFromDate(fromDate); setDraftToDate(toDate); setShowFilters((s) => !s); }}
+              onClick={() => {
+                setDraftFromDate(fromDate);
+                setDraftToDate(toDate);
+                setShowFilters((s) => !s);
+              }}
             >
               Filters
             </Button>
@@ -380,6 +605,9 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
               setToDate(defTo);
               setSearch("");
               setPage(1);
+              setAppliedColumnFilters({});
+              setEditingHeaderId(null);
+              lastDebouncedColumnFiltersRef.current = "{}";
               clearAllStore(LIST_KEY);
             }}
             onApply={() => {
@@ -392,6 +620,7 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                 date_to: draftToDate ? dayjs(draftToDate).format("YYYY-MM-DD") : null,
                 page: 1,
                 pageSize,
+                column_filters: appliedColumnFilters,
               };
               setStoreFilters(LIST_KEY, persisted);
               setStoreSearch(LIST_KEY, search);
@@ -401,14 +630,36 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         ),
         children: (
           <Group align="end" gap="sm">
-            <SingleDateInput label="From date" value={draftFromDate} onChange={setDraftFromDate} size="xs" />
-            <SingleDateInput label="To date" value={draftToDate} onChange={setDraftToDate} size="xs" />
+            <SingleDateInput
+              label="From date"
+              value={draftFromDate}
+              onChange={setDraftFromDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={compactFilterFieldStyles}
+            />
+            <SingleDateInput
+              label="To date"
+              value={draftToDate}
+              onChange={setDraftToDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={compactFilterFieldStyles}
+            />
           </Group>
         ),
       }}
       table={{
         footer: (
-          <Box style={{ flexShrink: 0, borderTop: `1px solid ${DSR_BORDER}`, background: DSR_FOOTER_BG, padding: "6px 14px", marginTop: 4 }}>
+          <Box
+            style={{
+              flexShrink: 0,
+              borderTop: `1px solid ${DSR_BORDER}`,
+              background: DSR_FOOTER_BG,
+              padding: "6px 14px",
+              marginTop: 4,
+            }}
+          >
             <Group justify="space-between" align="center" wrap="wrap" gap="sm">
               <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
                 <PaginationBar
@@ -422,7 +673,14 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                   onPageChange={setPage}
                 />
               </Box>
-              <Button size="xs" color={DSR_PRIMARY} onClick={() => void submitUpdates()} loading={isSubmitting} disabled={isLoading || rows.length === 0} style={{ flexShrink: 0, marginRight: 56 }}>
+              <Button
+                size="xs"
+                color={DSR_PRIMARY}
+                onClick={() => void submitUpdates()}
+                loading={isSubmitting}
+                disabled={isLoading || rows.length === 0}
+                style={{ flexShrink: 0, marginRight: 56 }}
+              >
                 Submit changes
               </Button>
             </Group>
@@ -430,47 +688,174 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
         ),
         children: (
           <Box style={TABLE_BODY}>
-            {isRestoring || isLoading ? (
-              <ERPListTableLoading theme={theme} message={`Loading ${title}…`} />
-            ) : rows.length === 0 ? (
-              <Box style={{ minHeight: 200, display: "flex", justifyContent: "center", alignItems: "center" }}>
-                <Text size="sm" c="dimmed">No data available for this criteria.</Text>
-              </Box>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "4px 4px", minWidth: 1760 }}>
-                <thead>
-                  <tr>
-                    {COLUMNS.filter((c) => visibleColumns[c.key]).map((column) => (
-                      <th key={column.key} style={{ textAlign: "left", padding: "4px 6px", fontSize: 11, borderBottom: "1px solid #e2e8f0", background: "#f8fafc", whiteSpace: "nowrap", width: column.width, maxWidth: column.width }}>
-                        {column.label}
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "separate",
+                borderSpacing: "4px 4px",
+                minWidth: 1940,
+              }}
+            >
+              <thead>
+                <tr>
+                  {COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => {
+                    const w = column.width ?? 80;
+                    const isDateHeader = OCEAN_DATE_FILTER_COLUMN_KEYS.has(column.key);
+                    const isFilterable = !OCEAN_NON_FILTERABLE_COLUMN_KEYS.has(column.key);
+                    return (
+                      <th key={column.key} style={mergeTh(w, w)}>
+                        {!isFilterable ? (
+                          column.label
+                        ) : isDateHeader ? (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={formatFilterDateLabel(
+                              appliedColumnFilters[column.key] ?? "",
+                            )}
+                            theme={theme}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                size="xs"
+                                value={
+                                  appliedColumnFilters[column.key]
+                                    ? dayjs(appliedColumnFilters[column.key]).toDate()
+                                    : null
+                                }
+                                onChange={(date) => {
+                                  commitColumnFilter({
+                                    [column.key]: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={compactFilterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        ) : (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={appliedColumnFilters[column.key] ?? ""}
+                            theme={theme}
+                            placeholder={`Filter ${column.label}`}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={(next) => commitColumnFilter({ [column.key]: next })}
+                          />
+                        )}
                       </th>
-                    ))}
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {isRestoring || isLoading ? (
+                  <tr>
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        py={48}
+                        gap={8}
+                        justify="center"
+                        align="center"
+                        className="erp-header-filter-fade"
+                        style={{
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
+                        }}
+                      >
+                        <Loader color={theme.primary} />
+                        <Text size="sm" c="dimmed" style={{ fontFamily: theme.fontSans }}>
+                          Loading {title}…
+                        </Text>
+                      </Flex>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, rowIndex) => {
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        justify="center"
+                        align="center"
+                        style={{
+                          minHeight: 200,
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
+                        }}
+                      >
+                        <Text size="sm" c="dimmed">
+                          No data available for this criteria.
+                        </Text>
+                      </Flex>
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, rowIndex) => {
                     const identity = getIdentity(row.__source) || `row-${row.sr_no}-${rowIndex}`;
                     return (
                       <tr key={identity}>
                         {COLUMNS.filter((c) => visibleColumns[c.key]).map((column) => (
-                          <td key={`${identity}-${column.key}`} style={{ padding: "0px", borderBottom: "1px solid #f1f5f9", width: column.width, maxWidth: column.width }}>
-                            {column.key === "etd" || column.key === "eta" || column.key === "nomination_date" ? (
+                          <td
+                            key={`${identity}-${column.key}`}
+                            style={{
+                              padding: "0px",
+                              borderBottom: "1px solid #f1f5f9",
+                              width: column.width,
+                              maxWidth: column.width,
+                            }}
+                          >
+                            {column.key === "etd" ||
+                            column.key === "eta" ||
+                            column.key === "nomination_date" ? (
                               <SingleDateInput
                                 value={parseDateValue(row[column.key])}
                                 onChange={(d) => {
-                                  if (column.key === "etd" || column.key === "eta") onFieldChange(identity, column.key, d ? dayjs(d).format("YYYY-MM-DD") : "");
+                                  if (column.key === "etd" || column.key === "eta")
+                                    onFieldChange(
+                                      identity,
+                                      column.key,
+                                      d ? dayjs(d).format("YYYY-MM-DD") : "",
+                                    );
                                 }}
                                 size="xs"
                                 readOnly={column.key !== "etd" && column.key !== "eta"}
-                                styles={{ input: { width: column.width ?? 110, minWidth: column.width ?? 110, fontSize: 11, height: 28, ...(column.key !== "etd" && column.key !== "eta" ? { backgroundColor: "#f8fafc", borderColor: "#dbe4ff" } : {}) } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 110,
+                                    minWidth: column.width ?? 110,
+                                    fontSize: 11,
+                                    height: 26,
+                                    ...(column.key !== "etd" && column.key !== "eta"
+                                      ? { backgroundColor: "#f8fafc", borderColor: "#dbe4ff" }
+                                      : {}),
+                                  },
+                                }}
                               />
                             ) : column.key === "remark" ? (
                               <FormTextInput
                                 value={row[column.key]}
-                                onChange={(event) => onFieldChange(identity, column.key, event.currentTarget.value)}
+                                onChange={(event) =>
+                                  onFieldChange(identity, column.key, event.currentTarget.value)
+                                }
                                 format="normal"
                                 size="xs"
-                                styles={{ input: { width: column.width ?? 120, minWidth: column.width ?? 120, fontSize: 11, height: 28 } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 120,
+                                    minWidth: column.width ?? 120,
+                                    fontSize: 11,
+                                    height: 26,
+                                  },
+                                }}
                               />
                             ) : (
                               <FormTextInput
@@ -478,17 +863,27 @@ export default function OceanDsrBase({ title, endpoint, serviceType }: Props) {
                                 format="normal"
                                 size="xs"
                                 readOnly
-                                styles={{ input: { width: column.width ?? 120, minWidth: column.width ?? 120, fontSize: 11, height: 28, backgroundColor: "#f8fafc", borderColor: "#dbe4ff" } }}
+                                styles={{
+                                  input: {
+                                    width: column.width ?? 120,
+                                    minWidth: column.width ?? 120,
+                                    fontSize: 11,
+                                    height: 26,
+                                    textAlign: column.key === "sr_no" ? "center" : "left",
+                                    backgroundColor: "#f8fafc",
+                                    borderColor: "#dbe4ff",
+                                  },
+                                }}
                               />
                             )}
                           </td>
                         ))}
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            )}
+                  })
+                )}
+              </tbody>
+            </table>
           </Box>
         ),
       }}

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Box, Flex, Group, Text, Button, TextInput, Menu, Checkbox, ActionIcon } from "@mantine/core";
+import { useState, useEffect, useCallback, useRef, useMemo, type CSSProperties } from "react";
+import { Box, Center, Flex, Group, Text, Button, TextInput, ActionIcon, Loader } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
-import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconSettings } from "@tabler/icons-react";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../api/axios";
@@ -13,21 +13,21 @@ import PaginationBar from "../../components/PaginationBar/PaginationBar";
 import { ERPListScreen } from "../../components/ERPListPage/ERPListScreen";
 import { ERPListStatPill } from "../../components/ERPListPage/ERPListStatPill";
 import { ERPListFilterActionsFooter } from "../../components/ERPListPage/ERPListFilterActionsFooter";
-import { ERPListTableLoading } from "../../components/ERPListPage/ERPListTableLoading";
 import { DEFAULT_ERP_LIST_THEME } from "../../components/ERPListPage/erpListTheme";
-import { erpToolbarOutlineButtonStyles } from "../../components";
+import {
+  ERPListColumnHeaderFilter,
+  ERPListColumnToggleMenu,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMenuDropdownStyles,
+  erpListThStyle,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../components";
 import { useListFilterStore } from "../../store/listFilterStore";
+import useDateFormat from "../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_IMPORT_DSR";
 
-type PersistedDsrFilters = {
-  date_from: string | null;
-  date_to: string | null;
-  page: number;
-  pageSize: number;
-};
-
-/** Matches CallEntryMaster list URL style: `${endpoint}?index=${offset}&limit=${pageSize}` */
 function buildAirImportBookedListUrl(
   zeroBasedRowOffset: number,
   limit: number
@@ -49,21 +49,21 @@ const AIR_IMPORT_DSR_TABLE_BODY: CSSProperties = {
 };
 
 const AIR_IMPORT_DSR_COLUMNS = [
-  { key: "sr_no", label: "S.No", width: 40 },
+  { key: "sr_no", label: "S.No", width: 55 },
   { key: "date", label: "Date", width: 105 },
-  { key: "sales_person", label: "Sales Person", width: 80 },
-  { key: "ref_number", label: "Ref Number", width: 80 },
-  { key: "status", label: "Status", width: 80 },
+  { key: "sales_person", label: "Sales Person", width: 100 },
+  { key: "ref_number", label: "Ref Number", width: 120 },
+  { key: "status", label: "Status", width: 100 },
   { key: "customer", label: "Customer", width: 120 },
   { key: "actual_consignee", label: "Consignee", width: 120 },
   { key: "shipper", label: "Shipper", width: 120 },
   { key: "agent", label: "Agent", width: 120 },
-  { key: "pol", label: "POL", width: 60 },
-  { key: "pod", label: "POD", width: 60 },
-  { key: "terms", label: "Terms", width: 60 },
-  { key: "pqkgs", label: "Packages", width: 60 },
-  { key: "gw", label: "GW", width: 60 },
-  { key: "cw", label: "CW", width: 60 },
+  { key: "pol", label: "POL", width: 100 },
+  { key: "pod", label: "POD", width: 100 },
+  { key: "terms", label: "Terms", width: 100 },
+  { key: "pqkgs", label: "Packages", width: 100 },
+  { key: "gw", label: "GW", width: 100 },
+  { key: "cw", label: "CW", width: 100 },
   { key: "hawb", label: "HAWB", width: 100 },
   { key: "mawb", label: "MAWB", width: 100 },
   { key: "etd", label: "ETD", width: 110 },
@@ -75,6 +75,109 @@ const AIR_IMPORT_DSR_COLUMNS = [
 }>;
 
 type AirImportDsrColumnKey = (typeof AIR_IMPORT_DSR_COLUMNS)[number]["key"];
+
+/**
+ * Backend `filters` keys for air-import-booked (matches API).
+ * `shipment_received_date` is handled by the date-range drawer, not column headers.
+ */
+const IMPORT_BACKEND_FILTER_KEYS = [
+  "sales_person",
+  "enq_reference_no",
+  "customer_name",
+  "shipper_name",
+  "cnee_name",
+  "overseas_agent",
+  "pol",
+  "pod",
+  "terms",
+  "pkgs",
+  "weight_in_kg",
+  "shipping_bill_number_date",
+  "invoice_number_date",
+  "hawb",
+  "mawb",
+  "etd",
+  "eta",
+  "haz_non_haz",
+  "iata",
+  "remark",
+  "shipment_status",
+  "job_number",
+  "job_month",
+  "job_submitted_date",
+] as const;
+
+type ImportBackendFilterKey = (typeof IMPORT_BACKEND_FILTER_KEYS)[number];
+
+/** Table column key → backend `filters` key. */
+const IMPORT_COLUMN_TO_BACKEND_FILTER_KEY: Partial<
+  Record<AirImportDsrColumnKey, ImportBackendFilterKey>
+> = {
+  sales_person: "sales_person",
+  ref_number: "enq_reference_no",
+  status: "shipment_status",
+  customer: "customer_name",
+  actual_consignee: "cnee_name",
+  shipper: "shipper_name",
+  agent: "overseas_agent",
+  pol: "pol",
+  pod: "pod",
+  terms: "terms",
+  pqkgs: "pkgs",
+  gw: "weight_in_kg",
+  hawb: "hawb",
+  mawb: "mawb",
+  etd: "etd",
+  eta: "eta",
+};
+
+const IMPORT_NON_FILTERABLE_COLUMN_KEYS = new Set<AirImportDsrColumnKey>([
+  "sr_no",
+  "date",
+  "cw",
+]);
+
+function importColumnKeyToBackendFilterKey(
+  columnKey: AirImportDsrColumnKey,
+): ImportBackendFilterKey | null {
+  if (IMPORT_NON_FILTERABLE_COLUMN_KEYS.has(columnKey)) return null;
+  return IMPORT_COLUMN_TO_BACKEND_FILTER_KEY[columnKey] ?? null;
+}
+
+function buildImportBackendFiltersPayload(
+  applied: Partial<Record<AirImportDsrColumnKey, string>>,
+): Record<string, string> {
+  const filters: Record<string, string> = {};
+  for (const [columnKey, raw] of Object.entries(applied) as [
+    AirImportDsrColumnKey,
+    string,
+  ][]) {
+    const backendKey = importColumnKeyToBackendFilterKey(columnKey);
+    if (!backendKey) continue;
+    const v = String(raw ?? "").trim();
+    if (v) filters[backendKey] = v;
+  }
+  return filters;
+}
+
+/** Use cleared `applied` immediately; otherwise debounced values (avoids 1s lag after Clear). */
+function columnFiltersForApiRequest(
+  applied: Partial<Record<AirImportDsrColumnKey, string>>,
+  debounced: Partial<Record<AirImportDsrColumnKey, string>>,
+): Partial<Record<AirImportDsrColumnKey, string>> {
+  const appliedActive = Object.values(applied).some((v) => String(v ?? "").trim() !== "");
+  const debouncedActive = Object.values(debounced).some((v) => String(v ?? "").trim() !== "");
+  if (!appliedActive && debouncedActive) return applied;
+  return debounced;
+}
+
+type PersistedDsrFilters = {
+  date_from: string | null;
+  date_to: string | null;
+  page: number;
+  pageSize: number;
+  column_filters?: Partial<Record<AirImportDsrColumnKey, string>>;
+};
 
 type AirImportBookedApiRow = {
   booking_id?: number | null;
@@ -193,6 +296,29 @@ export default function AirImportDsr() {
   const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
   const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
 
+  const theme = DEFAULT_ERP_LIST_THEME;
+  const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
+  const compactFilterFieldStyles = {
+    ...filterFieldStyles,
+    input: {
+      ...filterFieldStyles.input,
+      height: 26,
+      minHeight: 26,
+    },
+  } as const;
+  const mergeTh = (minW: number, widthPx: number) => ({
+    ...erpListThStyle(theme),
+    minHeight: 40,
+    height: 40,
+    verticalAlign: "middle" as const,
+    boxSizing: "border-box" as const,
+    minWidth: minW,
+    width: widthPx,
+    fontSize: 12,
+    fontWeight: 500,
+    color: theme.fg,
+  });
+
   const [fromDate, setFromDate] = useState<Date | null>(() =>
     dayjs().startOf("month").toDate()
   );
@@ -204,7 +330,7 @@ export default function AirImportDsr() {
   const [airImportDsrPageSize, setAirImportDsrPageSize] = useState(25);
   const [airImportDsrTotalRecords, setAirImportDsrTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFromDate, setDraftFromDate] = useState<Date | null>(fromDate);
   const [draftToDate, setDraftToDate] = useState<Date | null>(toDate);
@@ -213,7 +339,76 @@ export default function AirImportDsr() {
       AIR_IMPORT_DSR_COLUMNS.map((column) => [column.key, true])
     ) as Record<AirImportDsrColumnKey, boolean>
   );
+  const [appliedColumnFilters, setAppliedColumnFilters] = useState<
+    Partial<Record<AirImportDsrColumnKey, string>>
+  >({});
+  const [debouncedColumnFilters] = useDebouncedValue(appliedColumnFilters, 1000);
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
+
+  const dateFormat = useDateFormat();
+  const formatFilterDateLabel = useCallback(
+    (iso: string) => {
+      if (!iso?.trim()) return "";
+      const d = dayjs(iso);
+      return d.isValid() ? d.format(dateFormat) : iso;
+    },
+    [dateFormat],
+  );
+
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const persistDsrListState = useCallback(
+    (nextColumnFilters: Partial<Record<AirImportDsrColumnKey, string>>, nextPage: number) => {
+      setStoreFilters(LIST_KEY, {
+        date_from: fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null,
+        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : null,
+        page: nextPage,
+        pageSize: airImportDsrPageSize,
+        column_filters: nextColumnFilters,
+      });
+    },
+    [fromDate, toDate, airImportDsrPageSize, setStoreFilters],
+  );
+
+  const commitColumnFilter = useCallback(
+    (patch: Partial<Record<AirImportDsrColumnKey, string>>) => {
+      setAppliedColumnFilters((prev) => {
+        const next: Partial<Record<AirImportDsrColumnKey, string>> = { ...prev };
+        for (const [k, v] of Object.entries(patch)) {
+          const key = k as AirImportDsrColumnKey;
+          if (key === "sr_no") continue;
+          const trimmed = String(v ?? "").trim();
+          if (!trimmed) delete next[key];
+          else next[key] = trimmed;
+        }
+        persistDsrListState(next, 1);
+        return next;
+      });
+      setAirImportDsrPage(1);
+    },
+    [persistDsrListState],
+  );
+
+  const columnToggleItems = useMemo(
+    () =>
+      AIR_IMPORT_DSR_COLUMNS.map((column) => ({
+        id: column.key,
+        label: column.label,
+        checked: visibleColumns[column.key],
+        onToggle: () =>
+          setVisibleColumns((prev) => ({
+            ...prev,
+            [column.key]: !prev[column.key],
+          })),
+      })),
+    [visibleColumns],
+  );
 
   const airImportDsrOriginalEditableRef = useRef<
     Map<string, Pick<AirImportDsrRow, AirImportDsrEditableKey>>
@@ -243,6 +438,9 @@ export default function AirImportDsr() {
       setDraftToDate(restoredTo ?? null);
       if (typeof f.page === "number" && f.page > 0) setAirImportDsrPage(f.page);
       if (typeof f.pageSize === "number" && f.pageSize > 0) setAirImportDsrPageSize(f.pageSize);
+      if (f.column_filters && typeof f.column_filters === "object") {
+        setAppliedColumnFilters(f.column_filters as Partial<Record<AirImportDsrColumnKey, string>>);
+      }
     }
 
     clearAllExcept(LIST_KEY);
@@ -266,12 +464,15 @@ export default function AirImportDsr() {
       const page = Math.max(1, Math.trunc(Number(airImportDsrPage)) || 1);
       const offset = (page - 1) * pageSize;
 
-      const payload: Record<string, string> = {
+      const payload = {
         service_type: "import",
         date_from: dayjs(fromDate).format("YYYY-MM-DD"),
         date_to: dayjs(toDate).format("YYYY-MM-DD"),
+        search: debouncedSearch.trim(),
+        filters: buildImportBackendFiltersPayload(
+          columnFiltersForApiRequest(appliedColumnFilters, debouncedColumnFilters),
+        ),
       };
-      if (debouncedSearch.trim()) payload.search = debouncedSearch.trim();
 
       const listUrl = buildAirImportBookedListUrl(offset, pageSize);
       const response = await apiCallProtected.post(listUrl, payload);
@@ -332,14 +533,20 @@ export default function AirImportDsr() {
     } finally {
       setIsLoadingAirImportDsr(false);
     }
-  }, [fromDate, toDate, airImportDsrPage, airImportDsrPageSize, debouncedSearch]);
+  }, [
+    fromDate,
+    toDate,
+    airImportDsrPage,
+    airImportDsrPageSize,
+    debouncedSearch,
+    appliedColumnFilters,
+    debouncedColumnFilters,
+  ]);
 
   useEffect(() => {
     setAirImportDsrPage(1);
   }, [fromDate, toDate]);
 
-  // Reset to first page whenever the search term changes (after debounce).
-  // Skip the initial value (and any restore-driven update) so we don't clobber a restored page.
   const lastDebouncedSearchRef = useRef<string | null>(null);
   useEffect(() => {
     if (isRestoring) return;
@@ -351,6 +558,19 @@ export default function AirImportDsr() {
     lastDebouncedSearchRef.current = debouncedSearch;
     setAirImportDsrPage(1);
   }, [debouncedSearch, isRestoring]);
+
+  const lastDebouncedColumnFiltersRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring) return;
+    const serialized = JSON.stringify(debouncedColumnFilters);
+    if (lastDebouncedColumnFiltersRef.current === null) {
+      lastDebouncedColumnFiltersRef.current = serialized;
+      return;
+    }
+    if (lastDebouncedColumnFiltersRef.current === serialized) return;
+    lastDebouncedColumnFiltersRef.current = serialized;
+    setAirImportDsrPage(1);
+  }, [debouncedColumnFilters, isRestoring]);
 
   useEffect(() => {
     if (isRestoring) return;
@@ -369,9 +589,6 @@ export default function AirImportDsr() {
     },
     []
   );
-
-  // Search is now applied server-side via the API payload; render rows directly.
-  const filteredRows = airImportDsrRows;
 
   const submitAirImportDsrUpdates = useCallback(async () => {
     try {
@@ -443,13 +660,17 @@ export default function AirImportDsr() {
     }
   }, [airImportDsrRows, fetchAirImportDsrData]);
 
-  const theme = DEFAULT_ERP_LIST_THEME;
   const summary = {
     total: airImportDsrRows.length,
     active: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "ACTIVE").length,
     closed: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "CLOSED").length,
     cancel: airImportDsrRows.filter((r) => r.status?.toUpperCase() === "CANCEL").length,
   };
+
+  const visibleColumnCount = useMemo(
+    () => AIR_IMPORT_DSR_COLUMNS.filter((c) => visibleColumns[c.key]).length,
+    [visibleColumns],
+  );
 
   return (
     <ERPListScreen
@@ -468,7 +689,7 @@ export default function AirImportDsr() {
             <TextInput
               size="xs"
               leftSection={<IconSearch size={14} />}
-              placeholder="Search..."
+              placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               rightSection={
@@ -484,27 +705,23 @@ export default function AirImportDsr() {
                 ) : null
               }
               w={220}
+              classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+              styles={{
+                input: {
+                  fontFamily: theme.fontSans,
+                  fontSize: 12,
+                  height: 32,
+                  minHeight: 32,
+                },
+              }}
             />
-            
-            <Menu shadow="md" width={220} position="bottom-end">
-              <Menu.Target>
-                <Button
-                  variant="default"
-                  size="xs"
-                  leftSection={<IconSettings size={14} />}
-                  styles={erpToolbarOutlineButtonStyles(theme)}
-                >
-                  Columns
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {AIR_IMPORT_DSR_COLUMNS.map((column) => (
-                  <Menu.Item key={column.key} closeMenuOnClick={false}>
-                    <Checkbox label={column.label} checked={visibleColumns[column.key]} onChange={(e) => setVisibleColumns((prev) => ({ ...prev, [column.key]: e.currentTarget.checked }))} />
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
+
+            <ERPListColumnToggleMenu
+              theme={theme}
+              items={columnToggleItems}
+              menuStyles={erpListGeistMenuDropdownStyles}
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+            />
             <Button
               variant="default"
               size="xs"
@@ -533,6 +750,9 @@ export default function AirImportDsr() {
               setFromDate(defFrom);
               setToDate(defTo);
               setAirImportDsrPage(1);
+              setAppliedColumnFilters({});
+              setEditingHeaderId(null);
+              lastDebouncedColumnFiltersRef.current = "{}";
               clearAllStore(LIST_KEY);
             }}
             onApply={() => {
@@ -545,6 +765,7 @@ export default function AirImportDsr() {
                 date_to: draftToDate ? dayjs(draftToDate).format("YYYY-MM-DD") : null,
                 page: 1,
                 pageSize: airImportDsrPageSize,
+                column_filters: appliedColumnFilters,
               };
               setStoreFilters(LIST_KEY, persisted);
               setStoreSearch(LIST_KEY, search);
@@ -553,8 +774,22 @@ export default function AirImportDsr() {
         ),
         children: (
           <Group align="end" gap="sm">
-            <SingleDateInput label="From date" value={draftFromDate} onChange={setDraftFromDate} size="xs" />
-            <SingleDateInput label="To date" value={draftToDate} onChange={setDraftToDate} size="xs" />
+            <SingleDateInput
+              label="From date"
+              value={draftFromDate}
+              onChange={setDraftFromDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={compactFilterFieldStyles}
+            />
+            <SingleDateInput
+              label="To date"
+              value={draftToDate}
+              onChange={setDraftToDate}
+              size="xs"
+              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={compactFilterFieldStyles}
+            />
           </Group>
         ),
       }}
@@ -597,46 +832,123 @@ export default function AirImportDsr() {
         ),
         children: (
           <Box style={AIR_IMPORT_DSR_TABLE_BODY}>
-            {isRestoring || isLoadingAirImportDsr ? (
-              <ERPListTableLoading theme={theme} message="Loading air import DSR..." />
-            ) : filteredRows.length === 0 ? (
-              <Flex justify="center" align="center" style={{ minHeight: 200 }}>
-                <Text size="sm" c="dimmed">
-                  No data available for this criteria.
-                </Text>
-              </Flex>
-            ) : (
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: "4px 4px",
-                  minWidth: 1280,
-                }}
-              >
-                <thead>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "separate",
+                borderSpacing: "4px 4px",
+                minWidth: 1280,
+              }}
+            >
+              <thead>
+                <tr>
+                  {AIR_IMPORT_DSR_COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => {
+                    const w = column.width ?? 80;
+                    const isDateHeader = column.key === "etd" || column.key === "eta";
+                    const isFilterable = !IMPORT_NON_FILTERABLE_COLUMN_KEYS.has(column.key);
+                    return (
+                      <th key={column.key} style={mergeTh(w, w)}>
+                        {!isFilterable ? (
+                          column.label
+                        ) : isDateHeader ? (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={formatFilterDateLabel(
+                              appliedColumnFilters[column.key] ?? "",
+                            )}
+                            theme={theme}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                size="xs"
+                                value={
+                                  appliedColumnFilters[column.key]
+                                    ? dayjs(appliedColumnFilters[column.key]).toDate()
+                                    : null
+                                }
+                                onChange={(date) => {
+                                  commitColumnFilter({
+                                    [column.key]: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={compactFilterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
+                            )}
+                          />
+                        ) : (
+                          <ERPListColumnHeaderFilter
+                            label={column.label}
+                            value={appliedColumnFilters[column.key] ?? ""}
+                            displayValue={appliedColumnFilters[column.key] ?? ""}
+                            theme={theme}
+                            placeholder={`Filter ${column.label}`}
+                            isEditing={editingHeaderId === column.key}
+                            onStartEdit={() => openHeaderEditor(column.key)}
+                            onStopEdit={() => collapseHeaderEditor(column.key)}
+                            onChange={(next) => commitColumnFilter({ [column.key]: next })}
+                          />
+                        )}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {isRestoring || isLoadingAirImportDsr ? (
                   <tr>
-                    {AIR_IMPORT_DSR_COLUMNS.filter((column) => visibleColumns[column.key]).map((column) => (
-                      <th
-                        key={column.key}
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        py={48}
+                        gap={8}
+                        justify="center"
+                        align="center"
+                        className="erp-header-filter-fade"
                         style={{
-                          textAlign: "left",
-                          padding: "4px 6px",
-                          fontSize: 11,
-                          borderBottom: "1px solid #e2e8f0",
-                          background: "#f8fafc",
-                          whiteSpace: "nowrap",
-                          width: column.width,
-                          maxWidth: column.width,
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
                         }}
                       >
-                        {column.label}
-                      </th>
-                    ))}
+                        <Loader color={theme.primary} />
+
+                        <Text
+                          size="sm"
+                          c="dimmed"
+                          style={{ fontFamily: theme.fontSans }}
+                        >
+                          Loading air import DSR…
+                        </Text>
+                      </Flex>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, rowIndex) => {
+                ) : airImportDsrRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={Math.max(1, visibleColumnCount)}>
+                      <Flex
+                        justify="center"
+                        align="center"
+                        style={{
+                          minHeight: 200,
+                          width: "calc(100vw - 150px)",
+                          position: "sticky",
+                          left: 0,
+                        }}
+                      >
+                        <Text size="sm" c="dimmed">
+                          No data available for this criteria.
+                        </Text>
+                      </Flex>
+                    </td>
+                  </tr>
+                ) : (
+                  airImportDsrRows.map((row, rowIndex) => {
                     const identityKey =
                       getAirImportDsrIdentityKeyFromRow(row) || `row-${row.sr_no}-${rowIndex}`;
                     return (
@@ -670,7 +982,7 @@ export default function AirImportDsr() {
                                     width: column.width ?? 120,
                                     minWidth: column.width ?? 120,
                                     fontSize: 11,
-                                    height: 28,
+                                    height: 26,
                                   },
                                 }}
                               />
@@ -695,7 +1007,7 @@ export default function AirImportDsr() {
                                     width: column.width ?? 110,
                                     minWidth: column.width ?? 110,
                                     fontSize: 11,
-                                    height: 28,
+                                    height: 26,
                                   },
                                 }}
                               />
@@ -715,7 +1027,7 @@ export default function AirImportDsr() {
                                     width: column.width ?? 110,
                                     minWidth: column.width ?? 110,
                                     fontSize: 11,
-                                    height: 28,
+                                    height: 26,
                                     backgroundColor: "#f8fafc",
                                     borderColor: "#dbe4ff",
                                   },
@@ -732,7 +1044,8 @@ export default function AirImportDsr() {
                                     width: column.width ?? 120,
                                     minWidth: column.width ?? 120,
                                     fontSize: 11,
-                                    height: 28,
+                                    height: 26,
+                                    textAlign: column.key === "sr_no" ? "center" : "left",
                                     backgroundColor: "#f8fafc",
                                     borderColor: "#dbe4ff",
                                   },
@@ -743,10 +1056,10 @@ export default function AirImportDsr() {
                         ))}
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            )}
+                  })
+                )}
+              </tbody>
+            </table>
           </Box>
         ),
       }}
