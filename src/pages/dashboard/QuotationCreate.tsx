@@ -67,6 +67,97 @@ import useAuthStore from "../../store/authStore";
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
 const QUOTATION_MASTER_PATH = "/quotation";
 
+type QuotationHeaderRemarkSource = {
+  status?: string;
+  reject_remark?: string | null;
+};
+
+/** LOST quotations use top-level reject_remark; other statuses use service-level remark. */
+function resolveQuotationRemark(
+  headerData: QuotationHeaderRemarkSource | null | undefined,
+  serviceRemark?: string | null,
+): string {
+  const status = String(headerData?.status ?? "")
+    .trim()
+    .toUpperCase();
+  if (status === "LOST") {
+    return headerData?.reject_remark?.trim() || "";
+  }
+  return serviceRemark?.trim() || "";
+}
+
+type RemarkInputWithTooltipProps = {
+  value: string;
+  error?: string;
+  isRemarkRequired: boolean;
+  isViewMode: boolean;
+  onChange: (value: string) => void;
+};
+
+function RemarkInputWithTooltip({
+  value,
+  error,
+  isRemarkRequired,
+  isViewMode,
+  onChange,
+}: RemarkInputWithTooltipProps) {
+  const trimmed = value?.trim() ?? "";
+
+  return (
+    <Tooltip
+      label={value}
+      multiline
+      w={320}
+      position="top"
+      withArrow
+      disabled={!trimmed}
+      events={{ hover: true, focus: true, touch: true }}
+      styles={{
+        tooltip: {
+          fontFamily: "Inter",
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+        },
+      }}
+    >
+      <div style={{ width: "100%" }}>
+        <TextInput
+          label="Remark"
+          withAsterisk={isRemarkRequired}
+          placeholder="Enter remark"
+          value={value}
+          onChange={(e) => {
+            if (!isViewMode) {
+              onChange(toTitleCase(e.target.value));
+            }
+          }}
+          readOnly={isViewMode}
+          disabled={isViewMode}
+          styles={{
+            input: {
+              fontSize: "14px",
+              fontFamily: "Inter",
+              height: "36px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            },
+            label: {
+              fontSize: "14px",
+              fontWeight: 500,
+              color: "#424242",
+              marginBottom: "4px",
+              fontFamily: "Inter",
+              fontStyle: "medium",
+            },
+          }}
+          error={error}
+        />
+      </div>
+    </Tooltip>
+  );
+}
+
 const quotationFormSchema = (isRemarkRequired: boolean) =>
   Yup.object().shape({
     quote_currency_country_code: Yup.string().required("Currency is required"),
@@ -673,7 +764,10 @@ function QuotationCreate({
         quote_type: quotationData.quote_type || "Standard",
         carrier_code: carrierCode,
         status: "QUOTE CREATED", // Always set to default for consistency
-        remark: quotationData.remark || "",
+        remark: resolveQuotationRemark(
+          fetchedQuotationData || actualEnquiryData,
+          quotationData.remark,
+        ),
       });
 
       // Set dynamic form charges
@@ -702,7 +796,7 @@ function QuotationCreate({
         resetFormsToDefaults();
       }
     },
-    [quotationForm, dynamicForm],
+    [quotationForm, dynamicForm, fetchedQuotationData, actualEnquiryData],
   );
 
   // Helper function to reset forms to defaults
@@ -924,6 +1018,10 @@ function QuotationCreate({
         return;
       }
       if (!savedData) {
+        // View mode from pipeline/dashboard loads via fetch + init; avoid clearing remark.
+        if (isViewMode && quotationId) {
+          return;
+        }
         quotationForm.setValues({
           quote_currency_country_code: "",
           valid_upto: "",
@@ -956,6 +1054,8 @@ function QuotationCreate({
     selectedServiceIndex,
     selectedService?.id,
     isEditMode,
+    isViewMode,
+    quotationId,
     serviceQuotationData,
   ]);
 
@@ -984,6 +1084,7 @@ function QuotationCreate({
               sales_person: quotationData.sales_person,
               enquiry_received_date: quotationData.enquiry_received_date,
               status: quotationData.status,
+              reject_remark: quotationData.reject_remark,
               origin_list: quotationData.origin_list,
               destination_list: quotationData.destination_list,
               quote_type_list: quotationData.quote_type_list,
@@ -1004,7 +1105,7 @@ function QuotationCreate({
                 quote_type: quotation.quote_type || "Standard",
                 carrier_code: quotation.carrier_code || "",
                 status: quotationData.status || "QUOTE CREATED",
-                remark: quotation.remark || "",
+                remark: resolveQuotationRemark(quotationData, quotation.remark),
               };
 
               // Map charges data
@@ -2798,9 +2899,13 @@ function QuotationCreate({
   // Initialize form data for edit mode (from list row or fetched quotation)
   useEffect(() => {
     const quotationDataToUse =
+      fetchedQuotationData?.quotation ||
       quotationData?.quotation ||
-      actualEnquiryData?.quotation ||
-      fetchedQuotationData?.quotation;
+      actualEnquiryData?.quotation;
+    const quotationHeader: QuotationHeaderRemarkSource | null | undefined =
+      fetchedQuotationData ||
+      actualEnquiryData ||
+      quotationData;
     const hasQuotationData =
       quotationDataToUse &&
       Array.isArray(quotationDataToUse) &&
@@ -2814,9 +2919,7 @@ function QuotationCreate({
         fetchedQuotationData?.quotation) &&
       services.length > 0
     ) {
-      const dataSource =
-        quotationData || actualEnquiryData || fetchedQuotationData;
-      console.log("Initializing form for edit mode:", dataSource);
+      console.log("Initializing form for edit mode:", quotationHeader);
 
       const initialServiceData: { [serviceId: number]: any } = {};
       const carrierList = Array.isArray(carrierData) ? carrierData : [];
@@ -2852,8 +2955,11 @@ function QuotationCreate({
             multi_carrier: quotationForService.multi_carrier ? "true" : "false",
             quote_type: quotationForService.quote_type || "Standard",
             carrier_code: carrierCode,
-            status: "QUOTE CREATED", // Always set to default for consistency
-            remark: quotationForService.remark || "",
+            status: quotationHeader?.status || "QUOTE CREATED",
+            remark: resolveQuotationRemark(
+              quotationHeader,
+              quotationForService.remark,
+            ),
           };
 
           // Prepare charges data for this service (include charge_id for SearchableSelect value)
@@ -4564,40 +4670,21 @@ function QuotationCreate({
                     <Grid.Col span={2}>
                       <Flex gap="sm" align="flex-end">
                         <div style={{ flex: 1 }}>
-                          <TextInput
-                            label="Remark"
-                            withAsterisk={isRemarkRequired}
-                            placeholder="Enter remark"
+                          <RemarkInputWithTooltip
                             value={quotationForm.values.remark}
-                            onChange={(e) => {
-                              if (!isViewMode) {
-                                const formattedValue = toTitleCase(
-                                  e.target.value,
-                                );
-                                quotationForm.setFieldValue(
-                                  "remark",
-                                  formattedValue,
-                                );
-                              }
-                            }}
-                            readOnly={isViewMode}
-                            disabled={isViewMode}
-                            styles={{
-                              input: {
-                                fontSize: "14px",
-                                fontFamily: "Inter",
-                                height: "36px",
-                              },
-                              label: {
-                                fontSize: "14px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                                fontStyle: "medium",
-                              },
-                            }}
-                            error={quotationForm.errors.remark}
+                            error={
+                              quotationForm.errors.remark
+                                ? String(quotationForm.errors.remark)
+                                : undefined
+                            }
+                            isRemarkRequired={isRemarkRequired}
+                            isViewMode={isViewMode}
+                            onChange={(formattedValue) =>
+                              quotationForm.setFieldValue(
+                                "remark",
+                                formattedValue,
+                              )
+                            }
                           />
                         </div>
                         {!isViewMode && (
@@ -5072,8 +5159,8 @@ function QuotationCreate({
                                   };
                                 }}
                                 value={
-                                  dynamicForm.values.charges[index]?.charge_id !=
-                                  null
+                                  dynamicForm.values.charges[index]
+                                    ?.charge_id != null
                                     ? String(
                                         dynamicForm.values.charges[index]
                                           .charge_id,
@@ -5947,34 +6034,21 @@ function QuotationCreate({
                   <Grid.Col span={2}>
                     <Flex gap="sm" align="flex-end">
                       <div style={{ flex: 1 }}>
-                        <TextInput
-                          label="Remark"
-                          withAsterisk={isRemarkRequired}
-                          placeholder="Enter remark"
+                        <RemarkInputWithTooltip
                           value={quotationForm.values.remark}
-                          onChange={(e) => {
-                            const formattedValue = toTitleCase(e.target.value);
+                          error={
+                            quotationForm.errors.remark
+                              ? String(quotationForm.errors.remark)
+                              : undefined
+                          }
+                          isRemarkRequired={isRemarkRequired}
+                          isViewMode={false}
+                          onChange={(formattedValue) =>
                             quotationForm.setFieldValue(
                               "remark",
                               formattedValue,
-                            );
-                          }}
-                          styles={{
-                            input: {
-                              fontSize: "14px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                            label: {
-                              fontSize: "14px",
-                              fontWeight: 500,
-                              color: "#424242",
-                              marginBottom: "4px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                          }}
-                          error={quotationForm.errors.remark}
+                            )
+                          }
                         />
                       </div>
                       <Menu shadow="md" width={220} position="bottom-end">
@@ -6417,7 +6491,9 @@ function QuotationCreate({
                               apiEndpoint={URL.chargeMaster}
                               dropdownZIndex={310}
                               searchFields={["charge_code", "charge_name"]}
-                              displayFormat={(item: Record<string, unknown>) => {
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => {
                                 const charge = item as {
                                   id?: number;
                                   charge_name?: string;
@@ -6432,13 +6508,14 @@ function QuotationCreate({
                                 dynamicForm.values.charges[index]?.charge_id !=
                                 null
                                   ? String(
-                                      dynamicForm.values.charges[index].charge_id,
+                                      dynamicForm.values.charges[index]
+                                        .charge_id,
                                     )
                                   : null
                               }
                               displayValue={
-                                dynamicForm.values.charges[index]?.charge_name ||
-                                ""
+                                dynamicForm.values.charges[index]
+                                  ?.charge_name || ""
                               }
                               onChange={(value, selected, originalData) => {
                                 if (isViewMode) return;
