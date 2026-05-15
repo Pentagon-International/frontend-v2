@@ -16,6 +16,7 @@ import {
   Textarea,
   SimpleGrid,
   MantineProvider,
+  Select,
 } from "@mantine/core";
 import { IconSearch, IconX, IconSend } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -61,10 +62,12 @@ import {
   BudgetAggregatedData,
   extractNumericValue,
   extractEnquiryConversionOverviewMeta,
+  getFilterBranchMasterOptions,
 } from "../../../service/dashboard.service";
 import {
   DetailedViewTable,
   DateRangeInput,
+  SearchableSelect,
   ERP_LIST_GEIST_ROOT_CLASS,
   erpListGeistMantineTheme,
   erpListGeistRootTypography,
@@ -649,6 +652,27 @@ const Dashboard = () => {
 
   // Tab state for navigation
   const [activeTab, setActiveTab] = useState<string>("overall");
+  const [pipelineBranchCode, setPipelineBranchCode] = useState<string | null>(
+    null
+  );
+  const [pipelineCoordinatorName, setPipelineCoordinatorName] = useState<
+    string | null
+  >(null);
+  const [pipelineCoordinatorDisplay, setPipelineCoordinatorDisplay] = useState<
+    string | null
+  >(null);
+  const [pipelineBranchOptions, setPipelineBranchOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [pipelineBranchLoading, setPipelineBranchLoading] = useState(false);
+  const isPipelineReportTab = activeTab === "pipeline-Report";
+  const isPipelineAdmin = Boolean(user?.is_staff);
+  const isIndiaUser =
+    (user?.country?.country_code ?? "").toUpperCase() === "IN";
+  const showPipelineBranchFilter =
+    isPipelineReportTab && isPipelineAdmin && isIndiaUser;
+  const showPipelineCoordinatorFilter =
+    isPipelineReportTab && isPipelineAdmin;
   // Pipeline Report state for restoration
   const [pipelineReportState, setPipelineReportState] = useState<{
     drillLevel?: 0 | 1 | 2;
@@ -696,6 +720,53 @@ const Dashboard = () => {
   const [currentEmailData, setCurrentEmailData] = useState<any>(null);
   const [isRestoringFromNavigation, setIsRestoringFromNavigation] =
     useState(false);
+
+  useEffect(() => {
+    if (!showPipelineBranchFilter || !user?.country?.country_code) {
+      setPipelineBranchOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadPipelineBranches = async () => {
+      setPipelineBranchLoading(true);
+      try {
+        const branches = await getFilterBranchMasterOptions(
+          user.country.country_code
+        );
+        if (cancelled) return;
+        setPipelineBranchOptions(
+          branches.map((b) => ({
+            value: b.branch_code,
+            label: b.branch_name?.trim() || b.branch_code,
+          }))
+        );
+      } catch (error) {
+        console.error("Error loading pipeline branch options:", error);
+        if (!cancelled) setPipelineBranchOptions([]);
+      } finally {
+        if (!cancelled) setPipelineBranchLoading(false);
+      }
+    };
+
+    void loadPipelineBranches();
+    return () => {
+      cancelled = true;
+    };
+  }, [showPipelineBranchFilter, user?.country?.country_code]);
+
+  useEffect(() => {
+    if (!isPipelineReportTab || isPipelineAdmin) return;
+    setPipelineBranchCode(null);
+    setPipelineCoordinatorName(null);
+    setPipelineCoordinatorDisplay(null);
+  }, [isPipelineReportTab, isPipelineAdmin]);
+
+  useEffect(() => {
+    if (!showPipelineBranchFilter) {
+      setPipelineBranchCode(null);
+    }
+  }, [showPipelineBranchFilter]);
 
   // Handle location state for pipeline report restoration
   useEffect(() => {
@@ -7841,6 +7912,7 @@ const Dashboard = () => {
                     flexShrink: 0,
                     display: "flex",
                     alignItems: "center",
+                    maxWidth: isPipelineReportTab ? 260 : undefined,
                   }}
                 >
                   <DateRangeInput
@@ -7855,15 +7927,59 @@ const Dashboard = () => {
                     showRangeInCalendar={false}
                     hideLabels={true}
                     compactToolbar
-                    containerStyle={{ gap: 8 }}
+                    containerStyle={{ gap: isPipelineReportTab ? 6 : 8 }}
                   />
                 </Box>
+                {showPipelineBranchFilter ? (
+                  <Select
+                    placeholder="Branch"
+                    size="xs"
+                    clearable
+                    searchable
+                    data={pipelineBranchOptions}
+                    value={pipelineBranchCode}
+                    onChange={setPipelineBranchCode}
+                    disabled={pipelineBranchLoading}
+                    nothingFoundMessage="No branches"
+                    style={{ width: 128, flexShrink: 0 }}
+                    styles={dashToolbarSearchInputStyles}
+                  />
+                ) : null}
+                {showPipelineCoordinatorFilter ? (
+                  <Box style={{ width: 168, flexShrink: 0 }}>
+                    <SearchableSelect
+                      placeholder="Reporting to"
+                      size="xs"
+                      apiEndpoint={URL.coordinatorsUser}
+                      searchFields={["coordinator_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.coordinator_name ?? ""),
+                        label: String(item.coordinator_name ?? ""),
+                      })}
+                      value={pipelineCoordinatorName}
+                      displayValue={pipelineCoordinatorDisplay}
+                      onChange={(value, selectedData) => {
+                        setPipelineCoordinatorName(value);
+                        setPipelineCoordinatorDisplay(
+                          value === null
+                            ? null
+                            : selectedData?.label ?? value
+                        );
+                      }}
+                      minSearchLength={1}
+                      dropdownZIndex={400}
+                      styles={dashToolbarSearchInputStyles}
+                    />
+                  </Box>
+                ) : null}
                 <Box
                   style={{
                     flexShrink: 0,
-                    width: "clamp(220px, 36vw, 420px)",
-                    minWidth: 220,
-                    maxWidth: 420,
+                    width: isPipelineReportTab
+                      ? "clamp(140px, 20vw, 240px)"
+                      : "clamp(220px, 36vw, 420px)",
+                    minWidth: isPipelineReportTab ? 140 : 220,
+                    maxWidth: isPipelineReportTab ? 240 : 420,
                   }}
                 >
                   <Autocomplete
@@ -8291,6 +8407,12 @@ const Dashboard = () => {
               globalSearch={globalSearch}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
+              branchCode={
+                showPipelineBranchFilter ? pipelineBranchCode : null
+              }
+              coordinatorName={
+                showPipelineCoordinatorFilter ? pipelineCoordinatorName : null
+              }
             />
           </Box>
         </Tabs.Panel>

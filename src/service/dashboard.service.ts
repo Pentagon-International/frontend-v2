@@ -2419,6 +2419,8 @@ export const getCustomerInteractionStatusSummary = async (
 // Pipeline Report API interfaces
 export interface PipelineReportItem {
   salesperson: string;
+  coordinator_name?: string | null;
+  branch_code?: string | null;
   total_profit: number;
   quoted_profit: number;
   gained_profit: number;
@@ -2471,6 +2473,8 @@ export interface PipelineReportFilters {
   service?: string;
   service_type?: string;
   search?: string;
+  branch_code?: string;
+  coordinator_name?: string;
   calculation?: "volume" | "no_of_shipments";
 }
 
@@ -2521,6 +2525,8 @@ export interface PipelineReportRegionalFilters {
   region?: string;
   salesperson?: string;
   search?: string;
+  branch_code?: string;
+  coordinator_name?: string;
 }
 
 // Alias for backward compatibility and clarity
@@ -2565,6 +2571,37 @@ export interface PotentialCustomersResponse {
   pagination_total: number;
   data: PotentialCustomerItem[];
 }
+
+export interface FilterBranchMasterItem {
+  branch_code: string;
+  branch_name?: string;
+}
+
+export interface FilterBranchMasterResponse {
+  success?: boolean;
+  data?: FilterBranchMasterItem[];
+}
+
+export const getFilterBranchMasterOptions = async (
+  countryCode: string
+): Promise<FilterBranchMasterItem[]> => {
+  try {
+    const response = (await postAPICall(URL.filterBranchMaster, {
+      filters: { country_code: countryCode },
+    })) as FilterBranchMasterResponse | FilterBranchMasterItem[];
+
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response?.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching branch master filter options:", error);
+    return [];
+  }
+};
 
 // Get Pipeline Report data
 export const getPipelineReportData = async (
@@ -2626,6 +2663,8 @@ export interface PipelineReportProductItem {
 
 export interface PipelineReportProductSalespersonItem {
   salesperson: string;
+  coordinator_name?: string | null;
+  branch_code?: string | null;
   service: string;
   service_type: string;
   pipeline_profit: number;
@@ -2657,6 +2696,8 @@ export interface PipelineReportProductFilters {
   service_type?: string;
   salesperson?: string;
   search?: string;
+  branch_code?: string;
+  coordinator_name?: string;
 }
 
 // Get Product-wise Pipeline Report data

@@ -5,6 +5,8 @@ import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/Enqu
 
 export type PipelineSalespersonRepRow = {
   salesperson: string;
+  coordinator_name?: string;
+  branch_code?: string;
   potential: number;
   pipeline: number;
   gained: number;
@@ -62,9 +64,9 @@ const BAR_FILLS = {
 const STRIPED_TRACK =
   "repeating-linear-gradient(-45deg, #f1f5f9, #f1f5f9 4px, #e8ecf1 4px, #e8ecf1 8px)";
 
-/** Tighter salesman + metrics; compact bar columns (Gained | In progress | Lost) */
+/** Salesman + reporting/branch + metrics; compact bar columns (Gained | In progress | Lost) */
 const GRID_TEMPLATE =
-  "minmax(68px, 0.75fr) minmax(72px, 0.48fr) minmax(72px, 0.48fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr)";
+  "minmax(68px, 0.7fr) minmax(72px, 0.55fr) minmax(52px, 0.38fr) minmax(72px, 0.48fr) minmax(72px, 0.48fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr) minmax(118px, 0.62fr)";
 
 /** Max width of striped bar track (values carry precision) */
 const BAR_TRACK_W = 80;
@@ -314,6 +316,8 @@ function PipelineSalespersonByRepTable({
             <Box style={{ paddingInline: 12 }}>
               {headerCell("Salesman", "left")}
             </Box>
+            {headerCell("Reporting to")}
+            {headerCell("Branch")}
             {headerCell("Potential")}
             {headerCell("Pipeline")}
             {headerCell("Gained")}
@@ -368,6 +372,23 @@ function PipelineSalespersonByRepTable({
                     </Text>
                   ) : null}
                 </Box>
+                <Text
+                  fz={12}
+                  fw={500}
+                  c={enquiryConversionColors.heading}
+                  style={{ ...METRIC_NUMERIC, textAlign: "center" }}
+                  lineClamp={2}
+                >
+                  {row.coordinator_name?.trim() || "—"}
+                </Text>
+                <Text
+                  fz={12}
+                  fw={500}
+                  c={enquiryConversionColors.heading}
+                  style={{ ...METRIC_NUMERIC, textAlign: "center" }}
+                >
+                  {row.branch_code?.trim() || "—"}
+                </Text>
                 <Text style={METRIC_NUMERIC}>{formatAmount(row.potential)}</Text>
                 <Text style={METRIC_NUMERIC}>{formatAmount(row.pipeline)}</Text>
                 <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
@@ -491,6 +512,8 @@ function TotalsFooterRow({
           </Text>
         ) : null}
       </Box>
+      <Box />
+      <Box />
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(potential)}</Text>
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(pipeline)}</Text>
       <Text style={TOTAL_NUMBER_STYLE}>{formatAmount(gained)}</Text>
