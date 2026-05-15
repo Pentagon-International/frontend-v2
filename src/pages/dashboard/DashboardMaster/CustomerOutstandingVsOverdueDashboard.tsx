@@ -31,6 +31,10 @@ import {
   type CustomerOutstandingVsOverdueResponse,
 } from "../../../service/dashboard.service";
 import { CustomerOutstandingSendEmailModal } from "./CustomerOutstandingSendEmailModal";
+import {
+  formatUserDecimal,
+  formatUserInteger,
+} from "../../../utils/userNumberFormat";
 import { enquiryConversionColors } from "./EnquiryConversion/enquiryConversionTokens";
 import {
   ERP_LIST_GEIST_ROOT_CLASS,
@@ -107,11 +111,6 @@ const toPercentNumber = (value: string | number | undefined | null): number => {
   return 0;
 };
 
-/** Indian-style digit grouping (thousands, lakhs, crores) for whole amounts. */
-function formatInrInteger(value: string | number | undefined | null): string {
-  return Math.round(toNumber(value)).toLocaleString("en-IN");
-}
-
 /** Top accent per aging bucket — matches ERP reference (green → amber → orange → deep orange → red). */
 const BUCKET_TOP_COLORS = ["#22C55E", "#F59E0B", "#FB923C", "#EA580C", "#DC2626"] as const;
 
@@ -181,10 +180,13 @@ function riskPillStyle(risk: string | undefined): { bg: string; fg: string; bord
   return { bg: "#DCFCE7", fg: "#15803D", border: "1px solid #BBF7D0" };
 }
 
-function formatAmountCell(value: string | number | undefined | null): string {
+function formatAmountCell(
+  value: string | number | undefined | null,
+  countryCode?: string | null,
+): string {
   if (value === undefined || value === null || value === "") return "—";
   if (toNumber(value) === 0) return "—";
-  return formatInrInteger(value);
+  return formatUserInteger(value, countryCode);
 }
 
 const hdr = {
@@ -241,6 +243,16 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const isMobile = useMediaQuery("(max-width: 48em)");
   const routeState = (location.state || {}) as RouteState;
   const user = useAuthStore((state) => state.user);
+  const userCountryCode = user?.country?.country_code;
+  const formatAmount = (value: string | number | undefined | null) =>
+    formatUserInteger(value, userCountryCode);
+  const formatCount = (value: string | number | undefined | null) =>
+    formatUserInteger(value, userCountryCode);
+  const formatPct = (value: string | number | undefined | null) =>
+    formatUserDecimal(value, userCountryCode, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
 
   const company =
     routeState.company?.trim() || user?.company?.company_name?.trim() || "PENTAGON INDIA";
@@ -558,9 +570,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 </Box>
               ) : null}
               <Text fz={11} fw={600} c="#8AA0B9" style={{ lineHeight: 1.4 }}>
-                Total AR {formatInrInteger(summary?.total_outstanding)} ·{" "}
-                {toNumber(summary?.open_invoices).toLocaleString("en-IN")} open invoices ·{" "}
-                {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
+                Total AR {formatAmount(summary?.total_outstanding)} ·{" "}
+                {formatCount(summary?.open_invoices)} open invoices ·{" "}
+                {formatCount(summary?.customer_count)} customers
               </Text>
               </Box>
             </Group>
@@ -733,14 +745,10 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   lh={1.1}
                   style={{ fontVariantNumeric: "tabular-nums" }}
                 >
-                  {card.label === "90+ DAYS" && card.missing ? "-" : formatInrInteger(card.amount)}
+                  {card.label === "90+ DAYS" && card.missing ? "-" : formatAmount(card.amount)}
                 </Text>
                 <Text fz={11} fw={500} c={enquiryConversionColors.subHeading} mt={2} lh={1.3}>
-                  {toNumber(card.pct).toLocaleString("en-IN", {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  })}
-                  %
+                  {formatPct(card.pct)}%
                 </Text>
                 {card.label === "90+ DAYS" && card.pct > 0 ? (
                   <Text size="10px" fw={600} c="#EF4444" mt={2}>
@@ -1095,22 +1103,22 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.outstanding, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatInrInteger(row.outstanding)}
+                            {formatAmount(row.outstanding)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.overdue, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.overdue)}
+                            {formatAmountCell(row.overdue, userCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.days_1_30)}
+                            {formatAmountCell(row.days_1_30, userCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.days_31_60)}
+                            {formatAmountCell(row.days_31_60, userCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
@@ -1119,7 +1127,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             c={highlight61_90 ? "#EF4444" : OSTD_LIST_INK}
                             style={ostdTableValueNumericStyle}
                           >
-                            {formatAmountCell(row.days_61_90 ?? row.days_61_plus)}
+                            {formatAmountCell(row.days_61_90 ?? row.days_61_plus, userCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
@@ -1136,7 +1144,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               ) {
                                 return "-";
                               }
-                              return formatInrInteger(raw as string | number);
+                              return formatAmount(raw as string | number);
                             })()}
                           </Text>
                         </Table.Td>
@@ -1169,9 +1177,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
 
         <Group justify="space-between" style={{ paddingLeft: 10, paddingRight: 10 }}>
           <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
-            Showing {Math.min(total, index + 1).toLocaleString("en-IN")}-
-            {Math.min(total, index + PAGE_SIZE).toLocaleString("en-IN")} of{" "}
-            {total.toLocaleString("en-IN")}
+            Showing {formatCount(Math.min(total, index + 1))}-
+            {formatCount(Math.min(total, index + PAGE_SIZE))} of{" "}
+            {formatCount(total)}
           </Text>
           <Group gap={6}>
             <Button
@@ -1270,8 +1278,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 <>
                   <Text fz={13} fw={500} c="#64748B">
                     As of {drawerResponse?.as_of ?? "—"} · Total AR{" "}
-                    {formatInrInteger(drawerResponse?.summary?.total_outstanding)} ·{" "}
-                    {toNumber(drawerResponse?.summary?.open_invoices).toLocaleString("en-IN")} open invoices
+                    {formatAmount(drawerResponse?.summary?.total_outstanding)} ·{" "}
+                    {formatCount(drawerResponse?.summary?.open_invoices)} open invoices
                   </Text>
                   <Box style={{ position: "relative" }}>
                     <LoadingOverlay
@@ -1449,22 +1457,22 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.outstanding, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatInrInteger(drow.outstanding)}
+                                      {formatAmount(drow.outstanding)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.overdue, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.overdue)}
+                                      {formatAmountCell(drow.overdue, userCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.days_1_30)}
+                                      {formatAmountCell(drow.days_1_30, userCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.days_31_60)}
+                                      {formatAmountCell(drow.days_31_60, userCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
@@ -1473,7 +1481,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       c={highlight61_90d ? "#EF4444" : OSTD_LIST_INK}
                                       style={ostdTableValueNumericStyle}
                                     >
-                                      {formatAmountCell(drow.days_61_90 ?? drow.days_61_plus)}
+                                      {formatAmountCell(drow.days_61_90 ?? drow.days_61_plus, userCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
@@ -1490,7 +1498,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                         ) {
                                           return "-";
                                         }
-                                        return formatInrInteger(raw as string | number);
+                                        return formatAmount(raw as string | number);
                                       })()}
                                     </Text>
                                   </Table.Td>
@@ -1538,9 +1546,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
             >
               <Group justify="space-between" wrap="wrap" gap="sm">
                 <Text fz={12} fw={500} c="#64748B">
-                  Showing {Math.min(drawerTotal, drawerIndex + 1).toLocaleString("en-IN")}-
-                  {Math.min(drawerTotal, drawerIndex + PAGE_SIZE).toLocaleString("en-IN")} of{" "}
-                  {drawerTotal.toLocaleString("en-IN")}
+                  Showing {formatCount(Math.min(drawerTotal, drawerIndex + 1))}-
+                  {formatCount(Math.min(drawerTotal, drawerIndex + PAGE_SIZE))} of{" "}
+                  {formatCount(drawerTotal)}
                 </Text>
                 <Group gap={6}>
                   <Button

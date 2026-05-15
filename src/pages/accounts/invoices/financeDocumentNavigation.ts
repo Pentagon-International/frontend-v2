@@ -107,7 +107,9 @@ export async function openFinanceDocument(
 
   switch (recordType) {
     case "invoice":
-      navigate(`/invoice/${seg}/${id}`, { state: { ...baseExtras } });
+      navigate(`/invoice/${seg}/${id}`, {
+        state: { ...record, ...baseExtras, invoiceData: record },
+      });
       return;
     case "reverse_invoice": {
       const rec = record as Record<string, unknown>;

@@ -15,6 +15,11 @@ import {
   type CustomerOutstandingVsOverdueResponse,
   type CustomerOutstandingVsOverdueSummary,
 } from "../../../service/dashboard.service";
+import useAuthStore from "../../../store/authStore";
+import {
+  formatOutstandingAmountCompact,
+  formatUserInteger,
+} from "../../../utils/userNumberFormat";
 import {
   dashboardPanelBody,
   dashboardPanelHeaderBand,
@@ -36,15 +41,6 @@ const toNumber = (value: string | number | undefined | null): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const formatAmountCompact = (value: string | number | undefined | null): string => {
-  const amount = toNumber(value);
-  const abs = Math.abs(amount);
-  const sign = amount < 0 ? "-" : "";
-  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(2)} Cr`;
-  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)} L`;
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-};
-
 const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
 
 const progressColors = ["#22c55e", "#84cc16", "#f59e0b", "#fb923c", "#ef4444"];
@@ -62,6 +58,12 @@ const OutstandingVsOverdueCard = ({
   company,
   onViewAll,
 }: OutstandingVsOverdueCardProps) => {
+  const userCountryCode = useAuthStore((state) => state.user?.country?.country_code);
+  const formatAmountCompact = (value: string | number | undefined | null) =>
+    formatOutstandingAmountCompact(value, userCountryCode);
+  const formatCount = (value: string | number | undefined | null) =>
+    formatUserInteger(value, userCountryCode);
+
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] =
     useState<CustomerOutstandingVsOverdueResponse | null>(null);
@@ -184,7 +186,7 @@ const OutstandingVsOverdueCard = ({
         </Group>
         <Text fz={11} fw={600} c="#8AA0B9" mt={4} style={{ lineHeight: 1.4 }}>
           Total {formatAmountCompact(summary?.total_outstanding)} ·{" "}
-          {toNumber(summary?.open_invoices).toLocaleString("en-IN")} invoices
+          {formatCount(summary?.open_invoices)} invoices
         </Text>
       </Box>
 
@@ -247,7 +249,7 @@ const OutstandingVsOverdueCard = ({
                   {formatAmountCompact(readSummaryDays90Plus(summary))}
                 </Text>
                 <Text size="xs" fw={700} c={enquiryConversionColors.subHeading} mt={4}>
-                  {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
+                  {formatCount(summary?.customer_count)} customers
                 </Text>
               </Box>
             </Group>
@@ -281,7 +283,7 @@ const OutstandingVsOverdueCard = ({
                 As of {response?.as_of || "-"}
               </Text>
               <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
-                {toNumber(summary?.customer_count).toLocaleString("en-IN")} customers
+                {formatCount(summary?.customer_count)} customers
               </Text>
             </Group>
           </>

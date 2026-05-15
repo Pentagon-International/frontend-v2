@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import { apiCallProtected } from "../../../api/axios";
 import { URL } from "../../../api/serverUrls";
 import type { CustomerOutstandingVsOverdueItem } from "../../../service/dashboard.service";
+import useAuthStore from "../../../store/authStore";
+import { formatUserInteger } from "../../../utils/userNumberFormat";
 
 function parseEmails(emailString: string): string[] {
   if (!emailString?.trim()) return [];
@@ -46,19 +48,13 @@ function normalizeCcField(cc: string | string[] | null | undefined): string {
   return cleanEmailString(cc);
 }
 
-function toNum(value: string | number | undefined | null): number {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function fmtInr(value: string | number | undefined | null): string {
-  return Math.round(toNum(value)).toLocaleString("en-IN");
-}
-
 function defaultOutstandingMessage(
   row: CustomerOutstandingVsOverdueItem,
-  asOf: string | null | undefined
+  asOf: string | null | undefined,
+  countryCode?: string | null,
 ): string {
+  const fmtAmount = (value: string | number | undefined | null) =>
+    formatUserInteger(value, countryCode);
   const lines = [
     "Please find the details of outstanding/overdue amounts.",
     "",
@@ -66,15 +62,15 @@ function defaultOutstandingMessage(
     `Location: ${row.location || "—"}`,
     `Salesperson: ${row.salesperson || "—"}`,
     "",
-    `Outstanding (INR): ${fmtInr(row.outstanding)}`,
-    `Overdue (INR): ${fmtInr(row.overdue)}`,
-    `1-30 days (INR): ${fmtInr(row.days_1_30)}`,
-    `31-60 days (INR): ${fmtInr(row.days_31_60)}`,
-    `61-90 days (INR): ${fmtInr(row.days_61_90 ?? row.days_61_plus)}`,
+    `Outstanding (INR): ${fmtAmount(row.outstanding)}`,
+    `Overdue (INR): ${fmtAmount(row.overdue)}`,
+    `1-30 days (INR): ${fmtAmount(row.days_1_30)}`,
+    `31-60 days (INR): ${fmtAmount(row.days_31_60)}`,
+    `61-90 days (INR): ${fmtAmount(row.days_61_90 ?? row.days_61_plus)}`,
     `90+ days (INR): ${
       row.days_90_plus === undefined || row.days_90_plus === "" || row.days_90_plus === null
         ? "—"
-        : fmtInr(row.days_90_plus)
+        : fmtAmount(row.days_90_plus)
     }`,
     "",
     `Risk: ${row.risk || "LOW"}`,
@@ -122,6 +118,7 @@ export function CustomerOutstandingSendEmailModal({
   companyName,
   asOf,
 }: CustomerOutstandingSendEmailModalProps) {
+  const userCountryCode = useAuthStore((state) => state.user?.country?.country_code);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailForm, setEmailForm] = useState({
     to_email: "",
@@ -143,10 +140,10 @@ export function CustomerOutstandingSendEmailModal({
       to_email: cleanedTo,
       cc_email: cleanedCc,
       subject: `Outstanding Details - ${cust}`,
-      message: defaultOutstandingMessage(row, asOf),
+      message: defaultOutstandingMessage(row, asOf, userCountryCode),
     });
     setEmailErrors({ to_email: "", cc_email: "" });
-  }, [opened, row, asOf]);
+  }, [opened, row, asOf, userCountryCode]);
 
   const handleClose = () => {
     setEmailErrors({ to_email: "", cc_email: "" });

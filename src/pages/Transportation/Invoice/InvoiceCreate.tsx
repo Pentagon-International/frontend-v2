@@ -353,6 +353,43 @@ function resolvePartyStateIdFromHousing(
   return Number(raw);
 }
 
+/** Prefer route :id, then list-row invoice_id, then record id (house / filter lists). */
+function resolveInvoiceRecordId(
+  data: Record<string, unknown> | null | undefined,
+  urlId?: string,
+): number | undefined {
+  const candidates = [
+    urlId,
+    data?.invoice_id,
+    data?.id,
+  ];
+  for (const c of candidates) {
+    if (c == null || c === "") continue;
+    const n = typeof c === "number" ? c : Number(String(c).trim());
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+function getInvoiceDataFromLocationState(
+  state: unknown,
+): InvoiceDataFromApi | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const s = state as Record<string, unknown>;
+  if (s.invoiceData && typeof s.invoiceData === "object") {
+    return s.invoiceData as InvoiceDataFromApi;
+  }
+  if (
+    s.id != null &&
+    (s.document_no != null ||
+      s.bill_to != null ||
+      Array.isArray(s.charges))
+  ) {
+    return s as InvoiceDataFromApi;
+  }
+  return undefined;
+}
+
 // Invoice data shape from filter/invoice API (for edit/view form fill)
 type InvoiceDataFromApi = {
   id?: number;
@@ -792,7 +829,7 @@ function InvoiceCreate({
   // Format daybook options: id = value, name = label (value is daybook_id)
   const daybookOptions = useMemo(() => {
     const invoiceData = (invoiceDataFromApi ??
-      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
+      getInvoiceDataFromLocationState(location.state)) as
       | InvoiceDataFromApi
       | undefined;
     const savedDaybookId =
@@ -1506,18 +1543,49 @@ function InvoiceCreate({
   useEffect(() => {
     if (!isEditOrViewMode || !invoiceId) return;
     const payload = invoiceViewFetchRes as any;
-    const data = payload?.data?.data ?? payload?.data ?? payload;
-    if (data && typeof data === "object") {
+    const raw = payload?.data?.data ?? payload?.data ?? payload;
+    const data = Array.isArray(raw) ? raw[0] : raw;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
       setInvoiceDataFromApi(data as InvoiceDataFromApi);
     } else {
       setInvoiceDataFromApi(null);
     }
   }, [invoiceId, isEditOrViewMode, invoiceViewFetchRes]);
 
+  // Seed document header + PDF action as soon as edit/view opens (house list, unposted list, URL :id)
+  useEffect(() => {
+    if (!isEditOrViewMode) return;
+    const partial =
+      invoiceDataFromApi ?? getInvoiceDataFromLocationState(location.state);
+    const resolvedId = resolveInvoiceRecordId(
+      partial as Record<string, unknown> | undefined,
+      invoiceId,
+    );
+    if (!resolvedId) return;
+    setSaveResponse((prev) => ({
+      id: resolvedId,
+      customer_id:
+        prev?.customer_id ??
+        (partial as InvoiceDataFromApi | undefined)?.customer_id,
+      document_no:
+        prev?.document_no ??
+        String((partial as InvoiceDataFromApi | undefined)?.document_no ?? ""),
+      status:
+        prev?.status ??
+        String((partial as InvoiceDataFromApi | undefined)?.status ?? "UNPOSTED"),
+    }));
+  }, [
+    isEditOrViewMode,
+    invoiceId,
+    invoiceDataFromApi,
+    location.state,
+    location.key,
+  ]);
+
   // Populate form from invoice data when navigating from Accounts (edit/view)
   useEffect(() => {
     const invoiceData = (invoiceDataFromApi ??
-      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
+      getInvoiceDataFromLocationState(location.state)) as
       | InvoiceDataFromApi
       | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
@@ -1527,8 +1595,12 @@ function InvoiceCreate({
 
     setBillToDisplayName(invoiceData.bill_to_name ?? null);
     // Set saveResponse so Update Invoice is shown and PUT is used when editing
+    const resolvedId = resolveInvoiceRecordId(
+      invoiceData as Record<string, unknown>,
+      invoiceId,
+    );
     setSaveResponse({
-      id: invoiceData.id,
+      id: resolvedId,
       customer_id: invoiceData.customer_id,
       document_no: invoiceData.document_no ?? "",
       status: invoiceData.status ?? "UNPOSTED",
@@ -2919,13 +2991,22 @@ function InvoiceCreate({
   };
 
   const handleDraftInvoicePreview = async () => {
-    if (!saveResponse?.id) return;
+    const pdfInvoiceId =
+      saveResponse?.id ??
+      resolveInvoiceRecordId(
+        (invoiceDataFromApi ??
+          getInvoiceDataFromLocationState(location.state)) as
+          | Record<string, unknown>
+          | undefined,
+        invoiceId,
+      );
+    if (!pdfInvoiceId) return;
     setPreviewOpen(true);
     setPdfBlob(null);
     try {
       const token = useAuthStore.getState().accessToken;
       const response = await fetch(
-        `${URL.base}${URL.invoice}${saveResponse.id}/pdf/`,
+        `${URL.base}${URL.invoice}${pdfInvoiceId}/pdf/`,
         {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
