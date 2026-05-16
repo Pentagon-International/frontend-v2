@@ -49,6 +49,7 @@ import {
   getNewCustomerData,
   getCustomerInteractionStatusSummary,
   DashboardFilters,
+  PipelineReportFilters,
   CallEntryAggregatedData,
   CallEntryStatisticsFilters,
   CallEntryStatisticsSummary,
@@ -689,6 +690,8 @@ const Dashboard = () => {
     fromDate?: Date | null;
     toDate?: Date | null;
     period?: string;
+    quotationListDrillPayload?: PipelineReportFilters;
+    quotationListDrillFetchKind?: "salesperson" | "regional" | "product";
   } | null>(null);
 
   // Refresh key for Pipeline and Booking tabs - changes when profile is updated

@@ -19,6 +19,91 @@ import {
   useMantineReactTable,
 } from "mantine-react-table";
 
+/**
+ * Pipeline report → drill-level-2 line-item grid only.
+ * Each known column key has its own width; unknown keys use `default`.
+ * Array-valued columns fall back to `arrayColumnFallback` when the field key has no entry.
+ */
+const PIPELINE_REPORT_DRILL2_COL_WIDTH: Record<string, number> = {
+  default: 120,
+  arrayColumnFallback: 170,
+  sno: 40,
+  quotation_id: 105,
+  enquiry_id: 225,
+  ENQUIRY_ID: 225,
+  customer_code: 95,
+  customer_name: 210,
+  CUSTOMER_NAME: 210,
+  service: 100,
+  trade: 90,
+  service_type: 105,
+  origin_port_name: 135,
+  destination_port_name: 135,
+  carrier_name: 115,
+  quote_currency: 85,
+  valid_upto: 100,
+  quote_type: 102,
+  total_cost: 102,
+  total_sell: 102,
+  profit: 90,
+  date: 150,
+  call_date: 105,
+  call_mode: 95,
+  call_summary: 140,
+  followup_date: 105,
+  followup_action: 125,
+  created_by: 110,
+  expected_profit: 105,
+  total_enquiries: 95,
+  total_enquiry: 95,
+  gain_percentage: 132,
+  loss_percentage: 132,
+  active_percentage: 132,
+  quoted_percentage: 132,
+  salesperson: 118,
+  salesman_name: 118,
+  salesman: 118,
+  SALESPERSON: 118,
+  USER_NAME: 118,
+  region: 108,
+  product: 100,
+  volume: 85,
+  reject_remark: 160,
+  call_entry_id: 105,
+  CALL_ENTRY_ID: 105,
+  id: 70,
+  potential: 94,
+  pipeline: 94,
+  gained: 94,
+  lost: 94,
+  quote: 94,
+  quoted: 94,
+  quoted_created: 94,
+  quote_created: 94,
+  expected: 94,
+  active: 94,
+  OVERDUE: 94,
+  TODAY: 94,
+  UPCOMING: 94,
+  CLOSED: 94,
+  POTENTIAL: 94,
+  PIPELINE: 94,
+  GAINED: 94,
+  LOST: 94,
+  QUOTED: 94,
+  EXPECTED: 94,
+  outstanding: 118,
+  overdue: 118,
+  local_outstanding: 118,
+  overdue_days: 102,
+  actual_budget: 105,
+  sales_budget: 105,
+  incentive_amount: 118,
+  total_customers: 105,
+  achieved: 105,
+  send_email: 72,
+};
+
 interface DetailedViewTableProps {
   data: any[];
   title: string;
@@ -94,6 +179,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   selectedColumnType,
   hideExpected = false,
 }) => {
+  const pipelineReportDrill2 =
+    moduleType === "pipelineReport" && drillLevel === 2;
+
   // State to track which cell is being edited (rowIndex, columnKey)
   const [editingCell, setEditingCell] = useState<{
     rowIndex: number;
@@ -106,13 +194,20 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
   // Generate columns dynamically using MantineReactTable format
   const columns = useMemo<MRT_ColumnDef<any>[]>(() => {
     if (!data || data.length === 0) return [];
+    /** Pipeline drill-2 only: width from explicit map; otherwise standard detailed-view width. */
+    const pr2ColWidth = (dataKey: string, standardWidth: number): number => {
+      if (!pipelineReportDrill2) return standardWidth;
+      const resolved = PIPELINE_REPORT_DRILL2_COL_WIDTH[dataKey];
+      if (resolved !== undefined) return resolved;
+      return PIPELINE_REPORT_DRILL2_COL_WIDTH.default ?? standardWidth;
+    };
     const columnDefs: MRT_ColumnDef<any>[] = [];
     // Always add 'S.No' as the first column, from API data
     // Use accessorFn to handle both lowercase and uppercase SNO keys
     columnDefs.push({
       id: "sno",
       header: "S.No",
-      size: 70,
+      size: pr2ColWidth("sno", 70),
       enableColumnOrdering: false,
       accessorFn: (row: any) => {
         // Check for SNO in various case formats
@@ -155,6 +250,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       },
     });
     const firstItem = data[0];
+    const showPipelineQuotationRejectRemark =
+      moduleType === "pipelineReport" &&
+      drillLevel === 2 &&
+      (selectedColumnType === "quoted_created" ||
+        selectedColumnType === "quote" ||
+        selectedColumnType === "lost");
     // const columnDefs: MRT_ColumnDef<any>[] = [];
 
     // Get company name from first row for header display
@@ -208,6 +309,8 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       // Hide email-related fields (used for send email functionality only)
       "salesperson_email",
       "cc_mail",
+
+      ...(showPipelineQuotationRejectRemark ? ["reject_remark"] : []),
 
       // Hide service_type for pipelineReport when service is combined (has service_original)
       // This happens at base level and drill level 1 for product tab
@@ -314,6 +417,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       quoted_percentage: "Quoted Percentage",
       salesperson: "Salesperson",
       region: "Region",
+      reject_remark: "Reject Remark",
       product: "Product",
       volume: "Volume",
       // For pipeline report, dynamically show header based on selectedColumnType
@@ -386,7 +490,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               ))}
             </Stack>
           ),
-          size: 200,
+          size: pipelineReportDrill2
+            ? (PIPELINE_REPORT_DRILL2_COL_WIDTH[key] ??
+                PIPELINE_REPORT_DRILL2_COL_WIDTH.arrayColumnFallback)
+            : 200,
         });
         console.log("columnDefs :", columnDefs);
       } else if (
@@ -421,7 +528,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
-          size: 150,
+          size: pr2ColWidth(key, 150),
         });
       } else if (
         key === "actual_budget" ||
@@ -462,7 +569,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
-          size: 150,
+          size: pr2ColWidth(key, 150),
         });
       } else if (key === "overdue_days") {
         // Special styling for overdue_days column - display as badge
@@ -481,7 +588,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
-          size: 150,
+          size: pr2ColWidth(key, 150),
         });
       } else if (key === "achieved") {
         const getAchievementColor = (percentage: any) => {
@@ -507,8 +614,8 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
+          size: pr2ColWidth("achieved", 150),
         });
-      } else if (key === "total_customers") {
         columnDefs.push({
           accessorKey: key,
           header: capitalizeHeader(
@@ -521,7 +628,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
-          size: 150,
+          size: pr2ColWidth(key, 150),
         });
       } else if (
         key === "potential" ||
@@ -881,7 +988,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Badge>
             );
           },
-          size: 150,
+          size: pr2ColWidth(key, 150),
         });
       } else if (
         key === "gain_percentage" ||
@@ -908,7 +1015,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Text>
             );
           },
-          size: 170,
+          size: pr2ColWidth(key, 170),
         });
       } else if (key === "send_email") {
         // Handle send_email column - display as icon button
@@ -938,7 +1045,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
               </Tooltip>
             );
           },
-          size: 100,
+          size: pr2ColWidth("send_email", 100),
         });
       } else {
         // For regular string fields - check if it's a clickable column
@@ -1010,16 +1117,13 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 
         console.log("headerText :", headerText);
         console.log("key :", key);
-        const isPipelineReportDrill2 =
-          moduleType === "pipelineReport" && drillLevel === 2;
-        const columnSize =
-          isPipelineReportDrill2 &&
-          (key === "enquiry_id" || key === "ENQUIRY_ID")
-            ? 280
-            : isPipelineReportDrill2 &&
-                (key === "customer_name" || key === "CUSTOMER_NAME")
-              ? 320
-              : 150;
+        let standardFallback = 150;
+        if (key === "enquiry_id" || key === "ENQUIRY_ID") {
+          standardFallback = 280;
+        } else if (key === "customer_name" || key === "CUSTOMER_NAME") {
+          standardFallback = 320;
+        }
+        const columnSize = pr2ColWidth(key, standardFallback);
 
         columnDefs.push({
           accessorKey: key,
@@ -1146,6 +1250,37 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         });
       }
     });
+
+    if (showPipelineQuotationRejectRemark) {
+      columnDefs.push({
+        id: "reject_remark",
+        accessorKey: "reject_remark",
+        header: "Reject Remark",
+        size: pr2ColWidth("reject_remark", 150),
+        Cell: ({ row }) => {
+          const raw = row.original?.reject_remark;
+          const str = raw == null || raw === "" ? "" : String(raw);
+          const truncated =
+            str.length > 20 ? `${str.slice(0, 20)}…` : str;
+          return (
+            <Tooltip
+              label={str || "—"}
+              disabled={!str}
+              withArrow
+              position="top"
+              multiline
+              maw={"fit-content"}
+              zIndex={1000}
+            >
+              <Text size="sm" style={{ cursor: "default" }}>
+                {truncated || "—"}
+              </Text>
+            </Tooltip>
+          );
+        },
+      });
+    }
+
     console.log("columnDefs :", columnDefs);
     return columnDefs;
   }, [
@@ -1159,6 +1294,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     originalCellValue,
     selectedColumnType,
     hideExpected,
+    pipelineReportDrill2,
   ]);
 
   const columnOrder = useMemo(() => {
@@ -1198,6 +1334,15 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       }
     }
 
+    // Pipeline report quotation drill: place reject_remark immediately after quotation_id
+    const rejectIdx = order.indexOf("reject_remark");
+    const quoteIdIdx = order.indexOf("quotation_id");
+    if (rejectIdx !== -1 && quoteIdIdx !== -1) {
+      order.splice(rejectIdx, 1);
+      const qAfter = order.indexOf("quotation_id");
+      order.splice(qAfter + 1, 0, "reject_remark");
+    }
+
     return order;
   }, [columns]);
 
@@ -1230,22 +1375,25 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     },
     mantineTableBodyCellProps: {
       style: {
-        padding: "12px 16px",
-        fontSize: "14px",
+        padding: pipelineReportDrill2 ? "6px 10px" : "12px 16px",
+        fontSize: pipelineReportDrill2 ? "13px" : "14px",
         backgroundColor: "#ffffff",
         borderBottom: "1px solid #dee2e6",
       },
     },
     mantineTableHeadCellProps: {
       style: {
-        padding: "12px 16px",
-        fontSize: "13px",
+        padding: pipelineReportDrill2 ? "4px 8px" : "12px 16px",
+        fontSize: pipelineReportDrill2 ? "12px" : "13px",
         fontWeight: 400,
         backgroundColor: "#E2E8F0",
         color: "#000000",
         top: 0,
         zIndex: 3,
         borderBottom: "1px solid #dee2e6",
+        ...(pipelineReportDrill2
+          ? { minHeight: 30, lineHeight: 1.25 }
+          : {}),
       },
     },
     mantineTableContainerProps: {
@@ -1300,6 +1448,14 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
         // Fallback: place at the beginning
         desiredOrder.unshift("send_email");
       }
+    }
+
+    const rejIdx = desiredOrder.indexOf("reject_remark");
+    const qIdIdx = desiredOrder.indexOf("quotation_id");
+    if (rejIdx !== -1 && qIdIdx !== -1) {
+      desiredOrder.splice(rejIdx, 1);
+      const qAfter = desiredOrder.indexOf("quotation_id");
+      desiredOrder.splice(qAfter + 1, 0, "reject_remark");
     }
 
     table.setColumnOrder(desiredOrder);
