@@ -50,7 +50,9 @@ export const CollapsibleNav = ({
         activeSubNav === "Outstanding / Overdue" ||
         activeSubNav === "Budget vs Actual")) ||
     (label === "Finance Dashboard" &&
-      (activeSubNav === "Profitability" || activeSubNav === "Branch Budget vs Actual")) ||
+      (activeSubNav === "Profitability" ||
+        activeSubNav === "Branch Budget vs Actual" ||
+        activeSubNav === "Collection Target vs Performance")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||

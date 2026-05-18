@@ -340,6 +340,21 @@ const Navbar = ({
                     setIsDashboardOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Finance Dashboard"
+                  label="Collection Target vs Performance"
+                  icon={IconCash}
+                  path="/finance-dashboard/collection-target-vs-performance"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                    setIsDashboardOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav

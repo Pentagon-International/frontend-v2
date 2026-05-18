@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import { calculateFinancialYearBudgetRangeForYear } from "../../../service/dashboard.service";
+import BranchMonthlyBudget from "./BranchMonthlyBudget";
 import {
   Alert,
   Box,
@@ -203,9 +206,31 @@ function PerformanceBar({
   );
 }
 
-function BranchPerformanceRow({ row, isTotal }: { row: BranchBvaRow; isTotal?: boolean }) {
+function parseBranchIdentity(row: BranchBvaRow): { branchName: string; branchCode?: string } {
+  const code = row.branchCode || row.id;
+  if (row.branchName) {
+    return { branchName: row.branchName, branchCode: code };
+  }
+  const match = row.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+  if (match) {
+    return { branchName: match[1].trim(), branchCode: match[2].trim() };
+  }
+  return { branchName: row.name.trim(), branchCode: code };
+}
+
+function BranchPerformanceRow({
+  row,
+  isTotal,
+  onRowClick,
+}: {
+  row: BranchBvaRow;
+  isTotal?: boolean;
+  onRowClick?: (row: BranchBvaRow) => void;
+}) {
   return (
     <Box
+      component={onRowClick && !isTotal ? "button" : "div"}
+      onClick={onRowClick && !isTotal ? () => onRowClick(row) : undefined}
       style={{
         ...BVA_GRID,
         borderBottom: isTotal ? "none" : `1px solid ${LINE}`,
@@ -213,7 +238,28 @@ function BranchPerformanceRow({ row, isTotal }: { row: BranchBvaRow; isTotal?: b
         paddingTop: isTotal ? 14 : 12,
         marginTop: isTotal ? 4 : 0,
         fontWeight: isTotal ? 600 : 400,
+        width: "100%",
+        textAlign: "left",
+        background: "transparent",
+        borderLeft: "none",
+        borderRight: "none",
+        cursor: onRowClick && !isTotal ? "pointer" : "default",
+        transition: "background-color 120ms ease",
       }}
+      onMouseEnter={
+        onRowClick && !isTotal
+          ? (e: React.MouseEvent<HTMLElement>) => {
+              e.currentTarget.style.backgroundColor = "#f8fafc";
+            }
+          : undefined
+      }
+      onMouseLeave={
+        onRowClick && !isTotal
+          ? (e: React.MouseEvent<HTMLElement>) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }
+          : undefined
+      }
     >
       <Box>
         <Text fz={12} fw={isTotal ? 600 : 500} c={INK}>
@@ -297,6 +343,28 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
   const [periodFilter, setPeriodFilter] = useState<string | null>("fy_ytd");
   const [groupBy, setGroupBy] = useState<string | null>("branch");
   const [metricFilter, setMetricFilter] = useState<string | null>("revenue_gp");
+  const [branchDrawerOpened, setBranchDrawerOpened] = useState(false);
+  const [selectedBranchName, setSelectedBranchName] = useState("");
+  const [selectedBranchCode, setSelectedBranchCode] = useState<string | undefined>();
+
+  const user = useAuthStore((state) => state.user);
+  const company = user?.company?.company_name || "PENTAGON INDIA";
+
+  const { start_month: startMonth, end_month: endMonth } = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const fyStart = month >= 4 ? year : year - 1;
+    return calculateFinancialYearBudgetRangeForYear(fyStart);
+  }, []);
+
+  const handleBranchRowClick = useCallback((row: BranchBvaRow) => {
+    const { branchName, branchCode } = parseBranchIdentity(row);
+    if (!branchName) return;
+    setSelectedBranchName(branchName);
+    setSelectedBranchCode(branchCode);
+    setBranchDrawerOpened(true);
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -625,7 +693,11 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
                 <div style={{ textAlign: "right" }}>Achvd.</div>
               </Box>
               {data.branchPerformance.rows.map((row) => (
-                <BranchPerformanceRow key={row.id ?? row.name} row={row} />
+                <BranchPerformanceRow
+                  key={row.id ?? row.name}
+                  row={row}
+                  onRowClick={handleBranchRowClick}
+                />
               ))}
               <BranchPerformanceRow row={data.branchPerformance.total} isTotal />
             </Box>
@@ -807,6 +879,15 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
           </Box>
         </SimpleGrid>
       </Box>
+      <BranchMonthlyBudget
+        opened={branchDrawerOpened}
+        onClose={() => setBranchDrawerOpened(false)}
+        company={company}
+        branchName={selectedBranchName}
+        branchCode={selectedBranchCode}
+        startMonth={startMonth}
+        endMonth={endMonth}
+      />
     </Box>
   );
 };

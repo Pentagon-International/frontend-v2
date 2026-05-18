@@ -7,6 +7,8 @@ export type BvaBarTone = "over" | "under" | "neutral";
 export type BranchBvaRow = {
   id?: string;
   name: string;
+  branchName?: string;
+  branchCode?: string;
   subtitle?: string;
   watchLabel?: string;
   budget: number;

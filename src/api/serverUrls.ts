@@ -215,6 +215,8 @@ export const URL = {
     /** Accounts / finance profitability dashboard (POST: date range, period, branch, mode, dimension). */
     accountsProfitability: "dashboard/accounts-profitability/",
     branchBudgetVsActual: "dashboard/branch-budget-vs-actual/",
+    collectionTargetVsPerformance: "dashboard/collection-target-vs-performance/",
+    collectionBranchInvoices: "dashboard/collection-branch-invoices/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",

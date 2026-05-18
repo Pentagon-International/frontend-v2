@@ -196,6 +196,7 @@ import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardM
 import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
 import FinanceDashboardPage from "../pages/dashboard/DashboardMaster/FinanceDashboardPage";
 import FinanceDashboardBranchBudgetPage from "../pages/dashboard/DashboardMaster/FinanceDashboardBranchBudgetPage";
+import FinanceDashboardCollectionPage from "../pages/dashboard/DashboardMaster/FinanceDashboardCollectionPage";
 import AirImportDsr from "../pages/Air/AirImportDsr";
 import AirExportDsr from "../pages/Air/AirExportDsr";
 import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
@@ -232,6 +233,10 @@ const NavigationRoutes = () => {
         <Route
           path="/finance-dashboard/branch-budget-vs-actual"
           element={<FinanceDashboardBranchBudgetPage />}
+        />
+        <Route
+          path="/finance-dashboard/collection-target-vs-performance"
+          element={<FinanceDashboardCollectionPage />}
         />
         <Route path="/road" element={<Road />} />
         <Route path="/air">

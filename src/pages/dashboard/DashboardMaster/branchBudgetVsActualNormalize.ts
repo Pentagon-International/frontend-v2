@@ -66,6 +66,8 @@ function normalizeBranchRow(raw: unknown): BranchBvaRow {
   return {
     id: firstString(row.id, row.code) || undefined,
     name: firstString(row.name, row.branch),
+    branchName: firstString(row.branch_name, row.branchName) || undefined,
+    branchCode: firstString(row.branch_code, row.branchCode, row.code) || undefined,
     subtitle: firstString(row.subtitle, row.sub, row.meta),
     watchLabel: firstString(row.watch_label, row.watchLabel) || undefined,
     budget,

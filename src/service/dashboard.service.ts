@@ -1940,6 +1940,33 @@ export const getFilteredBudgetData = async (
   }
 };
 
+export const getCollectionBranchInvoiceDetail = async (params: {
+  company?: string;
+  branch_id?: string;
+  branch_code?: string;
+  branch_name?: string;
+  period?: string;
+  period_filter?: string | null;
+  currency?: string | null;
+}): Promise<unknown> => {
+  try {
+    const payload = {
+      company: params.company,
+      branch_id: params.branch_id,
+      branch_code: params.branch_code,
+      branch_name: params.branch_name,
+      period: params.period,
+      period_filter: params.period_filter,
+      currency: params.currency,
+    };
+    const response = await postAPICall(URL.dashboard.collectionBranchInvoices, payload);
+    return response;
+  } catch (error) {
+    console.error("Error fetching collection branch invoices:", error);
+    throw error;
+  }
+};
+
 export const getSalespersonMonthlyBudgetSummary = async (params: {
   company: string;
   salesperson: string;
@@ -1959,6 +1986,40 @@ export const getSalespersonMonthlyBudgetSummary = async (params: {
     return response as SalespersonMonthlyBudgetResponse;
   } catch (error) {
     console.error("Error fetching salesperson monthly budget summary:", error);
+    throw error;
+  }
+};
+
+export const getBranchMonthlyBudgetSummary = async (params: {
+  company: string;
+  branch_name: string;
+  branch_code?: string;
+  start_month: string;
+  end_month: string;
+  period?: string;
+  period_filter?: string | null;
+  performance_metric?: string;
+  group_by?: string | null;
+  metric?: string | null;
+}): Promise<SalespersonMonthlyBudgetResponse> => {
+  try {
+    const payload = {
+      company: params.company,
+      branch_name: params.branch_name,
+      branch_code: params.branch_code,
+      start_month: params.start_month,
+      end_month: params.end_month,
+      period: params.period,
+      period_filter: params.period_filter,
+      performance_metric: params.performance_metric,
+      group_by: params.group_by,
+      metric: params.metric,
+      drill_down: "monthly",
+    };
+    const response = await postAPICall(URL.dashboard.branchBudgetVsActual, payload);
+    return response as SalespersonMonthlyBudgetResponse;
+  } catch (error) {
+    console.error("Error fetching branch monthly budget summary:", error);
     throw error;
   }
 };
