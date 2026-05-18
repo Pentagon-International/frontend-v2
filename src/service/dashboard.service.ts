@@ -742,6 +742,15 @@ export interface BudgetAggregatedData {
   totalSalesBudget: number;
 }
 
+export interface SalespersonMonthlyBudgetBreakdownItem {
+  trade_type: string;
+  service_type: string;
+  actual_budget: number;
+  sales_budget: number;
+  incentive_percentage?: number;
+  incentive_amount?: number;
+}
+
 export interface SalespersonMonthlyBudgetItem {
   sno: number;
   month: string;
@@ -752,6 +761,7 @@ export interface SalespersonMonthlyBudgetItem {
   service_type?: string | null;
   incentive_percentage?: number;
   incentive_amount?: number;
+  breakdown?: SalespersonMonthlyBudgetBreakdownItem[];
 }
 
 export interface SalespersonMonthlyBudgetData {
