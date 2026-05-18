@@ -5,6 +5,8 @@ import { useLayoutStore } from "../store/useLayoutStore";
 
 const pathTitleMap: Record<string, string> = {
   "/dashboard/enquiry-conversion": "Dashboard",
+  "/finance-dashboard/profitability": "Finance Dashboard",
+  "/finance-dashboard/branch-budget-vs-actual": "Finance Dashboard",
   "/": "Dashboard",
   "/lead": "Sales",
   "/call-entry": "Sales",
@@ -88,6 +90,8 @@ const pathTitleMap: Record<string, string> = {
 };
 
 const pathActiveNavMap: Record<string, string> = {
+  "/finance-dashboard/profitability": "Finance Dashboard",
+  "/finance-dashboard/branch-budget-vs-actual": "Finance Dashboard",
   "/air/import-dsr": "Transportation",
   "/air/export-dsr": "Transportation",
   "/SeaExport/import-dsr": "Transportation",
@@ -95,6 +99,8 @@ const pathActiveNavMap: Record<string, string> = {
 };
 
 const pathActiveSubNavMap: Record<string, string> = {
+  "/finance-dashboard/profitability": "Profitability",
+  "/finance-dashboard/branch-budget-vs-actual": "Branch Budget vs Actual",
   "/air/import-dsr": "Air import DSR",
   "/air/export-dsr": "Air export DSR",
   "/SeaExport/import-dsr": "Ocean Import DSR",

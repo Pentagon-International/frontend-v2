@@ -44,6 +44,8 @@ import {
   IconWorld,
   IconCash,
   IconWorldDollar,
+  IconReportMoney,
+  IconScale,
   IconCashOff,
   IconChecklist,
   IconFileInvoiceFilled,
@@ -88,6 +90,7 @@ const Navbar = ({
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isFinanceDashboardOpen, setIsFinanceDashboardOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
@@ -107,6 +110,9 @@ const Navbar = ({
       location.pathname.startsWith("/debit-credit-note-non-trade")
     ) {
       setIsAccountsOpen(true);
+    }
+    if (location.pathname.startsWith("/finance-dashboard")) {
+      setIsFinanceDashboardOpen(true);
     }
   }, [location.pathname]);
 
@@ -234,6 +240,7 @@ const Navbar = ({
                     setIsAirOpen,
                     setIsSeaExportOpen,
                     setIsAccountsOpen,
+                    setIsFinanceDashboardOpen,
                   }}
                 />
                 <SubNavLink
@@ -248,6 +255,7 @@ const Navbar = ({
                     setIsAirOpen,
                     setIsSeaExportOpen,
                     setIsAccountsOpen,
+                    setIsFinanceDashboardOpen,
                   }}
                 />
                 <SubNavLink
@@ -262,6 +270,7 @@ const Navbar = ({
                     setIsAirOpen,
                     setIsSeaExportOpen,
                     setIsAccountsOpen,
+                    setIsFinanceDashboardOpen,
                   }}
                 />
                 <SubNavLink
@@ -276,6 +285,7 @@ const Navbar = ({
                     setIsAirOpen,
                     setIsSeaExportOpen,
                     setIsAccountsOpen,
+                    setIsFinanceDashboardOpen,
                   }}
                 />
                 <SubNavLink
@@ -290,6 +300,44 @@ const Navbar = ({
                     setIsAirOpen,
                     setIsSeaExportOpen,
                     setIsAccountsOpen,
+                    setIsFinanceDashboardOpen,
+                  }}
+                />
+              </CollapsibleNav>
+              <CollapsibleNav
+                label="Finance Dashboard"
+                openedLocal={isFinanceDashboardOpen}
+                setOpenedLocal={setIsFinanceDashboardOpen}
+                icon={IconReportMoney}
+              >
+                <SubNavLink
+                  parent="Finance Dashboard"
+                  label="Profitability"
+                  icon={IconReportMoney}
+                  path="/finance-dashboard/profitability"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                    setIsDashboardOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Finance Dashboard"
+                  label="Branch Budget vs Actual"
+                  icon={IconScale}
+                  path="/finance-dashboard/branch-budget-vs-actual"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                    setIsDashboardOpen,
                   }}
                 />
               </CollapsibleNav>

@@ -212,6 +212,9 @@ export const URL = {
       "pipeline/dashboard-cs/",
     customerServiceDashboardShipments:
       "customer-service-shipment/dashboard-shipments/",
+    /** Accounts / finance profitability dashboard (POST: date range, period, branch, mode, dimension). */
+    accountsProfitability: "dashboard/accounts-profitability/",
+    branchBudgetVsActual: "dashboard/branch-budget-vs-actual/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",

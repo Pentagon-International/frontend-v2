@@ -1,6 +1,7 @@
 // Section icon colors — vibrant, designed for dark sidebar background
 export const sectionIconColors: Record<string, string> = {
   Dashboard: "#34D399",
+  "Finance Dashboard": "#38BDF8",
   Sales: "#34D399",
   "Customer Service": "#A78BFA",
 
@@ -23,6 +24,7 @@ export const sectionIconColors: Record<string, string> = {
 // Inactive icon box background — subtle tinted overlays for dark sidebar
 export const sectionIconBackground: Record<string, string> = {
   Dashboard: "rgba(52, 211, 153, 0.12)",
+  "Finance Dashboard": "rgba(56, 189, 248, 0.12)",
   Sales: "rgba(52, 211, 153, 0.12)",
   "Customer Service": "rgba(167, 139, 250, 0.12)",
 

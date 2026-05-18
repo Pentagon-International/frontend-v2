@@ -200,6 +200,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/dashboard/enquiry-conversion")) {
       setActiveNav("Dashboard");
       setActiveSubNav("Enquiry Conversion");
+    } else if (path.startsWith("/finance-dashboard/profitability")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Profitability");
+    } else if (path.startsWith("/finance-dashboard/branch-budget-vs-actual")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Branch Budget vs Actual");
     } else if (path === "/") {
       setActiveNav("Dashboard");
       setActiveSubNav("Overview");

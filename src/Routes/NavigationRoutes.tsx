@@ -194,6 +194,8 @@ import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
 import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
+import FinanceDashboardPage from "../pages/dashboard/DashboardMaster/FinanceDashboardPage";
+import FinanceDashboardBranchBudgetPage from "../pages/dashboard/DashboardMaster/FinanceDashboardBranchBudgetPage";
 import AirImportDsr from "../pages/Air/AirImportDsr";
 import AirExportDsr from "../pages/Air/AirExportDsr";
 import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
@@ -222,6 +224,14 @@ const NavigationRoutes = () => {
         <Route
           path="/dashboard/budget-vs-actual"
           element={<BudgetVsActualDashboard />}
+        />
+        <Route
+          path="/finance-dashboard/profitability"
+          element={<FinanceDashboardPage />}
+        />
+        <Route
+          path="/finance-dashboard/branch-budget-vs-actual"
+          element={<FinanceDashboardBranchBudgetPage />}
         />
         <Route path="/road" element={<Road />} />
         <Route path="/air">

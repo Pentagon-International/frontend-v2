@@ -84,7 +84,9 @@ import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
 import CustomerServiceDashboard from "./CustomerServiceDashboard";
+import AccountsDashboard from "./AccountsDashboard";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { useLayoutStore } from "../../../store/useLayoutStore";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -653,6 +655,7 @@ const Dashboard = () => {
 
   // Tab state for navigation
   const [activeTab, setActiveTab] = useState<string>("overall");
+  const { setActiveNav, setActiveSubNav, setTitle, setOpenCollapsible } = useLayoutStore();
   const [pipelineBranchCode, setPipelineBranchCode] = useState<string | null>(
     null
   );
@@ -7890,6 +7893,25 @@ const Dashboard = () => {
                 >
                   CS Dashboard
                 </Button>
+                {/* <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "accounts-dashboard"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => {
+                    setActiveTab("accounts-dashboard");
+                    setActiveNav("Finance Dashboard");
+                    setActiveSubNav("Profitability");
+                    setTitle("Finance Dashboard");
+                    setOpenCollapsible("Finance Dashboard", true);
+                    setOpenCollapsible("Dashboard", false);
+                  }}
+                >
+                  Finance
+                </Button> */}
               </Box> 
 
               <Box
@@ -8090,6 +8112,7 @@ const Dashboard = () => {
           <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
           <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
           <Tabs.Tab value="customer-service-dashboard">Customer Service Dashboard</Tabs.Tab>
+          <Tabs.Tab value="accounts-dashboard">Finance</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel
@@ -8467,6 +8490,25 @@ const Dashboard = () => {
             style={{ flex: 1, minHeight: 0, overflow: "auto" }}
           >
             <CustomerServiceDashboard
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+              globalSearch={globalSearch}
+            />
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel
+          value="accounts-dashboard"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box
+            px={DASH_MAIN_PAD_X}
+            pb="md"
+            style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+          >
+            <AccountsDashboard
               key={tabsRefreshKey}
               fromDate={customerInteractionFromDate}
               toDate={customerInteractionToDate}
