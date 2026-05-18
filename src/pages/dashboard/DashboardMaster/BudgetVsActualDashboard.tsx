@@ -25,6 +25,7 @@ import { ActionIcon } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import {
   calculateFinancialYearBudgetRangeForYear,
+  getCurrentFinancialYearStart,
   getFilteredBudgetData,
 } from "../../../service/dashboard.service";
 import SalespersonMonthlyBudget from "./SalespersonMonthlyBudget";
@@ -96,13 +97,6 @@ const selectInputStyles = {
   },
 } as const;
 
-function getCurrentFinancialYearStart(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 4 ? String(year) : String(year - 1);
-}
-
 export default function BudgetVsActualDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -118,8 +112,12 @@ export default function BudgetVsActualDashboard() {
     committed: committedSearch,
     commit: commitSearch,
   } = useDashboardChartSearch();
-  const initialYear = routeState.start_month?.split("-")[0] || getCurrentFinancialYearStart();
-  const initialRange = calculateFinancialYearBudgetRangeForYear(parseInt(initialYear, 10));
+  const initialYear =
+    routeState.start_month?.split("-")[0] ||
+    String(getCurrentFinancialYearStart());
+  const initialRange = calculateFinancialYearBudgetRangeForYear(
+    parseInt(initialYear, 10)
+  );
 
   const [type, setType] = useState<"salesperson" | "non-salesperson">(
     routeState.type || "salesperson"
@@ -140,10 +138,13 @@ export default function BudgetVsActualDashboard() {
   const [salespersonDrawerOpened, setSalespersonDrawerOpened] = useState(false);
 
   const yearOptions = useMemo(() => {
-    const current = parseInt(getCurrentFinancialYearStart(), 10);
+    const current = getCurrentFinancialYearStart();
     return Array.from({ length: 4 }, (_, i) => {
-      const y = String(current - (3 - i));
-      return { value: y, label: `FY ${y.slice(-2)}-${String(Number(y) + 1).slice(-2)}` };
+      const y = current - (3 - i);
+      return {
+        value: String(y),
+        label: `FY ${String(y).slice(-2)}-${String(y + 1).slice(-2)}`,
+      };
     });
   }, []);
 
