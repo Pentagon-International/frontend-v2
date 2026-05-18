@@ -23,6 +23,11 @@ export type PipelineSalespersonBreakdownRow = {
   expected: number;
 };
 
+export type PipelineBreakdownFinancialColumnType =
+  | "gained"
+  | "quote"
+  | "lost";
+
 export interface PipelineSalespersonBreakdownDrawerTableProps {
   rows: PipelineSalespersonBreakdownRow[];
   summary: DrawerSummary;
@@ -31,6 +36,10 @@ export interface PipelineSalespersonBreakdownDrawerTableProps {
   loading?: boolean;
   emptyMessage?: string;
   onSalespersonClick: (row: PipelineSalespersonBreakdownRow) => void;
+  onFinancialColumnClick?: (
+    columnType: PipelineBreakdownFinancialColumnType,
+    row: PipelineSalespersonBreakdownRow
+  ) => void;
 }
 
 const NAVY = "#1E3A8A";
@@ -61,6 +70,7 @@ export default function PipelineSalespersonBreakdownDrawerTable({
   loading,
   emptyMessage = "No salesperson rows available.",
   onSalespersonClick,
+  onFinancialColumnClick,
 }: PipelineSalespersonBreakdownDrawerTableProps) {
   const tableRows = useMemo(
     () =>
@@ -210,7 +220,9 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                   </Table.Td>
                 </Table.Tr>
               ) : (
-                tableRows.map((r, i) => (
+                tableRows.map((r, i) => {
+                  const inProg = Math.max(0, r.quote) + Math.max(0, r.expected);
+                  return (
                   <Table.Tr key={`${r.salesperson}-${i}`} style={{ cursor: "pointer" }} onClick={() => onSalespersonClick(r)}>
                     <Table.Td style={{ textAlign: "left" }}>
                       <Text fz={13} fw={700} c="#0F172A">
@@ -229,12 +241,61 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                     </Table.Td>
                     <Table.Td ta="center"><MetricText n={r.potential} /></Table.Td>
                     <Table.Td ta="center"><MetricText n={r.pipeline} /></Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.quote} /></Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.gained} fw={700} c={r.gained > 0 ? GREEN : "#0F172A"} /></Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.lost} fw={700} c={r.lost > 0 ? RED : "#0F172A"} /></Table.Td>
+                    <Table.Td
+                      ta="center"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onFinancialColumnClick && inProg > 0) {
+                          onFinancialColumnClick("quote", r);
+                        }
+                      }}
+                      style={{
+                        cursor:
+                          onFinancialColumnClick && inProg > 0
+                            ? "pointer"
+                            : undefined,
+                      }}
+                    >
+                      <MetricText n={r.quote} fw={inProg > 0 && onFinancialColumnClick ? 700 : 400} c={inProg > 0 && onFinancialColumnClick ? GREEN : "#0F172A"} />
+                    </Table.Td>
+                    <Table.Td
+                      ta="center"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onFinancialColumnClick && r.gained > 0) {
+                          onFinancialColumnClick("gained", r);
+                        }
+                      }}
+                      style={{
+                        cursor:
+                          onFinancialColumnClick && r.gained > 0
+                            ? "pointer"
+                            : undefined,
+                      }}
+                    >
+                      <MetricText n={r.gained} fw={700} c={r.gained > 0 ? GREEN : "#0F172A"} />
+                    </Table.Td>
+                    <Table.Td
+                      ta="center"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onFinancialColumnClick && r.lost > 0) {
+                          onFinancialColumnClick("lost", r);
+                        }
+                      }}
+                      style={{
+                        cursor:
+                          onFinancialColumnClick && r.lost > 0
+                            ? "pointer"
+                            : undefined,
+                      }}
+                    >
+                      <MetricText n={r.lost} fw={700} c={r.lost > 0 ? RED : "#0F172A"} />
+                    </Table.Td>
                     <Table.Td ta="center"><MetricText n={r.expected} /></Table.Td>
                   </Table.Tr>
-                ))
+                );
+                })
               )}
             </Table.Tbody>
           </Table>

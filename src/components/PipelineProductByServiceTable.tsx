@@ -23,6 +23,11 @@ export type PipelineProductByServiceSummary = {
   total_lost: number;
 } | null;
 
+export type PipelineProductFinancialColumnType =
+  | "gained"
+  | "quote"
+  | "lost";
+
 export interface PipelineProductByServiceTableProps {
   title?: string;
   subtitle?: string;
@@ -30,6 +35,10 @@ export interface PipelineProductByServiceTableProps {
   summary?: PipelineProductByServiceSummary;
   loading?: boolean;
   onRowClick?: (row: PipelineProductByServiceRow) => void;
+  onFinancialColumnClick?: (
+    columnType: PipelineProductFinancialColumnType,
+    row: PipelineProductByServiceRow
+  ) => void;
   emptyMessage?: string;
 }
 
@@ -206,6 +215,7 @@ export default function PipelineProductByServiceTable({
   summary,
   loading,
   onRowClick,
+  onFinancialColumnClick,
   emptyMessage = "No product pipeline data",
 }: PipelineProductByServiceTableProps) {
   const prepared = useMemo(() => {
@@ -370,27 +380,72 @@ export default function PipelineProductByServiceTable({
                   </Box>
                   <Text style={METRIC_NUMERIC}>{formatAmount(row.potential)}</Text>
                   <Text style={METRIC_NUMERIC}>{formatAmount(row.pipeline)}</Text>
-                  <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
-                    <SingleBar
-                      value={row.gained}
-                      max={prepared.maxGained}
-                      fill={BAR_FILLS.gained}
-                    />
-                  </ValueAndCompactBar>
-                  <ValueAndCompactBar valueLabel={formatAmount(inProg)}>
-                    <InProgressStackedBar
-                      quote={row.quote}
-                      expected={row.expected}
-                      maxSum={prepared.maxInProgress}
-                    />
-                  </ValueAndCompactBar>
-                  <ValueAndCompactBar valueLabel={formatAmount(row.lost)}>
-                    <SingleBar
-                      value={row.lost}
-                      max={prepared.maxLost}
-                      fill={BAR_FILLS.lost}
-                    />
-                  </ValueAndCompactBar>
+                  <Box
+                    style={{
+                      cursor:
+                        onFinancialColumnClick && row.gained > 0
+                          ? "pointer"
+                          : undefined,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onFinancialColumnClick && row.gained > 0) {
+                        onFinancialColumnClick("gained", row);
+                      }
+                    }}
+                  >
+                    <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
+                      <SingleBar
+                        value={row.gained}
+                        max={prepared.maxGained}
+                        fill={BAR_FILLS.gained}
+                      />
+                    </ValueAndCompactBar>
+                  </Box>
+                  <Box
+                    style={{
+                      cursor:
+                        onFinancialColumnClick && inProg > 0
+                          ? "pointer"
+                          : undefined,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onFinancialColumnClick && inProg > 0) {
+                        onFinancialColumnClick("quote", row);
+                      }
+                    }}
+                  >
+                    <ValueAndCompactBar valueLabel={formatAmount(inProg)}>
+                      <InProgressStackedBar
+                        quote={row.quote}
+                        expected={row.expected}
+                        maxSum={prepared.maxInProgress}
+                      />
+                    </ValueAndCompactBar>
+                  </Box>
+                  <Box
+                    style={{
+                      cursor:
+                        onFinancialColumnClick && row.lost > 0
+                          ? "pointer"
+                          : undefined,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onFinancialColumnClick && row.lost > 0) {
+                        onFinancialColumnClick("lost", row);
+                      }
+                    }}
+                  >
+                    <ValueAndCompactBar valueLabel={formatAmount(row.lost)}>
+                      <SingleBar
+                        value={row.lost}
+                        max={prepared.maxLost}
+                        fill={BAR_FILLS.lost}
+                      />
+                    </ValueAndCompactBar>
+                  </Box>
                 </Box>
               );
             })}

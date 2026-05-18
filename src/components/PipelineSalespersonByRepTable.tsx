@@ -32,6 +32,13 @@ export type PipelineSalespersonRepSummary = {
   total_lost: number;
 } | null;
 
+export type PipelineSalespersonFinancialColumnType =
+  | "potential"
+  | "pipeline"
+  | "gained"
+  | "quote"
+  | "lost";
+
 export interface PipelineSalespersonByRepTableProps {
   title?: string;
   subtitle?: string;
@@ -39,6 +46,10 @@ export interface PipelineSalespersonByRepTableProps {
   summary?: PipelineSalespersonRepSummary;
   loading?: boolean;
   onRowClick?: (row: PipelineSalespersonRepRow) => void;
+  onFinancialColumnClick?: (
+    columnType: PipelineSalespersonFinancialColumnType,
+    row: PipelineSalespersonRepRow
+  ) => void;
   emptyMessage?: string;
   /** Shown under each rep name (e.g. reporting period); same for all rows if only one string is needed */
   getRepSubline?: (row: PipelineSalespersonRepRow) => string | undefined;
@@ -253,6 +264,7 @@ function PipelineSalespersonByRepTable({
   summary,
   loading,
   onRowClick,
+  onFinancialColumnClick,
   emptyMessage = "No salesperson pipeline data",
   getRepSubline,
 }: PipelineSalespersonByRepTableProps) {
@@ -445,33 +457,108 @@ function PipelineSalespersonByRepTable({
                 >
                   {row.branch_code?.trim() || "—"}
                 </Text>
-                <Text style={{ ...METRIC_NUMERIC, minWidth: 0 }}>
+                <Text
+                  style={{
+                    ...METRIC_NUMERIC,
+                    minWidth: 0,
+                    cursor:
+                      onFinancialColumnClick && row.potential > 0
+                        ? "pointer"
+                        : undefined,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onFinancialColumnClick && row.potential > 0) {
+                      onFinancialColumnClick("potential", row);
+                    }
+                  }}
+                >
                   {formatAmount(row.potential)}
                 </Text>
-                <Text style={{ ...METRIC_NUMERIC, minWidth: 0 }}>
+                <Text
+                  style={{
+                    ...METRIC_NUMERIC,
+                    minWidth: 0,
+                    cursor:
+                      onFinancialColumnClick && row.pipeline > 0
+                        ? "pointer"
+                        : undefined,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onFinancialColumnClick && row.pipeline > 0) {
+                      onFinancialColumnClick("pipeline", row);
+                    }
+                  }}
+                >
                   {formatAmount(row.pipeline)}
                 </Text>
-                <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
-                  <SingleBar
-                    value={row.gained}
-                    max={prepared.maxGained}
-                    fill={BAR_FILLS.gained}
-                  />
-                </ValueAndCompactBar>
-                <ValueAndCompactBar valueLabel={formatAmount(inProg)}>
-                  <InProgressStackedBar
-                    quote={row.quote}
-                    expected={row.expected}
-                    maxSum={prepared.maxInProgress}
-                  />
-                </ValueAndCompactBar>
-                <ValueAndCompactBar valueLabel={formatAmount(row.lost)}>
-                  <SingleBar
-                    value={row.lost}
-                    max={prepared.maxLost}
-                    fill={BAR_FILLS.lost}
-                  />
-                </ValueAndCompactBar>
+                <Box
+                  style={{
+                    cursor:
+                      onFinancialColumnClick && row.gained > 0
+                        ? "pointer"
+                        : undefined,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onFinancialColumnClick && row.gained > 0) {
+                      onFinancialColumnClick("gained", row);
+                    }
+                  }}
+                >
+                  <ValueAndCompactBar valueLabel={formatAmount(row.gained)}>
+                    <SingleBar
+                      value={row.gained}
+                      max={prepared.maxGained}
+                      fill={BAR_FILLS.gained}
+                    />
+                  </ValueAndCompactBar>
+                </Box>
+                <Box
+                  style={{
+                    cursor:
+                      onFinancialColumnClick && inProg > 0
+                        ? "pointer"
+                        : undefined,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onFinancialColumnClick && inProg > 0) {
+                      onFinancialColumnClick("quote", row);
+                    }
+                  }}
+                >
+                  <ValueAndCompactBar valueLabel={formatAmount(inProg)}>
+                    <InProgressStackedBar
+                      quote={row.quote}
+                      expected={row.expected}
+                      maxSum={prepared.maxInProgress}
+                    />
+                  </ValueAndCompactBar>
+                </Box>
+                <Box
+                  style={{
+                    cursor:
+                      onFinancialColumnClick && row.lost > 0
+                        ? "pointer"
+                        : undefined,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onFinancialColumnClick && row.lost > 0) {
+                      onFinancialColumnClick("lost", row);
+                    }
+                  }}
+                >
+                  <ValueAndCompactBar valueLabel={formatAmount(row.lost)}>
+                    <SingleBar
+                      value={row.lost}
+                      max={prepared.maxLost}
+                      fill={BAR_FILLS.lost}
+                    />
+                  </ValueAndCompactBar>
+                </Box>
               </Box>
             );
           })}

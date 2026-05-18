@@ -254,6 +254,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       moduleType === "pipelineReport" &&
       drillLevel === 2 &&
       (selectedColumnType === "quoted_created" ||
+        selectedColumnType === "quoted" ||
         selectedColumnType === "quote" ||
         selectedColumnType === "lost");
     // const columnDefs: MRT_ColumnDef<any>[] = [];
@@ -432,6 +433,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             : selectedColumnType === "lost"
               ? "Quote Rejected Date"
               : selectedColumnType === "quoted_created" ||
+                  selectedColumnType === "quoted" ||
                   selectedColumnType === "quote"
                 ? "Quote Date"
                 : "Quote Date"
@@ -904,9 +906,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                       CLOSED: "closed",
                     };
                     let typeValue = columnTypeMap[key] || key;
-                    // Special case: If moduleType is PipelineReport, use 'quoted_created' for quoted columns
-                    if (key === "quote" && moduleType === "pipelineReport") {
-                      typeValue = "quoted_created";
+                    // Pipeline report: in-progress column drills as `quoted` on the API
+                    if (
+                      (key === "quote" || key === "quoted") &&
+                      moduleType === "pipelineReport"
+                    ) {
+                      typeValue = "quote";
                     }
                     onColumnClick(typeValue as any, cellValue, row.original);
                   }}
@@ -1181,7 +1186,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                     } else if (key === "lost") {
                       onColumnClick("lost", cellValue, row.original);
                     } else if (key === "quoted" || key === "quoted_created") {
-                      onColumnClick("quoted_created", cellValue, row.original);
+                      onColumnClick("quote", cellValue, row.original);
                     } else if (key === "expected") {
                       onColumnClick("expected", cellValue, row.original);
                     } else if (key === "quotation_id") {

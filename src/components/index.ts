@@ -11,6 +11,7 @@ import DateTimeInput from "./DateTimeInput";
 import BarChart from "./BarChart";
 import DrilldownHorizontalBarChart from "./DrilldownHorizontalBarChart";
 import PipelineSalespersonByRepTable from "./PipelineSalespersonByRepTable";
+import PipelineCustomerProfitTable from "./PipelineCustomerProfitTable";
 import PipelineSalespersonCustomerDrawerTable from "./PipelineSalespersonCustomerDrawerTable";
 import CallEntryCustomerDrawerTable from "./CallEntryCustomerDrawerTable";
 import PipelineSalespersonBreakdownDrawerTable from "./PipelineSalespersonBreakdownDrawerTable";
@@ -102,6 +103,7 @@ export {
   BarChart,
   DrilldownHorizontalBarChart,
   PipelineSalespersonByRepTable,
+  PipelineCustomerProfitTable,
   PipelineSalespersonCustomerDrawerTable,
   CallEntryCustomerDrawerTable,
   PipelineSalespersonBreakdownDrawerTable,
