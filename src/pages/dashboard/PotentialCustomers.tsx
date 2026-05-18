@@ -1,45 +1,68 @@
 import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
-import {
   Button,
-  Card,
   Group,
   Text,
-  Center,
-  Loader,
   Modal,
   Select,
   Stack,
   MultiSelect,
   SegmentedControl,
   ActionIcon,
-  Menu,
   Box,
-  UnstyledButton,
   Drawer,
   Flex,
   TextInput,
   Grid,
+  MantineProvider,
 } from "@mantine/core";
 import {
   IconPlus,
   IconUpload,
   IconUserPlus,
-  IconDotsVertical,
   IconDownload,
   IconFile,
   IconX,
   IconFilter,
-  IconFilterOff,
   IconSearch,
+  IconUsers,
+  IconMail,
+  IconPhone,
+  IconListNumbers,
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
 import { URL } from "../../api/serverUrls";
-import { ToastNotification } from "../../components";
-import PaginationBar from "../../components/PaginationBar/PaginationBar";
+import {
+  ToastNotification,
+  SingleDateInput,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  ERPListColumnToggleMenu,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
+  erpToolbarOutlineButtonStyles,
+  type ErpListTheme,
+  type ERPListColumnToggleItem,
+} from "../../components";
+import SearchableSelect from "../../components/SearchableSelect";
+import {
+  PotentialCustomersListNativeTable,
+  type PotentialCustomerHeaderFilterKey,
+  type PotentialCustomerHeaderFilterValues,
+  type PotentialCustomerHeaderFiltersProp,
+  type PotentialCustomerHeaderRenderInput,
+  type PotentialCustomerTableRow,
+  type PotentialCustomerVisibleColumns,
+} from "./PotentialCustomersListNativeTable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_HEADER } from "../../store/storeKeys";
 import { apiCallProtected } from "../../api/axios";
@@ -47,7 +70,14 @@ import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { getAPICall } from "../../service/getApiCall";
 import useAuthStore from "../../store/authStore";
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+  type CSSProperties,
+} from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../store/listFilterStore";
 import uploadImage from "../../assets/images/upload.png";
@@ -109,6 +139,39 @@ type PotentialCustomersResponse = {
   data: PotentialCustomerData[];
 };
 
+/** Resolve list total for pagination (prefers `total`, then `pagination_total`, then index+page length). */
+function getPotentialCustomersListTotal(
+  response: PotentialCustomersResponse
+): number {
+  const anyRes = response as PotentialCustomersResponse & {
+    count?: number;
+  };
+  const raw: unknown =
+    anyRes.total ??
+    anyRes.pagination_total ??
+    anyRes.count;
+  let n: number;
+  if (typeof raw === "number" && !Number.isNaN(raw)) {
+    n = raw;
+  } else if (typeof raw === "string" && raw.trim() !== "") {
+    const p = Number(raw);
+    n = !Number.isNaN(p) ? p : 0;
+  } else {
+    n = 0;
+  }
+  const idx = Number(response.index);
+  const len = Array.isArray(response.data) ? response.data.length : 0;
+  if (
+    len > 0 &&
+    !Number.isNaN(idx) &&
+    idx >= 0 &&
+    n < idx + len
+  ) {
+    n = Math.max(n, idx + len);
+  }
+  return n;
+}
+
 type UserData = {
   id: number;
   user_id: string;
@@ -124,29 +187,47 @@ type AssignFormValues = {
   user_id: string;
 };
 
+/**
+ * Filter shape mirrors the keys the backend understands (`customer_code`,
+ * `email_id`, `commodity`, `ice`, `pin`, `phone_no`, `contact_person`,
+ * `address`, `city`, `state`, `unit`, `sales_person` → `assigned_to`,
+ * `created_at`).
+ *
+ * Empty strings / nulls are NEVER sent to the API (the backend would otherwise
+ * turn them into `{key}__isnull=True`), so the payload builder includes a
+ * key only when its value is truthy.
+ *
+ * The `customer_code` payload key is populated via the customer-master
+ * `SearchableSelect`. The friendly label is tracked separately via
+ * `customerDisplayValue` (persisted as `displayValues.customer_name`).
+ */
 type FilterState = {
-  // customer_code: string | null; // Commented out
-  customer: string | null;
+  customer_code: string | null;
+  email_id: string | null;
   commodity: string | null;
+  ice: string | null;
+  pin: string | null;
+  phone_no: string | null;
+  contact_person: string | null;
+  address: string | null;
   city: string | null;
   state: string | null;
+  unit: string | null;
   sales_person: string | null;
-};
-
-type CityData = {
-  id: number;
-  city_code: string;
-  city_name: string;
-  status: string;
-};
-
-type StateData = {
-  id: number;
-  state_code: string;
-  state_name: string;
+  /** ISO `YYYY-MM-DD` date string — matches `created_at` (Assigned date) column. */
+  created_at: string | null;
 };
 
 const LIST_KEY = "POTENTIAL_CUSTOMERS";
+
+/**
+ * Stable `classNames` for the `SingleDateInput` used in the `created_at`
+ * column header. Module-scope keeps the object reference stable so the
+ * renderInput memo isn't churned every render.
+ */
+const POTENTIAL_HEADER_DATE_INPUT_CLASSNAMES: Record<string, string> = {
+  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+};
 
 function PotentialCustomers() {
   const navigate = useNavigate();
@@ -165,19 +246,31 @@ function PotentialCustomers() {
   const [totalCount, setTotalCount] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
-  const [citySearchValue, setCitySearchValue] = useState("");
-  const [debouncedCitySearch] = useDebouncedValue(citySearchValue, 400);
-  const [customerSearchValue, setCustomerSearchValue] = useState("");
-  const [debouncedCustomerSearch] = useDebouncedValue(customerSearchValue, 400);
-  const [customerOptions, setCustomerOptions] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [customerOptionsLoading, setCustomerOptionsLoading] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 1000);
   const hasRestoredFromStore = useRef(false);
   const location = useLocation();
+
+  const [potentialVisibleColumns, setPotentialVisibleColumns] =
+    useState<PotentialCustomerVisibleColumns>({
+      sno: true,
+      customer: true,
+      email_id: true,
+      commodity: true,
+      ice: true,
+      pin: true,
+      phone_no: true,
+      contact_person: true,
+      address: true,
+      city: true,
+      state: true,
+      total_value: true,
+      total_quantity: true,
+      unit: true,
+      assigned_to: true,
+      created_at: true,
+    });
 
   // Zustand store for filter and search preservation
   const setStoreFilters = useListFilterStore((state) => state.setFilters);
@@ -201,14 +294,28 @@ function PotentialCustomers() {
 
   const filterForm = useForm<FilterState>({
     initialValues: {
-      // customer_code: null, // Commented out
-      customer: null,
+      customer_code: null,
+      email_id: null,
       commodity: null,
+      ice: null,
+      pin: null,
+      phone_no: null,
+      contact_person: null,
+      address: null,
       city: null,
       state: null,
+      unit: null,
       sales_person: null,
+      created_at: null,
     },
   });
+
+  // Friendly label that shadows `filterForm.values.customer_code`. Persisted
+  // in the global store so navigating back from a sub-page restores the label
+  // even before the customer-master API has been hit.
+  const [customerDisplayValue, setCustomerDisplayValue] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if ((user?.is_manager || user?.is_staff) && location.state?.statusFilter !== "assigned") {
@@ -247,18 +354,39 @@ function PotentialCustomers() {
         return; // No stored state, use defaults
       }
       
-      // Restore filters
+      // Restore filters — accept any of the supported keys (advanced filter
+      // section + column header filters share the same shape).
       let hasFilters = false;
-      const restoredFilters = restoredState.filters as FilterState;
+      const restoredFilters = restoredState.filters as Partial<FilterState>;
       if (restoredFilters && Object.keys(restoredFilters).length > 0) {
         filterForm.setValues(restoredFilters);
         hasFilters = Boolean(
-          restoredFilters.customer ||
+          restoredFilters.customer_code ||
+          restoredFilters.email_id ||
           restoredFilters.commodity ||
+          restoredFilters.ice ||
+          restoredFilters.pin ||
+          restoredFilters.phone_no ||
+          restoredFilters.contact_person ||
+          restoredFilters.address ||
           restoredFilters.city ||
           restoredFilters.state ||
-          restoredFilters.sales_person
+          restoredFilters.unit ||
+          restoredFilters.sales_person ||
+          restoredFilters.created_at
         );
+      }
+
+      // Rehydrate customer display label so the UI shows the friendly name
+      // (e.g. on the column header chip + advanced filter) before the
+      // customer-master API has been hit.
+      const restoredCustomerLabel =
+        restoredState.displayValues?.customer_name;
+      if (
+        typeof restoredCustomerLabel === "string" &&
+        restoredCustomerLabel.trim() !== ""
+      ) {
+        setCustomerDisplayValue(restoredCustomerLabel);
       }
 
       // Restore search
@@ -312,57 +440,14 @@ function PotentialCustomers() {
     setStoreSearch(LIST_KEY, searchQuery);
   }, [filterForm.values, searchQuery, setStoreFilters, setStoreSearch]);
 
-  // Fetch customer options for customer filter (server-side search)
-  useEffect(() => {
-    const term = debouncedCustomerSearch.trim();
-    if (!term) {
-      setCustomerOptions([]);
-      return;
-    }
-
-    let cancelled = false;
-    setCustomerOptionsLoading(true);
-    apiCallProtected
-      .post("potential/filter/?index=0&limit=25", {
-        filters: { customer: term },
-      })
-      .then((res: any) => {
-        if (cancelled) return;
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        const unique = Array.from(
-          new Set(
-            rows
-              .map((r: any) => String(r?.customer ?? "").trim())
-              .filter(Boolean),
-          ),
-        );
-        setCustomerOptions(unique.map((c) => ({ value: String(c), label: String(c) })));
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        console.error("Error fetching customer options:", err);
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch customers";
-        ToastNotification({
-          type: "error",
-          message: `Error fetching customers: ${errorMessage}`,
-        });
-        setCustomerOptions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setCustomerOptionsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedCustomerSearch]);
-
+  // (Customer options are now fetched on-demand by the customer-master
+  // `SearchableSelect` — no separate effect needed.)
 
   // Fetch potential customers data using useQuery
   const {
     data: potentialCustomersData = [],
     isLoading: potentialCustomersLoading,
+    isFetching: potentialCustomersFetching,
   } = useQuery({
     queryKey: ["potentialCustomers", statusFilter, currentPage, pageSize],
     queryFn: async () => {
@@ -386,11 +471,11 @@ function PotentialCustomers() {
         )) as PotentialCustomersResponse;
 
         if (response && response.success && Array.isArray(response.data)) {
-          // Update total count for pagination
-          setTotalCount(response.total || 0);
+          setTotalCount(getPotentialCustomersListTotal(response));
           return response.data;
         }
 
+        setTotalCount(0);
         return [];
       } catch (err: unknown) {
         console.error("Error fetching potential customers:", err);
@@ -402,6 +487,7 @@ function PotentialCustomers() {
           type: "error",
           message: `Error fetching potential customers: ${errorMessage}`,
         });
+        setTotalCount(0);
         return [];
       }
     },
@@ -509,6 +595,7 @@ function PotentialCustomers() {
   const {
     data: filteredPotentialCustomersData = [],
     isLoading: filteredPotentialCustomersLoading,
+    isFetching: filteredPotentialCustomersFetching,
   } = useQuery({
     queryKey: [
       "filteredPotentialCustomers",
@@ -528,26 +615,29 @@ function PotentialCustomers() {
           status: statusFilter === "unassigned" ? "un-assigned" : "assigned",
         };
 
-        // Add additional filters if they have values
-        // if (filterForm.values.customer_code) {
-        //   baseFilters.customer_code = filterForm.values.customer_code;
-        // }
-        if (filterForm.values.customer) {
-          baseFilters.customer = filterForm.values.customer;
-        }
-        if (filterForm.values.commodity) {
-          baseFilters.commodity = filterForm.values.commodity;
-        }
-        if (filterForm.values.city) {
-          baseFilters.city = filterForm.values.city;
-        }
-        if (filterForm.values.state) {
-          baseFilters.state = filterForm.values.state;
-        }
+        // Add additional filters if they have values. Empty strings / null
+        // are intentionally NOT sent — the backend treats those as
+        // `{key}__isnull=True` which would silently break the result set.
+        const f = filterForm.values;
+        if (f.customer_code) baseFilters.customer_code = f.customer_code;
+        if (f.email_id) baseFilters.email_id = f.email_id;
+        if (f.commodity) baseFilters.commodity = f.commodity;
+        if (f.ice) baseFilters.ice = f.ice;
+        if (f.pin) baseFilters.pin = f.pin;
+        if (f.phone_no) baseFilters.phone_no = f.phone_no;
+        if (f.contact_person) baseFilters.contact_person = f.contact_person;
+        if (f.address) baseFilters.address = f.address;
+        if (f.city) baseFilters.city = f.city;
+        if (f.state) baseFilters.state = f.state;
+        if (f.unit) baseFilters.unit = f.unit;
         // Only include salesperson filter when statusFilter is "assigned"
-        if (statusFilter === "assigned" && filterForm.values.sales_person) {
-          baseFilters.assigned_to = filterForm.values.sales_person;
+        if (statusFilter === "assigned" && f.sales_person) {
+          baseFilters.assigned_to = f.sales_person;
         }
+        // `created_at` is the single-date filter the backend supports;
+        // values are already ISO `YYYY-MM-DD` strings (set by SingleDateInput
+        // → `dayjs().format("YYYY-MM-DD")` in the change handlers).
+        if (f.created_at) baseFilters.created_at = f.created_at;
         // Add search value to filters if it exists
         if (debouncedSearch.trim()) {
           baseFilters.search = debouncedSearch.trim();
@@ -567,11 +657,11 @@ function PotentialCustomers() {
         )) as PotentialCustomersResponse;
 
         if (response && response.success && Array.isArray(response.data)) {
-          // Update total count for pagination
-          setTotalCount(response.total || 0);
+          setTotalCount(getPotentialCustomersListTotal(response));
           return response.data;
         }
 
+        setTotalCount(0);
         return [];
       } catch (err: unknown) {
         console.error("Error fetching filtered potential customers:", err);
@@ -583,6 +673,7 @@ function PotentialCustomers() {
           type: "error",
           message: `Error fetching filtered potential customers: ${errorMessage}`,
         });
+        setTotalCount(0);
         return [];
       }
     },
@@ -590,6 +681,14 @@ function PotentialCustomers() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
+
+  // Keep current page in range when total shrinks (filters, assign, API data)
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalCount, pageSize, currentPage]);
 
   // Trigger filtered API when debounced search changes
   useEffect(() => {
@@ -602,13 +701,24 @@ function PotentialCustomers() {
         queryKey: ["filteredPotentialCustomers"],
       });
     } else if (debouncedSearch.trim() === "" && filtersApplied) {
-      // Check if there are other filters applied
+      // Check if there are other filters applied (all supported filterable
+      // fields — covers both the advanced filter section and column headers).
+      const f = filterForm.values;
       const hasOtherFilters =
-        filterForm.values.commodity ||
-        filterForm.values.city ||
-        filterForm.values.state ||
-        (statusFilter === "assigned" && filterForm.values.sales_person);
-      
+        f.customer_code ||
+        f.email_id ||
+        f.commodity ||
+        f.ice ||
+        f.pin ||
+        f.phone_no ||
+        f.contact_person ||
+        f.address ||
+        f.city ||
+        f.state ||
+        f.unit ||
+        f.created_at ||
+        (statusFilter === "assigned" && f.sales_person);
+
       // Save to store (with cleared search)
       saveFiltersToStore();
       
@@ -627,76 +737,7 @@ function PotentialCustomers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  // Fetch city data with search functionality - only when user searches
-  const { data: citiesData = [] } = useQuery({
-    queryKey: ["cities", debouncedCitySearch],
-    queryFn: async () => {
-      try {
-        const searchParam = debouncedCitySearch.trim()
-          ? `?search=${encodeURIComponent(debouncedCitySearch.trim())}`
-          : "";
-
-        const response = (await getAPICall(
-          `${URL.city}${searchParam}`,
-          API_HEADER
-        )) as {
-          success: boolean;
-          message: string;
-          data: CityData[];
-        };
-        return Array.isArray(response.data) ? response.data : [];
-      } catch (err: unknown) {
-        console.error("Error fetching cities:", err);
-        ToastNotification({
-          type: "error",
-          message: `Error fetching cities: ${err instanceof Error ? err.message : "Unknown error"}`,
-        });
-        return [];
-      }
-    },
-    enabled: debouncedCitySearch.trim().length > 0, // Only fetch when user searches
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
-
-  // Fetch state data with memoization
-  const { data: statesData = [] } = useQuery({
-    queryKey: ["states"],
-    queryFn: async () => {
-      try {
-        const response = (await getAPICall(URL.state, API_HEADER)) as {
-          success: boolean;
-          message: string;
-          data: StateData[];
-        };
-        return Array.isArray(response.data) ? response.data : [];
-      } catch (err: unknown) {
-        console.error("Error fetching states:", err);
-        ToastNotification({
-          type: "error",
-          message: `Error fetching states: ${err instanceof Error ? err.message : "Unknown error"}`,
-        });
-        return [];
-      }
-    },
-    staleTime: 10 * 60 * 1000, // 10 minutes - longer cache for static data
-    refetchOnWindowFocus: false,
-  });
-
-  // Memoize city and state options for better performance
-  const cityOptions = useMemo(() => {
-    return citiesData.map((city) => ({
-      value: city.city_name,
-      label: city.city_name,
-    }));
-  }, [citiesData]);
-
-  const stateOptions = useMemo(() => {
-    return statesData.map((state) => ({
-      value: state.state_name,
-      label: state.state_name,
-    }));
-  }, [statesData]);
+  // City / state are free-text inputs now — no option fetching needed.
 
   // Fetch salespersons data
   const { data: salespersonsData = [], isLoading: salespersonsLoading } =
@@ -728,17 +769,140 @@ function PotentialCustomers() {
       }));
   }, [salespersonsData]);
 
+  // ── Column header filters ─────────────────────────────────────────────────
+  // Strictly non-invasive: the column header filter inputs live on top of the
+  // existing `filterForm` state. They DO NOT introduce any new payload
+  // structure, client-side filtering, separate React Query, search path, or
+  // store keys. A monotonic tick is incremented only when the user edits a
+  // header input — a debounced effect (further below) uses that tick to
+  // invoke the EXISTING filtered query (via `setFiltersApplied(true)` +
+  // `invalidateQueries`), exactly the way the Apply button does today.
+  // Advanced filter inputs DO NOT bump this tick, so their existing
+  // behaviour (commit-on-Apply) is fully preserved.
+  const [headerFilterTick, setHeaderFilterTick] = useState(0);
+  const [debouncedHeaderFilterTick] = useDebouncedValue(headerFilterTick, 1000);
+  const lastHandledHeaderFilterTickRef = useRef(0);
+
+  const handlePotentialHeaderFilterChange = useCallback(
+    (key: PotentialCustomerHeaderFilterKey, value: string) => {
+      const next = value || null;
+      switch (key) {
+        case "customer":
+          // Header `customer` column writes to `customer_code` payload key.
+          // The free-text fallback path (used only when the user types into
+          // the generic input — not the SearchableSelect renderInput) would
+          // strip the display label, so clear it to keep state coherent.
+          filterForm.setFieldValue("customer_code", next);
+          if (!next) {
+            setCustomerDisplayValue(null);
+            useListFilterStore
+              .getState()
+              .setDisplayValues(LIST_KEY, { customer_name: null });
+          }
+          break;
+        case "email_id":
+          filterForm.setFieldValue("email_id", next);
+          break;
+        case "commodity":
+          filterForm.setFieldValue("commodity", next);
+          break;
+        case "ice":
+          filterForm.setFieldValue("ice", next);
+          break;
+        case "pin":
+          filterForm.setFieldValue("pin", next);
+          break;
+        case "phone_no":
+          filterForm.setFieldValue("phone_no", next);
+          break;
+        case "contact_person":
+          filterForm.setFieldValue("contact_person", next);
+          break;
+        case "address":
+          filterForm.setFieldValue("address", next);
+          break;
+        case "city":
+          filterForm.setFieldValue("city", next);
+          break;
+        case "state":
+          filterForm.setFieldValue("state", next);
+          break;
+        case "unit":
+          filterForm.setFieldValue("unit", next);
+          break;
+        case "assigned_to":
+          // Column header maps to filterForm.sales_person (per spec) — same
+          // field the advanced "Sales Person" Select writes to.
+          filterForm.setFieldValue("sales_person", next);
+          break;
+        case "created_at":
+          // Date column header — only fires from the generic fallback path
+          // (e.g. someone clearing it via the X button); the custom
+          // SingleDateInput renderInput handles its own set/format.
+          filterForm.setFieldValue("created_at", next);
+          break;
+      }
+      setCurrentPage(1);
+      setHeaderFilterTick((t) => t + 1);
+    },
+    [filterForm],
+  );
+
+  const potentialHeaderFilterValues: PotentialCustomerHeaderFilterValues =
+    useMemo(
+      () => ({
+        customer: filterForm.values.customer_code ?? "",
+        email_id: filterForm.values.email_id ?? "",
+        commodity: filterForm.values.commodity ?? "",
+        ice: filterForm.values.ice ?? "",
+        pin: filterForm.values.pin ?? "",
+        phone_no: filterForm.values.phone_no ?? "",
+        contact_person: filterForm.values.contact_person ?? "",
+        address: filterForm.values.address ?? "",
+        city: filterForm.values.city ?? "",
+        state: filterForm.values.state ?? "",
+        unit: filterForm.values.unit ?? "",
+        assigned_to: filterForm.values.sales_person ?? "",
+        created_at: filterForm.values.created_at ?? "",
+      }),
+      [
+        filterForm.values.customer_code,
+        filterForm.values.email_id,
+        filterForm.values.commodity,
+        filterForm.values.ice,
+        filterForm.values.pin,
+        filterForm.values.phone_no,
+        filterForm.values.contact_person,
+        filterForm.values.address,
+        filterForm.values.city,
+        filterForm.values.state,
+        filterForm.values.unit,
+        filterForm.values.sales_person,
+        filterForm.values.created_at,
+      ],
+    );
+
   // Function to apply filters manually
   const applyFilters = useCallback(async () => {
     try {
-      // Check if there are any actual filter values (excluding search, which is handled separately)
-      // Exclude sales_person when statusFilter is "unassigned"
+      // Check if there are any actual filter values (excluding search, which
+      // is handled separately). Exclude sales_person when statusFilter is
+      // "unassigned" — keeps existing UX for the segmented control.
+      const f = filterForm.values;
       const hasFilterValues =
-        filterForm.values.customer ||
-        filterForm.values.commodity ||
-        filterForm.values.city ||
-        filterForm.values.state ||
-        (statusFilter === "assigned" && filterForm.values.sales_person) ||
+        f.customer_code ||
+        f.email_id ||
+        f.commodity ||
+        f.ice ||
+        f.pin ||
+        f.phone_no ||
+        f.contact_person ||
+        f.address ||
+        f.city ||
+        f.state ||
+        f.unit ||
+        f.created_at ||
+        (statusFilter === "assigned" && f.sales_person) ||
         debouncedSearch.trim() !== "";
 
       if (!hasFilterValues) {
@@ -748,6 +912,9 @@ function PotentialCustomers() {
         // Clear store when no filters
         clearStoreFilters(LIST_KEY);
         clearStoreSearch(LIST_KEY);
+        useListFilterStore
+          .getState()
+          .setDisplayValues(LIST_KEY, { customer_name: null });
         return;
       }
 
@@ -757,6 +924,11 @@ function PotentialCustomers() {
 
       // Save filters and search to store
       saveFiltersToStore();
+      // Persist the customer display label so the friendly name shows up on
+      // restore even before the customer-master API has been re-hit.
+      useListFilterStore
+        .getState()
+        .setDisplayValues(LIST_KEY, { customer_name: customerDisplayValue });
 
       // Invalidate and refetch the filtered query
       await queryClient.invalidateQueries({
@@ -779,8 +951,7 @@ function PotentialCustomers() {
       setShowFilters(false);
 
       filterForm.reset(); // Reset form to initial values
-      setCustomerSearchValue("");
-      setCustomerOptions([]);
+      setCustomerDisplayValue(null);
       setSearchQuery(""); // Clear search
       setFiltersApplied(false); // Reset filters applied state
       setCurrentPage(1); // Reset to first page
@@ -788,6 +959,9 @@ function PotentialCustomers() {
       // Clear filters and search from store
       clearStoreFilters(LIST_KEY);
       clearStoreSearch(LIST_KEY);
+      useListFilterStore
+        .getState()
+        .setDisplayValues(LIST_KEY, { customer_name: null });
 
       // Invalidate queries and refetch unfiltered data
       await queryClient.invalidateQueries({ queryKey: ["potentialCustomers"] });
@@ -816,33 +990,32 @@ function PotentialCustomers() {
   // Loading state
   const isLoading = useMemo(() => {
     if (filtersApplied || debouncedSearch.trim() !== "") {
-      return filteredPotentialCustomersLoading;
+      return filteredPotentialCustomersLoading || filteredPotentialCustomersFetching;
     }
-    return potentialCustomersLoading;
+    return potentialCustomersLoading || potentialCustomersFetching;
   }, [
     potentialCustomersLoading,
+    potentialCustomersFetching,
     filteredPotentialCustomersLoading,
+    filteredPotentialCustomersFetching,
     filtersApplied,
     debouncedSearch,
   ]);
 
-  const handleCreateCallEntry = useCallback(
-    (customerData: PotentialCustomerData) => {
-      useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
-      // Navigate to call entry create page with customer data
-      navigate("/call-entry-create", {
-        state: {
-          returnTo:"/potential-customers",
-          fromPotentialCustomer: true,
-          statusFilter: "assigned",
-          customerCode: customerData.customer_code || customerData.potential_id,
-          customerName: customerData.customer,
-          customerData: customerData,
-        },
-      });
-    },
-    [navigate]
-  );
+  const handleCreateCallEntry = useCallback((row: PotentialCustomerTableRow) => {
+    const customerData = row as unknown as PotentialCustomerData;
+    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+    navigate("/call-entry-create", {
+      state: {
+        returnTo: "/potential-customers",
+        fromPotentialCustomer: true,
+        statusFilter: "assigned",
+        customerCode: customerData.customer_code || customerData.potential_id,
+        customerName: customerData.customer,
+        customerData,
+      },
+    });
+  }, [navigate]);
 
   // File validation function
   const validateFile = (file: File): boolean => {
@@ -1063,246 +1236,256 @@ function PotentialCustomers() {
   //   });
   // };
 
-  const columns = useMemo<MRT_ColumnDef<PotentialCustomerData>[]>(() => {
-    const baseColumns: MRT_ColumnDef<PotentialCustomerData>[] = [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "customer",
-        header: "Customer",
-        size: 250,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "email_id",
-        header: "Email Id",
-        size: 200,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "commodity",
-        header: "Commodity",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "ice",
-        header: "Ice",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "pin",
-        header: "Pin",
-        size: 100,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "phone_no",
-        header: "Phone No.",
-        size: 130,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "contact_person",
-        header: "Contact Person",
-        size: 180,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "address",
-        header: "Address",
-        size: 200,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "city",
-        header: "City",
-        size: 150,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "state",
-        header: "State",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "total_value",
-        header: "Total Value",
-        size: 120,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "total_quantity",
-        header: "Total Quantity",
-        size: 130,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-      {
-        accessorKey: "unit",
-        header: "Unit",
-        size: 80,
-        Cell: ({ cell }): string => String(cell.getValue() || "-"),
-      },
-    ];
+  // Stable reference — the header-filter `renderInput` memo depends on
+  // `erpTheme`, so an inline object literal (new reference every render)
+  // would make it recompute every render and cascade into the native table
+  // re-rendering needlessly. Same fix we did in EnquiryMaster / RFQMaster.
+  const erpTheme = useMemo<ErpListTheme>(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
 
-    // Only add actions column when statusFilter is "assigned"
-    if (statusFilter === "assigned") {
-      baseColumns.push(
-        {
-          accessorKey: "assigned_to",
-          header: "Assigned to",
-          size: 130,
-          Cell: ({ cell }): string => String(cell.getValue() || "-"),
-        },
-        {
-          accessorKey: "created_at",
-          header: "Assigned date",
-          size: 100,
-          Cell: ({ cell }): string => String(cell.getValue() || "-"),
-        },
-        {
-          id: "actions",
-          header: "Actions",
-          size: 80,
-          Cell: ({ row }) => (
-            <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => handleCreateCallEntry(row.original)}
-                  >
-                    <Group gap={"sm"}>
-                      <IconPlus size={16} style={{ color: "#105476" }} />
-                      <Text size="sm">Create call entry</Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              </Menu.Dropdown>
-            </Menu>
-          ),
-        }
-      );
+  const { border, muted, primary, fontSans, fg } = erpTheme;
+
+  // Stable styles for the SingleDateInput used in the `created_at` column
+  // header. Mirrors the same `erpListFilterUnifiedMantineStyles` the
+  // advanced filter would have produced.
+  const potentialHeaderDateInputStyles = useMemo(
+    () =>
+      erpListFilterUnifiedMantineStyles(erpTheme) as unknown as Record<
+        string,
+        CSSProperties & Record<string, unknown>
+      >,
+    [erpTheme],
+  );
+
+  // ── Header column custom inputs ──────────────────────────────────────────
+  // Mirrors the advanced filter section so the column header inputs (visible
+  // only when a user clicks a header) send the SAME payload shape — e.g.
+  // a customer pick from the header sets `filterForm.values.customer_code`,
+  // exactly like the advanced filter `SearchableSelect` does, so the API
+  // contract stays identical regardless of which surface the user edits from.
+  const potentialHeaderRenderInput = useMemo<
+    Partial<
+      Record<
+        PotentialCustomerHeaderFilterKey,
+        PotentialCustomerHeaderRenderInput
+      >
+    >
+  >(
+    () => ({
+      customer: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type customer name"
+          apiEndpoint={URL.customer}
+          searchFields={["customer_name", "customer_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.customer_code),
+            label: String(item.customer_name),
+          })}
+          value={filterForm.values.customer_code}
+          displayValue={customerDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const nextValue = value || null;
+            const nextLabel = selected?.label ?? null;
+            filterForm.setFieldValue("customer_code", nextValue);
+            setCustomerDisplayValue(nextValue ? nextLabel : null);
+            // Persist the display label immediately so a navigation away
+            // before Apply still rehydrates the friendly name on return.
+            useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+              customer_name: nextValue ? nextLabel : null,
+            });
+            setCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (nextValue) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      // `city` and `state` are now free-text (icontains on backend) — no
+      // server-side option fetching. They fall through to the default
+      // debounced `HeaderFilterInput` (1000ms) for consistency with the
+      // other free-text columns (commodity, email_id, etc.).
+      assigned_to: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          placeholder={
+            salespersonsLoading ? "Loading..." : "Select sales person"
+          }
+          size="xs"
+          data={salespersonOptions}
+          value={filterForm.values.sales_person}
+          onChange={(value) => {
+            filterForm.setFieldValue("sales_person", value || null);
+            setCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          disabled={salespersonsLoading}
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      created_at: ({ onClose }) => (
+        <SingleDateInput
+          value={
+            filterForm.values.created_at
+              ? new Date(filterForm.values.created_at)
+              : null
+          }
+          onChange={(d) => {
+            const iso = d ? dayjs(d).format("YYYY-MM-DD") : null;
+            filterForm.setFieldValue("created_at", iso);
+            setCurrentPage(1);
+            setHeaderFilterTick((t) => t + 1);
+            if (iso) onClose();
+          }}
+          placeholder="Assigned date"
+          size="xs"
+          allowDeselection
+          classNames={POTENTIAL_HEADER_DATE_INPUT_CLASSNAMES}
+          styles={potentialHeaderDateInputStyles}
+        />
+      ),
+      // Remaining text columns (email_id, ice, pin, phone_no, contact_person,
+      // address, city, state, unit, commodity) fall back to the default
+      // debounced `HeaderFilterInput` (1000ms) — the backend accepts them as
+      // plain strings, identical to the advanced filter.
+    }),
+    [
+      filterForm.values.customer_code,
+      filterForm.values.sales_person,
+      filterForm.values.created_at,
+      customerDisplayValue,
+      salespersonOptions,
+      salespersonsLoading,
+      potentialHeaderDateInputStyles,
+      erpTheme,
+      filterForm,
+    ],
+  );
+
+  // The collapsed `customer` header label otherwise shows the opaque
+  // `customer_code` — render the friendly customer name instead.
+  const potentialHeaderDisplayFormatter = useMemo<
+    Partial<Record<PotentialCustomerHeaderFilterKey, (value: string) => string>>
+  >(
+    () => ({
+      customer: (raw) => {
+        if (!raw) return "";
+        return customerDisplayValue ?? raw;
+      },
+    }),
+    [customerDisplayValue],
+  );
+
+  const potentialHeaderFiltersProp: PotentialCustomerHeaderFiltersProp = useMemo(
+    () => ({
+      values: potentialHeaderFilterValues,
+      onChange: handlePotentialHeaderFilterChange,
+      renderInput: potentialHeaderRenderInput,
+      displayFormatter: potentialHeaderDisplayFormatter,
+    }),
+    [
+      potentialHeaderFilterValues,
+      handlePotentialHeaderFilterChange,
+      potentialHeaderRenderInput,
+      potentialHeaderDisplayFormatter,
+    ],
+  );
+
+  // ── Debounced refetch on header-filter edit ───────────────────────────────
+  // When `headerFilterTick` advances (the user picked / typed in a column
+  // header), wait for `debouncedHeaderFilterTick` to settle (1000ms) then
+  // mark filters as applied, persist to store, and invalidate the EXISTING
+  // filtered query — exactly what the Apply button does. We dedupe via
+  // `lastHandledHeaderFilterTickRef` so the same tick is never replayed
+  // twice (e.g. on a parent re-render).
+  useEffect(() => {
+    if (debouncedHeaderFilterTick === 0) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick)
+      return;
+    lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
+
+    setFiltersApplied(true);
+    saveFiltersToStore();
+    queryClient.invalidateQueries({
+      queryKey: ["filteredPotentialCustomers"],
+    });
+  }, [debouncedHeaderFilterTick, queryClient, saveFiltersToStore]);
+
+  const potentialPageStats = useMemo(() => {
+    let withEmail = 0;
+    let withPhone = 0;
+    for (const r of displayData) {
+      if (r.email_id && String(r.email_id).trim()) withEmail += 1;
+      const ph = r.phone_no || r.ctc_no;
+      if (ph && String(ph).trim()) withPhone += 1;
     }
+    return { withEmail, withPhone };
+  }, [displayData]);
 
-    return baseColumns;
-  }, [statusFilter, handleCreateCallEntry]);
+  const potentialTableRows: PotentialCustomerTableRow[] = useMemo(
+    () =>
+      displayData.map((r, i) => ({
+        ...r,
+        sno: (currentPage - 1) * pageSize + i + 1,
+      })),
+    [displayData, currentPage, pageSize]
+  );
 
-  const table = useMantineReactTable({
-    columns,
-    data: displayData,
-    enableColumnFilters: false,
-    enablePagination: false,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      radius: "md",
-      style: { 
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto", 
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
+  const potentialColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
+    () => {
+      const labelMap: Record<keyof PotentialCustomerVisibleColumns, string> = {
+        sno: "S.No",
+        customer: "Customer",
+        email_id: "Email",
+        commodity: "Commodity",
+        ice: "Ice",
+        pin: "Pin",
+        phone_no: "Phone",
+        contact_person: "Contact Person",
+        address: "Address",
+        city: "City",
+        state: "State",
+        total_value: "Total Value",
+        total_quantity: "Total Qty",
+        unit: "Unit",
+        assigned_to: "Assigned to",
+        created_at: "Assigned date",
       };
+      return (
+        Object.keys(labelMap) as (keyof PotentialCustomerVisibleColumns)[]
+      ).map((id) => ({
+        id: id as string,
+        label: labelMap[id],
+        checked: potentialVisibleColumns[id] !== false,
+        onToggle: () =>
+          setPotentialVisibleColumns((p) => ({ ...p, [id]: !p[id] })),
+      }));
     },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#FBFBFB",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
+    [potentialVisibleColumns]
+  );
+
+  const tableLoading = isLoading;
+  const assignedListMode = statusFilter === "assigned";
 
   const handleAssign = async (values: AssignFormValues) => {
     setIsAssigning(true);
@@ -1344,33 +1527,7 @@ function PotentialCustomers() {
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="lg"
-        radius="md"
-        withBorder
-        style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden",
-            flex:1,
-        }}
-      >
-        <Box >
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c={"#444955"}
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              Potential Customers
-            </Text>
-
-          <Drawer
+      <Drawer
             opened={uploadOpenFlag}
             onClose={uploadClose}
             title="Potential Customers Bulk Upload"
@@ -1601,149 +1758,151 @@ function PotentialCustomers() {
             </form>
           </Modal>
 
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => {
-                        setSearchQuery("");
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#333740",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters ? "1px solid #105476" : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-            {((user as UserWithManager)?.is_manager || user?.is_staff) && (
-              <>
-                <SegmentedControl
-                  value={statusFilter}
-                  onChange={(value) =>
-                    setStatusFilter(value as "assigned" | "unassigned")
-                  }
-                  data={[
-                    { label: "Assigned", value: "assigned" },
-                    { label: "Unassigned", value: "unassigned" },
-                  ]}
-                  size="xs"
-                  color="#105476"
-                />
-                {/* <Button
-                  variant="outline"
-                  leftSection={<IconUpload size={16} />}
-                  size="xs"
-                  color="#105476"
-                  onClick={uploadOpen}
-                >
-                  Upload
-                </Button> */}
-                {statusFilter === "unassigned" && (
-                  <Button
-                    variant="outline"
-                    leftSection={<IconUserPlus size={16} />}
-                    size="sm"
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconUsers size={14} color={primary} />}
+                    value={totalCount}
+                    label="Total"
+                  />
+                  {/* <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconListNumbers size={14} color="#105476" />}
+                    iconBackground="#dbeafe"
+                    iconColor="#105476"
+                    value={displayData.length}
+                    label="On page"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconMail size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={potentialPageStats.withEmail}
+                    label="With email"
+                  />
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconPhone size={14} color="#d97706" />}
+                    iconBackground="#fef3c7"
+                    iconColor="#d97706"
+                    value={potentialPageStats.withPhone}
+                    label="With phone"
+                  />*/}
+                </> 
+              ),
+              // secondary: (
+              //   <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+              //     Potential Customers
+              //   </Text>
+              // ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search…"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      searchQuery ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            clearStoreSearch(LIST_KEY);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={240}
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                     styles={{
-                      root: {
-                        borderRadius: "4px",
-                        fontSize: "14px",
-                        fontFamily: "Inter",
-                        fontWeight: 600,
-                        border: "1px solid #105476",
-                        color: "#105476",
-                        "&:hover": {
-                          backgroundColor: "#E0F5FF",
-                        },
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
                       },
                     }}
-                    onClick={open}
+                  />
+                  <ERPListColumnToggleMenu
+                    theme={erpTheme}
+                    items={potentialColumnToggleItems}
+                    menuStyles={erpListGeistMenuDropdownStyles}
+                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
                   >
-                    Assign to salesperson
+                    {showFilters ? "Hide filters" : "Filters"}
                   </Button>
-                )}
-              </>
-            )}
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="xs"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+                  {((user as UserWithManager)?.is_manager || user?.is_staff) && (
+                    <>
+                      <SegmentedControl
+                        value={statusFilter}
+                        onChange={(value) =>
+                          setStatusFilter(value as "assigned" | "unassigned")
+                        }
+                        data={[
+                          { label: "Assigned", value: "assigned" },
+                          { label: "Unassigned", value: "unassigned" },
+                        ]}
+                        size="xs"
+                        color="#105476"
+                      />
+                      {statusFilter === "unassigned" && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          leftSection={<IconUserPlus size={16} />}
+                          styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                          onClick={open}
+                        >
+                          Assign to salesperson
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </>
+              ),
             }}
-          >
-            <Group justify="space-between" align="center" mb="sm" px="md" style={{ backgroundColor: "#FAFAFA", padding: "8px 8px", borderRadius: "8px" }}>
-              <Text size="sm" fw={600} c="#000000" style={{ fontFamily: "Inter", fontSize: "14px" }}>
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="md" px="md">
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle:
+                "Refine by customer, contact, address, commodity, location, unit, salesperson, or assigned date",
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={erpTheme}
+                  onClear={clearAllFilters}
+                  onApply={applyFilters}
+                  applyLoading={isLoading}
+                  applyDisabled={isLoading}
+                />
+              ),
+              children: (
+            <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
               {/* Sales Person Filter - Only show when statusFilter is "assigned" and should be first */}
               {statusFilter === "assigned" && (
-                <Grid.Col span={2.4}>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                  <Box style={erpListFilterFieldCellStyle}>
                   <Select
                     key={`sales-person-${filterForm.values.sales_person}-${salespersonsLoading}-${salespersonOptions.length}`}
                     label="Sales Person"
@@ -1775,137 +1934,85 @@ function PotentialCustomers() {
                         input.select();
                       }
                     }}
-                    styles={{
-                      input: { fontSize: "13px", height: "36px" },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#000000",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                      },
-                    }}
+                    classNames={erpListGeistSelectClassNames}
+                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                   />
+                  </Box>
                 </Grid.Col>
               )}
 
-              {/* Customer Filter */}
-              <Grid.Col span={2.4}>
-                <Select
-                  label="Customer"
+              {/* Customer Filter — hits customer-master, sends `customer_code` */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <SearchableSelect
+                  size="xs"
+                  label="Customer Name"
                   placeholder="Type customer name"
-                  size="xs"
-                  data={customerOptions}
-                  value={filterForm.values.customer}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("customer", value || null)
-                  }
-                  searchable
-                  clearable
-                  searchValue={customerSearchValue}
-                  onSearchChange={setCustomerSearchValue}
-                  nothingFoundMessage={
-                    customerSearchValue.trim().length === 0
-                      ? "Type to search customers"
-                      : customerOptionsLoading
-                        ? "Searching..."
-                        : "No customers found"
-                  }
-                  disabled={customerOptionsLoading && customerOptions.length === 0}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
+                  apiEndpoint={URL.customer}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.customer_code),
+                    label: String(item.customer_name),
+                  })}
+                  value={filterForm.values.customer_code}
+                  displayValue={customerDisplayValue}
+                  dropdownZIndex={5}
+                  onChange={(value, selected) => {
+                    const nextValue = value || null;
+                    const nextLabel = selected?.label ?? null;
+                    filterForm.setFieldValue("customer_code", nextValue);
+                    setCustomerDisplayValue(nextValue ? nextLabel : null);
                   }}
+                  minSearchLength={2}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
-                  {/* Customer Name Filter - Commented out */}
-                  {/* <Grid.Col span={2.4}>
-                    <SearchableSelect
-                      size="xs"
-                      label="Customer Name"
-                      placeholder="Type customer name"
-                      apiEndpoint={URL.customer}
-                      searchFields={["customer_name", "customer_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.customer_code),
-                        label: String(item.customer_name),
-                      })}
-                      value={filterForm.values.customer_code}
-                      onChange={(value) =>
-                        filterForm.setFieldValue("customer_code", value || "")
-                      }
-                      minSearchLength={2}
-                    />
-                  </Grid.Col> */}
-
-              {/* City Filter */}
-              <Grid.Col span={2.4}>
-                <Select
+              {/* City Filter (free text → backend icontains) */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
                   label="City"
-                  placeholder="Type to search city"
+                  placeholder="Search city"
                   size="xs"
-                  data={cityOptions}
-                  value={filterForm.values.city}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("city", value)
+                  value={filterForm.values.city || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "city",
+                      e.currentTarget.value || null,
+                    )
                   }
-                  searchable
-                  clearable
-                  searchValue={citySearchValue}
-                  onSearchChange={setCitySearchValue}
-                  nothingFoundMessage={
-                    citySearchValue.trim().length === 0
-                      ? "Type to search cities"
-                      : "No cities found"
-                  }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
-              {/* State Filter */}
-              <Grid.Col span={2.4}>
-                <Select
+              {/* State Filter (free text → backend icontains) */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
                   label="State"
-                  placeholder="Select State"
+                  placeholder="Search state"
                   size="xs"
-                  data={stateOptions}
-                  value={filterForm.values.state}
-                  onChange={(value) =>
-                    filterForm.setFieldValue("state", value)
+                  value={filterForm.values.state || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "state",
+                      e.currentTarget.value || null,
+                    )
                   }
-                  searchable
-                  clearable
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                 />
+                </Box>
               </Grid.Col>
 
               {/* Commodity Filter */}
-              <Grid.Col span={2.4}>
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
                 <TextInput
                   label="Commodity"
                   placeholder="Search Commodity"
@@ -1917,95 +2024,226 @@ function PotentialCustomers() {
                       e.currentTarget.value || null
                     )
                   }
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Email Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Email"
+                  placeholder="Search email"
+                  size="xs"
+                  value={filterForm.values.email_id || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "email_id",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Phone No. Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Phone No."
+                  placeholder="Search phone no."
+                  size="xs"
+                  value={filterForm.values.phone_no || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "phone_no",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Contact Person Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Contact Person"
+                  placeholder="Search contact person"
+                  size="xs"
+                  value={filterForm.values.contact_person || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "contact_person",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Address Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Address"
+                  placeholder="Search address"
+                  size="xs"
+                  value={filterForm.values.address || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "address",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Ice Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Ice"
+                  placeholder="Search ice"
+                  size="xs"
+                  value={filterForm.values.ice || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "ice",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Pin Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Pin"
+                  placeholder="Search pin"
+                  size="xs"
+                  value={filterForm.values.pin || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "pin",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Unit Filter */}
+              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                <Box style={erpListFilterFieldCellStyle}>
+                <TextInput
+                  label="Unit"
+                  placeholder="Search unit"
+                  size="xs"
+                  value={filterForm.values.unit || ""}
+                  onChange={(e) =>
+                    filterForm.setFieldValue(
+                      "unit",
+                      e.currentTarget.value || null,
+                    )
+                  }
+                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                />
+                </Box>
+              </Grid.Col>
+
+              {/* Assigned Date Filter (created_at) — only when in assigned mode */}
+              {statusFilter === "assigned" && (
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                  <SingleDateInput
+                    label="Assigned Date"
+                    placeholder="Select date"
+                    size="xs"
+                    value={
+                      filterForm.values.created_at
+                        ? new Date(filterForm.values.created_at)
+                        : null
+                    }
+                    onChange={(d) =>
+                      filterForm.setFieldValue(
+                        "created_at",
+                        d ? dayjs(d).format("YYYY-MM-DD") : null,
+                      )
+                    }
+                    allowDeselection
+                    classNames={POTENTIAL_HEADER_DATE_INPUT_CLASSNAMES}
+                    styles={potentialHeaderDateInputStyles}
+                  />
+                  </Box>
+                </Grid.Col>
+              )}
+            </Grid>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={totalCount}
+                  pageIndex={currentPage - 1}
+                  pageSize={pageSize}
+                  onPageIndexChange={(idx) => setCurrentPage(idx + 1)}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                  pageSizeOptions={["10", "15", "25", "50"]}
+                  selectClassNames={{
+                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                    option: ERP_LIST_GEIST_ROOT_CLASS,
                   }}
                 />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#444955",
-                  },
-                }}
-              >
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {isLoading ? (
-          <Center py="xl" style={{flex:1}}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading potential customers data...</Text>
-            </Stack>
-          </Center>
-        ) : displayData.length === 0 ? (
-          <Center py="xl" style={{flex:1}}>
-            <Text c="dimmed" size="lg">
-              No data available
-            </Text>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable table={table} />
-
-            <Box
-              w="100%"
-              style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-              mt="sm"
-            >
-              <PaginationBar
-                pageSize={pageSize}
-                currentPage={currentPage}
-                totalRecords={totalCount}
-                onPageSizeChange={handlePageSizeChange}
-                onPageChange={handlePageChange}
-              />
-            </Box>
-          </>
-        )}
-      </Card>
+              ),
+              children: (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <PotentialCustomersListNativeTable
+                    theme={erpTheme}
+                    rows={potentialTableRows}
+                    visible={potentialVisibleColumns}
+                    isEmpty={displayData.length === 0}
+                    assignedMode={assignedListMode}
+                    onCreateCallEntry={handleCreateCallEntry}
+                    headerFilters={potentialHeaderFiltersProp}
+                    loading={tableLoading}
+                    loadingMessage="Loading potential customers…"
+                  />
+                </Box>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
     </>
   );
 }

@@ -31,6 +31,8 @@ export const URL = {
   frequency: "frequency-master/",
   customerType: "customertype-master/",
   branchMaster: "branch-master/",
+  filterBranchMaster: "filter/branch-master/",
+  coordinatorsUser: "coordinators-user/",
   serviceMaster: "service-master/",
   nearbyCustomers: "potential/nearbycustomer/",
   enquiry: "enquiry/",
@@ -84,6 +86,9 @@ export const URL = {
   customerServiceShipment: "customer-service-shipment/",
   customerServiceShipmentFilter: "customer-service-shipment/filter/",
   uploadDocument: "customer-service-shipment/upload-document/",
+  airImportBooked: "customer-service-shipment/air-import-booked/",
+  airExportBooked: "customer-service-shipment/air-export-booked/",
+  oceanImportDsr: "customer-service-shipment/ocean-import/",
   eventMaster: "event-master/",
   eventMasterFilter: "filters_event_master/",
   triggerMaster: "trigger-master/filter/",
@@ -132,6 +137,8 @@ export const URL = {
   gstSacMasterFilter: "filter/gst-sac-master/",
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
+  /** Unified unposted / finance document list (POST body: `{ filters: { status, ... } }`). */
+  financeDocumentsFilter: "filter/finance-documents/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
   tdsCalculation: "tds_calculation/",
   invoiceReversableData: "invoice/reversable-data/",
@@ -160,6 +167,12 @@ export const URL = {
   documentAllocation: "filter/document_allocation/",
   outstandingAllocations: "outstanding-details/allocations/",
   outstandingAllocationDocuments: "outstanding-details/allocation-documents/",
+  outstandingAllocationDocumentsFilter:
+    "outstanding-details/filter/allocation-documents/",
+
+  // Debit / Credit Note (new API)
+  debitCreditNote: "debit_credit_note/",
+  debitCreditNoteFilter: "filter/debit_credit_note/",
 
   // PAN / GST utilities
   panGstByPan: "pan-gst-master/get-by-pan/",
@@ -174,10 +187,18 @@ export const URL = {
   // Dashboard APIs
   dashboard: {
     outstandingSummary: "local-outstanding/salesman-summary/",
+    customerOutstandingVsOverdue:
+      "local-outstanding/customer-outstanding-vs-overdue/",
     callEntry: "call-entry/",
+    /** Overview KPIs, rep roll-up, activity log, hourly heatmap (POST body: company, date_from, date_to). */
+    callEntryDashboardData: "call-entry/data/",
     callEntryStatistics: "call-entry/statistics/",
     enquiryConversion: "enquiry/salesperson-statistics/",
+    /** Overview + drilldown totals (dashboard card uses `summary`). */
+    enquiryEnquiryConversion: "enquiry/enquiryconversion/",
     budgetSummary: "enquiry/budget-summary/",
+    budgetVsActual: "enquiry/budget-vs-actual/",
+    budgetVsActualSalespersonNames: "salesperson-names/",
     customerNotVisited:
       "customer_master/customer-master/customers-not-visited/",
     lostCustomers: "dashboard/new-customer-shipment/get_lost_customers/",
@@ -187,6 +208,10 @@ export const URL = {
     pipelineReportProduct: "pipeline/dashboard/product/",
     expected: "expected/",
     booking: "customer-service-shipment/formatted-list/",
+    customerServiceDashboardSummary:
+      "pipeline/dashboard-cs/",
+    customerServiceDashboardShipments:
+      "customer-service-shipment/dashboard-shipments/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",

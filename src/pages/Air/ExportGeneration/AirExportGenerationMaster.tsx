@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
+  MRT_PaginationState,
   useMantineReactTable,
 } from "mantine-react-table";
 import {
@@ -15,20 +16,26 @@ import {
   Grid,
 } from "@mantine/core";
 import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
+  IconCircleCheck,
+  IconCircleX,
+  IconClock,
   IconFilter,
   IconFilterOff,
   IconPlus,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { URL } from "../../../api/serverUrls";
-import { searchAPI } from "../../../service/searchApi";
-import { SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
-import { DateInput } from "@mantine/dates";
+import {
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+  ERPListPaginationFooter,
+  ERPListStatPill,
+  DEFAULT_ERP_LIST_THEME,
+  erpListGeistSelectClassNames,
+} from "../../../components";
+import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import dayjs from "dayjs";
@@ -54,14 +61,35 @@ type FilterState = {
   date: Date | null;
 };
 
+/** Matches `summary` on `customerServiceShipmentFilter` for air export generation (totals are filter-scoped). */
+type AirExportGenerationListSummary = {
+  status_counts?: {
+    pending?: number;
+    generated?: number;
+    inactive?: number;
+  };
+};
+
+type AirExportGenerationQueryResult = {
+  data: ExportShipmentData[];
+  total: number;
+  summary?: AirExportGenerationListSummary;
+};
+
 function AirExportGenerationMaster() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const erpTheme = DEFAULT_ERP_LIST_THEME;
 
   //States
   const [showFilters, setShowFilters] = useState(false);
   const [filtersApplied, setFiltersApplied] = useState(false);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 15,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
 
   // State to store the actual applied filter values
   const filterForm = useForm<FilterState>({
@@ -74,9 +102,9 @@ function AirExportGenerationMaster() {
     },
   });
 
-  // Search states
+  // Search (optional; included in filter request when non-empty)
   const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 5000);
+  const [debouncedSearch] = useDebouncedValue(searchQuery, 500);
 
   // Check if we're on the create or edit route
   const isCreateRoute = location.pathname.endsWith("/create");
@@ -101,108 +129,118 @@ function AirExportGenerationMaster() {
     return payload;
   };
 
-  // Fetch export shipments data using filter endpoint with service="AIR"
+  const buildRequestFilters = (): Record<string, unknown> => {
+    const filters: Record<string, unknown> = {
+      service_type: "EXPORT",
+      service: "AIR",
+    };
+    if (filtersApplied) {
+      Object.assign(filters, buildFilterPayload());
+    }
+    const q = debouncedSearch.trim();
+    if (q) {
+      filters.search = q;
+    }
+    return filters;
+  };
+
   const {
-    data: exportShipmentsData = [],
+    data: exportShipmentsResponse,
     isLoading,
     refetch: refetchExportShipments,
   } = useQuery({
-    queryKey: ["air-export-generation/filter/"],
-    queryFn: async () => {
+    queryKey: [
+      "air-export-generation/filter",
+      pagination.pageIndex,
+      pagination.pageSize,
+      filtersApplied,
+      filtersApplied ? JSON.stringify(filterForm.values) : "-",
+      debouncedSearch,
+    ],
+    enabled: searchQuery === debouncedSearch,
+    queryFn: async (): Promise<AirExportGenerationQueryResult> => {
       try {
-        const response = await apiCallProtected.post(
-          URL.customerServiceShipmentFilter,
-          {
-            filters: {
-              service_type: "EXPORT",
-              service: "AIR",
-            },
+        const offset = pagination.pageIndex * pagination.pageSize;
+        const url = `${URL.customerServiceShipmentFilter}?index=${offset}&limit=${pagination.pageSize}`;
+        const response = (await apiCallProtected.post(url, {
+          filters: buildRequestFilters(),
+        })) as Record<string, unknown>;
+
+        if (response && typeof response === "object") {
+          let data: ExportShipmentData[] = [];
+          if (Array.isArray(response.data)) {
+            data = response.data as ExportShipmentData[];
+          } else if (Array.isArray(response.results)) {
+            data = response.results as ExportShipmentData[];
+          } else if (Array.isArray(response.result)) {
+            data = response.result as ExportShipmentData[];
           }
-        );
-        return response?.data || [];
+
+          const total = getBookingShipmentFilterListTotal(
+            response,
+            data,
+            offset
+          );
+          setTotalRecords(total);
+
+          const rawSummary = response.summary;
+          const summary: AirExportGenerationListSummary | undefined =
+            rawSummary &&
+            typeof rawSummary === "object" &&
+            !Array.isArray(rawSummary)
+              ? (rawSummary as AirExportGenerationListSummary)
+              : undefined;
+
+          return { data, total, summary };
+        }
+        setTotalRecords(0);
+        return { data: [], total: 0, summary: undefined };
       } catch (error) {
         console.error("Error fetching air export generation:", error);
-        return [];
+        setTotalRecords(0);
+        return { data: [], total: 0, summary: undefined };
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
   });
 
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredExportShipmentsData = [],
-    isLoading: filteredExportShipmentsLoading,
-    refetch: refetchFilteredExportShipments,
-  } = useQuery({
-    queryKey: ["filteredAirExportGeneration"],
-    queryFn: async () => {
-      const payload = buildFilterPayload();
-      if (Object.keys(payload).length === 0) return [];
+  const displayData = useMemo(
+    () => exportShipmentsResponse?.data ?? [],
+    [exportShipmentsResponse]
+  );
 
-      const response = await apiCallProtected.post(
-        URL.customerServiceShipmentFilter,
-        {
-          filters: {
-            service_type: "EXPORT",
-            service: "AIR",
-            ...payload,
-          },
-        }
-      );
-      return response?.data || [];
-    },
-    enabled: false,
-  });
-
-  const { data: searchData, isLoading: searchLoading } = useQuery({
-    queryKey: ["airExportGenerationSearch", debounced],
-    queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        const result = await searchAPI(debounced, new AbortController().signal);
-        return result;
-      } catch (error) {
-        console.error("Search API Error:", error);
-        return null;
-      }
-    },
-    enabled: debounced.trim() !== "",
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
-
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    if (debounced.trim() !== "" && searchData) {
-      return searchData;
+  const stats = useMemo(() => {
+    const summary = exportShipmentsResponse?.summary;
+    const sc = summary?.status_counts;
+    if (sc) {
+      return {
+        pending: sc.pending ?? 0,
+        generated: sc.generated ?? 0,
+        inactive: sc.inactive ?? 0,
+      };
     }
-    if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-      return filteredExportShipmentsData;
-    }
-    return exportShipmentsData;
-  }, [
-    debounced,
-    searchData,
-    exportShipmentsData,
-    filteredExportShipmentsData,
-    filtersApplied,
-  ]);
+    return { pending: 0, generated: 0, inactive: 0 };
+  }, [exportShipmentsResponse?.summary]);
 
-  // Loading state
-  const isDataLoading =
-    searchLoading ||
-    (filtersApplied ? filteredExportShipmentsLoading : isLoading);
+  const isDataLoading = isLoading;
+
+  // Keep current page in range when total shrinks
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
 
   // Effect to handle refetch when coming from successful form submission
   useEffect(() => {
     if (shouldRefetch) {
-      // Refetch the export shipments data
       queryClient.invalidateQueries({
-        queryKey: ["air-export-generation/filter/"],
+        queryKey: ["air-export-generation/filter"],
       });
 
       // Remove the refetch parameter from URL to prevent unnecessary refetches on subsequent visits
@@ -224,13 +262,6 @@ function AirExportGenerationMaster() {
     navigate,
   ]);
 
-  // Reset filtersApplied when search is cleared
-  useEffect(() => {
-    if (debounced.trim() === "" && searchQuery.trim() === "") {
-      setFiltersApplied(false);
-    }
-  }, [debounced, searchQuery]);
-
   // Effect to handle refreshData state from navigation
   useEffect(() => {
     console.log("refresh data----", location.state?.refreshData);
@@ -247,26 +278,16 @@ function AirExportGenerationMaster() {
 
           // Remove all cached data first
           queryClient.removeQueries({
-            queryKey: ["air-export-generation/filter/"],
-          });
-          queryClient.removeQueries({
-            queryKey: ["filteredAirExportGeneration"],
+            queryKey: ["air-export-generation/filter"],
           });
 
-          // Wait a moment for cleanup
           await new Promise((resolve) => setTimeout(resolve, 50));
 
-          // Refresh all quotation data
-          if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-            refetchFilteredExportShipments();
-          } else {
-            refetchExportShipments();
-          }
+          refetchExportShipments();
 
-          // Additional refetch to ensure UI updates
           setTimeout(async () => {
             await queryClient.refetchQueries({
-              queryKey: ["air-export-generation/filter/"],
+              queryKey: ["air-export-generation/filter"],
               type: "active",
             });
             console.log(
@@ -287,7 +308,6 @@ function AirExportGenerationMaster() {
     }
   }, [
     location.state,
-    refetchFilteredExportShipments,
     refetchExportShipments,
     navigate,
     location.pathname,
@@ -299,7 +319,7 @@ function AirExportGenerationMaster() {
       try {
         // Always refetch data when component mounts to ensure fresh data
         await queryClient.refetchQueries({
-          queryKey: ["air-export-generation/filter/"],
+          queryKey: ["air-export-generation/filter"],
           type: "active",
         });
         console.log(
@@ -319,54 +339,31 @@ function AirExportGenerationMaster() {
     return () => clearTimeout(timeoutId);
   }, [queryClient]);
 
-  const applyFilters = async () => {
-    try {
-      console.log("Applying filters...");
-      const formValues = filterForm.values;
-      console.log("Current filters:", formValues);
+  const applyFilters = () => {
+    const formValues = filterForm.values;
+    const hasFilterValues =
+      formValues.customer ||
+      formValues.service ||
+      formValues.origin ||
+      formValues.destination ||
+      formValues.date;
 
-      const hasFilterValues =
-        formValues.customer ||
-        formValues.service ||
-        formValues.origin ||
-        formValues.destination ||
-        formValues.date;
-
-      if (!hasFilterValues) {
-        setFiltersApplied(false);
-
-        ToastNotification({
-          type: "info",
-          message: "No filters selected, showing all data",
-        });
-        return;
-      }
-
-      // ✅ set state first
+    if (!hasFilterValues) {
+      setFiltersApplied(false);
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+      ToastNotification({
+        type: "info",
+        message: "No filters selected, showing all data",
+      });
+    } else {
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
       setFiltersApplied(true);
-
-      // ✅ Trigger API refetch and wait for it
-      const { data } = await refetchFilteredExportShipments();
-
-      // ✅ Toast only after success
       ToastNotification({
         type: "success",
-        message:
-          data && data.length > 0
-            ? "Filters applied successfully"
-            : "No matching data found",
+        message: "Filters applied successfully",
       });
-
-      console.log("Filters applied successfully");
-    } catch (error) {
-      ToastNotification({
-        type: "error",
-        message: "Error applying filters",
-      });
-      console.error("Error applying filters:", error);
-    } finally {
-      setShowFilters(false);
     }
+    setShowFilters(false);
   };
 
   const clearAllFilters = async () => {
@@ -390,18 +387,14 @@ function AirExportGenerationMaster() {
         });
         return;
       }
-      filterForm.reset(); // Reset form to initial values
-      setFiltersApplied(false); // Reset filters applied state
+      filterForm.reset();
+      setFiltersApplied(false);
       setSearchQuery("");
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
 
-      // Invalidate queries and refetch unfiltered data
       await queryClient.invalidateQueries({
-        queryKey: ["air-export-generation/filter/"],
+        queryKey: ["air-export-generation/filter"],
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredAirExportGeneration"],
-      });
-      queryClient.removeQueries({ queryKey: ["filteredAirExportGeneration"] }); // Remove filtered data from cache
       ToastNotification({
         type: "success",
         message: "All filters cleared successfully",
@@ -410,6 +403,10 @@ function AirExportGenerationMaster() {
       console.error("Error clearing filters:", error);
       setShowFilters(false);
     }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPagination({ pageIndex: 0, pageSize: newSize });
   };
 
   const columns = useMemo<MRT_ColumnDef<ExportShipmentData>[]>(
@@ -464,9 +461,12 @@ function AirExportGenerationMaster() {
     enableBottomToolbar: false,
     enableColumnPinning: true,
     enableStickyHeader: true,
+    manualPagination: true,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
+    state: { pagination },
     initialState: {
-      pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["actions"] },
+      pagination: { pageSize: 15, pageIndex: 0 },
     },
     layoutMode: "grid",
     mantineTableProps: {
@@ -555,6 +555,31 @@ function AirExportGenerationMaster() {
             </Group>
           </Group>
 
+          <Group gap="lg" wrap="wrap" align="center" mb="md">
+            <ERPListStatPill
+              theme={erpTheme}
+              icon={<IconClock size={14} color={erpTheme.primary} />}
+              value={stats.pending}
+              label="Pending"
+            />
+            <ERPListStatPill
+              theme={erpTheme}
+              icon={<IconCircleCheck size={14} color="#059669" />}
+              iconBackground="#d1fae5"
+              iconColor="#059669"
+              value={stats.generated}
+              label="Generated"
+            />
+            <ERPListStatPill
+              theme={erpTheme}
+              icon={<IconCircleX size={14} color="#64748b" />}
+              iconBackground="#f1f5f9"
+              iconColor="#64748b"
+              value={stats.inactive}
+              label="Inactive"
+            />
+          </Group>
+
           {showFilters && (
             <Card
               shadow="xs"
@@ -582,6 +607,7 @@ function AirExportGenerationMaster() {
                         size="xs"
                         label="Customer Name"
                         placeholder="Type customer name"
+                        dropdownZIndex={1000}
                         apiEndpoint={URL.customer}
                         searchFields={["customer_name", "customer_code"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -603,13 +629,8 @@ function AirExportGenerationMaster() {
                         label="Date"
                         placeholder="YYYY-MM-DD"
                         size="xs"
-                        {...filterForm.getInputProps("date")}
-                        leftSection={<IconCalendar size={14} />}
-                        leftSectionPointerEvents="none"
-                        radius="md"
-                        nextIcon={<IconChevronRight size={16} />}
-                        previousIcon={<IconChevronLeft size={16} />}
-                        clearable
+                        value={filterForm.values.date}
+                        onChange={(d) => filterForm.setFieldValue("date", d)}
                       />
                     </Grid.Col>
 
@@ -619,6 +640,7 @@ function AirExportGenerationMaster() {
                         size="xs"
                         label="Origin"
                         placeholder="Type origin code or name"
+                        dropdownZIndex={1000}
                         apiEndpoint={URL.portMaster}
                         searchFields={["port_code", "port_name"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -640,6 +662,7 @@ function AirExportGenerationMaster() {
                         size="xs"
                         label="Destination"
                         placeholder="Type destination code or name"
+                        dropdownZIndex={1000}
                         apiEndpoint={URL.portMaster}
                         searchFields={["port_code", "port_name"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -699,6 +722,18 @@ function AirExportGenerationMaster() {
           ) : (
             <>
               <MantineReactTable table={table} />
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                onPageIndexChange={(idx) =>
+                  setPagination((prev) => ({ ...prev, pageIndex: idx }))
+                }
+                onPageSizeChange={handlePageSizeChange}
+                pageSizeOptions={["10", "15", "25", "50"]}
+                selectClassNames={erpListGeistSelectClassNames}
+              />
             </>
           )}
         </Card>

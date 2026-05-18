@@ -126,7 +126,6 @@ const fetchChargeMaster = async () => {
 
 // Fetch unit master
 
-
 // Fetch effective SAC (tax code) for charge + service: POST body { items: [{ charge_id, service_id }] }
 const fetchGetEffectiveSac = async (
   items: { charge_id: number; service_id: number }[],
@@ -201,6 +200,7 @@ const fetchInvoiceCalculateGstBreakup = async (payload: {
 type ChargeItem = {
   id?: number | null; // primary key from API when editing existing charge
   charge_id: number | null; // id from charge master (value when selecting charge)
+  charge_code?: string; // e.g. ISC / IGST (from API)
   charge_name: string; // display label for charge
   shipment_id?: string; // per-charge shipment id (when from job level, from corresponding HAWB)
   shipper_id?: string; // per-charge shipper id/code (from corresponding HAWB)
@@ -217,6 +217,10 @@ type ChargeItem = {
   amount_in_local: number | null; // Auto-calculated as: amount * roe
   tax_code: string; // sac_code from get-effective-sac / payload
   dr_cr: "Cr" | "Dr"; // Dr/Cr for charge row, default "Cr"
+  is_tax_row?: boolean; // appended tax row during POST; don't fetch/calc GST for this row
+  igst_rate?: number | null;
+  cgst_rate?: number | null;
+  sgst_rate?: number | null;
 };
 
 type InvoiceFormData = {
@@ -269,14 +273,121 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return null;
 }
 
-// Clamp amount to max 10 digits including decimals, max 2 decimal places (e.g. 99999999.99)
+// Round monetary amounts to exactly 2 decimal places (payload / display math). No upper bound.
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
-  const maxVal = 99999999.99;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
-  return rounded;
+  if (value === null || value === undefined)
+    return value === undefined ? null : null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
+}
+
+/** Prefer first non-empty string from nested party/job records (ocean housings vary by field names). */
+function pickFirstTrimmedCode(
+  records: Array<Record<string, unknown> | null | undefined>,
+  keys: string[],
+): string {
+  for (const rec of records) {
+    if (!rec) continue;
+    for (const key of keys) {
+      const raw = rec[key];
+      if (raw == null || raw === "") continue;
+      const s = String(raw).trim();
+      if (s !== "") return s;
+    }
+  }
+  return "";
+}
+
+function clampSumAmounts(parts: Array<number | null | undefined>): number {
+  const sum = parts.reduce<number>(
+    (acc, v) =>
+      Number.isFinite(Number(v)) ? acc + (Number(v) as number) : acc,
+    0,
+  );
+  return clampAmount(sum) ?? 0;
+}
+
+/** Charges on a housing row may be `charges` (air/sea) or `mawb_charges` (air import). */
+function getHousingChargeArray(
+  hawb: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const ch = hawb.charges;
+  if (Array.isArray(ch) && ch.length > 0)
+    return ch as Record<string, unknown>[];
+  const mc = hawb.mawb_charges;
+  if (Array.isArray(mc) && mc.length > 0)
+    return mc as Record<string, unknown>[];
+  return [];
+}
+
+/** Map job/house party to master state_id for invoice State dropdown. */
+function resolvePartyStateIdFromHousing(
+  isAgent: boolean,
+  useConsigneeForBillTo: boolean,
+  firstHawb: Record<string, unknown>,
+  jobHouse0?: Record<string, unknown>,
+  jobRoot?: Record<string, unknown> | null,
+): number | null {
+  const raw = isAgent
+    ? (firstHawb["agent_state_id"] ??
+      jobHouse0?.["agent_state_id"] ??
+      jobRoot?.["agent_state_id"] ??
+      null)
+    : useConsigneeForBillTo
+      ? (firstHawb["consignee_state_id"] ??
+        jobHouse0?.["consignee_state_id"] ??
+        jobRoot?.["consignee_state_id"] ??
+        null)
+      : (firstHawb["shipper_state_id"] ??
+        jobHouse0?.["shipper_state_id"] ??
+        jobRoot?.["shipper_state_id"] ??
+        null);
+  if (
+    raw === null ||
+    raw === undefined ||
+    String(raw).trim() === "" ||
+    !Number.isFinite(Number(raw))
+  )
+    return null;
+  return Number(raw);
+}
+
+/** Prefer route :id, then list-row invoice_id, then record id (house / filter lists). */
+function resolveInvoiceRecordId(
+  data: Record<string, unknown> | null | undefined,
+  urlId?: string,
+): number | undefined {
+  const candidates = [
+    urlId,
+    data?.invoice_id,
+    data?.id,
+  ];
+  for (const c of candidates) {
+    if (c == null || c === "") continue;
+    const n = typeof c === "number" ? c : Number(String(c).trim());
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+function getInvoiceDataFromLocationState(
+  state: unknown,
+): InvoiceDataFromApi | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const s = state as Record<string, unknown>;
+  if (s.invoiceData && typeof s.invoiceData === "object") {
+    return s.invoiceData as InvoiceDataFromApi;
+  }
+  if (
+    s.id != null &&
+    (s.document_no != null ||
+      s.bill_to != null ||
+      Array.isArray(s.charges))
+  ) {
+    return s as InvoiceDataFromApi;
+  }
+  return undefined;
 }
 
 // Invoice data shape from filter/invoice API (for edit/view form fill)
@@ -338,6 +449,12 @@ function InvoiceCreate({
 }: InvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const handleInvoiceBack = () => {
+    if (financeReturnTo) navigate(financeReturnTo);
+    else navigate(-1);
+  };
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const isViewMode = location.pathname.includes("/view/");
@@ -421,19 +538,29 @@ function InvoiceCreate({
   >({});
 
   const isReadOnly = isViewMode || invoiceIsPosted;
-  const invoiceDataFromState = (location.state?.invoiceData as
-    | Record<string, unknown>
-    | undefined) ?? { };
+  const invoiceDataFromState =
+    (location.state?.invoiceData as Record<string, unknown> | undefined) ?? {};
   const inferredCreditFromData =
     String(invoiceDataFromState?.document_type ?? "").toUpperCase() === "CRN" ||
-    String((invoiceDataFromApi as Record<string, unknown> | null)?.document_type ?? "").toUpperCase() === "CRN" ||
-    String(invoiceDataFromState?.Dr_Cr ?? invoiceDataFromState?.dr_cr ?? "").toLowerCase() === "cr" ||
-    String((invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ?? (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ?? "").toLowerCase() === "cr";
+    String(
+      (invoiceDataFromApi as Record<string, unknown> | null)?.document_type ??
+        "",
+    ).toUpperCase() === "CRN" ||
+    String(
+      invoiceDataFromState?.Dr_Cr ?? invoiceDataFromState?.dr_cr ?? "",
+    ).toLowerCase() === "cr" ||
+    String(
+      (invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ??
+        (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ??
+        "",
+    ).toLowerCase() === "cr";
   const isCreditNoteFlow =
     documentType === "CRN" ||
     location.pathname.includes("credit-note") ||
     inferredCreditFromData;
-  const resolvedDocumentLabel = isCreditNoteFlow ? "Credit Note" : documentLabel;
+  const resolvedDocumentLabel = isCreditNoteFlow
+    ? "Credit Note"
+    : documentLabel;
   const pdfDocumentLabel = resolvedDocumentLabel;
   const pageTitle = isViewMode
     ? `View ${resolvedDocumentLabel}`
@@ -501,6 +628,19 @@ function InvoiceCreate({
         location.pathname.includes("/SeaExport/import-job")),
     [isFromAirExportJob, location.pathname],
   );
+
+  // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
+  const invoiceUsesConsigneeParty = useMemo(() => {
+    const isAgentFlow =
+      (location.state as { is_agent?: boolean } | null)?.is_agent === true;
+    if (isAgentFlow) return false;
+    const bt = (
+      location.state as { billToFrom?: "shipper" | "consignee" } | null
+    )?.billToFrom;
+    if (bt === "consignee") return true;
+    if (bt === "shipper") return false;
+    return location.pathname.includes("/SeaExport/import-job/invoice");
+  }, [location.pathname, location.state?.is_agent, location.state?.billToFrom]);
 
   // User's local currency code (for ROE = 1 when billing currency matches)
   const userLocalCurrency = useMemo(() => {
@@ -634,65 +774,62 @@ function InvoiceCreate({
     }));
   }, [stateData]);
 
-  // State from housing is set after state API loads
-  // Agent invoice: use agent_state_id; Customer invoice: use shipper_state_id by default,
-  // but allow ocean import customer invoice flow to use consignee_state_id when billToFrom === "consignee"
+  // State from housing: apply only after state master is loaded and options exist (avoids Select clearing value before data arrives).
   useEffect(() => {
     if (isStateLoading) return;
+
+    const stateRows = Array.isArray(stateData) ? (stateData as any[]) : [];
+    if (stateRows.length === 0) return;
+
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const job = location.state?.job as
-      | {
-          housing_details?: Array<{
-            shipper_state_id?: number | null;
-            agent_state_id?: number | null;
-            consignee_state_id?: number | null;
-          }>;
-        }
+      | { housing_details?: Array<Record<string, unknown>> }
       | undefined;
-    const jobHousing = job?.housing_details;
+    const jobHousingArr = Array.isArray(job?.housing_details)
+      ? (job?.housing_details as Array<Record<string, unknown>>)
+      : [];
     const firstHawb =
       Array.isArray(hawbDetails) && hawbDetails.length > 0
         ? hawbDetails[0]
-        : (jobHousing?.[0] ?? null);
-    const firstHawbAny = firstHawb as
-      | {
-          shipper_state_id?: number | null;
-          agent_state_id?: number | null;
-          consignee_state_id?: number | null;
-        }
-      | null
-      | undefined;
+        : jobHousingArr[0];
+    const jobHouse0 = jobHousingArr.length > 0 ? jobHousingArr[0] : undefined;
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
-    const billToFrom = (
-      location.state as { billToFrom?: "shipper" | "consignee" } | null
-    )?.billToFrom;
-    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
+    if (!firstHawb) return;
 
-    const stateId = isAgent
-      ? (firstHawbAny?.agent_state_id ??
-        jobHousing?.[0]?.agent_state_id ??
-        null)
-      : useConsigneeForBillTo
-        ? (firstHawbAny?.consignee_state_id ??
-          jobHousing?.[0]?.consignee_state_id ??
-          null)
-        : (firstHawbAny?.shipper_state_id ??
-          jobHousing?.[0]?.shipper_state_id ??
-          null);
+    const stateIdNum = resolvePartyStateIdFromHousing(
+      isAgent,
+      invoiceUsesConsigneeParty,
+      firstHawb as Record<string, unknown>,
+      jobHouse0,
+      (job ?? null) as Record<string, unknown> | null,
+    );
+    if (stateIdNum == null) return;
 
-    if (stateId != null && String(stateId) !== form.values.state) {
-      form.setFieldValue("state", String(stateId));
-    }
+    const desired = String(stateIdNum);
+    if (desired === form.values.state) return;
+
+    queueMicrotask(() => {
+      form.setFieldValue("state", desired);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStateLoading, stateData]);
+  }, [
+    isStateLoading,
+    stateData,
+    location.key,
+    location.state?.is_agent,
+    invoiceUsesConsigneeParty,
+    location.state?.hawbDetails,
+    location.state?.housingDetails,
+    location.state?.job,
+  ]);
 
   // Format daybook options: id = value, name = label (value is daybook_id)
   const daybookOptions = useMemo(() => {
     const invoiceData = (invoiceDataFromApi ??
-      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
+      getInvoiceDataFromLocationState(location.state)) as
       | InvoiceDataFromApi
       | undefined;
     const savedDaybookId =
@@ -788,6 +925,11 @@ function InvoiceCreate({
     )?.invoiceData?.reverse_invoice_id,
   );
 
+  const skipInvoiceDetailFetch = Boolean(
+    (location.state as { skipInvoiceDetailFetch?: boolean } | null)
+      ?.skipInvoiceDetailFetch,
+  );
+
   // When user currency and billing currency are the same, set top-level ROE to 1
   useEffect(() => {
     const billingCurrency = form.values.currency?.trim().toUpperCase();
@@ -798,44 +940,46 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.currency, userLocalCurrency]);
 
-  // Keep Bill To, State and Address in sync: when customer (Bill To) is empty, clear state and address
+  // When Bill To is cleared, clear address only. Do not clear state here: it runs before
+  // house→invoice prefill and would wipe shipper/consignee state before bill_to is set.
+  // Clearing state on user action is handled in handleBillToChange.
   useEffect(() => {
     const billTo = form.values.bill_to;
-    console.log(
-      "[InvoiceCreate] Bill To effect - current bill_to value:",
-      billTo,
-      "displayName:",
-      billToDisplayName,
-    );
     if (!billTo || (typeof billTo === "string" && billTo.trim() === "")) {
       if (form.values.address) form.setFieldValue("address", "");
-      if (form.values.state) form.setFieldValue("state", "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.bill_to]);
 
   // Populate form from house (HAWB) state: shipper/Bill To/address and house charges → invoice charges
   useEffect(() => {
+    // After POST, we rehydrate charges from API response. Avoid re-applying the initial
+    // navigation (house) charges, which would overwrite the response values.
+    if (invoiceIsPosted || isPosting) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
     const job = (
       location.state as {
-        job?: { agent_code?: string; agent_name?: string };
+        job?: Record<string, unknown>;
       } | null
     )?.job;
-
-    const billToFrom = (
-      location.state as { billToFrom?: "shipper" | "consignee" } | null
-    )?.billToFrom;
-    const useConsigneeForBillTo = !isAgent && billToFrom === "consignee";
+    const jobHousingArr = Array.isArray(
+      (job as { housing_details?: unknown[] } | undefined)?.housing_details,
+    )
+      ? ((job as { housing_details: Array<Record<string, unknown>> })
+          .housing_details ?? [])
+      : [];
+    const jobHouse0 = jobHousingArr.length > 0 ? jobHousingArr[0] : undefined;
 
     if (Array.isArray(hawbDetails) && hawbDetails.length > 0) {
       // Get the first HAWB detail
       const firstHawb = hawbDetails[0];
 
       if (firstHawb) {
+        const firstHawbRec = firstHawb as Record<string, unknown>;
+
         if (isAgent && job) {
           // Agent invoice: default billing currency USD, Bill To = origin/destination agent
           form.setFieldValue("currency", "USD");
@@ -843,18 +987,48 @@ function InvoiceCreate({
           if (roe !== null && roe !== undefined) {
             form.setFieldValue("roe", roe);
           }
-          const agentCode = String(job.agent_code || "").trim();
+          const agentCode = pickFirstTrimmedCode(
+            [
+              (job ?? null) as Record<string, unknown> | null,
+              firstHawbRec,
+              jobHouse0,
+            ],
+            [
+              "agent_code",
+              "origin_agent",
+              "destination_agent",
+              "destination_agent_code",
+              "agent_customer_code",
+            ],
+          );
+          const agentNamePick = pickFirstTrimmedCode(
+            [
+              (job ?? null) as Record<string, unknown> | null,
+              firstHawbRec,
+              jobHouse0,
+            ],
+            [
+              "agent_name",
+              "origin_agent_name",
+              "destination_agent_name",
+              "agent_display_name",
+            ],
+          );
+          // Set display name before code so ocean export job invoice (Bill To agent) avoids a transient code-only Bill To hint.
+          if (agentNamePick) setBillToDisplayName(agentNamePick);
           if (agentCode) {
             form.setFieldValue("bill_to", agentCode);
           }
-          if (job.agent_name) {
-            setBillToDisplayName(String(job.agent_name));
-          }
-          const firstHawbAny = firstHawb as Record<string, unknown>;
-          const agentAddress =
-            firstHawbAny?.origin_agent_address ?? firstHawbAny?.agent_address;
-          if (agentAddress && typeof agentAddress === "string") {
-            form.setFieldValue("address", agentAddress);
+          const agentAddressRaw =
+            firstHawbRec?.origin_agent_address ??
+            firstHawbRec?.agent_address ??
+            jobHouse0?.agent_address ??
+            jobHouse0?.origin_agent_address;
+          if (
+            typeof agentAddressRaw === "string" &&
+            agentAddressRaw.trim() !== ""
+          ) {
+            form.setFieldValue("address", agentAddressRaw);
           }
         } else {
           // Customer invoice: by default Bill To = shipper, but allow ocean import to use consignee when requested
@@ -865,45 +1039,27 @@ function InvoiceCreate({
               form.setFieldValue("roe", roe);
             }
           }
-          if (useConsigneeForBillTo) {
+          if (invoiceUsesConsigneeParty) {
             // Ocean import customer invoice: Bill To / address from consignee
             console.log(
               "[InvoiceCreate] Ocean import - using consignee for Bill To. Raw firstHawb:",
               firstHawb,
             );
+            const consigneeAddr = firstHawbRec["consignee_address"];
             if (
-              (firstHawb as { consignee_address?: string }).consignee_address
+              typeof consigneeAddr === "string" &&
+              consigneeAddr.trim() !== ""
             ) {
-              form.setFieldValue(
-                "address",
-                (firstHawb as { consignee_address?: string }).consignee_address,
-              );
+              form.setFieldValue("address", consigneeAddr);
             }
-            // Prefer consignee_code from firstHawb; if missing, fall back to job.housing_details[0].consignee_code
-            let consigneeCode = String(
-              (firstHawb as { consignee_code?: string }).consignee_code || "",
-            ).trim();
-            if (
-              !consigneeCode &&
-              job &&
-              Array.isArray(
-                (
-                  job as {
-                    housing_details?: Array<{ consignee_code?: string }>;
-                  }
-                ).housing_details,
-              )
-            ) {
-              const jobHousing = (
-                job as {
-                  housing_details?: Array<{ consignee_code?: string }>;
-                }
-              ).housing_details;
-              const fromJob = jobHousing?.[0]?.consignee_code;
-              if (fromJob) {
-                consigneeCode = String(fromJob).trim();
-              }
-            }
+            const consigneeCode = pickFirstTrimmedCode(
+              [
+                firstHawbRec,
+                jobHouse0,
+                (job ?? null) as Record<string, unknown> | null,
+              ],
+              ["consignee_code", "consignee_id", "customer_code"],
+            );
             console.log(
               "[InvoiceCreate] Consignee mapping - extracted consignee_code:",
               consigneeCode,
@@ -969,26 +1125,14 @@ function InvoiceCreate({
             if (firstHawb.shipper_address) {
               form.setFieldValue("address", firstHawb.shipper_address);
             }
-            // Prefer shipper_code from firstHawb; if missing, fall back to job.housing_details[0].shipper_code
-            let shipperCode = String(
-              (firstHawb as { shipper_code?: string }).shipper_code || "",
-            ).trim();
-            if (
-              !shipperCode &&
-              job &&
-              Array.isArray(
-                (job as { housing_details?: Array<{ shipper_code?: string }> })
-                  .housing_details,
-              )
-            ) {
-              const jobHousing = (job as {
-                housing_details?: Array<{ shipper_code?: string }>;
-              }).housing_details;
-              const fromJob = jobHousing?.[0]?.shipper_code;
-              if (fromJob) {
-                shipperCode = String(fromJob).trim();
-              }
-            }
+            const shipperCode = pickFirstTrimmedCode(
+              [
+                firstHawbRec,
+                jobHouse0,
+                (job ?? null) as Record<string, unknown> | null,
+              ],
+              ["shipper_code", "shipper_id", "customer_code"],
+            );
             if (shipperCode) {
               form.setFieldValue("bill_to", shipperCode);
             }
@@ -1030,6 +1174,8 @@ function InvoiceCreate({
           }
         }
 
+        // Party state — applied in the effect once state dropdown master has loaded.
+
         // Set shipment_no: when from Air Export Job use job.id, else use firstHawb.shipment_id
         if (isFromAirExportJob) {
           form.setFieldValue(
@@ -1040,25 +1186,70 @@ function InvoiceCreate({
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
 
-        // State from housing is set after state API loads (see useEffect below)
+        // Map house charges → invoice lines.
+        // Agent: Collect from every HAWB (charges or mawb_charges); each line uses same billing currency as header.
+        const chargesSource: unknown[] = (() => {
+          if (documentType === "CRN") return [];
+          if (isAgent) {
+            const houses = hawbDetails as Array<Record<string, unknown>>;
+            const merged = houses.flatMap((hawb) =>
+              getHousingChargeArray(hawb)
+                .filter(
+                  (c) =>
+                    String((c as { pp_cc?: unknown }).pp_cc ?? "").trim() ===
+                    "Collect",
+                )
+                .map((c) => {
+                  const row =
+                    typeof c === "object" && c !== null
+                      ? (c as Record<string, unknown>)
+                      : {};
+                  return {
+                    ...row,
+                    shipment_id:
+                      row.shipment_id ??
+                      hawb.shipment_id ??
+                      hawb.shipment_no ??
+                      "",
+                    shipper_id:
+                      row.shipper_id ??
+                      hawb.shipper_code ??
+                      hawb.shipper_id ??
+                      "",
+                  };
+                }),
+            );
+            if (merged.length > 0) return merged;
+            if (
+              firstHawb.charges &&
+              Array.isArray(firstHawb.charges) &&
+              firstHawb.charges.length > 0
+            )
+              return firstHawb.charges as unknown[];
+            return [];
+          }
+          if (
+            firstHawb.charges &&
+            Array.isArray(firstHawb.charges) &&
+            firstHawb.charges.length > 0
+          )
+            return firstHawb.charges as unknown[];
+          return [];
+        })();
 
-        // Map house (HAWB) charges into invoice charges form (same shape as housing stepper for common fields)
-        if (
-          documentType !== "CRN" &&
-          firstHawb.charges &&
-          Array.isArray(firstHawb.charges) &&
-          firstHawb.charges.length > 0
-        ) {
+        if (chargesSource.length > 0) {
+          // Agent: header billing currency defaults to USD (see agent useEffect); each charge keeps its own currency from the job.
           const billingCurrency = isAgent
             ? "USD"
             : defaultBranchCurrency || form.values.currency || "";
+          const headerCode = billingCurrency.trim().toUpperCase();
           const headerRoe = billingCurrency
             ? getRoeValue(billingCurrency)
             : null;
 
-          const mappedCharges = firstHawb.charges.map((charge: any) => {
+          const mappedCharges = (chargesSource as any[]).map((charge: any) => {
             const unitDetails = charge.unit_details as
-              | { unit_code?: string }
+              | { unit_code?: string; unit_id?: number }
               | undefined;
             const unitCode = String(
               charge.unit_code ??
@@ -1067,15 +1258,47 @@ function InvoiceCreate({
                 "",
             ).trim();
             const currencyDetails = charge.currency_details as
-              | { currency_code?: string }
+              | { currency_id?: number; currency_code?: string }
               | undefined;
-            const currency = String(
-              charge.currency ?? currencyDetails?.currency_code ?? "",
-            ).trim();
+            const rawCurrencyId =
+              charge.currency_id ??
+              currencyDetails?.currency_id ??
+              (typeof charge.currency === "number" ? charge.currency : null);
+            let currency = String(
+              charge.currency_code ??
+                currencyDetails?.currency_code ??
+                (typeof charge.currency === "string" ? charge.currency : "") ??
+                "",
+            )
+              .trim()
+              .toUpperCase();
+            if (
+              !currency &&
+              rawCurrencyId != null &&
+              Array.isArray(currencyData)
+            ) {
+              const row = (
+                currencyData as {
+                  id?: number;
+                  code?: string;
+                  currency_code?: string;
+                }[]
+              ).find((c) => String(c.id) === String(rawCurrencyId));
+              currency = (row?.code || row?.currency_code || "")
+                .toString()
+                .trim()
+                .toUpperCase();
+            }
             const unit_id =
-              charge.unit_id != null ? String(charge.unit_id) : "";
+              charge.unit_id != null && String(charge.unit_id).trim() !== ""
+                ? String(charge.unit_id)
+                : charge.unit != null && String(charge.unit).trim() !== ""
+                  ? String(charge.unit)
+                  : unitDetails?.unit_id != null
+                    ? String(unitDetails.unit_id)
+                    : "";
             const currency_id =
-              charge.currency_id != null ? String(charge.currency_id) : "";
+              rawCurrencyId != null ? String(rawCurrencyId) : "";
 
             const noOfUnit =
               charge.no_of_unit != null
@@ -1090,10 +1313,10 @@ function InvoiceCreate({
                   : parseFloat(charge.amount_per_unit)
                 : null;
             const roeVal =
-              charge.roe != null
+              charge.roe != null && String(charge.roe).trim() !== ""
                 ? typeof charge.roe === "number"
                   ? charge.roe
-                  : parseFloat(charge.roe)
+                  : parseFloat(String(charge.roe))
                 : currency
                   ? getRoeValue(currency)
                   : null;
@@ -1102,14 +1325,18 @@ function InvoiceCreate({
               charge.amount != null
                 ? typeof charge.amount === "number"
                   ? charge.amount
-                  : parseFloat(charge.amount)
+                  : parseFloat(String(charge.amount))
                 : null;
             let amountInLocal: number | null =
               charge.amount_in_local != null
                 ? typeof charge.amount_in_local === "number"
                   ? charge.amount_in_local
-                  : parseFloat(charge.amount_in_local)
-                : null;
+                  : parseFloat(String(charge.amount_in_local))
+                : charge.sell_local_amount != null
+                  ? typeof charge.sell_local_amount === "number"
+                    ? charge.sell_local_amount
+                    : parseFloat(String(charge.sell_local_amount))
+                  : null;
             let headerAmt: number | null =
               (charge.amount_in_header ?? charge.header_amount) != null
                 ? typeof (charge.amount_in_header ?? charge.header_amount) ===
@@ -1138,7 +1365,6 @@ function InvoiceCreate({
                 if (calcLocal != null) amountInLocal = calcLocal;
               }
             }
-            // Amount in (billing currency): always compute when we have amount_in_local
             if (amountInLocal != null && amountInLocal > 0) {
               const billCurr =
                 billingCurrency || (form.values.currency ?? "").trim();
@@ -1170,7 +1396,7 @@ function InvoiceCreate({
                       String(charge.shipment_no).trim() !== ""
                     ? String(charge.shipment_no)
                     : firstHawb.shipment_id
-                      ? firstHawb.shipment_id
+                      ? String(firstHawb.shipment_id)
                       : null,
               shipper_id:
                 charge.shipper_id != null
@@ -1195,21 +1421,19 @@ function InvoiceCreate({
                 ? amountInLocal
                 : null,
               tax_code: charge.tax_code ? String(charge.tax_code) : "",
-              dr_cr:
-                (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
+              dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
             };
           });
           form.setFieldValue("charges", mappedCharges);
 
-          // Fetch SAC code for each charge that has charge_id (from house)
           const jobServiceIdForSac =
             (location.state as { job?: { service_id?: number } })?.job
               ?.service_id ?? null;
           if (
+            !isAgent &&
             jobServiceIdForSac &&
             mappedCharges.some((c: ChargeItem) => c.charge_id != null)
           ) {
-            // Keep track of original indices when filtering
             const chargesWithIds = mappedCharges
               .map((c, idx) => ({ charge: c, originalIdx: idx }))
               .filter(({ charge }) => charge.charge_id != null);
@@ -1220,7 +1444,6 @@ function InvoiceCreate({
             }));
 
             fetchGetEffectiveSac(items).then((data) => {
-              // Map response by index order (API returns in same order as request)
               data.forEach((item, responseIdx) => {
                 const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
                 if (
@@ -1238,9 +1461,10 @@ function InvoiceCreate({
           }
         } else {
           const branchCurrency = isAgent
-            ? "USD"
+            ? ""
             : defaultBranchCurrency || form.values.currency || "";
-          const branchRoe = branchCurrency ? getRoeValue(branchCurrency) : null;
+          const branchRoe =
+            !isAgent && branchCurrency ? getRoeValue(branchCurrency) : null;
           form.setFieldValue("charges", [
             {
               charge_id: null,
@@ -1249,7 +1473,7 @@ function InvoiceCreate({
               unit_id: "",
               no_of_unit: null,
               currency: branchCurrency,
-              currency_id: defaultBranchCurrencyId || "",
+              currency_id: isAgent ? "" : defaultBranchCurrencyId || "",
               billing_currency: null,
               roe: branchRoe,
               amount_per_unit: null,
@@ -1286,7 +1510,9 @@ function InvoiceCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    location.key,
     location.state?.is_agent,
+    invoiceUsesConsigneeParty,
     location.state?.job,
     location.state?.hawbDetails,
     location.state?.housingDetails,
@@ -1302,7 +1528,12 @@ function InvoiceCreate({
         isReverseInvoiceNavigation ? "reverse_invoice_id" : "invoice_id",
         location.key,
       ],
-      enabled: Boolean(isEditOrViewMode && invoiceId && location.key),
+      enabled: Boolean(
+        isEditOrViewMode &&
+          invoiceId &&
+          location.key &&
+          !skipInvoiceDetailFetch,
+      ),
       queryFn: async () => getAPICall(`${URL.invoice}${invoiceId}`, API_HEADER),
       staleTime: 5 * 60 * 1000,
       refetchOnMount: true,
@@ -1312,18 +1543,49 @@ function InvoiceCreate({
   useEffect(() => {
     if (!isEditOrViewMode || !invoiceId) return;
     const payload = invoiceViewFetchRes as any;
-    const data = payload?.data?.data ?? payload?.data ?? payload;
-    if (data && typeof data === "object") {
+    const raw = payload?.data?.data ?? payload?.data ?? payload;
+    const data = Array.isArray(raw) ? raw[0] : raw;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
       setInvoiceDataFromApi(data as InvoiceDataFromApi);
     } else {
       setInvoiceDataFromApi(null);
     }
   }, [invoiceId, isEditOrViewMode, invoiceViewFetchRes]);
 
+  // Seed document header + PDF action as soon as edit/view opens (house list, unposted list, URL :id)
+  useEffect(() => {
+    if (!isEditOrViewMode) return;
+    const partial =
+      invoiceDataFromApi ?? getInvoiceDataFromLocationState(location.state);
+    const resolvedId = resolveInvoiceRecordId(
+      partial as Record<string, unknown> | undefined,
+      invoiceId,
+    );
+    if (!resolvedId) return;
+    setSaveResponse((prev) => ({
+      id: resolvedId,
+      customer_id:
+        prev?.customer_id ??
+        (partial as InvoiceDataFromApi | undefined)?.customer_id,
+      document_no:
+        prev?.document_no ??
+        String((partial as InvoiceDataFromApi | undefined)?.document_no ?? ""),
+      status:
+        prev?.status ??
+        String((partial as InvoiceDataFromApi | undefined)?.status ?? "UNPOSTED"),
+    }));
+  }, [
+    isEditOrViewMode,
+    invoiceId,
+    invoiceDataFromApi,
+    location.state,
+    location.key,
+  ]);
+
   // Populate form from invoice data when navigating from Accounts (edit/view)
   useEffect(() => {
     const invoiceData = (invoiceDataFromApi ??
-      (location.state?.invoiceData as InvoiceDataFromApi | undefined)) as
+      getInvoiceDataFromLocationState(location.state)) as
       | InvoiceDataFromApi
       | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
@@ -1333,8 +1595,12 @@ function InvoiceCreate({
 
     setBillToDisplayName(invoiceData.bill_to_name ?? null);
     // Set saveResponse so Update Invoice is shown and PUT is used when editing
+    const resolvedId = resolveInvoiceRecordId(
+      invoiceData as Record<string, unknown>,
+      invoiceId,
+    );
     setSaveResponse({
-      id: invoiceData.id,
+      id: resolvedId,
       customer_id: invoiceData.customer_id,
       document_no: invoiceData.document_no ?? "",
       status: invoiceData.status ?? "UNPOSTED",
@@ -1367,90 +1633,111 @@ function InvoiceCreate({
       fapiao_no: invoiceData.fapiao_no ?? "",
       charges:
         invoiceData.charges && invoiceData.charges.length > 0
-          ? invoiceData.charges.map((c: any) => ({
-              id: c.id != null ? Number(c.id) : null,
-              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-              charge_name: c.charge_name ?? "",
-              shipment_id: c.shipment_id
-                ? String(c.shipment_id)
-                : c.shipment_no
-                  ? String(c.shipment_no)
-                  : "",
-              shipper_id: c.shipper_id ?? "",
-              unit_id:
-                c.unit_id != null && String(c.unit_id).trim() !== ""
-                  ? String(c.unit_id)
-                  : (() => {
-                      const unitCode = String(c.unit_code ?? "").trim();
-                      if (!unitCode) return "";
-                      const opt = unitOptions.find(
-                        (o) =>
-                          String(o.value).trim().toUpperCase() ===
-                            unitCode.toUpperCase() ||
-                          String(o.label).trim().toUpperCase() ===
-                            unitCode.toUpperCase(),
-                      );
-                      return opt?.value ?? "";
-                    })(),
-              unit_code: c.unit_code ?? "",
-              no_of_unit:
-                c.no_of_unit != null
-                  ? typeof c.no_of_unit === "string"
-                    ? parseFloat(c.no_of_unit)
-                    : c.no_of_unit
-                  : null,
-              currency_id:
-                c.currency_id != null && String(c.currency_id).trim() !== ""
-                  ? String(c.currency_id)
-                  : (() => {
-                      const code = String(c.currency_code ?? "").trim();
-                      if (!code) return "";
-                      const opt = currencyOptions.find(
-                        (o) =>
-                          String(o.label).trim().toUpperCase() ===
-                            code.toUpperCase() ||
-                          String(o.value).trim().toUpperCase() ===
-                            code.toUpperCase(),
-                      );
-                      return opt?.value ?? "";
-                    })(),
-              currency: c.currency_code ?? "",
-              roe:
-                c.roe != null
-                  ? typeof c.roe === "string"
-                    ? parseFloat(c.roe)
-                    : c.roe
-                  : null,
-              amount_per_unit:
-                c.amount_per_unit != null
-                  ? typeof c.amount_per_unit === "string"
-                    ? parseFloat(c.amount_per_unit)
-                    : c.amount_per_unit
-                  : null,
-              amount:
-                c.amount != null
-                  ? typeof c.amount === "string"
-                    ? parseFloat(c.amount)
-                    : c.amount
-                  : null,
-              header_amount:
-                c.amount_in_header != null
-                  ? typeof c.amount_in_header === "string"
-                    ? parseFloat(c.amount_in_header)
-                    : c.amount_in_header
-                  : null,
-              amount_in_local:
-                c.amount_in_local != null
-                  ? typeof c.amount_in_local === "string"
-                    ? parseFloat(c.amount_in_local)
-                    : c.amount_in_local
-                  : null,
-              tax_code: c.tax_code ?? "",
-              dr_cr:
-                (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
-                  ? "Dr"
-                  : chargeDefaultDrCr,
-            }))
+          ? invoiceData.charges.map((c: any) => {
+              const chargeCodeUpper = String(c.charge_code ?? "")
+                .trim()
+                .toUpperCase();
+              const isTaxRow =
+                chargeCodeUpper === "IGST" ||
+                chargeCodeUpper === "CGST" ||
+                chargeCodeUpper === "SGST";
+
+              const parseNullableNumber = (v: unknown): number | null => {
+                if (v == null || v === "") return null;
+                const n = typeof v === "number" ? v : parseFloat(String(v));
+                return Number.isFinite(n) ? n : null;
+              };
+
+              return {
+                id: c.id != null ? Number(c.id) : null,
+                charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+                charge_code: c.charge_code ?? "",
+                charge_name: c.charge_name ?? "",
+                shipment_id: c.shipment_id
+                  ? String(c.shipment_id)
+                  : c.shipment_no
+                    ? String(c.shipment_no)
+                    : "",
+                shipper_id: c.shipper_id ?? "",
+                unit_id:
+                  c.unit_id != null && String(c.unit_id).trim() !== ""
+                    ? String(c.unit_id)
+                    : (() => {
+                        const unitCode = String(c.unit_code ?? "").trim();
+                        if (!unitCode) return "";
+                        const opt = unitOptions.find(
+                          (o) =>
+                            String(o.value).trim().toUpperCase() ===
+                              unitCode.toUpperCase() ||
+                            String(o.label).trim().toUpperCase() ===
+                              unitCode.toUpperCase(),
+                        );
+                        return opt?.value ?? "";
+                      })(),
+                unit_code: c.unit_code ?? "",
+                no_of_unit:
+                  c.no_of_unit != null
+                    ? typeof c.no_of_unit === "string"
+                      ? parseFloat(c.no_of_unit)
+                      : c.no_of_unit
+                    : null,
+                currency_id:
+                  c.currency_id != null && String(c.currency_id).trim() !== ""
+                    ? String(c.currency_id)
+                    : (() => {
+                        const code = String(c.currency_code ?? "").trim();
+                        if (!code) return "";
+                        const opt = currencyOptions.find(
+                          (o) =>
+                            String(o.label).trim().toUpperCase() ===
+                              code.toUpperCase() ||
+                            String(o.value).trim().toUpperCase() ===
+                              code.toUpperCase(),
+                        );
+                        return opt?.value ?? "";
+                      })(),
+                currency: c.currency_code ?? "",
+                roe:
+                  c.roe != null
+                    ? typeof c.roe === "string"
+                      ? parseFloat(c.roe)
+                      : c.roe
+                    : null,
+                amount_per_unit:
+                  c.amount_per_unit != null
+                    ? typeof c.amount_per_unit === "string"
+                      ? parseFloat(c.amount_per_unit)
+                      : c.amount_per_unit
+                    : null,
+                amount:
+                  c.amount != null
+                    ? typeof c.amount === "string"
+                      ? parseFloat(c.amount)
+                      : c.amount
+                    : null,
+                header_amount:
+                  c.amount_in_header != null
+                    ? typeof c.amount_in_header === "string"
+                      ? parseFloat(c.amount_in_header)
+                      : c.amount_in_header
+                    : null,
+                amount_in_local:
+                  c.amount_in_local != null
+                    ? typeof c.amount_in_local === "string"
+                      ? parseFloat(c.amount_in_local)
+                      : c.amount_in_local
+                    : null,
+                tax_code: c.tax_code ?? "",
+                dr_cr:
+                  (c as any).dr_cr === "Dr" || (c as any).Dr_Cr === "Dr"
+                    ? "Dr"
+                    : chargeDefaultDrCr,
+                is_tax_row: isTaxRow,
+                igst_rate: parseNullableNumber(c.igst_rate),
+                cgst_rate: parseNullableNumber(c.cgst_rate),
+                sgst_rate: parseNullableNumber(c.sgst_rate),
+              };
+            })
           : form.values.charges.length > 0
             ? form.values.charges
             : [
@@ -1473,7 +1760,7 @@ function InvoiceCreate({
               ],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceDataFromApi, isEditOrViewMode]);
+  }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
@@ -1489,8 +1776,10 @@ function InvoiceCreate({
         idx,
         sac: String(c.tax_code || "").trim(),
         localAmount: c.amount_in_local,
+        isTaxRow: c.is_tax_row === true,
       }))
-      .filter((x) => x.sac !== "");
+      // For appended tax rows, we still want to *display* SAC code but must NOT fetch GST rates.
+      .filter((x) => x.sac !== "" && !x.isTaxRow);
 
     if (sacs.length === 0) {
       // Clear loading states if no SAC codes are present
@@ -1591,6 +1880,32 @@ function InvoiceCreate({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.state, form.values.charges]);
+
+  // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
+  useEffect(() => {
+    const taxRowIndices = (form.values.charges || [])
+      .map((c, idx) => (c.is_tax_row === true ? idx : -1))
+      .filter((idx) => idx >= 0);
+
+    if (taxRowIndices.length === 0) return;
+
+    setGstRatesByChargeIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = null;
+      });
+      return next;
+    });
+
+    setGstRatesLoadingByIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = false;
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.charges]);
 
   // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
   const chargeAmountPerUnits = form.values.charges
@@ -1839,8 +2154,7 @@ function InvoiceCreate({
       );
 
       const addrForState =
-        primaryAddress ||
-        (addressesData || []).find((a) => a.state_id != null);
+        primaryAddress || (addressesData || []).find((a) => a.state_id != null);
       if (addrForState?.state_id != null) {
         form.setFieldValue("state", String(addrForState.state_id));
       }
@@ -1850,8 +2164,9 @@ function InvoiceCreate({
         (addressesData || []).find(
           (a) => (a as { gst_id?: string | null }).gst_id != null,
         );
-      const gstFromAddress =
-        (addrForGst as { gst_id?: string | null } | undefined)?.gst_id;
+      const gstFromAddress = (
+        addrForGst as { gst_id?: string | null } | undefined
+      )?.gst_id;
       if (gstFromAddress) {
         form.setFieldValue("gstn", String(gstFromAddress));
       }
@@ -1891,9 +2206,14 @@ function InvoiceCreate({
       // }
 
       const stateId = values.state ? Number(values.state) : null;
+      const headerCurSave = (values.currency ?? "")
+        .toString()
+        .trim()
+        .toUpperCase();
       const currencyItem = (currencyData as any[])?.find(
         (c: any) =>
-          (c.code || c.currency_code || "").toString() === values.currency,
+          (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+          headerCurSave,
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
@@ -1919,16 +2239,13 @@ function InvoiceCreate({
         return;
       }
 
-      // Total = sum of header amount column; header_total = same (Amount in billing currency total)
-      const total = values.charges.reduce(
-        (sum, c) => sum + (c.header_amount ?? 0),
-        0,
+      // Total = sum of header amount column; header_total = same (rounded to 2 dp for payload)
+      const total = clampSumAmounts(
+        values.charges.map((c) => c.header_amount ?? 0),
       );
       const header_total = total;
-      // Local currency total (billing currency value INR, USD)
-      const local_total = values.charges.reduce(
-        (sum, c) => sum + (c.amount_in_local ?? 0),
-        0,
+      const local_total = clampSumAmounts(
+        values.charges.map((c) => c.amount_in_local ?? 0),
       );
 
       const formatDateDDMMYYYY = (d: Date) => {
@@ -1993,13 +2310,18 @@ function InvoiceCreate({
           currency_code?: string;
         }[];
         const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          ? currencyDataArr?.find(
+              (c) => String(c.id) === String(charge.currency_id).trim(),
+            )
           : currencyDataArr?.find(
               (c) =>
-                (c.code || c.currency_code || "").toString() ===
-                charge.currency,
+                (c.code || c.currency_code || "")
+                  .toString()
+                  .trim()
+                  .toUpperCase() ===
+                (charge.currency ?? "").toString().trim().toUpperCase(),
             );
-        const chargeCurrencyId =
+        let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
         const unitDataArr = unitData as {
           id?: number;
@@ -2211,10 +2533,13 @@ function InvoiceCreate({
     try {
       const values = form.values;
       const stateId = values.state ? Number(values.state) : null;
+      const headerCur = (values.currency ?? "").toString().trim().toUpperCase();
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
       )?.find(
-        (c) => (c.code || c.currency_code || "").toString() === values.currency,
+        (c) =>
+          (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+          headerCur,
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
@@ -2245,6 +2570,7 @@ function InvoiceCreate({
       // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
       let sacWiseTotals: Array<{
         sac_code?: string;
+        charge_name?: string;
         charge_id?: number;
         total_amount?: number;
         rate?: number;
@@ -2259,11 +2585,25 @@ function InvoiceCreate({
           })) as typeof gstBreakup;
         }
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-        taxes = sacWiseTotals.map((row) => ({
-          tax_code: row.sac_code ?? "",
-          rate: row.rate ?? 0,
-          amount: row.total_amount ?? 0,
-        }));
+        taxes = sacWiseTotals
+          .filter((row) => {
+            const name = String(row.charge_name ?? "")
+              .trim()
+              .toUpperCase();
+            const rate = Number(row.rate ?? 0);
+            // If tax rate is 0%, do not send IGST/CGST/SGST in payload.
+            if (
+              (name === "IGST" || name === "CGST" || name === "SGST") &&
+              rate <= 0
+            )
+              return false;
+            return true;
+          })
+          .map((row) => ({
+            tax_code: row.sac_code ?? "",
+            rate: row.rate ?? 0,
+            amount: clampAmount(row.total_amount ?? 0) ?? 0,
+          }));
       }
 
       const topRoe =
@@ -2322,16 +2662,19 @@ function InvoiceCreate({
           );
       const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find((c) => String(c.id) === charge.currency_id)
+          ? currencyDataArr?.find(
+              (c) => String(c.id) === String(charge.currency_id).trim(),
+            )
           : currencyDataArr?.find(
               (c) =>
-                (c.code || c.currency_code || "").toString() ===
-                charge.currency,
+                (c.code || c.currency_code || "")
+                  .toString()
+                  .trim()
+                  .toUpperCase() ===
+                (charge.currency ?? "").toString().trim().toUpperCase(),
             );
         let chargeCurrencyId =
           chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        if (chargeCurrencyId == null && currencyId != null)
-          chargeCurrencyId = currencyId;
         const unitItem = charge.unit_id
           ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
           : unitDataArr?.find(
@@ -2387,37 +2730,57 @@ function InvoiceCreate({
       // Agent invoice: no tax charges in payload. Customer invoice: append tax rows from sac_wise_totals
       const taxCharges = isAgentPost
         ? []
-        : sacWiseTotals.map((row) => {
-            const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-            const amountInLocal = clampAmount(amt * topRoe) ?? 0;
-            return {
-              shipment_no: values.shipment_no,
-              charge_id: row.charge_id ?? null,
-              unit_id: null,
-              no_of_unit: 0,
-              currency_id: currencyId,
-              roe: topRoe,
-              amount_per_unit: 0,
-              amount: amt,
-              amount_in_local: amountInLocal,
-              amount_in_header: amountInLocal,
-              tax_code: row.sac_code ?? "",
-              Dr_Cr: "Cr",
-            };
-          });
+        : sacWiseTotals
+            .filter((row) => {
+              const name = String(row.charge_name ?? "")
+                .trim()
+                .toUpperCase();
+              const rate = Number(row.rate ?? 0);
+              // If tax rate is 0%, do not include IGST/CGST/SGST rows in charge payload.
+              if (
+                (name === "IGST" || name === "CGST" || name === "SGST") &&
+                rate <= 0
+              )
+                return false;
+              return true;
+            })
+            .map((row) => {
+              const amt = clampAmount(row.total_amount ?? 0) ?? 0;
+              const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+              return {
+                shipment_no: values.shipment_no,
+                charge_id: row.charge_id ?? null,
+                unit_id: null,
+                no_of_unit: 0,
+                currency_id: currencyId,
+                roe: topRoe,
+                amount_per_unit: 0,
+                amount: amt,
+                amount_in_local: amountInLocal,
+                amount_in_header: amountInLocal,
+                // This row is itself a tax amount entry. Keep SAC code visible, but do NOT fetch/calc GST.
+                tax_code: row.sac_code ?? "",
+                is_tax_row: true,
+                igst_rate: null,
+                cgst_rate: null,
+                sgst_rate: null,
+                igst: null,
+                cgst: null,
+                sgst: null,
+                Dr_Cr: "Cr",
+              };
+            });
       const allChargesPayload = isAgentPost
         ? chargesPayload
         : [...chargesPayload, ...taxCharges];
 
       // Recompute totals from final charges payload (base charges + appended tax rows)
-      const total = allChargesPayload.reduce(
-        (sum, c) => sum + (Number(c.amount_in_header) || 0),
-        0,
+      const total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_header) || 0),
       );
       const header_total = total;
-      const local_total = allChargesPayload.reduce(
-        (sum, c) => sum + (Number(c.amount_in_local) || 0),
-        0,
+      const local_total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_local) || 0),
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -2495,7 +2858,7 @@ function InvoiceCreate({
           status: response.status ?? "POSTED",
         });
         setInvoiceIsPosted(true);
-        // Re-render charges from POST response (includes tax rows) for view mode
+        // After POST, display charges exactly as returned by API.
         if (response.charges && Array.isArray(response.charges)) {
           const mappedCharges: ChargeItem[] = response.charges.map((c) => {
             const noOfUnit =
@@ -2534,6 +2897,25 @@ function InvoiceCreate({
                   ? parseFloat(c.amount_in_header)
                   : c.amount_in_header
                 : null;
+
+            const chargeCodeUpper = String(
+              (c as { charge_code?: string | null }).charge_code ?? "",
+            )
+              .trim()
+              .toUpperCase();
+            const isTaxRow =
+              (c as { is_tax_row?: boolean | null }).is_tax_row === true ||
+              chargeCodeUpper === "IGST" ||
+              chargeCodeUpper === "CGST" ||
+              chargeCodeUpper === "SGST" ||
+              // Heuristic fallback for tax-only line items
+              ((c.unit_id == null || String(c.unit_id).trim() === "") &&
+                (noOfUnit == null || noOfUnit === 0) &&
+                (amountPerUnit == null || amountPerUnit === 0) &&
+                ((c as any).igst_rate == null ||
+                  (c as any).cgst_rate == null ||
+                  (c as any).sgst_rate == null));
+
             return {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
@@ -2564,8 +2946,31 @@ function InvoiceCreate({
               tax_code:
                 c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
               dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
+              is_tax_row: isTaxRow,
+              igst_rate: (() => {
+                const raw = (c as any).igst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              cgst_rate: (() => {
+                const raw = (c as any).cgst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              sgst_rate: (() => {
+                const raw = (c as any).sgst_rate;
+                if (raw == null || raw === "") return null;
+                const parsed =
+                  typeof raw === "number" ? raw : parseFloat(String(raw));
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
             };
           });
+
           form.setFieldValue("charges", mappedCharges);
         }
         ToastNotification({
@@ -2586,13 +2991,22 @@ function InvoiceCreate({
   };
 
   const handleDraftInvoicePreview = async () => {
-    if (!saveResponse?.id) return;
+    const pdfInvoiceId =
+      saveResponse?.id ??
+      resolveInvoiceRecordId(
+        (invoiceDataFromApi ??
+          getInvoiceDataFromLocationState(location.state)) as
+          | Record<string, unknown>
+          | undefined,
+        invoiceId,
+      );
+    if (!pdfInvoiceId) return;
     setPreviewOpen(true);
     setPdfBlob(null);
     try {
       const token = useAuthStore.getState().accessToken;
       const response = await fetch(
-        `${URL.base}${URL.invoice}${saveResponse.id}/pdf/`,
+        `${URL.base}${URL.invoice}${pdfInvoiceId}/pdf/`,
         {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
@@ -2633,9 +3047,22 @@ function InvoiceCreate({
     }
   };
 
-  const headerSameState = Object.values(gstRatesByChargeIndex).find(
-    (rates) => rates?.same_state !== undefined,
-  )?.same_state;
+  const headerSameState = (() => {
+    const fromFetchedRates = Object.values(gstRatesByChargeIndex).find(
+      (rates) => rates?.same_state !== undefined,
+    )?.same_state;
+    if (fromFetchedRates !== undefined) return fromFetchedRates;
+
+    // Fallback for cases where rates haven't been fetched yet (or were skipped for tax rows):
+    // infer intra/inter state from non-tax rows' returned rates (from POST response mapping).
+    const nonTax = (form.values.charges || []).filter(
+      (c) => c.is_tax_row !== true,
+    );
+    if (nonTax.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0))
+      return true;
+    if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    return undefined;
+  })();
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -2732,7 +3159,7 @@ function InvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={() => handleInvoiceBack()}
             >
               Back
             </Button>
@@ -2761,6 +3188,7 @@ function InvoiceCreate({
             {/* Bill To - spans 2 fields (span=4) */}
             <Grid.Col span={4}>
               <SearchableSelect
+                key={`invoice-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
                 placeholder="Type customer name"
                 apiEndpoint={URL.allCustomers}
@@ -2783,33 +3211,38 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {/* State - optional for agent invoice */}
-            <Grid.Col span={2}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading states" : "Select state"}
-                data={stateOptions}
-                value={form.values.state ? form.values.state : null}
-                onChange={(value) => form.setFieldValue("state", value ?? "")}
-                searchable
-                withAsterisk={!isAgentInvoice}
-                error={form.errors.state || undefined}
-                readOnly={isStateLoading || isReadOnly}
-                // disabled={isStateLoading || isReadOnly}
-              />
-            </Grid.Col>
+            {!isAgentInvoice && (
+              <>
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label="State"
+                    placeholder={
+                      isStateLoading ? "Loading states" : "Select state"
+                    }
+                    data={stateOptions}
+                    value={form.values.state ? form.values.state : null}
+                    onChange={(value) =>
+                      form.setFieldValue("state", value ?? "")
+                    }
+                    searchable
+                    withAsterisk
+                    error={form.errors.state || undefined}
+                    readOnly={isStateLoading || isReadOnly}
+                  />
+                </Grid.Col>
 
-            {/* GSTN */}
-            <Grid.Col span={2}>
-              <FormTextInput
-                label="GSTN"
-                placeholder="Enter GSTN"
-                value={form.values.gstn}
-                onChange={(e) => form.setFieldValue("gstn", e.target.value)}
-                error={form.errors.gstn}
-                readOnly={isReadOnly}
-              />
-            </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label="GSTN"
+                    placeholder="Enter GSTN"
+                    value={form.values.gstn}
+                    onChange={(e) => form.setFieldValue("gstn", e.target.value)}
+                    error={form.errors.gstn}
+                    readOnly={isReadOnly}
+                  />
+                </Grid.Col>
+              </>
+            )}
 
             {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
@@ -3855,6 +4288,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="CGST"
                           value={(() => {
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -3897,6 +4340,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="SGST"
                           value={(() => {
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -3940,6 +4393,16 @@ function InvoiceCreate({
                         <FormTextInput
                           placeholder="IGST"
                           value={(() => {
+                            const code = String(charge.charge_code ?? "")
+                              .trim()
+                              .toUpperCase();
+                            if (
+                              charge.is_tax_row === true ||
+                              code === "IGST" ||
+                              code === "CGST" ||
+                              code === "SGST"
+                            )
+                              return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
                             const localAmount = charge.amount_in_local;
                             if (rate == null || localAmount == null) return "";
@@ -4288,7 +4751,7 @@ function InvoiceCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={() => handleInvoiceBack()}
             >
               Cancel
             </Button>

@@ -138,6 +138,17 @@ function clampAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [c, b, a].filter(Boolean).join(" - ");
+}
+
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
@@ -171,6 +182,7 @@ type AdjustmentRow = {
 
 type InvoiceCombinedItem = {
   id?: number;
+  doc_id?: number | string;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -294,7 +306,25 @@ type PaymentFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
-const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+/** Map API/stored party Dr/Cr. When prefilling reversal create from a source payment, flip Dr↔Cr. */
+function mapPaymentPartyDrCr(
+  raw: string | null | undefined,
+  flipForReversalSource: boolean,
+): "Cr" | "Dr" {
+  const side =
+    String(raw ?? "")
+      .trim()
+      .toLowerCase() === "dr"
+      ? "Dr"
+      : "Cr";
+  if (!flipForReversalSource) return side;
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
+const getDefaultDetailRow = (
+  localCurrency: string,
+  isReversalFlow = false,
+): DetailRow => ({
   subledger_id: null,
   account_code: "",
   customer_code: "",
@@ -304,7 +334,7 @@ const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   roe: 1,
   amount: null,
   local_amount: null,
-  dr_cr: "Cr",
+  dr_cr: isReversalFlow ? "Cr" : "Dr",
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -414,6 +444,16 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
   return d ? d.toLocaleDateString() : "—";
 }
 
+function formatOutstandingDocumentAmountInLocal(
+  amountInLocal: number | string | null | undefined,
+): string {
+  if (amountInLocal == null || amountInLocal === "") return "—";
+  if (typeof amountInLocal === "number")
+    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+  const n = parseFloat(String(amountInLocal).trim());
+  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+}
+
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
 function firstNonEmptyString(
   ...candidates: Array<string | number | null | undefined>
@@ -485,6 +525,10 @@ export default function PaymentCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
+  const [
+    isOpeningSupplierInvoiceFromModal,
+    setIsOpeningSupplierInvoiceFromModal,
+  ] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -511,7 +555,7 @@ export default function PaymentCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
-      details: [getDefaultDetailRow(localCurrency)],
+      details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
     },
@@ -634,6 +678,13 @@ export default function PaymentCreate({
       pathname.includes("/reversal/view"));
   const isReversalCreate = _isReversal && pathname.includes("/reversal/create");
 
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const paymentResolvedBackPath =
+    isReversalCreate && !financeReturnTo
+      ? "/payment"
+      : financeReturnTo || backPath;
+
   // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
     if (!paymentFromState || paymentFromState.id == null || !localCurrency) {
@@ -690,10 +741,10 @@ export default function PaymentCreate({
               roe: parseNum(pAny.roe) ?? 1,
               amount: parseNum(pAny.amount),
               local_amount: parseNum(pAny.local_amount),
-              dr_cr: (pAny.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+              dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
           })
-        : [getDefaultDetailRow(localCurrency)];
+        : [getDefaultDetailRow(localCurrency, _isReversal)];
 
     // Map list response allocations: document_no, document_date, subledger_code, subledger_name, day_book_id, type, location, supplier_invoice_id, adj_curr_amount, adj_local_amount
     const allocations = paymentFromState.allocations;
@@ -957,7 +1008,10 @@ export default function PaymentCreate({
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency));
+    form.insertListItem(
+      "details",
+      getDefaultDetailRow(localCurrency, _isReversal),
+    );
   };
 
   const removeDetailRow = (idx: number) => {
@@ -1026,6 +1080,88 @@ export default function PaymentCreate({
       else next.add(idx);
       return next;
     });
+  };
+
+  const openSupplierInvoiceFromAllocationRow = async (
+    inv: InvoiceCombinedItem,
+  ) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "CRJ") return;
+
+    const docIdRaw = inv.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Supplier invoice not found",
+      });
+      return;
+    }
+
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the supplier invoice in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningSupplierInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.supplierInvoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setIsOpeningSupplierInvoiceFromModal(false);
+      const supplierPath = `/supplier-invoice/${mode}/${docId}`;
+      const supplierUrl = new window.URL(
+        supplierPath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = supplierUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open supplier invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open supplier invoice details.",
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningSupplierInvoiceFromModal(false);
+    }
   };
 
   const handleSelectInvoice = () => {
@@ -1173,13 +1309,14 @@ export default function PaymentCreate({
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr ?? "Cr").toString(),
+        dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
@@ -1200,7 +1337,7 @@ export default function PaymentCreate({
     return base;
   };
 
-  /** Build payload for reverse-payment API. Header dr_cr = "Dr". For create: payment_no from source. */
+  /** Build payload for reverse-payment API. Header dr_cr = "Dr"; party lines default Cr. */
   const buildReversalPayload = (
     values: PaymentFormValues,
     options?: {
@@ -1255,6 +1392,7 @@ export default function PaymentCreate({
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
       dr_cr: "Dr",
       parties: details.map((d) => ({
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1341,6 +1479,17 @@ export default function PaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    const hasAdjustments = (values.adjustments ?? []).some((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
     const partyLocalTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
@@ -1359,14 +1508,19 @@ export default function PaymentCreate({
             : 0),
         0,
       ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
+    // Validation aligned with Receipt: when adjustments exist, Party total
+    // should not be less than total allocation amount.
+    if (hasAdjustments && partyLocalTotal < adjLocalTotal) {
       ToastNotification({
         type: "error",
         message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
+          "The total Local Amount of Payment cannot be less than the total Local Amount of Invoice.",
       });
       return;
     }
+    // Important: allow saving "open payment" (no adjustments),
+    // same as Receipt. So we DO NOT restrict party totals when allocations are empty.
+    // Also, unlike the earlier logic, we don't block when partyLocalTotal > adjLocalTotal.
     setIsSubmitting(true);
     try {
       if (_isReversal) {
@@ -1881,7 +2035,7 @@ export default function PaymentCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(paymentResolvedBackPath)}
             >
               Back
             </Button>
@@ -2164,10 +2318,12 @@ export default function PaymentCreate({
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 sl_code?: string;
                                 account_name?: string;
                               };
+                              const glName = orig?.gl_name ?? "";
                               const name = orig?.account_name ?? "";
                               const subledgerCode = orig?.sl_code ?? "";
                               const glAccountCode = orig?.gl_account_code ?? "";
@@ -2192,7 +2348,11 @@ export default function PaymentCreate({
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
-                                name,
+                                formatChartOfAccountsLabel(
+                                  glName,
+                                  glAccountCode,
+                                  name,
+                                ),
                               );
                               form.setFieldValue(
                                 `details.${idx}.currency`,
@@ -2204,18 +2364,22 @@ export default function PaymentCreate({
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
+                                gl_name?: string;
                                 gl_account_code?: string;
                                 account_name?: string;
                               };
                               return {
                                 value: String(i?.id ?? ""),
-                                label: String(
-                                  `${String(i?.gl_account_code ?? "").trim()} - ${String(i?.account_name ?? "").trim()}`.trim(),
+                                label: formatChartOfAccountsLabel(
+                                  String(i?.gl_name ?? "").trim(),
+                                  String(i?.gl_account_code ?? "").trim(),
+                                  String(i?.account_name ?? "").trim(),
                                 ),
                               };
                             }}
                             searchFields={[
                               "account_name",
+                              "gl_name",
                               "gl_account_code",
                               "sl_code",
                             ]}
@@ -2341,7 +2505,8 @@ export default function PaymentCreate({
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.dr_cr`,
-                                (v as "Cr" | "Dr") ?? "Cr",
+                                (v as "Cr" | "Dr") ??
+                                  (_isReversal ? "Cr" : "Dr"),
                               )
                             }
                             styles={partyFieldStyles}
@@ -2643,11 +2808,35 @@ export default function PaymentCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningSupplierInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{
+              title: { fontWeight: 600, color: "#105476" },
+              body: { position: "relative" },
+            }}
           >
+            {isOpeningSupplierInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening supplier invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading documents...
@@ -2668,6 +2857,7 @@ export default function PaymentCreate({
                       <Table.Th>Document Doc Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2679,7 +2869,34 @@ export default function PaymentCreate({
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
+                        <Table.Td>
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "CRJ" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                void openSupplierInvoiceFromAllocationRow(inv)
+                              }
+                              title="Open supplier invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          )}
+                        </Table.Td>
                         <Table.Td>
                           {String(
                             inv.day_book_document_type ??
@@ -2693,19 +2910,12 @@ export default function PaymentCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.document_amount != null
-                            ? typeof inv.document_amount === "number"
-                              ? inv.document_amount.toFixed(2)
-                              : String(inv.document_amount)
-                            : inv.total != null
-                              ? typeof inv.total === "number"
-                                ? inv.total.toFixed(2)
-                                : String(inv.total)
-                              : inv.amount != null
-                                ? typeof inv.amount === "number"
-                                  ? inv.amount.toFixed(2)
-                                  : String(inv.amount)
-                                : "—"}
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -3092,7 +3302,7 @@ export default function PaymentCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(paymentResolvedBackPath)}
             >
               Cancel
             </Button>

@@ -107,6 +107,8 @@ type HouseDetailsForm = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  /** State id from consignee customer master primary address — used for Invoice Create (Bill To state). */
+  consignee_state_id: string;
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
@@ -811,6 +813,13 @@ function HouseCreate() {
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
+      consignee_state_id:
+        (editData as { consignee_state_id?: number | string } | undefined)
+          ?.consignee_state_id != null
+          ? String(
+              (editData as { consignee_state_id?: number | string }).consignee_state_id,
+            )
+          : "",
       notify1_customer_name:
         (editData as { notify1_customer_name?: string })
           ?.notify1_customer_name ??
@@ -2185,6 +2194,16 @@ function HouseCreate() {
       consignee_name: form.values.consignee_name,
       consignee_address: form.values.consignee_address,
       consignee_email: form.values.consignee_email,
+      consignee_state_id: form.values.consignee_state_id
+        ? Number(form.values.consignee_state_id)
+        : ((editData as { consignee_state_id?: number } | undefined)
+            ?.consignee_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ consignee_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.consignee_state_id ??
+          null),
       notify1_customer_name: form.values.notify1_customer_name,
       notify1_customer_address: form.values.notify1_customer_address,
       notify1_customer_email: form.values.notify1_customer_email,
@@ -2329,6 +2348,16 @@ function HouseCreate() {
           }
         )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
         null,
+      consignee_state_id: v.consignee_state_id
+        ? Number(v.consignee_state_id)
+        : ((editData as { consignee_state_id?: number } | undefined)
+            ?.consignee_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ consignee_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.consignee_state_id ??
+          null),
       notify1_customer_name: v.notify1_customer_name,
       notify1_customer_address: v.notify1_customer_address,
       notify1_customer_email: v.notify1_customer_email,
@@ -3462,6 +3491,7 @@ function HouseCreate() {
                         form.setFieldValue("shipper_name", "");
                         form.setFieldValue("shipper_address", "");
                         form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
                         setShipperAddressOptions([]);
                         return;
                       }
@@ -3493,7 +3523,42 @@ function HouseCreate() {
                         );
                       }
 
-                      form.setFieldValue("shipper_code", value);
+                      const addressesDataFull = Array.isArray(
+                        (original as Record<string, unknown>).addresses_data,
+                      )
+                        ? ((original as Record<string, unknown>)
+                            .addresses_data as Array<{
+                            address?: string;
+                            state_id?: number | null;
+                            address_type?: string | null;
+                          }>)
+                        : [];
+                      const primaryAddr = addressesDataFull.find(
+                        (a) =>
+                          String(a.address_type || "").toUpperCase() ===
+                          "PRIMARY",
+                      );
+                      const addrWithState =
+                        primaryAddr ||
+                        addressesDataFull.find((a) => a.state_id != null);
+                      if (addrWithState?.state_id != null) {
+                        form.setFieldValue(
+                          "shipper_state_id",
+                          String(addrWithState.state_id),
+                        );
+                      } else {
+                        form.setFieldValue("shipper_state_id", "");
+                      }
+
+                      const customerCodeRaw = (
+                        original as Record<string, unknown>
+                      ).customer_code;
+                      const customerCode =
+                        customerCodeRaw != null &&
+                        String(customerCodeRaw).trim() !== ""
+                          ? String(customerCodeRaw).trim()
+                          : String(value ?? "").trim();
+                      form.setFieldValue("shipper_code", customerCode);
                       form.setFieldValue("shipper_name", toTitleCase(name));
                       form.setFieldValue("shipper_email", email);
                       setShipperSearch(name);
@@ -3594,7 +3659,11 @@ function HouseCreate() {
                     form.setFieldValue("consignee_email", email);
 
                     const addressesData = Array.isArray(original.addresses_data)
-                      ? (original.addresses_data as Array<{ address?: string }>)
+                      ? (original.addresses_data as Array<{
+                          address?: string;
+                          state_id?: number | null;
+                          address_type?: string | null;
+                        }>)
                       : [];
                     const addressOptions = addressesData
                       .filter((a) => a.address)
@@ -3611,6 +3680,27 @@ function HouseCreate() {
                       );
                     } else {
                       if (!value) form.setFieldValue("consignee_address", "");
+                    }
+
+                    if (!value) {
+                      form.setFieldValue("consignee_state_id", "");
+                      return;
+                    }
+                    const primaryAddress = addressesData.find(
+                      (a) =>
+                        String(a.address_type || "").toUpperCase() ===
+                        "PRIMARY",
+                    );
+                    const addrForState =
+                      primaryAddress ||
+                      addressesData.find((a) => a.state_id != null);
+                    if (addrForState?.state_id != null) {
+                      form.setFieldValue(
+                        "consignee_state_id",
+                        String(addrForState.state_id),
+                      );
+                    } else {
+                      form.setFieldValue("consignee_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -4243,6 +4333,99 @@ function HouseCreate() {
               </Text>
               {location.state?.job?.id != null && (
                 <Group gap="xs">
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const fullDetail = getCurrentHousingDetail();
+                      const charges = Array.isArray(fullDetail.charges)
+                        ? fullDetail.charges
+                        : [];
+
+                      const chargesFromHouse = charges
+                        .filter(
+                          (e: any) =>
+                            e?.charge_id != null ||
+                            (e?.charge_name && String(e.charge_name).trim() !== ""),
+                        )
+                        .map((e: any) => ({
+                          charge_id: e?.charge_id ?? null,
+                          charge_name: e?.charge_name ?? "",
+                          segment: "",
+                          // NOTE: PRQ "Job Id" should receive shipment_id from house context
+                          job_no: String(
+                            (fullDetail as { shipment_id?: unknown })?.shipment_id ??
+                              (location.state?.job as { shipment_id?: unknown } | null)
+                                ?.shipment_id ??
+                              location.state?.job?.job_id ??
+                              location.state?.job?.id ??
+                              "",
+                          ),
+                          sub_job: String(
+                            fullDetail?.hbl_number ??
+                              fullDetail?.hbl_no ??
+                              fullDetail?.id ??
+                              "",
+                          ),
+                          cn_r: "",
+                          currency: e?.currency_code ?? e?.currency ?? "",
+                          currency_id: e?.currency_id ?? "",
+                          roe: e?.roe ?? null,
+                          unit_code: e?.unit_code ?? e?.unit ?? "",
+                          unit_id: e?.unit_id ?? "",
+                          no_of_unit: e?.no_of_unit ?? null,
+                          amount_per_unit:
+                            e?.cost_per_unit ?? e?.amount_per_unit ?? null,
+                          amount: e?.total_cost ?? e?.amount ?? null,
+                          amount_in_local:
+                            e?.cost_local_amount ??
+                            e?.local_amount ??
+                            (e?.total_cost != null && e?.roe != null
+                              ? Math.round(Number(e.total_cost) * Number(e.roe) * 100) /
+                                100
+                              : e?.total_cost ?? null),
+                          tax_code: "",
+                          tax: "false",
+                        }));
+
+                      const firstSupplier =
+                        charges.find(
+                          (e: any) =>
+                            String(e?.supplier_code ?? "").trim() !== "" ||
+                            String(e?.supplier_name ?? "").trim() !== "",
+                        ) ?? null;
+
+                      navigate("/payment-request/create", {
+                        state: {
+                          serviceType: location.state?.mblDetails?.service || "FCL",
+                          voucherType: "OCEAN IMPORTS",
+                          chargesFromEstimates:
+                            chargesFromHouse.length > 0
+                              ? chargesFromHouse
+                              : undefined,
+                          supplier:
+                            firstSupplier != null
+                              ? {
+                                  supplier_code: String(
+                                    firstSupplier?.supplier_code ?? "",
+                                  ),
+                                  supplier_name: String(
+                                    firstSupplier?.supplier_name ?? "",
+                                  ),
+                                }
+                              : null,
+                          job_reference_1: String(
+                            location.state?.job?.job_id ??
+                              location.state?.job?.id ??
+                              "",
+                          ),
+                          ...(location.state?.job && { job: location.state.job }),
+                        },
+                      });
+                    }}
+                  >
+                    Create PRQ
+                  </Button>
                   <Button
                     variant="outline"
                     color="#105476"

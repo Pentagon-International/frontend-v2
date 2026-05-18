@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Box,
   Button,
@@ -13,12 +13,13 @@ import {
   Modal,
   Text,
 } from "@mantine/core";
-import { IconSearch } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { IconSearch, IconTrash } from "@tabler/icons-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
+import { commonSearchAPI } from "../../../service/searchApi";
 import {
   SearchableSelect,
   SingleDateInput,
@@ -130,9 +131,125 @@ const formatDateForApi = (date: Date | null): string => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+type AllocationDocumentNavRow = {
+  id: number;
+  account_name?: string;
+  account_code?: string;
+  subledger_code?: string;
+  allocation_no?: string;
+  allocation_date?: string;
+  document_status?: string;
+  allocation?: DocumentAllocationRow[];
+};
+
+const parseAllocationDateString = (s: string | null | undefined): Date | null => {
+  if (!s || typeof s !== "string") return null;
+  const part = s.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return null;
+  const [y, m, d] = part.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRow => {
+  const outAmt = r.outstanding_amount ?? r.amount ?? "";
+  const outLocal =
+    r.outstanding_local_amount ?? r.amount_in_local ?? "";
+  return {
+    ...r,
+    outstanding_amount: outAmt,
+    outstanding_local_amount: outLocal,
+    amount: r.amount ?? outAmt,
+    amount_in_local: r.amount_in_local ?? outLocal,
+  };
+};
+
+const fetchCoaAccount = async (
+  accountCode: string,
+): Promise<CoaItem | null> => {
+  try {
+    const results = await commonSearchAPI({
+      endpoint: URL.chartOfAccounts,
+      query: accountCode,
+    });
+    if (!Array.isArray(results) || results.length === 0) return null;
+    const match =
+      (results as Record<string, unknown>[]).find(
+        (item) => String(item.gl_account_code ?? "") === accountCode,
+      ) ?? results[0];
+    if (!match) return null;
+    return {
+      id: match.id != null ? Number(match.id) : undefined,
+      gl_account_code:
+        match.gl_account_code != null ? String(match.gl_account_code) : undefined,
+      sl_code: match.sl_code != null ? String(match.sl_code) : undefined,
+      account_name:
+        match.account_name != null ? String(match.account_name) : undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const fetchAllocationDocumentFromApi = async (
+  row: AllocationDocumentNavRow,
+): Promise<{
+  id?: number;
+  document_status?: string;
+  account_code?: string;
+  subledger_code?: string;
+  account_name?: string;
+  allocation_date?: string;
+  allocation_no?: string;
+  allocation?: DocumentAllocationRow[];
+} | null> => {
+  const tryPost = async (filters: Record<string, unknown>) => {
+    const axiosRes = (await postAPICall(
+      `${URL.outstandingAllocationDocumentsFilter}?index=0&limit=1`,
+      { filters },
+      API_HEADER,
+    )) as {
+      data?: {
+        data?: Array<{
+          id?: number;
+          document_status?: string;
+          account_code?: string;
+          subledger_code?: string;
+          account_name?: string;
+          allocation_date?: string;
+          allocation_no?: string;
+          allocation?: DocumentAllocationRow[];
+        }>;
+      };
+    };
+    const body = axiosRes?.data;
+    const rows = Array.isArray(body?.data)
+      ? body.data
+      : Array.isArray(body)
+        ? body
+        : [];
+    const first = rows[0] ?? null;
+    return first ?? null;
+  };
+
+  let doc = await tryPost({ id: row.id });
+  if (
+    !doc &&
+    row.account_code &&
+    row.subledger_code &&
+    row.allocation_date
+  ) {
+    doc = await tryPost({
+      account_code: row.account_code,
+      subledger_code: row.subledger_code,
+      allocation_date: row.allocation_date,
+    });
+  }
+  return doc;
+};
+
 const fetchDocumentAllocation = async (payload: {
   account_code: string;
-  subledger_code: string;
+  subledger_code?: string;
   /** Optional filter; omitted when user leaves date empty */
   document_date?: string;
 }): Promise<DocumentAllocationResponse> => {
@@ -203,6 +320,10 @@ const putAllocationDocuments = async (
 
 export default function DocumentAllocation() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const hydratedDocumentIdRef = useRef<number | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
   const [rows, setRows] = useState<DocumentAllocationRow[]>([]);
   const [fetchedRows, setFetchedRows] = useState<DocumentAllocationRow[]>([]);
@@ -221,8 +342,110 @@ export default function DocumentAllocation() {
   const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
 
-  const isLocked = String(savedHeader?.status ?? "").toUpperCase() === "POSTED";
+  const isLocked =
+    String(savedHeader?.status ?? "").toUpperCase() === "POSTED" ||
+    isViewMode;
   const hasSavedId = savedHeader?.id != null;
+
+  useEffect(() => {
+    const state = location.state as {
+      allocationDocument?: AllocationDocumentNavRow;
+      allocationMode?: "view" | "edit";
+    } | null;
+
+    const row = state?.allocationDocument;
+    if (!row?.id) return;
+    if (hydratedDocumentIdRef.current === row.id) return;
+    hydratedDocumentIdRef.current = row.id;
+    const mode = state?.allocationMode === "edit" ? "edit" : "view";
+
+    setIsViewMode(mode === "view");
+    setSelectedDate(parseAllocationDateString(row.allocation_date ?? null));
+
+    (async () => {
+      setIsHydrating(true);
+      try {
+        let doc: Awaited<ReturnType<typeof fetchAllocationDocumentFromApi>> =
+          null;
+
+        if (Array.isArray(row.allocation) && row.allocation.length > 0) {
+          doc = {
+            id: row.id,
+            document_status: row.document_status,
+            account_code: row.account_code,
+            subledger_code: row.subledger_code,
+            account_name: row.account_name,
+            allocation_date: row.allocation_date,
+            allocation_no: row.allocation_no,
+            allocation: row.allocation,
+          };
+        } else {
+          doc = await fetchAllocationDocumentFromApi(row);
+        }
+
+        if (!doc?.id) {
+          ToastNotification({
+            type: "error",
+            message: "Could not load allocation document details.",
+          });
+          return;
+        }
+
+        const resolvedAccountCode =
+          doc.account_code ?? row.account_code ?? "";
+        const resolvedSlCode = doc.subledger_code ?? row.subledger_code;
+
+        // Prefer account_name from navigation row (most reliable), then API doc
+        const rawAccountName =
+          (row.account_name?.trim() ||
+            doc.account_name?.trim()) ?? "";
+
+        // Fetch full account details from COA to get the proper id and canonical name
+        let coaAccount: CoaItem | null = null;
+        if (resolvedAccountCode) {
+          coaAccount = await fetchCoaAccount(resolvedAccountCode);
+        }
+
+        setIsViewMode(mode === "view");
+
+        setSavedHeader({
+          id: doc.id,
+          status: doc.document_status,
+          account_code: resolvedAccountCode || undefined,
+          subledger_code: resolvedSlCode,
+          allocation_date: doc.allocation_date ?? row.allocation_date,
+          allocation_no: doc.allocation_no ?? row.allocation_no,
+        });
+
+        setSelectedAccount({
+          id: coaAccount?.id,
+          gl_account_code: coaAccount?.gl_account_code ?? resolvedAccountCode,
+          sl_code: coaAccount?.sl_code ?? resolvedSlCode,
+          account_name: coaAccount?.account_name?.trim()
+            ? coaAccount.account_name
+            : rawAccountName,
+        });
+
+        setSelectedDate(
+          parseAllocationDateString(
+            (doc.allocation_date ?? row.allocation_date) ?? null,
+          ),
+        );
+
+        const lines = Array.isArray(doc.allocation) ? doc.allocation : [];
+        setRows(lines.map(normalizeAllocationLine));
+        setHasFetched(lines.length > 0);
+      } catch (e) {
+        console.error(e);
+        ToastNotification({
+          type: "error",
+          message: "Could not load allocation document details.",
+        });
+      } finally {
+        setIsHydrating(false);
+      }
+    })();
+  }, [location.state]);
 
   const handleOutstandingAmountChange = (
     rowIndex: number,
@@ -299,6 +522,10 @@ export default function DocumentAllocation() {
         message: "No rows selected.",
       });
     }
+  };
+
+  const removeAllocationRow = (rowIndex: number) => {
+    setRows((prev) => prev.filter((_, idx) => idx !== rowIndex));
   };
 
   const mergeAllocationResponseIntoRows = (
@@ -474,7 +701,7 @@ export default function DocumentAllocation() {
   };
 
   const handleGet = async () => {
-    if (!selectedAccount || !selectedGlAccountCode || !selectedSlCode) {
+    if (!selectedAccount || !selectedGlAccountCode) {
       ToastNotification({
         type: "error",
         message: "Please select an Account Name before fetching.",
@@ -484,13 +711,24 @@ export default function DocumentAllocation() {
 
     setIsFetching(true);
     try {
-      const res = await fetchDocumentAllocation({
+      const slTrimmed = String(selectedSlCode ?? "").trim();
+      const payload: {
+        account_code: string;
+        subledger_code?: string;
+        document_date?: string;
+      } = {
         account_code: selectedGlAccountCode,
-        subledger_code: selectedSlCode,
         ...(selectedDate != null
           ? { document_date: formatDateForApi(selectedDate) }
           : {}),
-      });
+      };
+
+      // When SL code is 0, don't send subledger_code at all
+      if (slTrimmed !== "" && slTrimmed !== "0") {
+        payload.subledger_code = slTrimmed;
+      }
+
+      const res = await fetchDocumentAllocation(payload);
       const list = Array.isArray(res?.data) ? res.data : [];
       setHasFetched(true);
       if (list.length === 0) {
@@ -538,7 +776,7 @@ export default function DocumentAllocation() {
         opened={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Select Allocations"
-        size="95%"
+        size="100%"
         centered
         styles={{
           content: { maxWidth: "95vw" },
@@ -560,7 +798,7 @@ export default function DocumentAllocation() {
             <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
               Branch
             </Grid.Col>
-            <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
+            <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
               Daybook code
             </Grid.Col>
             <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
@@ -727,7 +965,7 @@ export default function DocumentAllocation() {
         </Box>
       </Modal>
 
-      {isFetching && (
+      {(isFetching || isHydrating) && (
         <Center
           style={{
             position: "absolute",
@@ -843,20 +1081,23 @@ export default function DocumentAllocation() {
                     placeholder="Search by account name"
                     apiEndpoint={URL.chartOfAccounts}
                     value={
-                      selectedAccount ? String(selectedAccount.id ?? "") : null
+                      selectedAccount?.id != null
+                        ? String(selectedAccount.id)
+                        : null
                     }
                     dropdownZIndex={1100}
                     minSearchLength={1}
-                    searchFields={["gl_account_code", "account_name", "id"]}
+                    searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
                     disabled={isLocked}
                     readOnly={isLocked}
                     displayFormat={(item: Record<string, unknown>) => {
                       const id = String(item.id ?? "").trim();
+                      const glName = String(item.gl_name ?? "").trim();
                       const gl = String(item.gl_account_code ?? "").trim();
                       const name = String(item.account_name ?? "").trim();
                       return {
                         value: id,
-                        label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                        label: [name, gl, glName].filter(Boolean).join(" - "),
                       };
                     }}
                     displayValue={selectedAccount?.account_name ?? ""}
@@ -938,7 +1179,7 @@ export default function DocumentAllocation() {
                       size="sm"
                       leftSection={<IconSearch size={16} />}
                       onClick={handleGet}
-                      disabled={isFetching || isLocked}
+                      disabled={isFetching || isLocked || isHydrating}
                       style={{
                         backgroundColor: "#105476",
                         fontSize: "13px",
@@ -984,13 +1225,13 @@ export default function DocumentAllocation() {
                           <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                             Branch
                           </Grid.Col>
-                          <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
+                          <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                             Daybook code
                           </Grid.Col>
                           <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                             Document Type
                           </Grid.Col>
-                          <Grid.Col span={1.9} style={{ fontSize: "13px" }}>
+                          <Grid.Col span={1.7} style={{ fontSize: "13px" }}>
                             Document Number
                           </Grid.Col>
                           <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
@@ -1008,12 +1249,20 @@ export default function DocumentAllocation() {
                           <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
                             Outstanding amount
                           </Grid.Col>
-                          <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                          <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
                             Outstanding local amount
                           </Grid.Col>
                           <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                             Dr/Cr
                           </Grid.Col>
+                          {!isLocked ? (
+                            <Grid.Col
+                              span={0.5}
+                              style={{ fontSize: "13px", textAlign: "center" }}
+                            >
+                              Action
+                            </Grid.Col>
+                          ) : null}
                         </Grid>
 
                         {/* Dynamic rows */}
@@ -1057,7 +1306,7 @@ export default function DocumentAllocation() {
                                       format="normal"
                                     />
                                   </Grid.Col>
-                                  <Grid.Col span={1.3}>
+                                  <Grid.Col span={0.8}>
                                     <FormTextInput
                                       placeholder="Daybook code"
                                       value={daybookCode}
@@ -1079,7 +1328,7 @@ export default function DocumentAllocation() {
                                       format="normal"
                                     />
                                   </Grid.Col>
-                                  <Grid.Col span={1.9}>
+                                  <Grid.Col span={1.7}>
                                     <FormTextInput
                                       placeholder="Document Number"
                                       value={row.document_no ?? ""}
@@ -1160,7 +1409,7 @@ export default function DocumentAllocation() {
                                       format="normal"
                                     />
                                   </Grid.Col>
-                                  <Grid.Col span={1.5}>
+                                  <Grid.Col span={1.3}>
                                     <FormTextInput
                                       placeholder="Outstanding local amount"
                                       value={formatTwoDecimalsFromString(
@@ -1184,6 +1433,24 @@ export default function DocumentAllocation() {
                                       format="normal"
                                     />
                                   </Grid.Col>
+                                  {!isLocked ? (
+                                    <Grid.Col span={0.5}>
+                                      <Center h="100%">
+                                        <Button
+                                          variant="subtle"
+                                          color="red"
+                                          size="compact-xs"
+                                          p={0}
+                                          onClick={() =>
+                                            removeAllocationRow(index)
+                                          }
+                                          aria-label="Delete allocation row"
+                                        >
+                                          <IconTrash size={16} />
+                                        </Button>
+                                      </Center>
+                                    </Grid.Col>
+                                  ) : null}
                                 </>
                               );
                             })()}

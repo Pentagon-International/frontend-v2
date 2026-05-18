@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Box,
   Grid,
@@ -6,6 +6,7 @@ import {
   TextInput,
   Autocomplete,
   Group,
+  Flex,
   ActionIcon,
   Loader,
   Modal,
@@ -13,6 +14,9 @@ import {
   Text,
   Button,
   Textarea,
+  SimpleGrid,
+  MantineProvider,
+  Select,
 } from "@mantine/core";
 import { IconSearch, IconX, IconSend } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -27,18 +31,16 @@ import {
   getFilteredOutstandingData,
   calculateAggregatedData,
   calculateFilteredAggregatedData,
-  getCallEntryData,
   calculateCallEntryAggregatedData,
   filterCallEntryData,
   getCallEntryStatistics,
-  calculateCallEntryDateRange,
-  getEnquiryConversionData,
+  getCallEntryDashboardData,
+  mapCallEntryDashboardToLegacyResponse,
   getFilteredEnquiryConversionData,
-  calculateEnquiryConversionAggregatedData,
-  calculateFilteredEnquiryConversionAggregatedData,
+  getEnquiryConversionDashboardData,
+  resolveEnquiryConversionAggregatedFromResponse,
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
-  calculateFinancialYearBudgetRange,
   calculateFinancialYearBudgetRangeForYear,
   calculateStartMonthFromEndMonth,
   getFinancialYearOptions,
@@ -47,26 +49,31 @@ import {
   getNewCustomerData,
   getCustomerInteractionStatusSummary,
   DashboardFilters,
+  PipelineReportFilters,
   CallEntryAggregatedData,
+  CallEntryStatisticsFilters,
   CallEntryStatisticsSummary,
   CallEntryStatisticsResponse,
+  CallEntryDashboardFilters,
   CallEntrySalespersonData,
   CallEntryCustomerData,
   CallEntryDetailData,
   EnquiryConversionAggregatedData,
+  EnquiryConversionOverviewMeta,
   BudgetAggregatedData,
   extractNumericValue,
+  extractEnquiryConversionOverviewMeta,
+  getFilterBranchMasterOptions,
 } from "../../../service/dashboard.service";
-import { useQuery } from "@tanstack/react-query";
-import { DetailedViewTable, DateRangeInput } from "../../../components";
+import {
+  DetailedViewTable,
+  DateRangeInput,
+  SearchableSelect,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistMantineTheme,
+  erpListGeistRootTypography,
+} from "../../../components";
 import dayjs from "dayjs";
-import Outstanding from "./Outstanding";
-import Budget from "./Budget";
-import CallEntry from "./CallEntry";
-import Enquiry from "./Enquiry";
-import NewCustomers from "./NewCustomers";
-import LostCustomer from "./LostCustomer";
-import CustomerNotVisited from "./CustomerNotVisited";
 import CustomerInteractionStatus from "./CustomerInteractionStatus";
 import CallEntrySection from "./CallEntrySection";
 import OutstandingSection from "./OutstandingSection";
@@ -76,6 +83,8 @@ import PipelineReport from "../PipelineReport/index";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
+import CustomerServiceDashboard from "./CustomerServiceDashboard";
+import { useListFilterStore } from "../../../store/listFilterStore";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -86,10 +95,203 @@ interface AggregatedData {
 
 type MetricType = "outstanding" | "overdue";
 
+/** Air Export Booking toolbar tokens (Geist, 32px controls, #e2e8f0 / #105476) */
+const DASH_TOOLBAR_BORDER = "#e2e8f0";
+const DASH_TOOLBAR_PRIMARY = "#105476";
+const DASH_TOOLBAR_FONT = "'Geist', sans-serif";
+
+/** Segmented control track + tabs (white floating pill active, gray labels inactive). */
+const DASH_SEGMENT_TRACK_BG = "#E8EBEF";
+const DASH_SEGMENT_ACTIVE_SHADOW =
+  "0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.06)";
+
+const dashSegmentTabInactive = {
+  root: {
+    height: 32,
+    fontSize: 12,
+    fontWeight: 400,
+    color: "#64748B",
+    backgroundColor: "transparent",
+    border: "none",
+    paddingLeft: 14,
+    paddingRight: 14,
+    fontFamily: DASH_TOOLBAR_FONT,
+    borderRadius: 8,
+    "&:hover": {
+      color: "#475569",
+      backgroundColor: "rgba(255, 255, 255, 0.35)",
+    },
+  },
+  label: { fontWeight: 400 },
+} as const;
+
+const dashSegmentTabActive = {
+  root: {
+    height: 32,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#0F172A",
+    backgroundColor: "#ffffff",
+    border: "none",
+    paddingLeft: 14,
+    paddingRight: 14,
+    fontFamily: DASH_TOOLBAR_FONT,
+    borderRadius: 8,
+    boxShadow: DASH_SEGMENT_ACTIVE_SHADOW,
+    "&:hover": {
+      color: "#0F172A",
+      backgroundColor: "#ffffff",
+    },
+  },
+  label: { fontWeight: 600 },
+} as const;
+
+const dashToolbarSearchInputStyles = {
+  input: {
+    height: 32,
+    minHeight: 32,
+    fontSize: 12,
+    borderColor: DASH_TOOLBAR_BORDER,
+    fontFamily: DASH_TOOLBAR_FONT,
+  },
+} as const;
+
+/** Page chrome behind the white toolbar — matches Sales Leadership reference. */
+const DASH_PAGE_BG = "#F8F9FB";
+
+/** Matches AppShellLayout main `px`; negative margin on dashboard root cancels this so scrollbars align to the main column edge, then content uses this as padding inside scroll areas. */
+const DASH_MAIN_PAD_X = { base: 16, sm: 24 } as const;
+
+const DASH_LEADERSHIP_POS = "#22C55E";
+const DASH_LEADERSHIP_NEG = "#EF4444";
+const DASH_LEADERSHIP_BLUE = "#3B82F6";
+const DASH_LEADERSHIP_CARD_BORDER = "#E5E7EB";
+const DASHBOARD_DATE_FILTER_STORAGE_KEY =
+  "dashboard.master.customerInteractionDateRange";
+
+function dashFormatInrAdaptive(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "₹—";
+  const crores = n / 1e7;
+  const lakhs = n / 1e5;
+  if (crores >= 0.005) return `₹${crores.toFixed(2)} Cr`;
+  if (lakhs >= 0.05) return `₹${lakhs.toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+type DashLeadershipSparkKind = "greenUp" | "blueUp" | "redDown" | "redUp";
+
+function DashLeadershipSparkline({ kind }: { kind: DashLeadershipSparkKind }) {
+  const stroke =
+    kind === "greenUp"
+      ? DASH_LEADERSHIP_POS
+      : kind === "blueUp"
+        ? DASH_LEADERSHIP_BLUE
+        : DASH_LEADERSHIP_NEG;
+  const points =
+    kind === "redDown"
+      ? "0,6 16,9 32,12 48,16 64,20 80,22 100,24"
+      : kind === "redUp"
+        ? "0,20 16,18 32,16 48,14 64,12 80,9 100,7"
+        : kind === "blueUp"
+          ? "0,22 16,19 32,16 48,12 64,10 80,7 100,5"
+          : "0,24 16,20 32,16 48,12 64,9 80,6 100,4";
+  return (
+    <svg
+      width="100%"
+      height={28}
+      viewBox="0 0 100 28"
+      preserveAspectRatio="none"
+      style={{ display: "block" }}
+      aria-hidden
+    >
+      <polyline
+        fill="none"
+        stroke={stroke}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
+function DashSalesLeadershipKpiCard({
+  label,
+  value,
+  trendPrefix,
+  trendMain,
+  trendSub,
+  trendColor,
+  sparkKind,
+}: {
+  label: string;
+  value: string;
+  trendPrefix?: string;
+  trendMain?: string;
+  trendSub?: string;
+  trendColor: string;
+  sparkKind: DashLeadershipSparkKind;
+}) {
+  return (
+    <Box
+      style={{
+        backgroundColor: "#FFFFFF",
+        border: `1px solid ${DASH_LEADERSHIP_CARD_BORDER}`,
+        borderRadius: 10,
+        padding: "14px 16px",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minHeight: 120,
+      }}
+    >
+      <Group justify="space-between" align="flex-start" gap={8} wrap="nowrap">
+        <Text
+          fz={11}
+          fw={700}
+          tt="uppercase"
+          lts={0.6}
+          c="#64748B"
+          style={{ lineHeight: 1.3 }}
+        >
+          {label}
+        </Text>
+      </Group>
+      <Text fz={22} fw={800} c="#0F172A" lh={1.15}>
+        {value}
+      </Text>
+      {trendMain ? (
+        <Text fz={11} lh={1.35} style={{ whiteSpace: "nowrap" }}>
+          <Text span c={trendColor} fw={700}>
+            {trendPrefix ?? ""}
+            {trendMain}
+          </Text>
+          {trendSub ? (
+            <Text span fw={600} c="#94A3B8">
+              {" "}
+              {trendSub}
+            </Text>
+          ) : null}
+        </Text>
+      ) : (
+        <Text fz={11} fw={600} c="#94A3B8">
+          {/* Selected date range */}
+        </Text>
+      )}
+      {/* <Box mt="auto">
+        <DashLeadershipSparkline kind={sparkKind} />
+      </Box> */}
+    </Box>
+  );
+}
+
 const Dashboard = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+
   const [loading, setLoading] = useState(false);
   const [isLoadingOutstandingChart, setIsLoadingOutstandingChart] =
     useState(false);
@@ -168,9 +370,6 @@ const Dashboard = () => {
   const [initialEnquiryFilterType, setInitialEnquiryFilterType] = useState<
     "all" | "gain" | "lost" | "active" | "quote"
   >("all");
-  const [enquiryView, setEnquiryView] = useState<"gain-lost" | "active-quote">(
-    "gain-lost"
-  );
   const [callEntryFilterType, setCallEntryFilterType] = useState<
     "all" | "overdue" | "today" | "upcoming" | "closed"
   >("all");
@@ -253,14 +452,29 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // Global search state - separate input value from actual search query
-  const [searchInputValue, setSearchInputValue] = useState<string>("");
-  const [globalSearch, setGlobalSearch] = useState<string>("");
+  const persistedChartSearch = useListFilterStore(
+    (s) => s.registry["dashboard:chart-search"]?.search ?? ""
+  );
+  const [searchInputValue, setSearchInputValue] = useState<string>(
+    persistedChartSearch
+  );
+  const [globalSearch, setGlobalSearch] = useState<string>(persistedChartSearch);
   const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
 
   // Searchable dropdown states
   const [dropdownOptions, setDropdownOptions] = useState<string[]>([]);
   const [isDropdownLoading, setIsDropdownLoading] = useState<boolean>(false);
   const [debouncedSearch] = useDebouncedValue(searchInputValue, 400);
+
+  // When returning from inner pages, restore the selected dashboard search value.
+  // Do NOT clear it unless user clears manually.
+  useEffect(() => {
+    const v = String(persistedChartSearch || "").trim();
+    if (!v) return;
+    if (globalSearch.trim() === v && searchInputValue.trim() === v) return;
+    setGlobalSearch(v);
+    setSearchInputValue(v);
+  }, [persistedChartSearch, globalSearch, searchInputValue]);
 
   // Calculate current financial year start year for default selection
   const getCurrentFinancialYearStart = () => {
@@ -336,6 +550,8 @@ const Dashboard = () => {
       activePercentage: 0,
       quotePercentage: 0,
     });
+  const [enquiryConversionOverviewMeta, setEnquiryConversionOverviewMeta] =
+    useState<EnquiryConversionOverviewMeta>({});
 
   // Section-level period states (for unified filters in section headers)
   const [customerInteractionPeriod, setCustomerInteractionPeriod] =
@@ -344,6 +560,28 @@ const Dashboard = () => {
     useState<string>("last_30_days");
 
   // Customer Interaction Status date range states
+  const readPersistedDashboardDateRange = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(DASHBOARD_DATE_FILTER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        fromDate?: string | null;
+        toDate?: string | null;
+      };
+      const fromDate = parsed?.fromDate ? new Date(parsed.fromDate) : null;
+      const toDate = parsed?.toDate ? new Date(parsed.toDate) : null;
+      const validFromDate =
+        fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
+      const validToDate = toDate && !Number.isNaN(toDate.getTime()) ? toDate : null;
+      if (!validFromDate && !validToDate) return null;
+      return { fromDate: validFromDate, toDate: validToDate };
+    } catch {
+      return null;
+    }
+  };
+  const persistedDateRange = readPersistedDashboardDateRange();
+
   const getDefaultFromDate = (): Date => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -352,9 +590,24 @@ const Dashboard = () => {
     return new Date();
   };
   const [customerInteractionFromDate, setCustomerInteractionFromDate] =
-    useState<Date | null>(getDefaultFromDate());
+    useState<Date | null>(persistedDateRange?.fromDate ?? getDefaultFromDate());
   const [customerInteractionToDate, setCustomerInteractionToDate] =
-    useState<Date | null>(getDefaultToDate());
+    useState<Date | null>(persistedDateRange?.toDate ?? getDefaultToDate());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        DASHBOARD_DATE_FILTER_STORAGE_KEY,
+        JSON.stringify({
+          fromDate: customerInteractionFromDate?.toISOString() ?? null,
+          toDate: customerInteractionToDate?.toISOString() ?? null,
+        })
+      );
+    } catch {
+      // Ignore storage failures and continue with in-memory state.
+    }
+  }, [customerInteractionFromDate, customerInteractionToDate]);
 
   // Enquiry and Call Entry now use the universal date selector (customerInteractionFromDate/ToDate)
   // Removed separate date states to ensure all modules use the same selected dates
@@ -400,6 +653,27 @@ const Dashboard = () => {
 
   // Tab state for navigation
   const [activeTab, setActiveTab] = useState<string>("overall");
+  const [pipelineBranchCode, setPipelineBranchCode] = useState<string | null>(
+    null
+  );
+  const [pipelineCoordinatorName, setPipelineCoordinatorName] = useState<
+    string | null
+  >(null);
+  const [pipelineCoordinatorDisplay, setPipelineCoordinatorDisplay] = useState<
+    string | null
+  >(null);
+  const [pipelineBranchOptions, setPipelineBranchOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [pipelineBranchLoading, setPipelineBranchLoading] = useState(false);
+  const isPipelineReportTab = activeTab === "pipeline-Report";
+  const isPipelineAdmin = Boolean(user?.is_staff);
+  const isIndiaUser =
+    (user?.country?.country_code ?? "").toUpperCase() === "IN";
+  const showPipelineBranchFilter =
+    isPipelineReportTab && isPipelineAdmin && isIndiaUser;
+  const showPipelineCoordinatorFilter =
+    isPipelineReportTab && isPipelineAdmin;
   // Pipeline Report state for restoration
   const [pipelineReportState, setPipelineReportState] = useState<{
     drillLevel?: 0 | 1 | 2;
@@ -416,6 +690,8 @@ const Dashboard = () => {
     fromDate?: Date | null;
     toDate?: Date | null;
     period?: string;
+    quotationListDrillPayload?: PipelineReportFilters;
+    quotationListDrillFetchKind?: "salesperson" | "regional" | "product";
   } | null>(null);
 
   // Refresh key for Pipeline and Booking tabs - changes when profile is updated
@@ -447,6 +723,53 @@ const Dashboard = () => {
   const [currentEmailData, setCurrentEmailData] = useState<any>(null);
   const [isRestoringFromNavigation, setIsRestoringFromNavigation] =
     useState(false);
+
+  useEffect(() => {
+    if (!showPipelineBranchFilter || !user?.country?.country_code) {
+      setPipelineBranchOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadPipelineBranches = async () => {
+      setPipelineBranchLoading(true);
+      try {
+        const branches = await getFilterBranchMasterOptions(
+          user.country.country_code
+        );
+        if (cancelled) return;
+        setPipelineBranchOptions(
+          branches.map((b) => ({
+            value: b.branch_code,
+            label: b.branch_name?.trim() || b.branch_code,
+          }))
+        );
+      } catch (error) {
+        console.error("Error loading pipeline branch options:", error);
+        if (!cancelled) setPipelineBranchOptions([]);
+      } finally {
+        if (!cancelled) setPipelineBranchLoading(false);
+      }
+    };
+
+    void loadPipelineBranches();
+    return () => {
+      cancelled = true;
+    };
+  }, [showPipelineBranchFilter, user?.country?.country_code]);
+
+  useEffect(() => {
+    if (!isPipelineReportTab || isPipelineAdmin) return;
+    setPipelineBranchCode(null);
+    setPipelineCoordinatorName(null);
+    setPipelineCoordinatorDisplay(null);
+  }, [isPipelineReportTab, isPipelineAdmin]);
+
+  useEffect(() => {
+    if (!showPipelineBranchFilter) {
+      setPipelineBranchCode(null);
+    }
+  }, [showPipelineBranchFilter]);
 
   // Handle location state for pipeline report restoration
   useEffect(() => {
@@ -1020,29 +1343,9 @@ const Dashboard = () => {
         setBudgetSelectedSalesperson(null);
         setBudgetSelectedMonth(null);
 
-        // Calculate financial year range for the selected year
-        // First, get the end month (previous month of current date)
-        const today = dayjs();
-        const currentMonth = today.month() + 1;
-        const currentYear = today.year();
-
-        let endMonth: number;
-        let endYear: number;
-
-        if (currentMonth === 1) {
-          endMonth = 12;
-          endYear = currentYear - 1;
-        } else {
-          endMonth = currentMonth - 1;
-          endYear = currentYear;
-        }
-
-        const endMonthStr = `${endYear}-${String(endMonth).padStart(2, "0")}`;
-
-        // Calculate start month based on end month
-        // If end month is Jan-Mar, start year = end year - 1
-        // If end month is Apr-Dec, start year = end year
-        const startMonth = calculateStartMonthFromEndMonth(endMonthStr);
+        // Calculate financial year range directly from selected year
+        const { start_month: startMonth, end_month: endMonthStr } =
+          calculateFinancialYearBudgetRangeForYear(parseInt(selectedYear, 10));
 
         setBudgetStartMonth(startMonth);
         setBudgetEndMonth(endMonthStr);
@@ -1203,6 +1506,7 @@ const Dashboard = () => {
         company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        search: globalSearch?.trim() || "",
       });
 
       setCustomerInteractionData(data);
@@ -1402,14 +1706,14 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const response = await getCallEntryStatistics(
+      const dash = await getCallEntryDashboardData(
         addSearchToCallEntryFilters({
           company: companyName,
-        })
+        }) as CallEntryDashboardFilters
       );
 
-      setCallEntryStatisticsData(response);
-      setCallEntrySummary(response.summary);
+      setCallEntryStatisticsData(mapCallEntryDashboardToLegacyResponse(dash));
+      setCallEntrySummary(dash.summary);
     } catch (error) {
       console.error("Error fetching call entry statistics:", error);
       toast.error("Failed to fetch call entry data");
@@ -1459,19 +1763,23 @@ const Dashboard = () => {
       const companyName =
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(companyName && { company: companyName }),
+      const response = await getEnquiryConversionDashboardData({
+        company: companyName,
         date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
         date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+        search: globalSearch?.trim() || null,
       });
 
-      const response = await getFilteredEnquiryConversionData(filterData);
-      const aggregatedData =
-        calculateFilteredEnquiryConversionAggregatedData(response);
-      setEnquiryConversionAggregatedData(aggregatedData);
+      setEnquiryConversionAggregatedData(
+        resolveEnquiryConversionAggregatedFromResponse(response)
+      );
+      setEnquiryConversionOverviewMeta(
+        extractEnquiryConversionOverviewMeta(response)
+      );
     } catch (error) {
       console.error("Error fetching enquiry conversion data:", error);
       toast.error("Failed to fetch enquiry conversion data");
+      setEnquiryConversionOverviewMeta({});
     } finally {
       setIsLoadingEnquiryConversion(false);
     }
@@ -1539,6 +1847,7 @@ const Dashboard = () => {
   const handleSearch = useCallback(() => {
     const searchQuery = searchInputValue.trim();
     setGlobalSearch(searchQuery);
+    useListFilterStore.getState().setSearch("dashboard:chart-search", searchQuery);
   }, [searchInputValue]);
 
   // Handler for Enter key press
@@ -1623,23 +1932,24 @@ const Dashboard = () => {
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
-  // Helper function for call entry filters - uses DD-MM-YYYY format
+  // Helper — `getCallEntryStatistics` expects `CallEntryStatisticsFilters` with dates.
   const addSearchToCallEntryFilters = useCallback(
-    <T extends DashboardFilters>(filters: T): T => {
-      let updatedFilters = { ...filters };
-      if (globalSearch && globalSearch.trim()) {
-        updatedFilters = { ...updatedFilters, search: globalSearch.trim() };
+    (
+      filters: Omit<CallEntryStatisticsFilters, "date_from" | "date_to" | "search"> & {
+        search?: string;
       }
-      // Add date range filter from common date filter in DD-MM-YYYY format for call entry
-      if (customerInteractionFromDate && customerInteractionToDate) {
-        updatedFilters = {
-          ...updatedFilters,
-          date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
-          date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-      }
-      return updatedFilters as T;
-    },
+    ): CallEntryStatisticsFilters => ({
+      ...filters,
+      search: globalSearch?.trim() || filters.search || "",
+      date_from:
+        customerInteractionFromDate != null
+          ? dayjs(customerInteractionFromDate).format("DD-MM-YYYY")
+          : "",
+      date_to:
+        customerInteractionToDate != null
+          ? dayjs(customerInteractionToDate).format("DD-MM-YYYY")
+          : "",
+    }),
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
@@ -1681,29 +1991,12 @@ const Dashboard = () => {
       setIsLoadingEnquiryConversion(true);
       setIsLoadingCallEntry(true);
 
-      // Calculate budget month range using end month logic
-      const today = dayjs();
-      const currentYear = today.year();
-      const currentMonth = today.month() + 1; // dayjs month is 0-indexed, so +1
-      let endMonth: number;
-      let endYear: number;
-
-      if (currentMonth === 1) {
-        // If current month is January, previous month is December of previous year
-        endMonth = 12;
-        endYear = currentYear - 1;
-      } else {
-        // Otherwise, previous month is current month - 1 of current year
-        endMonth = currentMonth - 1;
-        endYear = currentYear;
-      }
-
-      const endMonthStr = `${endYear}-${String(endMonth).padStart(2, "0")}`;
-
-      // Calculate start month based on end month
-      // If end month is Jan-Mar, start year = end year - 1
-      // If end month is Apr-Dec, start year = end year
-      const startMonth = calculateStartMonthFromEndMonth(endMonthStr);
+      // Keep API payload month range aligned with selected financial year in UI
+      const budgetYear = selectedYear
+        ? parseInt(selectedYear, 10)
+        : parseInt(getCurrentFinancialYearStart(), 10);
+      const { start_month: startMonth, end_month: endMonthStr } =
+        calculateFinancialYearBudgetRangeForYear(budgetYear);
 
       setBudgetStartMonth(startMonth);
       setBudgetEndMonth(endMonthStr);
@@ -1714,16 +2007,7 @@ const Dashboard = () => {
         type: "salesperson",
       };
       console.log("🔥 Initial Budget Payload:", budgetPayload);
-      console.log(
-        "🔥 Debug - currentYear:",
-        currentYear,
-        "currentMonth:",
-        currentMonth,
-        "endYear:",
-        endYear,
-        "endMonth:",
-        endMonth
-      );
+      console.log("🔥 Debug - selectedBudgetYear:", budgetYear);
 
       // Get company name from user's auth data
       const companyName =
@@ -1734,11 +2018,8 @@ const Dashboard = () => {
       // If one fails, others can still succeed and display their data
       const results = await Promise.allSettled([
         // Use filtered API call with company name to get location data directly
-        companyName
-          ? getFilteredOutstandingData(
-              addSearchToFilters({ company: companyName })
-            )
-          : getFilteredOutstandingData({ company: companyName }),
+        // Outstanding should NOT be impacted by the dashboard search bar.
+        getFilteredOutstandingData({ company: companyName }),
         // Use filtered API call with company name for budget data
         companyName
           ? getFilteredBudgetData(
@@ -1757,35 +2038,36 @@ const Dashboard = () => {
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              search: globalSearch?.trim() || "",
             })
           : getCustomerInteractionStatusSummary({
               company: companyName,
               period: customerInteractionPeriod,
+              search: globalSearch?.trim() || "",
             }),
-        // Use filtered API call with company name and date range for enquiry conversion data
-        // Updated to use date range instead of period
-        // Always use selected dates if available, otherwise fall back to getEnquiryConversionData
+        // Enquiry conversion overview — POST enquiry/enquiryconversion/ only (needs date range)
         (async () => {
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const filterData: DashboardFilters = addSearchToFilters({
-              ...(companyName && { company: companyName }),
+            return await getEnquiryConversionDashboardData({
+              company: companyName,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
+              search: globalSearch?.trim() || null,
             });
-            return await getFilteredEnquiryConversionData(filterData);
-          } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            return await getEnquiryConversionData();
           }
+          return null;
         })(),
-        // Call entry statistics - use selected date range
+        // Call entry overview — POST call-entry/data/
         (async () => {
-          return await getCallEntryStatistics(
+          if (!customerInteractionFromDate || !customerInteractionToDate) {
+            return null;
+          }
+          return await getCallEntryDashboardData(
             addSearchToCallEntryFilters({
               company: companyName,
-            })
+            }) as CallEntryDashboardFilters
           );
         })(),
       ]);
@@ -1919,39 +2201,34 @@ const Dashboard = () => {
         setIsLoadingCustomerInteraction(false);
       }
 
-      // Process Enquiry Conversion response
+      // Process Enquiry Conversion — POST enquiry/enquiryconversion/ only
       if (enquiryConversionResponse) {
-        const hasEnquiryData =
-          (enquiryConversionResponse as any)?.data?.[0]?.Enquiry_data !==
-          undefined;
-
-        const calculatedEnquiryConversionData = hasEnquiryData
-          ? calculateEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            )
-          : calculateFilteredEnquiryConversionAggregatedData(
-              enquiryConversionResponse as any
-            );
-
-        setEnquiryConversionAggregatedData(calculatedEnquiryConversionData);
-        // Don't reset period here - preserve user's selected period
-        setIsLoadingEnquiryConversion(false);
-      } else if (results[3].status === "rejected") {
-        setIsLoadingEnquiryConversion(false);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(
+            enquiryConversionResponse as any
+          )
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryConversionResponse)
+        );
+      } else {
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
+      setIsLoadingEnquiryConversion(false);
 
       // Process Call Entry response
-      if (callEntryResponse) {
-        // New API response structure
-        setCallEntryStatisticsData(
-          callEntryResponse as CallEntryStatisticsResponse
-        );
-        setCallEntrySummary(
-          (callEntryResponse as CallEntryStatisticsResponse).summary
-        );
-        // Don't reset period here - let it be controlled by user selection only
+      if (results[4].status === "fulfilled") {
+        if (callEntryResponse) {
+          setCallEntryStatisticsData(
+            mapCallEntryDashboardToLegacyResponse(callEntryResponse)
+          );
+          setCallEntrySummary(callEntryResponse.summary);
+        }
         setIsLoadingCallEntry(false);
-      } else if (results[4].status === "rejected") {
+      } else {
         setIsLoadingCallEntry(false);
       }
     } catch (error) {
@@ -1963,6 +2240,7 @@ const Dashboard = () => {
       setIsLoadingBudget(false);
       setIsLoadingCustomerInteraction(false);
       setIsLoadingEnquiryConversion(false);
+      setEnquiryConversionOverviewMeta({});
       setIsLoadingCallEntry(false);
     } finally {
       // Only set loading to false if all operations completed
@@ -2013,22 +2291,23 @@ const Dashboard = () => {
         user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
       if (customerInteractionFromDate && customerInteractionToDate) {
-        const enquiryFilterData: DashboardFilters = {
+        const enquiryResponse = await getEnquiryConversionDashboardData({
           company: companyNameForEnquiry,
           date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
           date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-        };
-        const enquiryResponse =
-          await getFilteredEnquiryConversionData(enquiryFilterData);
-        const aggregatedEnquiryConversion =
-          calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+          search: globalSearch?.trim() || null,
+        });
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+        );
+        setEnquiryConversionOverviewMeta(
+          extractEnquiryConversionOverviewMeta(enquiryResponse)
+        );
       } else {
-        // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-        const enquiryResponse = await getEnquiryConversionData();
-        const aggregatedEnquiryConversion =
-          calculateEnquiryConversionAggregatedData(enquiryResponse);
-        setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+        setEnquiryConversionAggregatedData(
+          resolveEnquiryConversionAggregatedFromResponse(undefined)
+        );
+        setEnquiryConversionOverviewMeta({});
       }
       // Don't reset period here - preserve user's selected period
 
@@ -2077,145 +2356,31 @@ const Dashboard = () => {
   };
 
   const handleOutstandingViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("outstanding");
-      setDetailedViewTitle("Outstanding vs Over Due - Detailed View");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values
-      setDetailedViewSelectedCompany(selectedCompany);
-      setDetailedViewSelectedLocation(selectedLocation);
-      setDetailedViewSelectedSalesperson(
-        searchSalesman ? searchSalesman : null
-      );
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(drillLevel);
-
-      const filterData: DashboardFilters = addSearchToFilters({
-        ...(selectedCompany && { company: selectedCompany }),
-        ...(selectedLocation && { location: selectedLocation }),
-        ...(searchSalesman && { salesman: searchSalesman }),
-        ...(selectedYear && { year: parseInt(selectedYear) }),
-        ...(customerInteractionFromDate &&
-          customerInteractionToDate && {
-            date_from: dayjs(customerInteractionFromDate).format("YYYY-MM-DD"),
-            date_to: dayjs(customerInteractionToDate).format("YYYY-MM-DD"),
-          }),
-      });
-
-      const response = await getFilteredOutstandingData(filterData);
-
-      const shouldRemoveSalespersonColumns = !!searchSalesman;
-      const tableData = convertFilteredResponseToTableData(
-        response,
-        shouldRemoveSalespersonColumns
-      );
-
-      if (searchSalesman) {
-        setDetailedViewTitle(`Outstanding vs Over Due - ${searchSalesman}`);
-      }
-
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/customer-outstanding-vs-overdue", {
+      state: {
+        company: companyName,
+        location: selectedLocation || null,
+        salesman: searchSalesman || null,
+        customer_name: globalSearch?.trim() || null,
+      },
+    });
   };
 
   const handleBudgetViewAll = async () => {
-    try {
-      setIsLoadingDetailedView(true);
-      setShowDetailedView(true);
-      setDetailedViewType("budget");
-      setDetailedViewSearch(globalSearch); // Initialize with current search
-
-      // Use current dashboard filter values with fallback to user company
-      const companyName =
-        user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-      setDetailedViewSelectedCompany(companyName);
-      setDetailedViewSelectedSalesperson(budgetSelectedSalesperson);
-
-      // Use SAME drill level as dashboard
-      setDetailedViewDrillLevel(budgetDrillLevel);
-
-      let title = "Budget vs Actual - Overall";
-      let response: any;
-
-      if (budgetDrillLevel === 0) {
-        title = "Budget vs Actual - Overall";
-        const filterData: DashboardFilters = addSearchToFilters({
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 1) {
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        title = "Budget vs Actual - Salesperson Wise";
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 2) {
-        // Month wise view - show salesperson name
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        title = `Budget vs Actual - ${salespersonName} - Month Wise`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetStartMonth && { start_month: budgetStartMonth }),
-          ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      } else if (budgetDrillLevel === 3) {
-        // Specific month selected
-        const companyName =
-          user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
-        const salespersonName = budgetSelectedSalesperson || "";
-        const monthFormatted = budgetSelectedMonth
-          ? dayjs(budgetSelectedMonth + "-01").format("MMMM YYYY")
-          : "";
-        title = `Budget vs Actual - ${salespersonName} - ${monthFormatted}`;
-        const filterData: DashboardFilters = addSearchToFilters({
-          company: companyName,
-          salesman: salespersonName,
-          ...(budgetSelectedMonth && {
-            start_month: budgetSelectedMonth,
-            end_month: budgetSelectedMonth,
-          }),
-          ...(!budgetSelectedMonth && {
-            ...(budgetStartMonth && { start_month: budgetStartMonth }),
-            ...(budgetEndMonth && { end_month: budgetEndMonth }),
-          }),
-          type: budgetType,
-        });
-        response = await getFilteredBudgetData(filterData as any);
-      }
-
-      setDetailedViewTitle(title);
-
-      const tableData = convertBudgetResponseToTableData(
-        response,
-        budgetDrillLevel,
-        budgetType
-      );
-      setDetailedViewData(tableData);
-    } catch (error) {
-      console.error("Error loading budget detailed view:", error);
-    } finally {
-      setIsLoadingDetailedView(false);
-    }
+    const companyName =
+      selectedCompany || user?.company?.company_name || "PENTAGON INDIA";
+    navigate("/dashboard/budget-vs-actual", {
+      state: {
+        company: companyName,
+        type: budgetType,
+        start_month: budgetStartMonth || undefined,
+        end_month: budgetEndMonth || undefined,
+        salesperson: searchSalesman || budgetSelectedSalesperson || null,
+        mode: null,
+      },
+    });
   };
 
   const handleEnquiryConversionViewAll = async (
@@ -2392,6 +2557,28 @@ const Dashboard = () => {
       setIsLoadingDetailedView(false);
     }
   };
+
+  const handleOpenCallEntryDashboard = useCallback(() => {
+    const companyName =
+      user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+    navigate("/dashboard/call-entry-dashboard", {
+      state: {
+        company: companyName,
+        fromDate: customerInteractionFromDate
+          ? dayjs(customerInteractionFromDate).toISOString()
+          : null,
+        toDate: customerInteractionToDate
+          ? dayjs(customerInteractionToDate).toISOString()
+          : null,
+      },
+    });
+  }, [
+    customerInteractionFromDate,
+    customerInteractionToDate,
+    navigate,
+    selectedCompany,
+    user?.company?.company_name,
+  ]);
 
   // Customer Not Visited handlers (similar to Budget handlers)
   const handleCustomerNotVisitedPeriodChange = useCallback(
@@ -3194,6 +3381,8 @@ const Dashboard = () => {
                 sales_budget: budgetItem.sales_budget || 0,
                 incentive_amount: budgetItem.incentive_amount || 0,
               };
+              dataRow.trade_type = budgetItem.trade_type ?? "-";
+              dataRow.service_type = budgetItem.service_type ?? "-";
 
               // Only add achieved column for salesperson type
               if (budgetType === "salesperson") {
@@ -3212,6 +3401,8 @@ const Dashboard = () => {
                 actual_budget: budgetItem.actual_budget || 0,
                 sales_budget: budgetItem.sales_budget || 0,
               };
+              row.trade_type = budgetItem.trade_type ?? "-";
+              row.service_type = budgetItem.service_type ?? "-";
 
               // Only add achieved column for salesperson type
               if (budgetType === "salesperson") {
@@ -6413,17 +6604,38 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(1);
         } else if (detailedViewDrillLevel === 1) {
-          // Go back to initial View All state
-          const response = await getCustomerNotVisitedData({
-            period: customerNotVisitedPeriod,
-            index: 0,
-            limit: 10,
-          });
-          const tableData = convertCustomerNotVisitedToTableData(response, 0);
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedCompany(null);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
+          if (notVisitedOriginalData?.data?.length) {
+            const salespersonData = (notVisitedOriginalData.data || []).filter(
+              (item: Record<string, unknown>) =>
+                item.salesperson !== undefined
+            );
+            const tableData = salespersonData.map(
+              (item: Record<string, unknown>) => ({
+                SNO:
+                  item.sno !== undefined && item.sno !== null
+                    ? Number(item.sno)
+                    : 0,
+                send_email: "send_email",
+                SALESPERSON: String(item.salesperson ?? ""),
+                COUNT: Number(item.count) || 0,
+              })
+            );
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+            setDetailedViewTitle("Not Visited Customers");
+          } else {
+            const response = await getCustomerNotVisitedData({
+              period: customerNotVisitedPeriod,
+              index: 0,
+              limit: 10,
+            });
+            const tableData = convertCustomerNotVisitedToTableData(response, 0);
+            setDetailedViewData(tableData);
+            setDetailedViewSelectedCompany(null);
+            setDetailedViewSelectedSalesperson(null);
+            setDetailedViewDrillLevel(0);
+          }
         }
       } else if (detailedViewType === "lostCustomer") {
         if (detailedViewDrillLevel === 1) {
@@ -6468,30 +6680,6 @@ const Dashboard = () => {
           setDetailedViewSelectedSalesperson(null);
           setDetailedViewDrillLevel(0);
           setDetailedViewTitle("Gain - New Customers");
-        }
-      } else if (detailedViewType === "customerNotVisited") {
-        if (detailedViewDrillLevel === 1) {
-          // Go back from customer to salesperson level
-          if (!notVisitedOriginalData) {
-            toast.error("Original data not found");
-            setIsLoadingDetailedView(false);
-            return;
-          }
-          // Transform response to table data format using stored original data
-          const salespersonData = (notVisitedOriginalData.data || []).filter(
-            (item: any) => item.salesperson !== undefined
-          );
-          const tableData = salespersonData.map((item: any) => ({
-            SNO: item.sno !== undefined && item.sno !== null ? item.sno : 0,
-            send_email: "send_email",
-            SALESPERSON: item.salesperson || "",
-            // EMAIL: item.email || "",
-            COUNT: item.count || 0,
-          }));
-          setDetailedViewData(tableData);
-          setDetailedViewSelectedSalesperson(null);
-          setDetailedViewDrillLevel(0);
-          setDetailedViewTitle("Not Visited Customers");
         }
       } else if (detailedViewType === "callentry") {
         if (callEntryDrillLevel === 2) {
@@ -6847,24 +7035,25 @@ const Dashboard = () => {
             user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
 
           if (customerInteractionFromDate && customerInteractionToDate) {
-            const enquiryFilterData: DashboardFilters = {
+            const enquiryResponse = await getEnquiryConversionDashboardData({
               company: companyNameForEnquiry,
               date_from: dayjs(customerInteractionFromDate).format(
                 "DD-MM-YYYY"
               ),
               date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-            };
-            const enquiryResponse =
-              await getFilteredEnquiryConversionData(enquiryFilterData);
-            const aggregatedEnquiryConversion =
-              calculateFilteredEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+              search: globalSearch?.trim() || null,
+            });
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
+            );
+            setEnquiryConversionOverviewMeta(
+              extractEnquiryConversionOverviewMeta(enquiryResponse)
+            );
           } else {
-            // Fallback to non-filtered API if dates are not set (shouldn't happen in normal flow)
-            const enquiryResponse = await getEnquiryConversionData();
-            const aggregatedEnquiryConversion =
-              calculateEnquiryConversionAggregatedData(enquiryResponse);
-            setEnquiryConversionAggregatedData(aggregatedEnquiryConversion);
+            setEnquiryConversionAggregatedData(
+              resolveEnquiryConversionAggregatedFromResponse(undefined)
+            );
+            setEnquiryConversionOverviewMeta({});
           }
 
           await refreshBudgetData();
@@ -7213,11 +7402,13 @@ const Dashboard = () => {
       setIsLoadingBudget(true);
       try {
         if (budgetDrillLevel === 0) {
-          setBudgetSelectedCompany(params?.name || null);
-          setSelectedCompany(params?.name || null);
+          const clickedCompanyName =
+            params?.data?.company_name || params?.name || null;
+          setBudgetSelectedCompany(clickedCompanyName);
+          setSelectedCompany(clickedCompanyName);
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
-              company: params?.name,
+              company: clickedCompanyName,
               start_month: budgetStartMonth,
               end_month: budgetEndMonth,
               type: budgetType,
@@ -7251,7 +7442,8 @@ const Dashboard = () => {
 
           const resp = await getFilteredBudgetData(
             addSearchToFilters({
-              company: budgetSelectedCompany,
+              // budgetSelectedCompany can be null on this drill path; always send company
+              company: companyName,
               salesman: fullSalespersonName,
               start_month: budgetStartMonth,
               end_month: budgetEndMonth,
@@ -7386,13 +7578,9 @@ const Dashboard = () => {
   };
 
   const getToMonthOptions = (year: string | null) => {
-    // Use year from budgetEndMonth if available, otherwise use selectedYear or current financial year start
-    let selectedYearValue: string;
-    if (budgetEndMonth) {
-      selectedYearValue = budgetEndMonth.split("-")[0];
-    } else {
-      selectedYearValue = year || getCurrentFinancialYearStart();
-    }
+    // Always derive options from selected year to keep dropdown editable.
+    // end_month year mapping (same/next year) is handled at payload layer.
+    const selectedYearValue = year || getCurrentFinancialYearStart();
 
     const currentYear = dayjs().year();
     const currentMonth = dayjs().month() + 1;
@@ -7451,255 +7639,433 @@ const Dashboard = () => {
   const fromMonthOptions = getFromMonthOptions(selectedYear);
   const toMonthOptions = getToMonthOptions(selectedYear);
 
-  return (
-    <Box p="xs" h="calc(100vh - 95px)" style={{display:"flex", flexDirection:"column"}}>
-      {/* Filter Section - Single Row */}
+  const salesLeadershipPeriodLabel = useMemo(() => {
+    if (customerInteractionFromDate && customerInteractionToDate) {
+      return `${dayjs(customerInteractionFromDate).format("D MMM YY")} → ${dayjs(customerInteractionToDate).format("D MMM YY")}`;
+    }
+    return "Selected period";
+  }, [customerInteractionFromDate, customerInteractionToDate]);
 
-      {/* Tabs and Search Row - Available in all drill levels */}
-      <Group
-        mb="md"
-        justify="space-between"
-        align="center"
-        wrap="nowrap"
-        style={{ alignItems: "center" }}
+  const salesLeadershipKpiItems = useMemo(() => {
+    const e = enquiryConversionAggregatedData;
+    const pipelineN = extractNumericValue(
+      (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
+    );
+    const overdueN = extractNumericValue(
+      (contextTotals as any).overdue ?? (contextTotals as any).total_overdue
+    );
+    const revenueMtd = extractNumericValue(
+      (budgetAggregatedData as any).totalActualBudget ??
+        (budgetAggregatedData as any).total_actual_budget ??
+        (budgetAggregatedData as any).actual_ytd
+    );
+    const activeEnquiries = e.totalActive;
+    const activeMoMLabel =
+      enquiryConversionOverviewMeta?.activeMoMChangePctDisplay?.trim() || "";
+    const activeMoMDir = enquiryConversionOverviewMeta?.activeMoMDirection;
+    const activeTrend =
+      activeMoMLabel.length > 0
+        ? {
+            prefix: activeMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: activeMoMLabel,
+            sub: undefined,
+            color:
+              activeMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
+    const winRateMoMLabel =
+      enquiryConversionOverviewMeta?.gainMoMChangePctDisplay?.trim() || "";
+    const winRateMoMDir = enquiryConversionOverviewMeta?.gainMoMDirection;
+    const winRateTrend =
+      winRateMoMLabel.length > 0
+        ? {
+            prefix: winRateMoMDir === "decrease" ? "▼ " : "▲ ",
+            main: winRateMoMLabel,
+            sub: undefined,
+            color:
+              winRateMoMDir === "decrease"
+                ? DASH_LEADERSHIP_NEG
+                : DASH_LEADERSHIP_POS,
+          }
+        : undefined;
+    const conversionRate = `${Math.min(100, Math.max(0, e.gainPercentage)).toFixed(1)}%`;
+    const variance =
+      budgetAggregatedData.totalSalesBudget > 0
+        ? revenueMtd - budgetAggregatedData.totalSalesBudget
+        : 0;
+    const budgetTrend =
+      variance < 0 && Math.abs(variance) > 1
+        ? {
+            prefix: "▼ ",
+            main: dashFormatInrAdaptive(Math.abs(variance)),
+            sub: "vs budget",
+            color: DASH_LEADERSHIP_NEG,
+          }
+        : variance > 1
+          ? {
+              prefix: "▲ ",
+              main: dashFormatInrAdaptive(variance),
+              sub: "vs budget",
+              color: DASH_LEADERSHIP_POS,
+            }
+          : undefined;
+    const revenueSpark =
+      variance < -1 ? ("redDown" as DashLeadershipSparkKind) : ("greenUp" as DashLeadershipSparkKind);
+    return [
+      {
+        key: "new-enquiries",
+        label: "ACTIVE",
+        value: activeEnquiries.toLocaleString("en-IN"),
+        trend: activeTrend,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      {
+        key: "conversion-rate",
+        label: "Conversion rate",
+        value: conversionRate,
+        trend: winRateTrend,
+        spark: "greenUp" as DashLeadershipSparkKind,
+      },
+      // {
+      //   key: "pipeline-value",
+      //   label: "Pipeline value",
+      //   value: dashFormatInrAdaptive(pipelineN),
+      //   trend: undefined,
+      //   spark: "blueUp" as DashLeadershipSparkKind,
+      // },
+      // {
+      //   key: "revenue-mtd",
+      //   label: "Revenue MTD",
+      //   value: revenueMtd === 0 ? "0" : dashFormatInrAdaptive(revenueMtd),
+      //   trend: budgetTrend,
+      //   spark: revenueSpark,
+      // },
+      {
+        key: "overdue-ar",
+        label: "Overdue AR",
+        value: dashFormatInrAdaptive(overdueN),
+        trend: undefined,
+        spark: "redUp" as DashLeadershipSparkKind,
+      },
+    ];
+  }, [
+    enquiryConversionAggregatedData,
+    enquiryConversionOverviewMeta?.activeMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.activeMoMDirection,
+    enquiryConversionOverviewMeta?.gainMoMChangePctDisplay,
+    enquiryConversionOverviewMeta?.gainMoMDirection,
+    contextTotals.outstanding,
+    contextTotals.overdue,
+    budgetAggregatedData.totalActualBudget,
+    budgetAggregatedData.totalSalesBudget,
+  ]);
+
+  return (
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        mx={{ base: -16, sm: -24 }}
+        pb="xs"
+        pt={0}
+        h="calc(100vh - 95px)"
+        style={{
+          ...erpListGeistRootTypography,
+          display: "flex",
+          flexDirection: "column",
+          boxSizing: "border-box",
+          backgroundColor: DASH_PAGE_BG,
+          minWidth: 0,
+        }}
       >
-        {/* Tabs with Segmented Control Style - only when common filters are visible */}
-        {!showDetailedView && (
-          <Group
-            gap={0}
+      {/* Toolbar: full-width under main column; horizontal inset is padding only (scroll uses full width below). */}
+      {!showDetailedView && (
+        <Box
+          style={{
+            backgroundColor: "#ffffff",
+            borderBottom: `1px solid ${DASH_TOOLBAR_BORDER}`,
+          }}
+        >
+          <Box
+            px={DASH_MAIN_PAD_X}
+            py={12}
             style={{
-              backgroundColor: "#f1f3f5",
-              borderRadius: "6px",
-              padding: "2px",
-              height: "32px",
-              display: "flex",
-              alignItems: "center",
+              fontFamily: DASH_TOOLBAR_FONT,
+              WebkitFontSmoothing: "antialiased",
+              MozOsxFontSmoothing: "grayscale",
             }}
           >
-            <Button
-              variant={activeTab === "overall" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("overall")}
-              size="xs"
+            <Flex
+              align="center"
+              gap={24}
+              wrap="nowrap"
               style={{
-                backgroundColor:
-                  activeTab === "overall" ? "#ffffff" : "transparent",
-                color: activeTab === "overall" ? "#000000" : "#666",
-                fontWeight: activeTab === "overall" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "overall"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
+                overflowX: "auto",
+                minHeight: 40,
+                scrollbarWidth: "thin",
+                WebkitOverflowScrolling: "touch",
               }}
             >
-              Sales
-            </Button>
-            <Button
-              variant={activeTab === "pipeline-Report" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("pipeline-Report")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "pipeline-Report" ? "#ffffff" : "transparent",
-                color: activeTab === "pipeline-Report" ? "#000000" : "#666",
-                fontWeight: activeTab === "pipeline-Report" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "pipeline-Report"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              Pipeline Report
-            </Button>
-            <Button
-              variant={activeTab === "booking" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("booking")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "booking" ? "#ffffff" : "transparent",
-                  color: activeTab === "booking" ? "#000000" : "#666",
-                  fontWeight: activeTab === "booking" ? 600 : 400,
-                  border: "none",
-                  borderRadius: "4px",
-                  boxShadow:
-                  activeTab === "booking"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                    transition: "all 0.2s ease",
-                    fontSize: "12px",
-                    padding: "4px 12px",
-                  }}
-            >
-              Booking
-            </Button>
-            <Button
-              variant={activeTab === "customer-service" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("customer-service")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "customer-service" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service" ? "#000000" : "#666",
-                fontWeight: activeTab === "customer-service" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "customer-service"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              CS Export
-            </Button>
-            <Button
-              variant={activeTab === "customer-service-import" ? "filled" : "subtle"}
-              onClick={() => setActiveTab("customer-service-import")}
-              size="xs"
-              style={{
-                backgroundColor:
-                  activeTab === "customer-service-import" ? "#ffffff" : "transparent",
-                color: activeTab === "customer-service-import" ? "#000000" : "#666",
-                fontWeight: activeTab === "customer-service-import" ? 600 : 400,
-                border: "none",
-                borderRadius: "4px",
-                boxShadow:
-                  activeTab === "customer-service-import"
-                    ? "0 1px 2px rgba(0, 0, 0, 0.1)"
-                    : "none",
-                transition: "all 0.2s ease",
-                fontSize: "12px",
-                padding: "4px 12px",
-              }}
-            >
-              CS Import
-            </Button>
-          </Group>
-        )}
-
-        {/* Global Search Input and Date Filter - Always visible at dashboard base level (only hidden in detailed view) */}
-        {!showDetailedView && (
-          <Group
-            gap="md"
-            align="center"
-            wrap="nowrap"
-            style={{ alignItems: "center" }}
-          >
-            {/* Common Date Range Filter */}
-            <Box
-              style={{
-                width: "270px",
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                height: "32px",
-              }}
-            >
-              <DateRangeInput
-                fromDate={customerInteractionFromDate}
-                toDate={customerInteractionToDate}
-                onFromDateChange={setCustomerInteractionFromDate}
-                onToDateChange={setCustomerInteractionToDate}
-                fromPlaceholder="From Date"
-                toPlaceholder="To Date"
-                size="xs"
-                allowDeselection={true}
-                showRangeInCalendar={false}
-                hideLabels={true}
-                containerStyle={{ gap: "4px" }}
-              />
-            </Box>
-            {/* Global Search Input */}
-            <Group
-              style={{
-                maxWidth: "400px",
-                display: "flex",
-                alignItems: "center",
-                height: "32px",
-              }}
-              gap="xs"
-            >
-              <Autocomplete
-                placeholder="Search by Customer name or Salesperson"
-                value={searchInputValue}
-                onChange={setSearchInputValue}
-                onOptionSubmit={(value) => {
-                  setSearchInputValue(value);
-                  setGlobalSearch(value);
+              <Box
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: 4,
+                  borderRadius: 12,
+                  backgroundColor: DASH_SEGMENT_TRACK_BG,
+                  flexShrink: 0,
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && searchInputValue.trim()) {
-                    setGlobalSearch(searchInputValue.trim());
+              >
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "overall"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
                   }
-                }}
-                data={dropdownOptions}
-                size="xs"
-                style={{ width: "400px" }}
-                rightSectionWidth={60}
-                rightSection={
-                  <Group gap={4} align="center" wrap="nowrap">
-                    {/* Clear (X) icon - only when value exists and not loading dropdown */}
-                    {searchInputValue.trim() !== "" && !isDropdownLoading && (
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => {
-                          setSearchInputValue("");
-                          setGlobalSearch("");
-                          setDropdownOptions([]);
-                        }}
-                        size="sm"
-                        style={{ flexShrink: 0 }}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
-                    )}
+                  onClick={() => setActiveTab("overall")}
+                >
+                  Sales
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "pipeline-Report"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("pipeline-Report")}
+                >
+                  Pipeline Report
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "booking"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("booking")}
+                >
+                  Booking
+                </Button>
+                {/* <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service")}
+                >
+                  CS Export
+                </Button>
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service-import"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service-import")}
+                >
+                  CS Import
+                </Button> */}
+                <Button
+                  variant="transparent"
+                  size="xs"
+                  styles={
+                    activeTab === "customer-service-dashboard"
+                      ? dashSegmentTabActive
+                      : dashSegmentTabInactive
+                  }
+                  onClick={() => setActiveTab("customer-service-dashboard")}
+                >
+                  CS Dashboard
+                </Button>
+              </Box> 
 
-                    {/* Fixed-width box for loader or search icon */}
-                    <Box
-                      style={{
-                        width: 26,
-                        height: 26,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {isDropdownLoading || isSearchLoading ? (
-                        <Loader size="xs" />
-                      ) : (
-                        <ActionIcon
-                          variant="subtle"
-                          color="blue"
-                          onClick={handleSearch}
-                          size="sm"
-                        >
-                          <IconSearch size={16} />
-                        </ActionIcon>
-                      )}
-                    </Box>
-                  </Group>
-                }
-                limit={10}
-                maxDropdownHeight={280}
+              <Box
+                style={{
+                  width: 1,
+                  height: 32,
+                  backgroundColor: DASH_TOOLBAR_BORDER,
+                  flexShrink: 0,
+                }}
               />
-            </Group>
-          </Group>
-        )}
-      </Group>
+
+              <Flex
+                align="center"
+                gap={8}
+                wrap="nowrap"
+                style={{
+                  marginLeft: "auto",
+                  flexShrink: 0,
+                }}
+              >
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    maxWidth: isPipelineReportTab ? 260 : undefined,
+                  }}
+                >
+                  <DateRangeInput
+                    fromDate={customerInteractionFromDate}
+                    toDate={customerInteractionToDate}
+                    onFromDateChange={setCustomerInteractionFromDate}
+                    onToDateChange={setCustomerInteractionToDate}
+                    fromPlaceholder="From Date"
+                    toPlaceholder="To Date"
+                    size="xs"
+                    allowDeselection={true}
+                    showRangeInCalendar={false}
+                    hideLabels={true}
+                    compactToolbar
+                    containerStyle={{ gap: isPipelineReportTab ? 6 : 8 }}
+                  />
+                </Box>
+                {showPipelineBranchFilter ? (
+                  <Select
+                    placeholder="Branch"
+                    size="xs"
+                    clearable
+                    searchable
+                    data={pipelineBranchOptions}
+                    value={pipelineBranchCode}
+                    onChange={setPipelineBranchCode}
+                    disabled={pipelineBranchLoading}
+                    nothingFoundMessage="No branches"
+                    style={{ width: 128, flexShrink: 0 }}
+                    styles={dashToolbarSearchInputStyles}
+                  />
+                ) : null}
+                {showPipelineCoordinatorFilter ? (
+                  <Box style={{ width: 168, flexShrink: 0 }}>
+                    <SearchableSelect
+                      placeholder="Reporting to"
+                      size="xs"
+                      apiEndpoint={URL.coordinatorsUser}
+                      searchFields={["coordinator_name"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.coordinator_name ?? ""),
+                        label: String(item.coordinator_name ?? ""),
+                      })}
+                      value={pipelineCoordinatorName}
+                      displayValue={pipelineCoordinatorDisplay}
+                      onChange={(value, selectedData) => {
+                        setPipelineCoordinatorName(value);
+                        setPipelineCoordinatorDisplay(
+                          value === null
+                            ? null
+                            : selectedData?.label ?? value
+                        );
+                      }}
+                      minSearchLength={1}
+                      dropdownZIndex={400}
+                      styles={dashToolbarSearchInputStyles}
+                    />
+                  </Box>
+                ) : null}
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    width: isPipelineReportTab
+                      ? "clamp(140px, 20vw, 240px)"
+                      : "clamp(220px, 36vw, 420px)",
+                    minWidth: isPipelineReportTab ? 140 : 220,
+                    maxWidth: isPipelineReportTab ? 240 : 420,
+                  }}
+                >
+                  <Autocomplete
+                    placeholder="Search by Customer name or Salesperson"
+                    value={searchInputValue}
+                    onChange={setSearchInputValue}
+                    onOptionSubmit={(value) => {
+                      setSearchInputValue(value);
+                      setGlobalSearch(value);
+                      useListFilterStore
+                        .getState()
+                        .setSearch("dashboard:chart-search", value);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && searchInputValue.trim()) {
+                        setGlobalSearch(searchInputValue.trim());
+                        useListFilterStore
+                          .getState()
+                          .setSearch(
+                            "dashboard:chart-search",
+                            searchInputValue.trim()
+                          );
+                      }
+                    }}
+                    data={dropdownOptions}
+                    size="xs"
+                    w="100%"
+                    styles={dashToolbarSearchInputStyles}
+                    rightSectionWidth={60}
+                    rightSection={
+                      <Group gap={4} align="center" wrap="nowrap">
+                        {searchInputValue.trim() !== "" && !isDropdownLoading && (
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => {
+                              setSearchInputValue("");
+                              setGlobalSearch("");
+                              useListFilterStore
+                                .getState()
+                                .setSearch("dashboard:chart-search", "");
+                              setDropdownOptions([]);
+                            }}
+                            size="sm"
+                            style={{ flexShrink: 0 }}
+                          >
+                            <IconX size={16} />
+                          </ActionIcon>
+                        )}
+                        <Box
+                          style={{
+                            width: 26,
+                            height: 26,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {isDropdownLoading || isSearchLoading ? (
+                            <Loader size="xs" />
+                          ) : (
+                            <ActionIcon
+                              variant="subtle"
+                              color={DASH_TOOLBAR_PRIMARY}
+                              onClick={handleSearch}
+                              size="sm"
+                            >
+                              <IconSearch size={16} />
+                            </ActionIcon>
+                          )}
+                        </Box>
+                      </Group>
+                    }
+                    limit={10}
+                    maxDropdownHeight={280}
+                  />
+                </Box>
+              </Flex>
+            </Flex>
+          </Box>
+        </Box>
+      )}
 
       {/* Main Dashboard Content */}
       <Tabs
@@ -7709,11 +8075,12 @@ const Dashboard = () => {
           list: {
             display: "none",
           },
-          root:{
-            flex:1,
-            display:"flex",
-            flexDirection:"column"
-          }
+          root: {
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          },
         }}
       >
         <Tabs.List style={{ display: "none" }}>
@@ -7722,216 +8089,392 @@ const Dashboard = () => {
           <Tabs.Tab value="booking">Booking</Tabs.Tab>
           <Tabs.Tab value="customer-service">Customer Service</Tabs.Tab>
           <Tabs.Tab value="customer-service-import">Customer Service Import</Tabs.Tab>
+          <Tabs.Tab value="customer-service-dashboard">Customer Service Dashboard</Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="overall" pt="sm">
+        <Tabs.Panel
+          value="overall"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {showDetailedView ? (
-            <DetailedViewTable
-              data={detailedViewData}
-              title={(() => {
-                // For budget type, use title as-is without appending drill level name
-                if (detailedViewType === "budget") {
-                  return detailedViewTitle;
-                }
-                // For other types, append drill level display name
-                if (detailedViewDrillLevel === 0) return detailedViewTitle;
-                const displayName = getDrillLevelDisplayName();
-                return displayName
-                  ? `${detailedViewTitle} - ${displayName}`
-                  : detailedViewTitle;
-              })()}
-              onClose={handleCloseDetailedView}
-              loading={isLoadingDetailedView}
-              moduleType={detailedViewType || undefined}
-              drillLevel={detailedViewDrillLevel}
-              totalRecords={
-                detailedViewType === "customerNotVisited"
-                  ? customerNotVisitedTotalRecords
-                  : detailedViewType === "lostCustomer"
-                    ? lostCustomerTotalRecords
-                    : detailedViewType === "newCustomer"
-                      ? newCustomerTotalRecords
-                      : undefined
-              }
-              onColumnClick={handleDetailedViewColumnClick}
-              onBack={handleDetailedViewBack}
-              initialSearch={detailedViewSearch}
-              onSearchChange={handleDetailedViewSearchChange}
-              showBackButton={
-                detailedViewDrillLevel > 1 ||
-                (detailedViewDrillLevel > 0 &&
-                  (detailedViewType === "lostCustomer" ||
-                    detailedViewType === "newCustomer" ||
-                    detailedViewType === "callentry" ||
-                    detailedViewType === "customerNotVisited"))
-              }
-              headerActions={
-                // Commented out - can be used in future case
-                // Period filter is now common at top level
-                undefined
-              }
-            />
+            <Box
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+              }}
+            >
+              <Box px={DASH_MAIN_PAD_X} pt="sm" pb="xs">
+                <DetailedViewTable
+                  data={detailedViewData}
+                  title={(() => {
+                    // For budget type, use title as-is without appending drill level name
+                    if (detailedViewType === "budget") {
+                      return detailedViewTitle;
+                    }
+                    // For other types, append drill level display name
+                    if (detailedViewDrillLevel === 0) return detailedViewTitle;
+                    const displayName = getDrillLevelDisplayName();
+                    return displayName
+                      ? `${detailedViewTitle} - ${displayName}`
+                      : detailedViewTitle;
+                  })()}
+                  onClose={handleCloseDetailedView}
+                  loading={isLoadingDetailedView}
+                  moduleType={detailedViewType || undefined}
+                  drillLevel={detailedViewDrillLevel}
+                  totalRecords={
+                    detailedViewType === "customerNotVisited"
+                      ? customerNotVisitedTotalRecords
+                      : detailedViewType === "lostCustomer"
+                        ? lostCustomerTotalRecords
+                        : detailedViewType === "newCustomer"
+                          ? newCustomerTotalRecords
+                          : undefined
+                  }
+                  onColumnClick={handleDetailedViewColumnClick}
+                  onBack={handleDetailedViewBack}
+                  initialSearch={detailedViewSearch}
+                  onSearchChange={handleDetailedViewSearchChange}
+                  showBackButton={
+                    detailedViewDrillLevel > 1 ||
+                    (detailedViewDrillLevel > 0 &&
+                      (detailedViewType === "lostCustomer" ||
+                        detailedViewType === "newCustomer" ||
+                        detailedViewType === "callentry" ||
+                        detailedViewType === "customerNotVisited"))
+                  }
+                  headerActions={
+                    // Commented out - can be used in future case
+                    // Period filter is now common at top level
+                    undefined
+                  }
+                />
+              </Box>
+            </Box>
           ) : (
-            <Box>
-              {/* Section 1 & 2: Customer Interaction Status and Enquiry (side by side) */}
-              <Grid mb="lg">
-                <Grid.Col span={6}>
-                  <CustomerInteractionStatus
-                    data={customerInteractionData}
-                    loading={isLoadingCustomerInteraction}
-                    customerInteractionPeriod={customerInteractionPeriod}
-                    setCustomerInteractionPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                    onGainClick={handleGainClick}
-                    onLostClick={handleLostClick}
-                    onNotVisitedClick={handleNotVisitedClick}
-                  />
+            <Box
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "auto",
+              }}
+            >
+              <Box px={DASH_MAIN_PAD_X} pt={{ base: 10, sm: 14 }} pb="lg">
+                <Stack gap="md">
+                  {/* <Box style={{ width: "100%" }}>
+                    <Text
+                      fz={11}
+                      fw={600}
+                      c="#64748B"
+                      mb={6}
+                      style={{ lineHeight: 1.35 }}
+                    >
+                      Pentagon Freight › Sales › Overview
+                    </Text>
+                    <Text
+                      fw={700}
+                      c="#111827"
+                      mb={6}
+                      style={{
+                        fontSize: "clamp(24px, 4.2vw, 20px)",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      Sales Leadership
+                    </Text>
+                    <Text fz={12} fw={600} c="#64748B" style={{ lineHeight: 1.45 }}>
+                      Leadership view · All regions · {salesLeadershipPeriodLabel}
+                    </Text>
+                  </Box> */}
+
+                  <SimpleGrid
+                    cols={{ base: 1, xs: 2, sm: 2, md: 3, lg: 5 }}
+                    spacing={{ base: "sm", sm: "md" }}
+                  >
+                    {salesLeadershipKpiItems.map((kpi) => (
+                      <DashSalesLeadershipKpiCard
+                        key={kpi.key}
+                        label={kpi.label}
+                        value={kpi.value}
+                        trendPrefix={kpi.trend?.prefix}
+                        trendMain={kpi.trend?.main}
+                        trendSub={kpi.trend?.sub}
+                        trendColor={kpi.trend?.color ?? "#64748B"}
+                        sparkKind={kpi.spark}
+                      />
+                    ))}
+                  </SimpleGrid>
+
+                  <Grid
+                    gutter={{ base: "md", lg: "lg" }}
+                    align="stretch"
+                    columns={12}
+                  >
+
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <EnquirySection
+                      enquiryConversionAggregatedData={
+                        enquiryConversionAggregatedData
+                      }
+                      enquiryConversionOverviewMeta={
+                        enquiryConversionOverviewMeta
+                      }
+                      isLoadingEnquiryConversion={isLoadingEnquiryConversion}
+                      isLoadingEnquiryChart={isLoadingEnquiryChart}
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                      onOpenEnquiryConversionModule={() =>
+                        navigate("/dashboard/enquiry-conversion", {
+                          state: {
+                            fromDate:
+                              customerInteractionFromDate?.toISOString() ?? null,
+                            toDate:
+                              customerInteractionToDate?.toISOString() ?? null,
+                            search: globalSearch?.trim() || null,
+                          },
+                        })
+                      }
+                    />
+                  </Box>
                 </Grid.Col>
-                <Grid.Col span={6}>
-                  <EnquirySection
-                    enquiryConversionAggregatedData={
-                      enquiryConversionAggregatedData
-                    }
-                    isLoadingEnquiryConversion={isLoadingEnquiryConversion}
-                    isLoadingEnquiryChart={isLoadingEnquiryChart}
-                    enquiryView={enquiryView}
-                    setEnquiryView={setEnquiryView}
-                    handleEnquiryConversionViewAll={
-                      handleEnquiryConversionViewAll
-                    }
-                    selectedPeriod={enquiryPeriod}
-                    setSelectedPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                  />
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CallEntrySection
+                      callEntrySummary={callEntrySummary}
+                      isLoadingCallEntry={isLoadingCallEntry}
+                      handleCallEntryViewAll={handleCallEntryViewAll}
+                      onOpenCallEntryDashboard={handleOpenCallEntryDashboard}
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                    />
+                  </Box>
                 </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <OutstandingSection
+                      globalSearch={globalSearch}
+                      drillLevel={drillLevel}
+                      handleBack={handleBack}
+                      selectedMetric={selectedMetric}
+                      companySummary={companySummary}
+                      locationData={locationData}
+                      salespersonData={salespersonData}
+                      selectedCompanyCtx={selectedCompanyCtx}
+                      selectedCompany={
+                        selectedCompany ||
+                        user?.company?.company_name ||
+                        "PENTAGON INDIA"
+                      }
+                      selectedLocation={selectedLocation}
+                      contextTotals={contextTotals}
+                      hoverTotals={hoverTotals}
+                      isLoadingOutstandingChart={isLoadingOutstandingChart}
+                      handleOutstandingViewAll={handleOutstandingViewAll}
+                      handlePieClick={handlePieClick}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col
+                  span={{ base: 12, md: 6 }}
+                  style={{ display: "flex", minWidth: 0 }}
+                >
+                  <Box
+                    style={{
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BudgetSection
+                      budgetDrillLevel={budgetDrillLevel}
+                      budgetSelectedCompany={budgetSelectedCompany}
+                      budgetSelectedSalesperson={budgetSelectedSalesperson}
+                      budgetDateRange={budgetDateRange}
+                      budgetRawData={budgetRawData}
+                      budgetAggregatedData={budgetAggregatedData}
+                      budgetHoverTotals={budgetHoverTotals}
+                      isLoadingBudget={isLoadingBudget}
+                      budgetStartMonth={budgetStartMonth}
+                      budgetEndMonth={budgetEndMonth}
+                      budgetType={budgetType}
+                      selectedYear={selectedYear}
+                      yearOptions={yearOptions}
+                      fromMonthOptions={fromMonthOptions}
+                      toMonthOptions={toMonthOptions}
+                      setBudgetDrillLevel={setBudgetDrillLevel}
+                      setBudgetSelectedCompany={setBudgetSelectedCompany}
+                      setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
+                      setBudgetRawData={setBudgetRawData}
+                      setBudgetAggregatedData={setBudgetAggregatedData}
+                      setSearchSalesman={setSearchSalesman}
+                      setSelectedCompany={setSelectedCompany}
+                      setIsLoadingBudget={setIsLoadingBudget}
+                      setBudgetType={setBudgetType}
+                      setSelectedYear={setSelectedYear}
+                      handleBudgetViewAll={handleBudgetViewAll}
+                      handleBudgetBarClick={handleBudgetBarClick}
+                      handleBudgetTypeChange={handleBudgetTypeChange}
+                      handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={12} style={{ display: "flex", minWidth: 0 }}>
+                  <Box
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <CustomerInteractionStatus
+                      data={customerInteractionData}
+                      loading={isLoadingCustomerInteraction}
+                      customerInteractionPeriod={customerInteractionPeriod}
+                      setCustomerInteractionPeriod={
+                        () => {} // Commented out - can be used in future case
+                      }
+                      fromDate={customerInteractionFromDate}
+                      toDate={customerInteractionToDate}
+                      setFromDate={setCustomerInteractionFromDate}
+                      setToDate={setCustomerInteractionToDate}
+                      hideDateFilter={true}
+                      onGainClick={handleGainClick}
+                      onLostClick={handleLostClick}
+                      onNotVisitedClick={handleNotVisitedClick}
+                    />
+                  </Box>
+                  </Grid.Col>
               </Grid>
-
-              {/* Section 3 & 4: Outstanding and Call Entry (side by side) */}
-              <Grid mb="lg">
-                <Grid.Col span={8}>
-                  <OutstandingSection
-                    drillLevel={drillLevel}
-                    selectedMetric={selectedMetric}
-                    companySummary={companySummary}
-                    locationData={locationData}
-                    salespersonData={salespersonData}
-                    selectedCompanyCtx={selectedCompanyCtx}
-                    selectedCompany={selectedCompany}
-                    selectedLocation={selectedLocation}
-                    contextTotals={contextTotals}
-                    hoverTotals={hoverTotals}
-                    isLoadingOutstandingChart={isLoadingOutstandingChart}
-                    handleOutstandingViewAll={handleOutstandingViewAll}
-                    handleBack={handleBack}
-                    handlePieClick={handlePieClick}
-                    outstandingPeriod={outstandingPeriod}
-                    setOutstandingPeriod={setOutstandingPeriod}
-                  />
-                </Grid.Col>
-
-                <Grid.Col span={4}>
-                  <CallEntrySection
-                    callEntrySummary={callEntrySummary}
-                    isLoadingCallEntry={isLoadingCallEntry}
-                    handleCallEntryViewAll={handleCallEntryViewAll}
-                    selectedPeriod={callEntryPeriod}
-                    setSelectedPeriod={
-                      () => {} // Commented out - can be used in future case
-                    }
-                    fromDate={customerInteractionFromDate}
-                    toDate={customerInteractionToDate}
-                    setFromDate={setCustomerInteractionFromDate}
-                    setToDate={setCustomerInteractionToDate}
-                    // Date filter is now common at top level, so hide it here
-                    hideDateFilter={true}
-                  />
-                </Grid.Col>
-              </Grid>
-
-              {/* Section 5: Budget vs Actual */}
-              <BudgetSection
-                budgetDrillLevel={budgetDrillLevel}
-                budgetSelectedCompany={budgetSelectedCompany}
-                budgetSelectedSalesperson={budgetSelectedSalesperson}
-                budgetDateRange={budgetDateRange}
-                budgetRawData={budgetRawData}
-                budgetAggregatedData={budgetAggregatedData}
-                budgetHoverTotals={budgetHoverTotals}
-                isLoadingBudget={isLoadingBudget}
-                budgetStartMonth={budgetStartMonth}
-                budgetEndMonth={budgetEndMonth}
-                budgetType={budgetType}
-                selectedYear={selectedYear}
-                yearOptions={yearOptions}
-                fromMonthOptions={fromMonthOptions}
-                toMonthOptions={toMonthOptions}
-                setBudgetDrillLevel={setBudgetDrillLevel}
-                setBudgetSelectedCompany={setBudgetSelectedCompany}
-                setBudgetSelectedSalesperson={setBudgetSelectedSalesperson}
-                setBudgetRawData={setBudgetRawData}
-                setBudgetAggregatedData={setBudgetAggregatedData}
-                setSearchSalesman={setSearchSalesman}
-                setSelectedCompany={setSelectedCompany}
-                setIsLoadingBudget={setIsLoadingBudget}
-                setBudgetType={setBudgetType}
-                setSelectedYear={setSelectedYear}
-                handleBudgetViewAll={handleBudgetViewAll}
-                handleBudgetBarClick={handleBudgetBarClick}
-                handleBudgetTypeChange={handleBudgetTypeChange}
-                handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}
-              />
+                </Stack>
+              </Box>
             </Box>
           )}
         </Tabs.Panel>
 
         <Tabs.Panel value="pipeline-Report" pt="md">
-          <PipelineReport
-            key={tabsRefreshKey}
-            initialState={pipelineReportState || undefined}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <PipelineReport
+              key={tabsRefreshKey}
+              initialState={pipelineReportState || undefined}
+              globalSearch={globalSearch}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+              branchCode={
+                showPipelineBranchFilter ? pipelineBranchCode : null
+              }
+              coordinatorName={
+                showPipelineCoordinatorFilter ? pipelineCoordinatorName : null
+              }
+            />
+          </Box>
         </Tabs.Panel>
 
         <Tabs.Panel value="booking" pt="md">
-          <Booking
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+          <Box px={DASH_MAIN_PAD_X}>
+            <Booking
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceReport
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
-        <Tabs.Panel value="customer-service-import" pt="xs" style={{display:"flex", flexDirection:"column", flex:1}}>
-          <CustomerServiceImportReport
-            key={tabsRefreshKey}
-            globalSearch={globalSearch}
-            fromDate={customerInteractionFromDate}
-            toDate={customerInteractionToDate}
-          />
+        <Tabs.Panel
+          value="customer-service-import"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box px={DASH_MAIN_PAD_X} style={{ flex: 1, minHeight: 0 }}>
+            <CustomerServiceImportReport
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+            />
+          </Box>
         </Tabs.Panel>
+
+        <Tabs.Panel
+          value="customer-service-dashboard"
+          pt="xs"
+          style={{ display: "flex", flexDirection: "column", flex: 1 }}
+        >
+          <Box
+            px={DASH_MAIN_PAD_X}
+            pb="md"
+            style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+          >
+            <CustomerServiceDashboard
+              key={tabsRefreshKey}
+              fromDate={customerInteractionFromDate}
+              toDate={customerInteractionToDate}
+              globalSearch={globalSearch}
+            />
+          </Box>
+        </Tabs.Panel>
+
       </Tabs>
 
       {/* Send Email Modal */}
@@ -7943,7 +8486,7 @@ const Dashboard = () => {
           setCurrentEmailData(null);
         }}
         title={
-          <Text size="lg" fw={600} c="#105476">
+          <Text size="lg" fw={600} c="#1E293B">
             {detailedViewType === "enquiry"
               ? "Send Email - Enquiry Conversion"
               : "Send Email - Outstanding Details"}
@@ -7951,6 +8494,17 @@ const Dashboard = () => {
         }
         size="lg"
         centered
+        classNames={{
+          content: ERP_LIST_GEIST_ROOT_CLASS,
+          body: ERP_LIST_GEIST_ROOT_CLASS,
+          header: ERP_LIST_GEIST_ROOT_CLASS,
+          inner: ERP_LIST_GEIST_ROOT_CLASS,
+        }}
+        styles={{
+          content: { ...erpListGeistRootTypography },
+          body: { ...erpListGeistRootTypography },
+          header: { ...erpListGeistRootTypography },
+        }}
         overlayProps={{
           backgroundOpacity: 0.55,
           blur: 3,
@@ -8019,7 +8573,7 @@ const Dashboard = () => {
               onClick={handleSendEmail}
               loading={sendingEmail}
               leftSection={<IconSend size={16} />}
-              color="#105476"
+              color="blue"
             >
               Send
             </Button>
@@ -8027,6 +8581,7 @@ const Dashboard = () => {
         </Stack>
       </Modal>
     </Box>
+    </MantineProvider>
   );
 };
 

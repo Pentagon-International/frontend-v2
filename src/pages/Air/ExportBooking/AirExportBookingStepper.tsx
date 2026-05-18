@@ -125,6 +125,10 @@ interface FormValues {
   routed: string;
   routed_by: string;
   customer_service_name: string;
+  /** Air export booking only (root payload) */
+  bill_no: string;
+  bill_date: Date | null;
+  iata: string;
   is_direct: boolean;
   is_coload: boolean;
 
@@ -229,6 +233,9 @@ const validationSchema = yup.object({
   customer_service_name: yup
     .string()
     .trim().required("Customer service name is required"),
+  bill_no: yup.string().trim().nullable().notRequired(),
+  bill_date: yup.date().nullable().notRequired(),
+  iata: yup.string().trim().nullable().notRequired(),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
 
@@ -982,6 +989,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       routed: String(data.routed || ""),
       routed_by: String(data.routed_by || ""),
       customer_service_name: String(data.customer_service_name || ""),
+      bill_no: String(data.bill_no ?? ""),
+      bill_date:
+        data.bill_date &&
+        String(data.bill_date) !== "" &&
+        String(data.bill_date) !== "null"
+          ? new Date(String(data.bill_date))
+          : null,
+      iata: String(data.iata ?? ""),
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
 
@@ -1238,6 +1253,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       routed: "Self",
       routed_by: "",
       customer_service_name: "",
+      bill_no: "",
+      bill_date: null,
+      iata: "",
       is_direct: false,
       is_coload: false,
 
@@ -2698,6 +2716,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         routed: form.values.routed,
         routed_by: form.values.routed_by,
         customer_service_name: form.values.customer_service_name,
+        bill_no: form.values.bill_no?.trim() || null,
+        bill_date: form.values.bill_date
+          ? formatDate(form.values.bill_date)
+          : null,
+        iata: form.values.iata?.trim() || null,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
 
@@ -3533,7 +3556,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           {active === 0 && (
             <Box>
               {/* Export Shipment Section */}
-              <Grid mb="lg">
+              <Grid mb="lg" gutter="sm">
                 <Grid.Col span={4}>
                   <SearchableSelect
                     label="Customer Name"
@@ -3774,6 +3797,40 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       );
                     }}
                     error={form.errors.customer_service_name}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Bill No"
+                    placeholder="Enter Bill No"
+                    // format="normal"
+                    value={form.values.bill_no}
+                    onChange={(e) =>
+                      form.setFieldValue("bill_no", e.target.value)
+                    }
+                    error={form.errors.bill_no}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="Bill Date"
+                    placeholder="Pick bill date"
+                    size="sm"
+                    value={form.values.bill_date}
+                    onChange={(value) => form.setFieldValue("bill_date", value)}
+                    error={form.errors.bill_date as string | undefined}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="IATA"
+                    placeholder="e.g. IATA-1234"
+                    // format="normal"
+                    value={form.values.iata}
+                    onChange={(e) =>
+                      form.setFieldValue("iata", e.target.value)
+                    }
+                    error={form.errors.iata}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||

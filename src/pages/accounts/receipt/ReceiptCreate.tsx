@@ -145,6 +145,17 @@ function clampAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [c, b, a].filter(Boolean).join(" - ");
+}
+
 /** Party row: customer_display = label in UI (subledger_name from list / customer_name from search); customer_code = subledger_code in payload */
 type DetailRow = {
   id?: number | null;
@@ -179,6 +190,8 @@ type AdjustmentRow = {
 
 type InvoiceCombinedItem = {
   id?: number;
+  /** Primary key of invoice when document type is INV */
+  doc_id?: number;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -206,11 +219,14 @@ const fetchOutstandingAllocations = async (payload: {
     payload,
     API_HEADER,
   );
-  const res = response as
-    | { data?: InvoiceCombinedItem[] }
-    | InvoiceCombinedItem[];
-  const data = Array.isArray(res) ? res : res?.data;
-  return Array.isArray(data) ? data : [];
+  const res = response as { data?: unknown } | InvoiceCombinedItem[];
+  const raw = Array.isArray(res) ? res : res?.data;
+  if (Array.isArray(raw)) return raw as InvoiceCombinedItem[];
+  if (raw && typeof raw === "object") {
+    const nested = (raw as { data?: unknown }).data;
+    if (Array.isArray(nested)) return nested as InvoiceCombinedItem[];
+  }
+  return [];
 };
 
 /** Receipt row from list API (filter/receipt) - used for View/Edit and Create Reversal from Receipt Master.
@@ -247,6 +263,8 @@ type ReceiptListItem = {
     subledger_id?: number;
     subledger_code?: string;
     subledger_name?: string;
+    account_name?: string;
+    account_code?: string;
     narration?: string;
     currency_code?: string;
     currency_id?: number;
@@ -254,6 +272,8 @@ type ReceiptListItem = {
     amount?: string | number;
     local_amount?: string | number;
     dr_cr?: string;
+    is_tds_calcualted_record?: boolean;
+    is_tds_calculated_record?: boolean;
   }>;
   allocations?: Array<{
     id?: number;
@@ -308,7 +328,10 @@ type ReceiptFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
-const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+const getDefaultDetailRow = (
+  localCurrency: string,
+  forReversal = false,
+): DetailRow => ({
   subledger_id: null,
   account_code: "",
   customer_code: "",
@@ -318,7 +341,7 @@ const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   roe: 1,
   amount: null,
   local_amount: null,
-  dr_cr: "Cr",
+  dr_cr: forReversal ? "Dr" : "Cr",
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -433,6 +456,16 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
   return d ? d.toLocaleDateString() : "—";
 }
 
+function formatOutstandingDocumentAmountInLocal(
+  amountInLocal: number | string | null | undefined,
+): string {
+  if (amountInLocal == null || amountInLocal === "") return "—";
+  if (typeof amountInLocal === "number")
+    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+  const n = parseFloat(String(amountInLocal).trim());
+  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+}
+
 /** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
 function firstNonEmptyString(
   ...candidates: Array<string | number | null | undefined>
@@ -443,6 +476,32 @@ function firstNonEmptyString(
     if (s !== "") return s;
   }
   return "";
+}
+
+/** List API uses `is_tds_calcualted_record` (typo); accept both spellings. */
+function isPartyTdsCalculatedRecord(p: {
+  is_tds_calcualted_record?: unknown;
+  is_tds_calculated_record?: unknown;
+}): boolean {
+  const raw = p.is_tds_calcualted_record ?? p.is_tds_calculated_record;
+  if (raw === true || raw === 1) return true;
+  if (raw === false || raw === 0) return false;
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
+
+function receiptPartyDrCrToSide(drCr: string | undefined | null): "Dr" | "Cr" {
+  return String(drCr ?? "")
+    .trim()
+    .toLowerCase() === "dr"
+    ? "Dr"
+    : "Cr";
+}
+
+function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
+  return side === "Dr" ? "Cr" : "Dr";
 }
 
 type ReceiptCreateProps = {
@@ -501,6 +560,8 @@ export default function ReceiptCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
+  const [isOpeningInvoiceFromModal, setIsOpeningInvoiceFromModal] =
+    useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -536,7 +597,7 @@ export default function ReceiptCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
-      details: [getDefaultDetailRow(localCurrency)],
+      details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
     },
@@ -684,26 +745,32 @@ export default function ReceiptCreate({
       ? receiptFromState.parties
       : [];
     // Party details: subledger_name = UI label (Account Name), subledger_code = value sent in payload. Set both for every row.
-    // Receipt Reversal: party Dr/Cr default is "Dr". Receipt Create: use source or "Cr".
+    // Reversal create (from receipt): normal party Dr; TDS row (is_tds_calcualted_record) flips receipt Dr/Cr. Edit/view: saved values.
     const details: DetailRow[] =
       parties.length > 0
         ? parties.map((p) => ({
             id: p.id ?? null,
             subledger_id:
               p.subledger_id != null ? String(p.subledger_id) : null,
-            account_code: "",
+            account_code: String(p.account_code ?? "").trim(),
             customer_code: String(p.subledger_code ?? "").trim(),
-            customer_display: String(p.subledger_name ?? "").trim(),
+            customer_display: String(
+              p.account_name ?? p.subledger_name ?? "",
+            ).trim(),
             narration: String(p.narration ?? "").trim(),
             currency: (p.currency_code ?? localCurrency).toString().trim(),
             roe: parseNum(p.roe) ?? 1,
             amount: parseNum(p.amount),
             local_amount: parseNum(p.local_amount),
             dr_cr: _isReversal
-              ? ("Dr" as const)
+              ? isReversalEditOrView
+                ? receiptPartyDrCrToSide(p.dr_cr)
+                : isPartyTdsCalculatedRecord(p)
+                  ? flipDrCr(receiptPartyDrCrToSide(p.dr_cr))
+                  : ("Dr" as const)
               : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
           }))
-        : [getDefaultDetailRow(localCurrency)];
+        : [getDefaultDetailRow(localCurrency, _isReversal)];
 
     const allocations = receiptFromState.allocations;
     const adjustments: AdjustmentRow[] =
@@ -837,41 +904,42 @@ export default function ReceiptCreate({
     }
   }, [form.values.currency, localCurrency, userCountryCode]);
 
-  // When party details Local Amount changes: set header Local Amount = sum(party details), header Amount = header Local Amount / header ROE (same idea as party: adj local → party local, party amount = party local/roe)
-  const partyLocalAmountsSnapshot = form.values.details
-    .map((d) => d.local_amount ?? "")
+  // When party details change: header amount = Σ(Cr) − Σ(Dr)
+  // This is important because backend may append extra party rows (ex: TDS) on save.
+  const partyNetSnapshot = form.values.details
+    .map(
+      (d) =>
+        `${d.dr_cr}|${d.amount ?? ""}|${d.local_amount ?? ""}|${d.roe ?? ""}`,
+    )
     .join(";");
   useEffect(() => {
-    const sum = (form.values.details ?? []).reduce(
-      (s, d) =>
-        s +
-        (d.local_amount != null && Number.isFinite(d.local_amount)
-          ? d.local_amount
-          : 0),
-      0,
-    );
-    const headerLocal = clampAmount(sum);
+    const details = form.values.details ?? [];
+    const netAmount = details.reduce((s, d) => {
+      const sign = d.dr_cr === "Dr" ? -1 : 1;
+      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+      return s + sign * amt;
+    }, 0);
+    const headerAmount = clampAmount(netAmount);
     const roeVal = form.values.roe;
-    const derivedHeaderAmount =
-      headerLocal != null &&
+    const headerLocal =
+      headerAmount != null &&
       roeVal != null &&
       Number.isFinite(roeVal) &&
       roeVal !== 0
-        ? clampAmount(headerLocal / roeVal)
+        ? clampAmount(headerAmount * roeVal)
         : null;
+
+    if (form.values.amount !== headerAmount) {
+      form.setFieldValue("amount", headerAmount);
+    }
     if (form.values.local_amount !== headerLocal) {
       form.setFieldValue("local_amount", headerLocal);
     }
-    if (
-      derivedHeaderAmount != null &&
-      form.values.amount !== derivedHeaderAmount
-    ) {
-      form.setFieldValue("amount", derivedHeaderAmount);
-    }
-  }, [partyLocalAmountsSnapshot]);
+  }, [partyNetSnapshot, form.values.roe]);
 
-  // Header: when user changes ROE or Amount, set Local Amount = Amount × ROE (same as party details; header not forced to party sum)
+  // Header: keep local_amount aligned with amount only when no party rows exist
   useEffect(() => {
+    if ((form.values.details ?? []).length > 0) return;
     const amt = form.values.amount;
     const roeVal = form.values.roe;
     const local =
@@ -953,7 +1021,10 @@ export default function ReceiptCreate({
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency));
+    form.insertListItem(
+      "details",
+      getDefaultDetailRow(localCurrency, _isReversal),
+    );
   };
 
   const removeDetailRow = (idx: number) => {
@@ -1022,6 +1093,88 @@ export default function ReceiptCreate({
       else next.add(idx);
       return next;
     });
+  };
+
+  const openInvoiceFromAllocationRow = async (inv: InvoiceCombinedItem) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "INV") return;
+
+    const docIdRaw = inv.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Invoice not found",
+      });
+      return;
+    }
+
+    // Open the tab immediately (popup blockers allow this on user gesture).
+    // Never navigate away from the Receipt page.
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the invoice in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.invoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setIsOpeningInvoiceFromModal(false);
+      const invoicePath = `/invoice/${mode}/${docId}`;
+      const invoiceUrl = new window.URL(
+        invoicePath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = invoiceUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open invoice details.",
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningInvoiceFromModal(false);
+    }
   };
 
   const handleSelectInvoice = () => {
@@ -1110,7 +1263,12 @@ export default function ReceiptCreate({
             : totalNum != null && invRoe != null
               ? clampAmount(totalNum * invRoe)
               : totalNum,
-        invoice_id: inv.id != null ? Number(inv.id) : null,
+        invoice_id:
+          inv.doc_id != null
+            ? Number(inv.doc_id)
+            : inv.id != null
+              ? Number(inv.id)
+              : null,
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1184,6 +1342,7 @@ export default function ReceiptCreate({
       dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1211,7 +1370,7 @@ export default function ReceiptCreate({
     return base;
   };
 
-  /** Build payload for reverse-receipt API. Uses DD-MM-YYYY for dates. No account_code. For create (POST) omit id. */
+  /** Reverse-receipt payload: header dr_cr is always Cr (do not inherit source receipt). Party dr_cr from form, default Dr. DD-MM-YYYY dates. */
   const buildReversalPayload = (
     values: ReceiptFormValues,
     options?: {
@@ -1259,16 +1418,20 @@ export default function ReceiptCreate({
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
-      dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
-      // Party: label = customer_display (subledger_name from list / customer_name from search); payload = subledger_code (customer_code)
+      dr_cr: "Cr",
+      // Party: label = customer_display; payload = subledger_code. dr_cr from UI (default Dr for reversal rows).
       parties: details.map((d) => ({
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr ?? "Dr").toString(),
+        dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr"
+          ? d.dr_cr
+          : "Dr"
+        ).toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
@@ -1278,6 +1441,9 @@ export default function ReceiptCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
+        ...(a.invoice_id != null && a.invoice_id > 0
+          ? { invoice_id: a.invoice_id }
+          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: a.adj_local_amount ?? 0,
       })),
@@ -1523,6 +1689,8 @@ export default function ReceiptCreate({
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          // After update, reflect the exact API response (can include appended party rows like TDS)
+          applyCreatedReceiptToUI(res);
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           ToastNotification({
             type: "success",
@@ -1544,18 +1712,8 @@ export default function ReceiptCreate({
             document_no: data.receipt_no ?? "",
             status: data.status != null ? String(data.status) : "UNPOSTED",
           });
-          // Merge party and allocation ids from response into form for future updates
-          if (
-            data.parties &&
-            Array.isArray(data.parties) &&
-            data.parties.length === form.values.details.length
-          ) {
-            const updatedDetails = form.values.details.map((d, i) => ({
-              ...d,
-              id: data.parties![i]?.id ?? d.id,
-            }));
-            form.setFieldValue("details", updatedDetails);
-          }
+          // After create, reflect the exact API response (can include extra party rows like TDS)
+          applyCreatedReceiptToUI(data);
           if (
             data.allocations &&
             Array.isArray(data.allocations) &&
@@ -1585,6 +1743,61 @@ export default function ReceiptCreate({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const applyCreatedReceiptToUI = (created: unknown) => {
+    const data = created as {
+      roe?: number | string | null;
+      parties?: Array<{
+        id?: number;
+        subledger_id?: number;
+        subledger_code?: string;
+        subledger_name?: string;
+        account_name?: string;
+        account_code?: string;
+        narration?: string;
+        currency_code?: string;
+        roe?: number | string | null;
+        amount?: number | string | null;
+        local_amount?: number | string | null;
+        dr_cr?: "Cr" | "Dr" | string;
+      }>;
+    };
+
+    if (!Array.isArray(data?.parties) || data.parties.length === 0) return;
+
+    const parseNum = (v: unknown): number | null => {
+      if (v == null) return null;
+      if (typeof v === "number") return Number.isFinite(v) ? v : null;
+      const n = parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const nextHeaderRoe = parseNum(data.roe);
+    if (
+      nextHeaderRoe != null &&
+      Number.isFinite(nextHeaderRoe) &&
+      form.values.roe !== nextHeaderRoe
+    ) {
+      form.setFieldValue("roe", nextHeaderRoe);
+    }
+
+    const details: DetailRow[] = data.parties.map((p) => ({
+      id: p.id ?? null,
+      subledger_id: p.subledger_id != null ? String(p.subledger_id) : null,
+      account_code: String(p.account_code ?? "").trim(),
+      customer_code: String(p.subledger_code ?? "").trim(),
+      customer_display: String(p.account_name ?? p.subledger_name ?? "").trim(),
+      narration: String(p.narration ?? "").trim(),
+      currency: String(p.currency_code ?? localCurrency).trim(),
+      roe: parseNum(p.roe) ?? 1,
+      amount: parseNum(p.amount),
+      local_amount: parseNum(p.local_amount),
+      dr_cr: p.dr_cr === "Dr" ? "Dr" : "Cr",
+    }));
+
+    setLoadedDetails(details);
+    form.setFieldValue("details", details);
   };
 
   const handlePostReverseReceipt = async () => {
@@ -1743,10 +1956,12 @@ export default function ReceiptCreate({
               ? "Create Receipt"
               : titleOverride;
 
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const effectiveBackPath =
-    _isReversal && pathname.includes("/reversal/create")
+    _isReversal && pathname.includes("/reversal/create") && !financeReturnTo
       ? "/receipt"
-      : backPath;
+      : financeReturnTo || backPath;
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -2190,82 +2405,117 @@ export default function ReceiptCreate({
                     return (
                       <Grid key={partyKey} w="100%" gutter="sm" mt="sm">
                         <Grid.Col span={3}>
-                          <SearchableSelect
-                            key={partyKey}
-                            placeholder="Account Name"
-                            apiEndpoint={URL.chartOfAccounts}
-                            value={row?.customer_code || null}
-                            displayValue={row?.customer_display || null}
-                            disabled={
-                              useNonEditableStyleOnly
-                                ? false
-                                : isReadOnly || reversalFormDisabled
-                            }
-                            onChange={(value, _selected, originalData) => {
-                              setLoadedDetails(null);
-                              const orig = originalData as {
-                                id?: number;
-                                gl_account_code?: string;
-                                sl_code?: string;
-                                account_name?: string;
-                              };
-                              const name = orig?.account_name ?? "";
-                              const subledgerCode = orig?.sl_code ?? "";
-                              const glAccountCode = orig?.gl_account_code ?? "";
-                              const sid =
-                                orig?.id != null
-                                  ? orig.id
-                                  : typeof value === "string" &&
-                                      /^\d+$/.test(value)
-                                    ? Number(value)
-                                    : null;
-                              form.setFieldValue(
-                                `details.${idx}.subledger_id`,
-                                sid,
+                          <Box>
+                            <SearchableSelect
+                              key={partyKey}
+                              placeholder="Account Name"
+                              apiEndpoint={URL.chartOfAccounts}
+                              value={row?.customer_code || null}
+                              displayValue={row?.customer_display || null}
+                              disabled={
+                                useNonEditableStyleOnly
+                                  ? false
+                                  : isReadOnly || reversalFormDisabled
+                              }
+                              onChange={(value, _selected, originalData) => {
+                                setLoadedDetails(null);
+                                const orig = originalData as {
+                                  id?: number;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  sl_code?: string;
+                                  account_name?: string;
+                                };
+                                const name = orig?.account_name ?? "";
+                                const subledgerCode = orig?.sl_code ?? "";
+                                const glAccountCode =
+                                  orig?.gl_account_code ?? "";
+                                const sid =
+                                  orig?.id != null
+                                    ? orig.id
+                                    : typeof value === "string" &&
+                                        /^\d+$/.test(value)
+                                      ? Number(value)
+                                      : null;
+                                form.setFieldValue(
+                                  `details.${idx}.subledger_id`,
+                                  sid,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.account_code`,
+                                  glAccountCode,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.customer_code`,
+                                  subledgerCode || (value ?? ""),
+                                );
+                                // UI label should show only account_name (not subledger_name)
+                                form.setFieldValue(
+                                  `details.${idx}.customer_display`,
+                                  name,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.currency`,
+                                  localCurrency,
+                                );
+                                form.setFieldValue(`details.${idx}.roe`, 1);
+                              }}
+                              dropdownZIndex={dropdownZIndex}
+                              displayFormat={(item) => {
+                                const i = item as {
+                                  id?: number;
+                                  gl_name?: string;
+                                  gl_account_code?: string;
+                                  account_name?: string;
+                                };
+                                const id = String(i.id ?? "").trim();
+                                const gl = String(
+                                  i.gl_account_code ?? "",
+                                ).trim();
+                                const name = String(
+                                  i.account_name ?? "",
+                                ).trim();
+                                const glName = String(i.gl_name ?? "").trim();
+                                return {
+                                  value: id,
+                                  label: formatChartOfAccountsLabel(
+                                    glName,
+                                    gl,
+                                    name,
+                                  ),
+                                };
+                              }}
+                              searchFields={[
+                                "gl_name",
+                                "gl_account_code",
+                                "account_name",
+                                "id",
+                              ]}
+                              returnOriginalData
+                              styles={partyFieldStyles}
+                            />
+
+                            {(() => {
+                              const accountCode = row?.account_code
+                                ?.toString()
+                                .trim();
+                              const subledgerCode = row?.customer_code
+                                ?.toString()
+                                .trim();
+                              if (!accountCode && !subledgerCode) return null;
+                              return (
+                                <Text size="xs" c="dimmed" mt={4}>
+                                  {accountCode
+                                    ? `Account Code: ${accountCode}`
+                                    : ""}
+                                  {accountCode && subledgerCode ? "  |  " : ""}
+                                  {subledgerCode
+                                    ? `Subledger Code: ${subledgerCode}`
+                                    : ""}
+                                </Text>
                               );
-                              form.setFieldValue(
-                                `details.${idx}.account_code`,
-                                glAccountCode,
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.customer_code`,
-                                subledgerCode || (value ?? ""),
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.customer_display`,
-                                name,
-                              );
-                              form.setFieldValue(
-                                `details.${idx}.currency`,
-                                localCurrency,
-                              );
-                              form.setFieldValue(`details.${idx}.roe`, 1);
-                            }}
-                            dropdownZIndex={dropdownZIndex}
-                            displayFormat={(item) => {
-                              const i = item as {
-                                id?: number;
-                                gl_account_code?: string;
-                                account_name?: string;
-                              };
-                              const id = String(i.id ?? "").trim();
-                              const gl = String(i.gl_account_code ?? "").trim();
-                              const name = String(i.account_name ?? "").trim();
-                              return {
-                                value: id,
-                                label: name
-                                  ? `${name}${gl ? ` - ${gl}` : ""}`
-                                  : gl,
-                              };
-                            }}
-                            searchFields={[
-                              "gl_account_code",
-                              "account_name",
-                              "id",
-                            ]}
-                            returnOriginalData
-                            styles={partyFieldStyles}
-                          />
+                            })()}
+                          </Box>
                         </Grid.Col>
                         <Grid.Col span={2.5}>
                           <TextInput
@@ -2393,7 +2643,8 @@ export default function ReceiptCreate({
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.dr_cr`,
-                                (v as "Cr" | "Dr") ?? "Cr",
+                                (v as "Cr" | "Dr") ??
+                                  (_isReversal ? "Dr" : "Cr"),
                               )
                             }
                             styles={partyFieldStyles}
@@ -2717,11 +2968,35 @@ export default function ReceiptCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{
+              title: { fontWeight: 600, color: "#105476" },
+              body: { position: "relative" },
+            }}
           >
+            {isOpeningInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading documents...
@@ -2739,9 +3014,10 @@ export default function ReceiptCreate({
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
                       <Table.Th>Document Number</Table.Th>
-                      <Table.Th>Document Doc Type</Table.Th>
+                      <Table.Th>Document Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -2753,7 +3029,34 @@ export default function ReceiptCreate({
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.document_no ?? "—"}</Table.Td>
+                        <Table.Td>
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "INV" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                void openInvoiceFromAllocationRow(inv)
+                              }
+                              title="Open invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          )}
+                        </Table.Td>
                         <Table.Td>
                           {String(
                             inv.day_book_document_type ??
@@ -2767,15 +3070,12 @@ export default function ReceiptCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {inv.document_amount != null
-                            ? typeof inv.document_amount === "number"
-                              ? inv.document_amount.toFixed(2)
-                              : String(inv.document_amount)
-                            : inv.total != null
-                              ? typeof inv.total === "number"
-                                ? inv.total.toFixed(2)
-                                : String(inv.total)
-                              : "—"}
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                       </Table.Tr>
                     ))}

@@ -1,7 +1,16 @@
-import { Box, Text, Group } from "@mantine/core";
+import { Box, Group, Text, UnstyledButton } from "@mantine/core";
+import { IconArrowRight } from "@tabler/icons-react";
 import { DateRangeInput } from "../../../components";
-import CallEntry from "./CallEntry";
-import { CallEntryStatisticsSummary } from "../../../service/dashboard.service";
+import { CallEntryActivity } from "./CallEntryActivity/CallEntryActivity";
+import type {
+  CallEntryStatisticsSummary,
+} from "../../../service/dashboard.service";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelBody,
+  dashboardPanelTitleStyle,
+} from "./dashboardPanelStyles";
 
 interface CallEntrySectionProps {
   callEntrySummary: CallEntryStatisticsSummary | null;
@@ -9,23 +18,39 @@ interface CallEntrySectionProps {
   handleCallEntryViewAll: (
     filterType: "all" | "overdue" | "today" | "upcoming" | "closed"
   ) => void;
-  selectedPeriod: string;
-  setSelectedPeriod: (period: string) => void;
-  // New date filter props
+  onOpenCallEntryDashboard?: () => void;
   fromDate: Date | null;
   toDate: Date | null;
   setFromDate: (date: Date | null) => void;
   setToDate: (date: Date | null) => void;
-  // Hide date filter if it's common at top level
   hideDateFilter?: boolean;
 }
+
+const headerArrowButtonSx = {
+  flexShrink: 0,
+  padding: 8,
+  borderRadius: 8,
+  color: "#94A3B8",
+} as const;
+
+const openDashboard = (
+  onOpenCallEntryDashboard: (() => void) | undefined,
+  handleCallEntryViewAll: (
+    filterType: "all" | "overdue" | "today" | "upcoming" | "closed"
+  ) => void
+) => {
+  if (onOpenCallEntryDashboard) {
+    onOpenCallEntryDashboard();
+    return;
+  }
+  handleCallEntryViewAll("all");
+};
 
 const CallEntrySection = ({
   callEntrySummary,
   isLoadingCallEntry,
   handleCallEntryViewAll,
-  selectedPeriod,
-  setSelectedPeriod,
+  onOpenCallEntryDashboard,
   fromDate,
   toDate,
   setFromDate,
@@ -33,85 +58,70 @@ const CallEntrySection = ({
   hideDateFilter = false,
 }: CallEntrySectionProps) => {
   return (
-    <Box
-      style={{
-        border: "1px solid #F7F7F7",
-        borderRadius: "8px",
-        padding: "12px",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <Group justify="space-between" align="center" mb="md">
-        <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Call Entry
-        </Text>
-        <Group gap="xs">
-          <Text
-            size="sm"
-            c="#105476"
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-            }}
-            onClick={() => handleCallEntryViewAll("all")}
-          >
-            View All
-          </Text>
-          {/* Date Range Filter - Hidden if common at top level */}
-          {!hideDateFilter && (
-            <Box style={{ width: "270px", flexShrink: 0 }}>
-              <DateRangeInput
-                fromDate={fromDate}
-                toDate={toDate}
-                onFromDateChange={setFromDate}
-                onToDateChange={setToDate}
-                fromLabel="From"
-                toLabel="To"
-                size="xs"
-                allowDeselection={true}
-                showRangeInCalendar={false}
-                containerStyle={{ gap: "4px" }}
-              />
-            </Box>
-          )}
-          {/* Commented out - can be used in future case */}
-          {/* <Select
-            placeholder="Select Period"
-            value={selectedPeriod}
-            onChange={(value) => setSelectedPeriod(value || "last_3_months")}
-            w={150}
-            size="xs"
-            data={[
-              { value: "weekly", label: "Last Week" },
-              { value: "current_month", label: "Current Month" },
-              { value: "last_month", label: "Last Month" },
-              { value: "last_3_months", label: "Last 3 Months" },
-              { value: "last_6_months", label: "Last 6 Months" },
-              { value: "last_year", label: "Last Year" },
-            ]}
-            styles={{
-              input: { fontSize: "12px" },
-            }}
-          /> */}
-        </Group>
-      </Group>
+    <Box style={dashboardPanelShell}>
+                  <UnstyledButton
+              type="button"
+              onClick={() =>
+                openDashboard(onOpenCallEntryDashboard, handleCallEntryViewAll)
+              }
+              style={{ textAlign: "left" ,}}
+            >
+      {/* <Box style={dashboardPanelHeaderBand}> */}
+        {/* <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%"> */}
+          <Group  align="center" wrap="nowrap" justify="space-between" style={{ flex: 1, minWidth: 0 , fontFamily: "Geist", fontWeight: "550", }}>
+              <Box style={{ flex: 1, minWidth: 0 , marginTop: -20, }}>
+              <Text style={[dashboardPanelTitleStyle,]}>Call Entry Activity</Text>
+              </Box>
+            <UnstyledButton
+              type="button"
+              onClick={() =>
+                openDashboard(onOpenCallEntryDashboard, handleCallEntryViewAll)
+              }
+              aria-label="Open call entry details"
+              style={{
+                ...headerArrowButtonSx,
+                marginTop: -10,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#105476";
+                e.currentTarget.style.background = "#F1F5F9";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#94A3B8";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <IconArrowRight size={20} stroke={1.5} />
+            </UnstyledButton>
+          </Group>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {!hideDateFilter && (
+              <Box style={{ width: "270px", flexShrink: 0 }}>
+                <DateRangeInput
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  onFromDateChange={setFromDate}
+                  onToDateChange={setToDate}
+                  fromLabel="From"
+                  toLabel="To"
+                  size="xs"
+                  allowDeselection={true}
+                  showRangeInCalendar={false}
+                  containerStyle={{ gap: "4px" }}
+                />
+              </Box>
+            )}
+          </Group>
+        {/* </Group> */}
+      {/* </Box> */}
 
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <CallEntry
-          callEntrySummary={callEntrySummary}
-          isLoadingCallEntry={isLoadingCallEntry}
-          handleCallEntryViewAll={handleCallEntryViewAll}
-          selectedPeriod={selectedPeriod}
-          setSelectedPeriod={setSelectedPeriod}
+      <Box style={dashboardPanelBody}>
+        <CallEntryActivity
+          summary={callEntrySummary}
+          isLoading={isLoadingCallEntry}
         />
       </Box>
+      </UnstyledButton>
     </Box>
   );
 };

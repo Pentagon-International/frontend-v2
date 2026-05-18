@@ -12,7 +12,6 @@ import {
   IconHelpCircle,
   IconKeyboard,
   IconMessageQuestion,
-  IconPercentage,
   IconPlaneInflight,
   IconRosetteDiscount,
   IconSettingsSpark,
@@ -26,6 +25,8 @@ import {
   IconMapPin,
   IconMapPinFilled,
   IconChartPie2,
+  IconLayoutDashboard,
+  IconChartLine,
   IconPlane,
   IconPlaneDeparture,
   IconPlaneArrival,
@@ -36,6 +37,23 @@ import {
   IconGitBranch,
   IconReceiptTax,
   IconSearch,
+  IconReceipt2,
+  IconReceipt,
+  IconReceiptOff,
+  IconReceiptFilled,
+  IconWorld,
+  IconCash,
+  IconWorldDollar,
+  IconCashOff,
+  IconChecklist,
+  IconFileInvoiceFilled,
+  IconFileInvoice,
+  IconBook2,
+  IconBookOff,
+  IconList,
+  IconLink,
+  IconFileUpload,
+  IconFiles,
 } from "@tabler/icons-react";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -65,21 +83,28 @@ const Navbar = ({
   const showQuotationApproval = isManagerOrAdmin && hasQuotationApprovalPermission;
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
-  const [isCustomerServiceOpen, setIsCustomerServiceOpen] = useState(false);
+  const [, setIsCustomerServiceOpen] = useState(false);
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
     if (
       location.pathname.startsWith("/receipt") ||
       location.pathname.startsWith("/payment") ||
+      location.pathname.startsWith("/payment-request-approval") ||
       location.pathname.startsWith("/supplier-invoice") ||
+      location.pathname.startsWith("/supplier-invoice-rcm") ||
       location.pathname.startsWith("/overseas-receipt") ||
+      location.pathname.startsWith("/overseas-payment") ||
       location.pathname.startsWith("/journal-voucher") ||
       location.pathname.startsWith("/journal-voucher-reversal") ||
-      location.pathname.startsWith("/subledger-enquiry")
+      location.pathname.startsWith("/subledger-enquiry") ||
+      location.pathname.startsWith("/document-allocation") ||
+      location.pathname.startsWith("/debit-credit-note-trade") ||
+      location.pathname.startsWith("/debit-credit-note-non-trade")
     ) {
       setIsAccountsOpen(true);
     }
@@ -140,7 +165,7 @@ const Navbar = ({
                       e.stopPropagation();
                       toggle();
                     }}
-                    style={{ position: "absolute", right: 0, color: "#105476" }}
+                    style={{ position: "absolute", right: 0, color: "#5A8AB0" }}
                     size={24}
                   />
                 </>
@@ -159,7 +184,7 @@ const Navbar = ({
                       e.stopPropagation();
                       toggle();
                     }}
-                    style={{ color: "#105476" }}
+                    style={{ color: "#5A8AB0" }}
                     size={24}
                   />
                 </>
@@ -189,20 +214,85 @@ const Navbar = ({
               {opened ? (
                 <SectionTitle title="Core" />
               ) : (
-                <Divider mb="xs" color="#D5D5D5" size="sm" />
+                <Divider mb="xs" color="#1A2D42" size="sm" />
               )}
-              <SimpleNavLink
+              <CollapsibleNav
                 label="Dashboard"
+                openedLocal={isDashboardOpen}
+                setOpenedLocal={setIsDashboardOpen}
                 icon={IconChartPie2}
-                path="/"
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                  setIsAirOpen,
-                  setIsSeaExportOpen,
-                }}
-              />
+              >
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Overview"
+                  icon={IconLayoutDashboard}
+                  path="/"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Enquiry Conversion"
+                  icon={IconChartLine}
+                  path="/dashboard/enquiry-conversion"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Call Entry"
+                  icon={IconKeyboard}
+                  path="/dashboard/call-entry-dashboard"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Outstanding / Overdue"
+                  icon={IconChartLine}
+                  path="/dashboard/customer-outstanding-vs-overdue"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Dashboard"
+                  label="Budget vs Actual"
+                  icon={IconChartLine}
+                  path="/dashboard/budget-vs-actual"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                  }}
+                />
+              </CollapsibleNav>
               <Box>
                 <CollapsibleNav
                   label="Sales"
@@ -477,6 +567,32 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Transportation"
+                    label="Air import DSR"
+                    icon={IconList}
+                    path="/air/import-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Air export DSR"
+                    icon={IconList}
+                    path="/air/export-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
                     label="Air Import to Export Booking"
                     icon={IconPlaneInflight}
                     path="/air/import-to-export-booking"
@@ -577,6 +693,32 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Transportation"
+                    label="Ocean Import DSR"
+                    icon={IconFileAnalytics}
+                    path="/SeaExport/import-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Ocean Export DSR"
+                    icon={IconFileDescription}
+                    path="/SeaExport/export-dsr"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
                     label="Ocean Import to Export Booking"
                     icon={IconShip}
                     path="/SeaExport/import-to-export-booking"
@@ -605,13 +747,13 @@ const Navbar = ({
                   key="Accounts"
                   openedLocal={isAccountsOpen}
                   setOpenedLocal={setIsAccountsOpen}
-                  icon={IconPercentage as any}
+                  icon={IconReceipt2}
                 >
-                  <ScrollArea.Autosize mah={320} offsetScrollbars scrollbarSize={6}>
+                  {/* <ScrollArea.Autosize mah={380} type="always" offsetScrollbars scrollbarSize={6}> */}
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt"
-                      icon={IconReceiptTax}
+                      icon={IconReceiptFilled}
                       path="/receipt"
                       collapsibles={{
                         setIsSalesOpen,
@@ -624,7 +766,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt Reversal"
-                      icon={IconReceiptTax}
+                      icon={IconReceiptOff}
                       path="/receipt/reversal"
                       collapsibles={{
                         setIsSalesOpen,
@@ -637,7 +779,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Overseas Receipt"
-                      icon={IconReceiptTax}
+                      icon={IconWorld}
                       path="/overseas-receipt"
                       collapsibles={{
                         setIsSalesOpen,
@@ -650,7 +792,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Payment"
-                      icon={IconReceiptTax}
+                      icon={IconCash}
                       path="/payment"
                       collapsibles={{
                         setIsSalesOpen,
@@ -663,7 +805,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Overseas Payment"
-                      icon={IconReceiptTax}
+                      icon={IconWorldDollar}
                       path="/overseas-payment"
                       collapsibles={{
                         setIsSalesOpen,
@@ -676,7 +818,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Payment Reversal"
-                      icon={IconReceiptTax}
+                      icon={IconCashOff}
                       path="/payment/reversal"
                       collapsibles={{
                         setIsSalesOpen,
@@ -689,7 +831,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Payment Request Approval"
-                      icon={IconCircleCheck}
+                      icon={IconChecklist}
                       path="/payment-request-approval"
                       collapsibles={{
                         setIsSalesOpen,
@@ -702,7 +844,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Supplier Invoice"
-                      icon={IconReceiptTax}
+                      icon={IconFileInvoiceFilled}
                       path="/supplier-invoice"
                       collapsibles={{
                         setIsSalesOpen,
@@ -714,8 +856,21 @@ const Navbar = ({
                     />
                     <SubNavLink
                       parent="Accounts"
+                      label="Unposted Documents"
+                      icon={IconFiles}
+                      path="/unposted-documents"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
                       label="Supplier Invoice Reversal"
-                      icon={IconReceiptTax}
+                      icon={IconFileInvoice}
                       path="/supplier-invoice/reversal"
                       collapsibles={{
                         setIsSalesOpen,
@@ -728,7 +883,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Journal Voucher"
-                      icon={IconReceiptTax}
+                      icon={IconBook2}
                       path="/journal-voucher"
                       collapsibles={{
                         setIsSalesOpen,
@@ -741,7 +896,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="JournalVoucherReversal"
-                      icon={IconReceiptTax}
+                      icon={IconBookOff}
                       path="/journal-voucher-reversal"
                       collapsibles={{
                         setIsSalesOpen,
@@ -767,7 +922,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Document Allocation"
-                      icon={IconSearch}
+                      icon={IconLink}
                       path="/document-allocation"
                       collapsibles={{
                         setIsSalesOpen,
@@ -780,7 +935,7 @@ const Navbar = ({
                     <SubNavLink
                       parent="Accounts"
                       label="Supplier Invoice RCM"
-                      icon={IconReceiptTax}
+                      icon={IconFileAnalytics}
                       path="/supplier-invoice-rcm"
                       collapsibles={{
                         setIsSalesOpen,
@@ -790,7 +945,33 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
-                  </ScrollArea.Autosize>
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Debit/Credit Note Trade"
+                      icon={IconReceiptTax}
+                      path="/debit-credit-note-trade"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Debit/Credit Note Non Trade"
+                      icon={IconReceipt}
+                      path="/debit-credit-note-non-trade"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                  {/* </ScrollArea.Autosize> */}
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink
@@ -831,7 +1012,7 @@ const Navbar = ({
               <SimpleNavLink
                 label="Jobcreation"
                 key={"Jobcreation"}
-                icon={IconPercentage}
+                icon={IconFileUpload}
                 path="/hbl-document-manager"
                 collapsibles={{
                   setIsSalesOpen,
@@ -845,7 +1026,7 @@ const Navbar = ({
               <SimpleNavLink
                 label="Invoice"
                 key={"Invoice"}
-                icon={IconPercentage}
+                icon={IconFileInvoice}
                 path="/invoice"
                 collapsibles={{
                   setIsSalesOpen,

@@ -4,6 +4,7 @@ import {
   IconFileAnalytics,
   IconBook2,
   IconReportMoney,
+  IconShoppingCart,
   IconScale,
   IconChartBar,
   IconReport,
@@ -49,6 +50,11 @@ export default function ReportsPage() {
           icon: <IconClockHour4 size={28} color="#105476" />,
           path: "/reports/aging-outstanding",
         },
+        {
+          label: "Purchase Register",
+          icon: <IconShoppingCart size={28} color="#105476" />,
+          path: "/reports/purchase-register",
+        },
       ],
     },
     {
@@ -80,7 +86,16 @@ export default function ReportsPage() {
       <Stack gap="lg">
         {sections.map((section) => (
           <Box key={section.title}>
-            <Text size="sm" fw={600} c="#105476" mb="md">
+            <Text
+              mb="md"
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#105476",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}
+            >
               {section.title}
             </Text>
             <Grid gutter="md" columns={12}>

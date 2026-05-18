@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { useLayoutStore } from "../store/useLayoutStore";
 
 const pathTitleMap: Record<string, string> = {
+  "/dashboard/enquiry-conversion": "Dashboard",
   "/": "Dashboard",
   "/lead": "Sales",
   "/call-entry": "Sales",
@@ -24,6 +25,10 @@ const pathTitleMap: Record<string, string> = {
   "/road": "Road",
   "/air": "Air",
   "/SeaExport": "Ocean",
+  "/air/import-dsr": "Air Import DSR",
+  "/air/export-dsr": "Air Export DSR",
+  "/SeaExport/import-dsr": "Ocean Import DSR",
+  "/SeaExport/export-dsr": "Ocean Export DSR",
   "/accounts": "Accounts",
   "/supplier-invoice/reversal/create": "Supplier Invoice Reverse",
   "/supplier-invoice/reversal/edit": "Supplier Invoice Reverse",
@@ -32,24 +37,44 @@ const pathTitleMap: Record<string, string> = {
   "/supplier-invoice/edit": "Supplier Invoice",
   "/supplier-invoice/view": "Supplier Invoice",
   "/supplier-invoice/create": "Supplier Invoice",
-  "/supplier-invoice": "Supplier Invoice",
+  "/supplier-invoice": "Supplier Invoice List",
+  "/unposted-documents": "Unposted Documents",
+  "/invoices": "Unposted Documents",
   "/receipt/reversal/view": "Receipt Reversal",
   "/receipt/reversal/edit": "Receipt Reversal",
   "/receipt/reversal/create": "Receipt Reversal",
-  "/receipt/reversal": "Receipt Reversal",
+  "/receipt/reversal": "Receipt Reversal List",
   "/receipt/view": "Receipt",
   "/receipt/edit": "Receipt",
   "/receipt/create": "Receipt",
-  "/receipt": "Receipt",
+  "/receipt": "Receipt List",
+  "/overseas-receipt/view": "Overseas Receipt",
+  "/overseas-receipt/edit": "Overseas Receipt",
+  "/overseas-receipt/create": "Overseas Receipt",
+  "/overseas-receipt": "Overseas Receipt List",
+  "/overseas-payment/view": "Overseas Payment",
+  "/overseas-payment/edit": "Overseas Payment",
+  "/overseas-payment/create": "Overseas Payment",
+  "/overseas-payment": "Overseas Payment List",
   "/payment/view": "Payment",
   "/payment/edit": "Payment",
   "/payment/create": "Payment",
-  "/payment": "Payment",
+  "/payment": "Payment List",
+  "/journal-voucher/view": "Journal Voucher",
+  "/journal-voucher/edit": "Journal Voucher",
+  "/journal-voucher/create": "Journal Voucher",
+  "/journal-voucher": "Journal Voucher List",
+  "/invoice-reverse": "Invoice Reverse",
+  "/payment-request-approval": "Payment Request List",
+  "/payment-request": "Payment Request",
   "/payment/reversal/view": "Payment Reversal",
   "/payment/reversal/edit": "Payment Reversal",
   "/payment/reversal/create": "Payment Reversal",
   "/payment/reversal": "Payment Reversal List",
   "/subledger-enquiry": "Subledger Enquiry",
+  "/document-allocation": "Document Allocation",
+  "/debit-credit-note-trade": "Debit/Credit Note Trade",
+  "/debit-credit-note-non-trade": "Debit/Credit Note Non Trade",
   "/master": "Masters",
   "/reports": "Reports",
   "/help": "Help",
@@ -62,19 +87,48 @@ const pathTitleMap: Record<string, string> = {
   //   '/master/company': 'Company',
 };
 
+const pathActiveNavMap: Record<string, string> = {
+  "/air/import-dsr": "Transportation",
+  "/air/export-dsr": "Transportation",
+  "/SeaExport/import-dsr": "Transportation",
+  "/SeaExport/export-dsr": "Transportation",
+};
+
+const pathActiveSubNavMap: Record<string, string> = {
+  "/air/import-dsr": "Air import DSR",
+  "/air/export-dsr": "Air export DSR",
+  "/SeaExport/import-dsr": "Ocean Import DSR",
+  "/SeaExport/export-dsr": "Ocean Export DSR",
+  "/unposted-documents": "Unposted Documents",
+  "/invoices": "Unposted Documents",
+  "/invoice-reverse": "Invoice Reverse",
+};
+
 export const usePageTitleSync = () => {
   const location = useLocation();
   const setTitle = useLayoutStore((state) => state.setTitle);
   const setActiveNav = useLayoutStore((state) => state.setActiveNav);
+  const setActiveSubNav = useLayoutStore((state) => state.setActiveSubNav);
 
   useEffect(() => {
     const path = location.pathname;
-    const matchedPath = Object.keys(pathTitleMap)
+    const matchedTitlePath = Object.keys(pathTitleMap)
       .filter((key) => path.startsWith(key))
       .sort((a, b) => b.length - a.length)[0];
-    const pageTitle = pathTitleMap[matchedPath] || "";
-    // console.log("Path-----",path, "----pageTitle---",pageTitle);
+    const pageTitle = pathTitleMap[matchedTitlePath] || "";
+
+    const matchedActiveNavPath = Object.keys(pathActiveNavMap)
+      .filter((key) => path.startsWith(key))
+      .sort((a, b) => b.length - a.length)[0];
+    const activeNav = pathActiveNavMap[matchedActiveNavPath] ?? pageTitle;
+
+    const matchedSubNavPath = Object.keys(pathActiveSubNavMap)
+      .filter((key) => path.startsWith(key))
+      .sort((a, b) => b.length - a.length)[0];
+    const activeSubNav = pathActiveSubNavMap[matchedSubNavPath] ?? "";
+
     setTitle(pageTitle);
-    setActiveNav(pageTitle);
-  }, [location.pathname, setTitle, setActiveNav]);
+    setActiveNav(activeNav);
+    setActiveSubNav(activeSubNav);
+  }, [location.pathname, setTitle, setActiveNav, setActiveSubNav]);
 };

@@ -66,21 +66,6 @@ const fetchCurrencyMaster = async () => {
   }
 };
 
-function getRoeValue(
-  currency: string,
-  countryCode: string | undefined,
-): number {
-  const currencyUpper = currency?.toUpperCase();
-  if (countryCode === "IN") {
-    if (currencyUpper === "INR") return 1;
-    if (currencyUpper === "USD") return 88.75;
-  } else if (countryCode === "AE") {
-    if (currencyUpper === "AED") return 1;
-    if (currencyUpper === "USD") return 3.67;
-  }
-  return 1;
-}
-
 // Header daybook: document_type PMT for Payment
 const fetchDaybookPMT = async () => {
   try {
@@ -138,9 +123,22 @@ function clampAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+function formatChartOfAccountsLabel(
+  glName: string | null | undefined,
+  glAccountCode: string | null | undefined,
+  accountName: string | null | undefined,
+): string {
+  const a = String(glName ?? "").trim();
+  const b = String(glAccountCode ?? "").trim();
+  const c = String(accountName ?? "").trim();
+  return [c, b, a].filter(Boolean).join(" - ");
+}
+
 type DetailRow = {
   id?: number | null;
   subledger_id?: string | null;
+  /** GL account code (used for allocations filter) */
+  account_code?: string;
   customer_code: string;
   customer_display: string;
   narration: string;
@@ -167,31 +165,38 @@ type AdjustmentRow = {
   adj_local_amount: number | null;
 };
 
-/** Supplier invoice item from filter/supplier-invoice response */
-type SupplierInvoiceItem = {
+type InvoiceCombinedItem = {
   id?: number;
-  crj_number?: string;
-  date?: string;
-  approved_amount?: string | number;
-  Inv_crn_amount?: string | number;
+  document_no?: string;
+  document_date?: string;
+  due_date?: string;
+  total?: number | string;
+  document_amount?: number | string;
+  daybook_id?: number | string;
+  day_book_id?: number | string;
+  daybook_name?: string;
+  day_book_type?: string;
+  day_book_document_type?: string;
+  currency_id?: number | string;
   currency_code?: string;
-  day_book_id?: number;
-  agent_name?: string;
-  agent_code?: string;
+  roe?: number | string;
+  amount?: number | string;
+  amount_in_local?: number | string;
   [key: string]: unknown;
 };
 
-const fetchFilterSupplierInvoice = async (
-  agentName: string,
-): Promise<SupplierInvoiceItem[]> => {
+const fetchOutstandingAllocations = async (payload: {
+  account_code: string;
+  subledger_code: string;
+}): Promise<InvoiceCombinedItem[]> => {
   const response = await postAPICall(
-    URL.supplierInvoiceFilter,
-    { filters: { status: "POSTED", agent_name: agentName } },
+    URL.outstandingAllocations,
+    payload,
     API_HEADER,
   );
   const res = response as
-    | { data?: SupplierInvoiceItem[] }
-    | SupplierInvoiceItem[];
+    | { data?: InvoiceCombinedItem[] }
+    | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -285,7 +290,24 @@ type PaymentFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
-const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
+function mapPaymentPartyDrCr(
+  raw: string | null | undefined,
+  flipForReversalSource: boolean,
+): "Cr" | "Dr" {
+  const side =
+    String(raw ?? "")
+      .trim()
+      .toLowerCase() === "dr"
+      ? "Dr"
+      : "Cr";
+  if (!flipForReversalSource) return side;
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
+const getDefaultDetailRow = (
+  localCurrency: string,
+  isReversalFlow = false,
+): DetailRow => ({
   subledger_id: null,
   customer_code: "",
   customer_display: "",
@@ -294,7 +316,7 @@ const getDefaultDetailRow = (localCurrency: string): DetailRow => ({
   roe: 1,
   amount: null,
   local_amount: null,
-  dr_cr: "Cr",
+  dr_cr: isReversalFlow ? "Cr" : "Dr",
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -404,6 +426,16 @@ function formatDocumentDateDisplay(value: string | null | undefined): string {
   return d ? d.toLocaleDateString() : "—";
 }
 
+function formatOutstandingDocumentAmountInLocal(
+  amountInLocal: number | string | null | undefined,
+): string {
+  if (amountInLocal == null || amountInLocal === "") return "—";
+  if (typeof amountInLocal === "number")
+    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+  const n = parseFloat(String(amountInLocal).trim());
+  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+}
+
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
 function firstNonEmptyString(
   ...candidates: Array<string | number | null | undefined>
@@ -433,21 +465,20 @@ export default function OverseasPaymentCreate({
   const { user } = useAuthStore();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
-  const [reversePaymentSaveResponse, setReversePaymentSaveResponse] =
-    useState<{
-      id?: number;
-      payment_no?: string;
-      reverse_payment_no?: string;
-      status?: string;
-    } | null>(null);
+  const [reversePaymentSaveResponse, setReversePaymentSaveResponse] = useState<{
+    id?: number;
+    payment_no?: string;
+    reverse_payment_no?: string;
+    status?: string;
+  } | null>(null);
 
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
-//   const localCurrency =
-//     (defaultBranch as { currency?: { currency_code?: string } } | undefined)
-//       ?.currency?.currency_code ?? "";
+  //   const localCurrency =
+  //     (defaultBranch as { currency?: { currency_code?: string } } | undefined)
+  //       ?.currency?.currency_code ?? "";
 
-  const localCurrency = 'USD';
+  const localCurrency = "USD";
   const [dropdownZIndex] = useState(300);
   const [
     documentsModalOpened,
@@ -470,12 +501,10 @@ export default function OverseasPaymentCreate({
   const [invoiceModalDetailRowIndex, setInvoiceModalDetailRowIndex] = useState<
     number | null
   >(null);
-  const [invoiceModalBillTo, setInvoiceModalBillTo] = useState<string | null>(
-    null,
-  );
-  const [supplierInvoiceList, setSupplierInvoiceList] = useState<
-    SupplierInvoiceItem[]
-  >([]);
+  /** When set, allocations API is triggered (or served from cache) for this filter */
+  const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
+    useState<{ account_code: string; subledger_code: string } | null>(null);
+  const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
@@ -505,7 +534,7 @@ export default function OverseasPaymentCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
-      details: [getDefaultDetailRow(localCurrency)],
+      details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
     },
@@ -543,14 +572,21 @@ export default function OverseasPaymentCreate({
   });
 
   const {
-    data: filterSupplierInvoiceData,
-    isLoading: filterSupplierInvoiceLoading,
-    isFetching: filterSupplierInvoiceFetching,
-    isError: filterSupplierInvoiceError,
+    data: filterInvoiceData,
+    isLoading: filterInvoiceLoading,
+    isFetching: filterInvoiceFetching,
+    isError: filterInvoiceError,
   } = useQuery({
-    queryKey: ["filterSupplierInvoice", invoiceModalBillTo ?? ""],
-    queryFn: () => fetchFilterSupplierInvoice(invoiceModalBillTo!),
-    enabled: invoiceModalOpen && !!invoiceModalBillTo,
+    queryKey: [
+      "outstandingAllocations",
+      invoiceModalAllocationFilter?.account_code ?? "",
+      invoiceModalAllocationFilter?.subledger_code ?? "",
+    ],
+    queryFn: () => fetchOutstandingAllocations(invoiceModalAllocationFilter!),
+    enabled:
+      invoiceModalOpen &&
+      !!invoiceModalAllocationFilter?.account_code &&
+      !!invoiceModalAllocationFilter?.subledger_code,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -617,9 +653,9 @@ export default function OverseasPaymentCreate({
   const pathname = location.pathname;
   const isReversalEditOrView =
     _isReversal &&
-    (pathname.includes("/reversal/edit") || pathname.includes("/reversal/view"));
-  const isReversalCreate =
-    _isReversal && pathname.includes("/reversal/create");
+    (pathname.includes("/reversal/edit") ||
+      pathname.includes("/reversal/view"));
+  const isReversalCreate = _isReversal && pathname.includes("/reversal/create");
 
   // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
@@ -676,10 +712,10 @@ export default function OverseasPaymentCreate({
               roe: parseNum(pAny.roe) ?? 1,
               amount: parseNum(pAny.amount),
               local_amount: parseNum(pAny.local_amount),
-              dr_cr: (pAny.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
+              dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
           })
-        : [getDefaultDetailRow(localCurrency)];
+        : [getDefaultDetailRow(localCurrency, _isReversal)];
 
     // Map list response allocations: document_no, document_date, subledger_code, subledger_name, day_book_id, type, location, supplier_invoice_id, adj_curr_amount, adj_local_amount
     const allocations = paymentFromState.allocations;
@@ -716,7 +752,9 @@ export default function OverseasPaymentCreate({
                     : null,
               location: String(aAny.location ?? "").trim(),
               type: String(aAny.type ?? aAny.type_name ?? "").trim(),
-              subledger: String(aAny.subledger_code ?? aAny.subledger ?? "").trim(),
+              subledger: String(
+                aAny.subledger_code ?? aAny.subledger ?? "",
+              ).trim(),
               subledger_display: String(
                 aAny.subledger_name ?? aAny.subledger ?? "",
               ).trim(),
@@ -734,12 +772,11 @@ export default function OverseasPaymentCreate({
 
     setLoadedDetails(details);
     form.setValues({
-      daybook_id:
-        isReversalCreate
-          ? ""
-          : paymentFromState.day_book_id != null
-            ? String(paymentFromState.day_book_id)
-            : "",
+      daybook_id: isReversalCreate
+        ? ""
+        : paymentFromState.day_book_id != null
+          ? String(paymentFromState.day_book_id)
+          : "",
       type: (paymentFromState.type ?? "CASH").toString().trim(),
       date: dateVal ?? new Date(),
       currency: (paymentFromState.currency_code ?? localCurrency)
@@ -797,18 +834,21 @@ export default function OverseasPaymentCreate({
       form.setFieldValue(
         "supporting_documents",
         rawDocs.map((doc: any) => ({
-          name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+          name: (
+            doc.document_name ??
+            doc.file_name ??
+            doc.name ??
+            ""
+          ).toString(),
           file: null as File | null,
-          document_url:
-            doc.document_url ??
-            doc.url ??
-            "",
+          document_url: doc.document_url ?? doc.url ?? "",
           document_id: doc.id ?? undefined,
-          original_document_name:
-            (doc.original_document_name ??
-              doc.document_name ??
-              doc.file_name ??
-              "").toString(),
+          original_document_name: (
+            doc.original_document_name ??
+            doc.document_name ??
+            doc.file_name ??
+            ""
+          ).toString(),
         })),
       );
     }
@@ -823,105 +863,15 @@ export default function OverseasPaymentCreate({
 
   const userCountryCode = user?.country?.country_code;
 
-  useEffect(() => {
-    const curr = form.values.currency?.trim().toUpperCase();
-    if (!curr || !localCurrency) return;
-    if (curr === localCurrency.toUpperCase()) {
-      form.setFieldValue("roe", 1);
-    } else {
-      form.setFieldValue("roe", getRoeValue(curr, userCountryCode));
-    }
-  }, [form.values.currency, localCurrency, userCountryCode]);
+  // Overseas Payment: no amount/ROE auto-sync. Keep effect for dependency symmetry.
+  useEffect(() => {}, [form.values.currency, localCurrency, userCountryCode]);
 
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
     .join(";");
-  useEffect(() => {
-    const sum = (form.values.details ?? []).reduce(
-      (s, d) =>
-        s +
-        (d.local_amount != null && Number.isFinite(d.local_amount)
-          ? d.local_amount
-          : 0),
-      0,
-    );
-    const headerLocal = clampAmount(sum);
-    const roeVal = form.values.roe;
-    const derivedHeaderAmount =
-      headerLocal != null &&
-      roeVal != null &&
-      Number.isFinite(roeVal) &&
-      roeVal !== 0
-        ? clampAmount(headerLocal / roeVal)
-        : null;
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
-    }
-    if (
-      derivedHeaderAmount != null &&
-      form.values.amount !== derivedHeaderAmount
-    ) {
-      form.setFieldValue("amount", derivedHeaderAmount);
-    }
-  }, [partyLocalAmountsSnapshot]);
+  useEffect(() => {}, [partyLocalAmountsSnapshot]);
 
-  useEffect(() => {
-    const amt = form.values.amount;
-    const roeVal = form.values.roe;
-    const local =
-      amt != null &&
-      Number.isFinite(amt) &&
-      roeVal != null &&
-      Number.isFinite(roeVal)
-        ? clampAmount(amt * roeVal)
-        : null;
-    if (form.values.local_amount !== local) {
-      form.setFieldValue("local_amount", local);
-    }
-  }, [form.values.amount, form.values.roe]);
-
-  const syncPartyDetailsFromAllocations = (
-    adjustmentsToUse?: AdjustmentRow[],
-  ) => {
-    const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
-    form.values.details.forEach((row, idx) => {
-      const partyCode = (row.customer_code ?? "").toString().trim();
-      const partyDisplay = (row.customer_display ?? "").toString().trim();
-      const matchingAllocations = adjustments.filter(
-        (a) =>
-          (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-          (partyDisplay &&
-            (a.subledger_display ?? "").toString().trim() === partyDisplay),
-      );
-      if (matchingAllocations.length === 0) return;
-      const sum = matchingAllocations.reduce(
-        (s, a) =>
-          s +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      );
-      const local = clampAmount(sum);
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const derivedAmount =
-        local != null &&
-        roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(local / roeVal)
-          : null;
-      if (form.values.details[idx].local_amount !== local) {
-        form.setFieldValue(`details.${idx}.local_amount`, local);
-      }
-      if (
-        derivedAmount != null &&
-        form.values.details[idx].amount !== derivedAmount
-      ) {
-        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-      }
-    });
-  };
+  useEffect(() => {}, [form.values.amount, form.values.roe]);
 
   const detailsSnapshotForLocal = form.values.details
     .map(
@@ -929,23 +879,16 @@ export default function OverseasPaymentCreate({
         `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
     )
     .join(";");
-  useEffect(() => {
-    form.values.details.forEach((row, idx) => {
-      const amt = row.amount;
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const local =
-        amt != null && Number.isFinite(amt) ? clampAmount(amt * roeVal) : null;
-      if (form.values.details[idx].local_amount !== local) {
-        form.setFieldValue(`details.${idx}.local_amount`, local);
-      }
-    });
-  }, [detailsSnapshotForLocal, localCurrency]);
+  useEffect(() => {}, [detailsSnapshotForLocal, localCurrency]);
 
   const showChequeSection = form.values.type === "CHEQUE";
 
   const addDetailRow = () => {
     setLoadedDetails(null);
-    form.insertListItem("details", getDefaultDetailRow(localCurrency));
+    form.insertListItem(
+      "details",
+      getDefaultDetailRow(localCurrency, _isReversal),
+    );
   };
 
   const removeDetailRow = (idx: number) => {
@@ -965,20 +908,23 @@ export default function OverseasPaymentCreate({
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
-    const agentName =
-      row?.customer_display?.trim() || row?.customer_code?.trim();
-    if (!agentName) return;
+    const accountCode = (row?.account_code ?? "").toString().trim();
+    const subledgerCode = (row?.customer_code ?? "").toString().trim();
+    if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
-    setInvoiceModalBillTo(agentName);
+    setInvoiceModalAllocationFilter({
+      account_code: accountCode,
+      subledger_code: subledgerCode,
+    });
     setInvoiceModalOpen(true);
-    setSupplierInvoiceList([]);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
-    if (!invoiceModalOpen || !filterSupplierInvoiceData) return;
-    const list = filterSupplierInvoiceData;
-    setSupplierInvoiceList(list);
+    if (!invoiceModalOpen || !filterInvoiceData) return;
+    const list = filterInvoiceData;
+    setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
         .map((a) => (a.document_no ?? "").toString().trim())
@@ -987,22 +933,22 @@ export default function OverseasPaymentCreate({
     const alreadySelected = new Set<number>();
     existingDocNos.forEach((docNo) => {
       const idx = list.findIndex(
-        (inv) => (inv.crj_number ?? "").toString().trim() === docNo,
+        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
       );
       if (idx >= 0) alreadySelected.add(idx);
     });
     setSelectedInvoiceIndices(alreadySelected);
-  }, [invoiceModalOpen, filterSupplierInvoiceData]);
+  }, [invoiceModalOpen, filterInvoiceData]);
 
   useEffect(() => {
-    if (invoiceModalOpen && filterSupplierInvoiceError) {
+    if (invoiceModalOpen && filterInvoiceError) {
       ToastNotification({
         type: "error",
-        message: "Failed to load supplier invoices",
+        message: "Failed to load documents",
       });
-      setSupplierInvoiceList([]);
+      setInvoiceList([]);
     }
-  }, [invoiceModalOpen, filterSupplierInvoiceError]);
+  }, [invoiceModalOpen, filterInvoiceError]);
 
   const toggleInvoiceSelection = (idx: number) => {
     setSelectedInvoiceIndices((prev) => {
@@ -1013,13 +959,13 @@ export default function OverseasPaymentCreate({
     });
   };
 
-  const handleSelectSupplierInvoice = () => {
+  const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
       ToastNotification({
         type: "warning",
-        message: "Please select at least one supplier invoice",
+        message: "Please select at least one document",
       });
       return;
     }
@@ -1032,41 +978,66 @@ export default function OverseasPaymentCreate({
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
     const managedDocNos = new Set(
-      supplierInvoiceList
-        .map((inv) => (inv.crj_number ?? "").toString().trim())
+      invoiceList
+        .map((inv) => (inv.document_no ?? "").toString().trim())
         .filter(Boolean),
     );
     const isManagedRow = (a: AdjustmentRow) =>
       managedDocNos.has((a.document_no ?? "").toString().trim());
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
-      const inv = supplierInvoiceList[listIdx];
-      const docDate = inv.date != null ? parseDocumentDate(inv.date) : null;
-      const approvedNum =
-        typeof inv.approved_amount === "number"
-          ? inv.approved_amount
-          : typeof inv.approved_amount === "string"
-            ? parseFloat(inv.approved_amount) || null
-            : null;
-      const invCrnNum =
-        typeof inv.Inv_crn_amount === "number"
-          ? inv.Inv_crn_amount
-          : typeof inv.Inv_crn_amount === "string"
-            ? parseFloat(inv.Inv_crn_amount) || null
-            : null;
-      const amountNum = approvedNum ?? invCrnNum;
-      const daybookId = inv.day_book_id;
+      const inv = invoiceList[listIdx];
+      const docDate =
+        inv.document_date != null
+          ? parseDocumentDate(inv.document_date as string)
+          : null;
+      const totalNum =
+        inv.amount != null
+          ? typeof inv.amount === "number"
+            ? inv.amount
+            : typeof inv.amount === "string"
+              ? parseFloat(inv.amount) || null
+              : null
+          : typeof inv.total === "number"
+            ? inv.total
+            : typeof inv.total === "string"
+              ? parseFloat(inv.total) || null
+              : null;
+      const localTotalNum =
+        inv.amount_in_local != null
+          ? typeof inv.amount_in_local === "number"
+            ? inv.amount_in_local
+            : typeof inv.amount_in_local === "string"
+              ? parseFloat(inv.amount_in_local) || null
+              : null
+          : null;
+      const invRoe =
+        inv.roe != null
+          ? typeof inv.roe === "number"
+            ? inv.roe
+            : typeof inv.roe === "string"
+              ? parseFloat(inv.roe) || null
+              : null
+          : null;
+      const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
-        type: "Supplier Invoice",
+        type: ((inv.day_book_document_type as string) ??
+          (inv.day_book_type as string) ??
+          "") as string,
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
-        document_no: (inv.crj_number ?? "").toString(),
+        document_no: (inv.document_no ?? "").toString(),
         doc_date: docDate,
         currency: (inv.currency_code ?? localCurrency).toString().trim(),
-        roe: 1,
-        adj_curr_amount: amountNum,
-        adj_local_amount: amountNum,
+        roe: invRoe,
+        adj_curr_amount: totalNum,
+        adj_local_amount:
+          localTotalNum != null
+            ? localTotalNum
+            : totalNum != null && invRoe != null
+              ? clampAmount(totalNum * invRoe)
+              : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
       };
     });
@@ -1087,11 +1058,11 @@ export default function OverseasPaymentCreate({
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
     form.setFieldValue("adjustments", nextAdjustments);
-    syncPartyDetailsFromAllocations(nextAdjustments);
+    // Overseas Payment: do not auto-sync party amounts from adjustments.
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
-    setInvoiceModalBillTo(null);
-    setSupplierInvoiceList([]);
+    setInvoiceModalAllocationFilter(null);
+    setInvoiceList([]);
     setSelectedInvoiceIndices(new Set());
   };
 
@@ -1126,7 +1097,7 @@ export default function OverseasPaymentCreate({
         roe: d.roe ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
-        dr_cr: (d.dr_cr ?? "Cr").toString(),
+        dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
       allocations: (values.adjustments ?? []).map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
@@ -1150,7 +1121,7 @@ export default function OverseasPaymentCreate({
     return base;
   };
 
-  /** Build payload for reverse-payment API. Header dr_cr = "Dr". For create: payment_no from source. */
+  /** Build payload for reverse-payment API. Header dr_cr = "Dr"; party lines default Cr. */
   const buildReversalPayload = (
     values: PaymentFormValues,
     options?: {
@@ -1169,7 +1140,10 @@ export default function OverseasPaymentCreate({
     );
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
-    const source = paymentFromState as Record<string, unknown> | null | undefined;
+    const source = paymentFromState as
+      | Record<string, unknown>
+      | null
+      | undefined;
     const base: Record<string, unknown> = {
       payment_no: paymentNo,
       date: formatDateDDMMYYYY(values.date),
@@ -1280,32 +1254,6 @@ export default function OverseasPaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
-    const partyLocalTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    const adjLocalTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      ) ?? 0;
-    if (partyLocalTotal > adjLocalTotal) {
-      ToastNotification({
-        type: "error",
-        message:
-          "The total Local Amount of Party Details cannot exceed the total Adj Local Amount of the Adjustments section.",
-      });
-      return;
-    }
     setIsSubmitting(true);
     try {
       if (_isReversal) {
@@ -1354,10 +1302,7 @@ export default function OverseasPaymentCreate({
                 res.documents.map((doc: any) => ({
                   name: (doc.document_name ?? doc.file_name ?? "").toString(),
                   file: null,
-                  document_url:
-                    doc.document_url ??
-                    doc.url ??
-                    "",
+                  document_url: doc.document_url ?? doc.url ?? "",
                   document_id: doc.id ?? undefined,
                   original_document_name:
                     doc.original_document_name ?? doc.document_name ?? "",
@@ -1401,10 +1346,7 @@ export default function OverseasPaymentCreate({
                 data.documents.map((doc: any) => ({
                   name: (doc.document_name ?? doc.file_name ?? "").toString(),
                   file: null,
-                  document_url:
-                    doc.document_url ??
-                    doc.url ??
-                    "",
+                  document_url: doc.document_url ?? doc.url ?? "",
                   document_id: doc.id ?? undefined,
                   original_document_name:
                     doc.original_document_name ?? doc.document_name ?? "",
@@ -1453,7 +1395,7 @@ export default function OverseasPaymentCreate({
       const payload = isUpdate
         ? buildPaymentPayload(values, { status: "UNPOSTED" })
         : buildPaymentPayload(values);
-payload.is_agent = true;
+      payload.is_agent = true;
       if (isUpdate) {
         const fd = buildPaymentFormData(payload);
         const recordIdNum = saveResponse?.id ?? Number(paymentFromState?.id);
@@ -1474,13 +1416,14 @@ payload.is_agent = true;
             form.setFieldValue(
               "supporting_documents",
               res.documents.map((doc: any) => ({
-                name:
-                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  doc.name ??
+                  ""
+                ).toString(),
                 file: null,
-                document_url:
-                  doc.document_url ??
-                  doc.url ??
-                  "",
+                document_url: doc.document_url ?? doc.url ?? "",
                 document_id: doc.id ?? undefined,
                 original_document_name:
                   doc.original_document_name ?? doc.document_name ?? "",
@@ -1534,13 +1477,14 @@ payload.is_agent = true;
             form.setFieldValue(
               "supporting_documents",
               data.documents.map((doc: any) => ({
-                name:
-                  (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+                name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  doc.name ??
+                  ""
+                ).toString(),
                 file: null,
-                document_url:
-                  doc.document_url ??
-                  doc.url ??
-                  "",
+                document_url: doc.document_url ?? doc.url ?? "",
                 document_id: doc.id ?? undefined,
                 original_document_name:
                   doc.original_document_name ?? doc.document_name ?? "",
@@ -1612,10 +1556,7 @@ payload.is_agent = true;
               res.documents.map((doc: any) => ({
                 name: (doc.document_name ?? doc.file_name ?? "").toString(),
                 file: null,
-                document_url:
-                  doc.document_url ??
-                  doc.url ??
-                  "",
+                document_url: doc.document_url ?? doc.url ?? "",
                 document_id: doc.id ?? undefined,
                 original_document_name:
                   doc.original_document_name ?? doc.document_name ?? "",
@@ -1676,13 +1617,14 @@ payload.is_agent = true;
           form.setFieldValue(
             "supporting_documents",
             res.documents.map((doc: any) => ({
-              name:
-                (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+              name: (
+                doc.document_name ??
+                doc.file_name ??
+                doc.name ??
+                ""
+              ).toString(),
               file: null,
-              document_url:
-                doc.document_url ??
-                doc.url ??
-                "",
+              document_url: doc.document_url ?? doc.url ?? "",
               document_id: doc.id ?? undefined,
               original_document_name:
                 doc.original_document_name ?? doc.document_name ?? "",
@@ -1729,12 +1671,11 @@ payload.is_agent = true;
       ? reversalNonEditableStyles
       : readOnlyFieldStyles
     : fieldStyles;
-  const partyFieldStyles =
-    headerOtherDisabled
-      ? useNonEditableStyleOnly
-        ? reversalNonEditableStyles
-        : readOnlyFieldStyles
-      : fieldStyles;
+  const partyFieldStyles = headerOtherDisabled
+    ? useNonEditableStyleOnly
+      ? reversalNonEditableStyles
+      : readOnlyFieldStyles
+    : fieldStyles;
   const adjustmentFieldStyles = reversalNonEditableStyles;
   const isHeaderDaybookEditable = _isReversal && !isReadOnly;
   const headerDaybookStyles = isHeaderDaybookEditable
@@ -1743,21 +1684,21 @@ payload.is_agent = true;
       ? reversalNonEditableStyles
       : inputStyles;
 
-//   const pageTitle = pathname.includes("/payment/reversal/view")
-//     ? "View Payment Reversal"
-//     : pathname.includes("/payment/reversal/edit")
-//       ? "Edit Payment Reversal"
-//       : pathname.includes("/payment/reversal/create")
-//         ? "Create Payment Reversal"
-//         : pathname.includes("/payment/view")
-//           ? "View Payment"
-//           : pathname.includes("/payment/edit")
-//             ? "Edit Payment"
-//             : pathname.includes("/payment/create")
-//               ? "Create Payment"
-//               : titleOverride;
+  //   const pageTitle = pathname.includes("/payment/reversal/view")
+  //     ? "View Payment Reversal"
+  //     : pathname.includes("/payment/reversal/edit")
+  //       ? "Edit Payment Reversal"
+  //       : pathname.includes("/payment/reversal/create")
+  //         ? "Create Payment Reversal"
+  //         : pathname.includes("/payment/view")
+  //           ? "View Payment"
+  //           : pathname.includes("/payment/edit")
+  //             ? "Edit Payment"
+  //             : pathname.includes("/payment/create")
+  //               ? "Create Payment"
+  //               : titleOverride;
 
-                const pageTitle = pathname.includes("/payment/reversal/view")
+  const pageTitle = pathname.includes("/payment/reversal/view")
     ? "View Payment Reversal"
     : pathname.includes("/payment/reversal/edit")
       ? "Edit Payment Reversal"
@@ -1853,50 +1794,52 @@ payload.is_agent = true;
             {_isReversal &&
               (reversePaymentSaveResponse ||
                 (isReversalEditOrView && paymentFromState)) && (
-              <Group gap="sm" wrap="nowrap">
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Reverse Payment No:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color="#105476"
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {(reversePaymentSaveResponse?.reverse_payment_no ??
-                      reversePaymentSaveResponse?.payment_no ??
-                      (paymentFromState as { reverse_payment_no?: string })
-                        ?.reverse_payment_no ??
-                      (paymentFromState as { payment_no?: string })?.payment_no ??
-                      (reversePaymentSaveResponse?.id != null
-                        ? String(reversePaymentSaveResponse.id)
-                        : paymentFromState?.id != null
-                          ? String(paymentFromState.id)
-                          : "")) || "—"}
-                  </Badge>
+                <Group gap="sm" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Reverse Payment No:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color="#105476"
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {(reversePaymentSaveResponse?.reverse_payment_no ??
+                        reversePaymentSaveResponse?.payment_no ??
+                        (paymentFromState as { reverse_payment_no?: string })
+                          ?.reverse_payment_no ??
+                        (paymentFromState as { payment_no?: string })
+                          ?.payment_no ??
+                        (reversePaymentSaveResponse?.id != null
+                          ? String(reversePaymentSaveResponse.id)
+                          : paymentFromState?.id != null
+                            ? String(paymentFromState.id)
+                            : "")) ||
+                        "—"}
+                    </Badge>
+                  </Group>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm" fw={500} c="dimmed">
+                      Status:
+                    </Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={
+                        reversalStatusUpper === "UNPOSTED"
+                          ? "gray"
+                          : reversalStatusUpper === "POSTED"
+                            ? "green"
+                            : "#105476"
+                      }
+                      styles={{ root: { textTransform: "none" } }}
+                    >
+                      {reversalStatusUpper || "—"}
+                    </Badge>
+                  </Group>
                 </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Status:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={
-                      reversalStatusUpper === "UNPOSTED"
-                        ? "gray"
-                        : reversalStatusUpper === "POSTED"
-                          ? "green"
-                          : "#105476"
-                    }
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {reversalStatusUpper || "—"}
-                  </Badge>
-                </Group>
-              </Group>
-            )}
+              )}
             <Button
               variant="outline"
               color="#105476"
@@ -2054,7 +1997,9 @@ payload.is_agent = true;
                     placeholder="Bank"
                     {...form.getInputProps("bank")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -2063,7 +2008,9 @@ payload.is_agent = true;
                     placeholder="Branch"
                     {...form.getInputProps("branch")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -2072,7 +2019,9 @@ payload.is_agent = true;
                     placeholder="Cheque No"
                     {...form.getInputProps("cheque_no")}
                     styles={headerFieldStyles}
-                    disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                    disabled={
+                      useNonEditableStyleOnly ? false : headerOtherDisabled
+                    }
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
@@ -2168,27 +2117,25 @@ payload.is_agent = true;
                           <SearchableSelect
                             key={partyKey}
                             placeholder="Account Name"
-                            apiEndpoint={URL.agent}
+                            apiEndpoint={URL.chartOfAccounts}
                             value={row?.customer_code || null}
                             displayValue={row?.customer_display || null}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                             onChange={(value, _selected, originalData) => {
                               setLoadedDetails(null);
                               const orig = originalData as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_name?: string;
+                                gl_account_code?: string;
+                                sl_code?: string;
+                                account_name?: string;
                               };
-                              const name =
-                                orig?.agent_name ??
-                                orig?.customer_name ??
-                                orig?.name ??
-                                "";
-                              const code =
-                                orig?.agent_code ?? orig?.customer_code ?? "";
+                              const glName = orig?.gl_name ?? "";
+                              const name = orig?.account_name ?? "";
+                              const subledgerCode = orig?.sl_code ?? "";
+                              const glAccountCode = orig?.gl_account_code ?? "";
                               const sid =
                                 orig?.id != null
                                   ? orig.id
@@ -2201,12 +2148,20 @@ payload.is_agent = true;
                                 sid,
                               );
                               form.setFieldValue(
+                                `details.${idx}.account_code`,
+                                glAccountCode,
+                              );
+                              form.setFieldValue(
                                 `details.${idx}.customer_code`,
-                                code || (value ?? ""),
+                                subledgerCode || (value ?? ""),
                               );
                               form.setFieldValue(
                                 `details.${idx}.customer_display`,
-                                name,
+                                formatChartOfAccountsLabel(
+                                  glName,
+                                  glAccountCode,
+                                  name,
+                                ),
                               );
                               form.setFieldValue(
                                 `details.${idx}.currency`,
@@ -2218,32 +2173,24 @@ payload.is_agent = true;
                             displayFormat={(item) => {
                               const i = item as {
                                 id?: number;
-                                customer_code?: string;
-                                customer_name?: string;
-                                agent_code?: string;
-                                agent_name?: string;
-                                name?: string;
+                                gl_name?: string;
+                                gl_account_code?: string;
+                                account_name?: string;
                               };
                               return {
-                                value: String(
-                                  i?.id ??
-                                    i?.agent_code ??
-                                    i?.customer_code ??
-                                    "",
-                                ),
-                                label: String(
-                                  i?.agent_name ??
-                                    i?.customer_name ??
-                                    i?.name ??
-                                    "",
+                                value: String(i?.id ?? ""),
+                                label: formatChartOfAccountsLabel(
+                                  String(i?.gl_name ?? "").trim(),
+                                  String(i?.gl_account_code ?? "").trim(),
+                                  String(i?.account_name ?? "").trim(),
                                 ),
                               };
                             }}
                             searchFields={[
-                              "agent_name",
-                              "agent_code",
-                              "customer_name",
-                              "customer_code",
+                              "account_name",
+                              "gl_name",
+                              "gl_account_code",
+                              "sl_code",
                             ]}
                             returnOriginalData
                             styles={partyFieldStyles}
@@ -2253,7 +2200,9 @@ payload.is_agent = true;
                           <TextInput
                             placeholder="Narration"
                             {...form.getInputProps(`details.${idx}.narration`)}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                             styles={partyFieldStyles}
                           />
                         </Grid.Col>
@@ -2292,7 +2241,9 @@ payload.is_agent = true;
                             decimalScale={4}
                             max={ROE_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2326,7 +2277,9 @@ payload.is_agent = true;
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2348,7 +2301,9 @@ payload.is_agent = true;
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -2359,11 +2314,14 @@ payload.is_agent = true;
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.dr_cr`,
-                                (v as "Cr" | "Dr") ?? "Cr",
+                                (v as "Cr" | "Dr") ??
+                                  (_isReversal ? "Cr" : "Dr"),
                               )
                             }
                             styles={partyFieldStyles}
-                            disabled={useNonEditableStyleOnly ? false : isReadOnly}
+                            disabled={
+                              useNonEditableStyleOnly ? false : isReadOnly
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1.5}>
@@ -2395,21 +2353,21 @@ payload.is_agent = true;
                               type="button"
                               variant="subtle"
                               size="sm"
-                              title="Get supplier invoice details"
+                              title="Get document details"
                               disabled={
                                 isReadOnly ||
                                 _isReversal ||
                                 (invoiceModalDetailRowIndex === idx &&
-                                  (filterSupplierInvoiceLoading ||
-                                    filterSupplierInvoiceFetching)) ||
+                                  (filterInvoiceLoading ||
+                                    filterInvoiceFetching)) ||
                                 (!form.values.details[idx].customer_code &&
                                   !form.values.details[idx].customer_display)
                               }
                               onClick={() => openInvoiceModal(idx)}
                               leftSection={
                                 invoiceModalDetailRowIndex === idx &&
-                                (filterSupplierInvoiceLoading ||
-                                  filterSupplierInvoiceFetching) ? (
+                                (filterInvoiceLoading ||
+                                  filterInvoiceFetching) ? (
                                   <Loader size="xs" color="#105476" />
                                 ) : (
                                   <IconFileInvoice size={18} />
@@ -2549,7 +2507,6 @@ payload.is_agent = true;
                       <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Adj Curr Amount"
-                          min={0}
                           hideControls
                           value={
                             form.values.adjustments[idx].adj_curr_amount ??
@@ -2557,9 +2514,11 @@ payload.is_agent = true;
                           }
                           onChange={(v) => {
                             const newCurr =
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null;
+                              v == null || v === ""
+                                ? null
+                                : typeof v === "string"
+                                  ? parseFloat(v) || 0
+                                  : v;
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
                               newCurr,
@@ -2571,29 +2530,15 @@ payload.is_agent = true;
                               rowRoe != null &&
                               Number.isFinite(rowRoe)
                             ) {
-                              newLocal = clampAmount(newCurr * rowRoe);
+                              newLocal = newCurr * rowRoe;
                               form.setFieldValue(
                                 `adjustments.${idx}.adj_local_amount`,
                                 newLocal,
                               );
                             }
-                            const effectiveAdjustments =
-                              form.values.adjustments.map((a, i) =>
-                                i === idx
-                                  ? {
-                                      ...a,
-                                      adj_curr_amount: newCurr,
-                                      adj_local_amount:
-                                        newLocal ?? a.adj_local_amount,
-                                    }
-                                  : a,
-                              );
-                            syncPartyDetailsFromAllocations(
-                              effectiveAdjustments,
-                            );
+                            // Overseas Payment: do not auto-sync party amounts from adjustments.
                           }}
                           decimalScale={2}
-                          max={AMOUNT_MAX}
                           styles={
                             isReadOnly || _isReversal
                               ? adjustmentFieldStyles
@@ -2605,7 +2550,6 @@ payload.is_agent = true;
                       <Grid.Col span={1}>
                         <NumberInput
                           placeholder="Adj local amount"
-                          min={0}
                           hideControls
                           readOnly
                           value={
@@ -2613,7 +2557,6 @@ payload.is_agent = true;
                             undefined
                           }
                           decimalScale={2}
-                          max={AMOUNT_MAX}
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
@@ -2656,17 +2599,17 @@ payload.is_agent = true;
             onClose={() => {
               setInvoiceModalOpen(false);
               setInvoiceModalDetailRowIndex(null);
-              setInvoiceModalBillTo(null);
-              setSupplierInvoiceList([]);
+              setInvoiceModalAllocationFilter(null);
+              setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
             }}
-            title="Select Supplier Invoice"
+            title="Select Document"
             size="lg"
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
-            {filterSupplierInvoiceLoading || filterSupplierInvoiceFetching ? (
+            {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
-                Loading supplier invoices...
+                Loading documents...
               </Text>
             ) : (
               <>
@@ -2680,12 +2623,15 @@ payload.is_agent = true;
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
-                      <Table.Th>CRJ Number</Table.Th>
-                      <Table.Th>Date</Table.Th>
+                      <Table.Th>Document Number</Table.Th>
+                      <Table.Th>Document Doc Type</Table.Th>
+                      <Table.Th>Document Date</Table.Th>
+                      <Table.Th>Document Amount</Table.Th>
+                      <Table.Th>Outstanding Amount</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {supplierInvoiceList.map((inv, idx) => (
+                    {invoiceList.map((inv, idx) => (
                       <Table.Tr key={idx}>
                         <Table.Td>
                           <Checkbox
@@ -2693,19 +2639,40 @@ payload.is_agent = true;
                             onChange={() => toggleInvoiceSelection(idx)}
                           />
                         </Table.Td>
-                        <Table.Td>{inv.crj_number ?? "—"}</Table.Td>
                         <Table.Td>
-                          {formatDocumentDateDisplay(inv.date)}
+                          {(inv.document_no ?? "—").toString()}
+                        </Table.Td>
+                        <Table.Td>
+                          {(
+                            (inv.day_book_document_type as string) ??
+                            (inv.day_book_type as string) ??
+                            "—"
+                          ).toString()}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatDocumentDateDisplay(
+                            inv.document_date as string,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.document_amount,
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {formatOutstandingDocumentAmountInLocal(
+                            inv.amount,
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
                 </Table>
-                {supplierInvoiceList.length === 0 &&
-                  !filterSupplierInvoiceLoading &&
-                  !filterSupplierInvoiceFetching && (
+                {invoiceList.length === 0 &&
+                  !filterInvoiceLoading &&
+                  !filterInvoiceFetching && (
                     <Text size="sm" c="dimmed" mt="sm">
-                      No posted supplier invoices found for this agent.
+                      No documents found.
                     </Text>
                   )}
                 <Group justify="flex-end" mt="md">
@@ -2715,8 +2682,8 @@ payload.is_agent = true;
                     onClick={() => {
                       setInvoiceModalOpen(false);
                       setInvoiceModalDetailRowIndex(null);
-                      setInvoiceModalBillTo(null);
-                      setSupplierInvoiceList([]);
+                      setInvoiceModalAllocationFilter(null);
+                      setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
                     }}
                   >
@@ -2724,7 +2691,7 @@ payload.is_agent = true;
                   </Button>
                   <Button
                     color="#105476"
-                    onClick={handleSelectSupplierInvoice}
+                    onClick={handleSelectInvoice}
                     disabled={selectedInvoiceIndices.size === 0}
                   >
                     Select
@@ -2736,272 +2703,273 @@ payload.is_agent = true;
 
           {/* Supporting Documents Modal */}
           <Modal
-              opened={documentsModalOpened}
-              onClose={closeDocumentsModal}
-              title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
-              size="xl"
-              centered
-              style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
-            >
-              <Stack gap="xs">
-                {form.values.supporting_documents.map((doc, index) => (
-                  <Grid key={index} columns={12} gutter="sm" align="flex-end">
-                    <Grid.Col span={5.5}>
-                      <TextInput
-                        label="Document Name"
-                        placeholder="Enter document name"
-                        value={doc.name}
-                        onChange={(e) => {
+            opened={documentsModalOpened}
+            onClose={closeDocumentsModal}
+            title={
+              isReadOnly
+                ? "Supporting Documents"
+                : "Attach Supporting Documents"
+            }
+            size="xl"
+            centered
+            style={{ fontFamily: "Inter" }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+          >
+            <Stack gap="xs">
+              {form.values.supporting_documents.map((doc, index) => (
+                <Grid key={index} columns={12} gutter="sm" align="flex-end">
+                  <Grid.Col span={5.5}>
+                    <TextInput
+                      label="Document Name"
+                      placeholder="Enter document name"
+                      value={doc.name}
+                      onChange={(e) => {
+                        const updatedDocs = [
+                          ...form.values.supporting_documents,
+                        ];
+                        updatedDocs[index] = {
+                          ...updatedDocs[index],
+                          name: e.target.value,
+                        };
+                        form.setFieldValue("supporting_documents", updatedDocs);
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={5.5}>
+                    <Box>
+                      <Text size="sm" fw={500} mb={4}>
+                        File
+                      </Text>
+                      <Dropzone
+                        onDrop={(files: File[]) => {
+                          if (isReadOnly) return;
+                          if (files.length === 0) return;
+                          const file = files[0];
+                          if (fileErrors[index]) {
+                            const newErrors = { ...fileErrors };
+                            delete newErrors[index];
+                            setFileErrors(newErrors);
+                          }
+                          if (file.size > MAX_FILE_SIZE) {
+                            const newErrors = { ...fileErrors };
+                            newErrors[index] =
+                              `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                            setFileErrors(newErrors);
+                            ToastNotification({
+                              type: "error",
+                              message: `File "${file.name}" exceeds 5MB limit`,
+                            });
+                            return;
+                          }
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
                           updatedDocs[index] = {
                             ...updatedDocs[index],
-                            name: e.target.value,
+                            file,
+                            document_url: undefined,
                           };
                           form.setFieldValue(
                             "supporting_documents",
                             updatedDocs,
                           );
                         }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={5.5}>
-                      <Box>
-                        <Text size="sm" fw={500} mb={4}>
-                          File
-                        </Text>
-                        <Dropzone
-                          onDrop={(files: File[]) => {
-                            if (isReadOnly) return;
-                            if (files.length === 0) return;
-                            const file = files[0];
-                            if (fileErrors[index]) {
-                              const newErrors = { ...fileErrors };
-                              delete newErrors[index];
-                              setFileErrors(newErrors);
-                            }
-                            if (file.size > MAX_FILE_SIZE) {
-                              const newErrors = { ...fileErrors };
-                              newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
-                              setFileErrors(newErrors);
-                              ToastNotification({
-                                type: "error",
-                                message: `File "${file.name}" exceeds 5MB limit`,
-                              });
-                              return;
-                            }
-                            const updatedDocs = [
-                              ...form.values.supporting_documents,
-                            ];
-                            updatedDocs[index] = {
-                              ...updatedDocs[index],
-                              file,
-                              document_url: undefined,
-                            };
-                            form.setFieldValue(
-                              "supporting_documents",
-                              updatedDocs,
-                            );
-                          }}
-                          onReject={(files: any[]) => {
-                            const rejection = files[0];
-                            if (
-                              rejection?.errors?.some(
-                                (e: any) => e.code === "file-too-large",
-                              )
-                            ) {
-                              const newErrors = { ...fileErrors };
-                              newErrors[index] = "File size exceeds 5MB limit";
-                              setFileErrors(newErrors);
-                            }
-                          }}
-                          maxSize={MAX_FILE_SIZE}
-                          accept={undefined}
-                          multiple={false}
-                          styles={{
-                            root: {
-                              border: "1px solid var(--mantine-color-gray-4)",
-                              borderRadius: "var(--mantine-radius-sm)",
-                              backgroundColor: "var(--mantine-color-white)",
-                              minHeight: "36px",
-                              padding: "0",
-                            },
-                            inner: {
-                              padding: "0",
-                              minHeight: "36px",
-                            },
-                          }}
-                        >
-                          <Group
-                            justify="space-between"
-                            gap="xs"
-                            px="sm"
-                            style={{
-                              minHeight: "36px",
-                              pointerEvents: "none",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                              {doc.file ? (
-                                <>
-                                  <IconUpload
-                                    size={16}
-                                    color="var(--mantine-color-dimmed)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    truncate
-                                    style={{
-                                      flex: 1,
-                                      color: "var(--mantine-color-dark)",
-                                    }}
-                                  >
-                                    {doc.file.name}
-                                  </Text>
-                                </>
-                              ) : doc.document_url ? (
-                                <>
-                                  <IconDownload
-                                    size={16}
-                                    color="var(--mantine-color-blue-6)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    truncate
-                                    style={{
-                                      flex: 1,
-                                      color: "var(--mantine-color-blue-6)",
-                                      cursor: "pointer",
-                                      textDecoration: "underline",
-                                      pointerEvents: "auto",
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (
-                                        doc.document_url &&
-                                        doc.original_document_name
-                                      ) {
-                                        downloadFile(
-                                          doc.document_url,
-                                          doc.original_document_name,
-                                        );
-                                      }
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.opacity = "0.8";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.opacity = "1";
-                                    }}
-                                  >
-                                    {doc.original_document_name ||
-                                      "Download file"}
-                                  </Text>
-                                </>
-                              ) : (
-                                <>
-                                  <IconUpload
-                                    size={16}
-                                    color="var(--mantine-color-dimmed)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    c="dimmed"
-                                    truncate
-                                    style={{ flex: 1 }}
-                                  >
-                                    Drag and drop or click to select file
-                                  </Text>
-                                </>
-                              )}
-                            </Group>
-                            {!isReadOnly && (doc.file || doc.document_url) && (
-                              <Button
-                                variant="subtle"
-                                color="red"
-                                size="xs"
-                                p={4}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (fileErrors[index]) {
-                                    const newErrors = { ...fileErrors };
-                                    delete newErrors[index];
-                                    setFileErrors(newErrors);
-                                  }
-                                  const updatedDocs = [
-                                    ...form.values.supporting_documents,
-                                  ];
-                                  updatedDocs[index] = {
-                                    ...updatedDocs[index],
-                                    file: null,
-                                    document_url: undefined,
-                                    document_id: undefined,
-                                  };
-                                  form.setFieldValue(
-                                    "supporting_documents",
-                                    updatedDocs,
-                                  );
-                                }}
-                                style={{ pointerEvents: "auto" }}
-                              >
-                                <IconX size={14} />
-                              </Button>
-                            )}
-                          </Group>
-                        </Dropzone>
-                        {fileErrors[index] && (
-                          <Text size="xs" c="red" mt={4}>
-                            {fileErrors[index]}
-                          </Text>
-                        )}
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={1}>
-                      <Button
-                        variant="light"
-                        color="red"
-                        onClick={() => {
-                          if (fileErrors[index]) {
+                        onReject={(files: any[]) => {
+                          const rejection = files[0];
+                          if (
+                            rejection?.errors?.some(
+                              (e: any) => e.code === "file-too-large",
+                            )
+                          ) {
                             const newErrors = { ...fileErrors };
-                            delete newErrors[index];
-                            setFileErrors(newErrors);
-                          }
-                          if (form.values.supporting_documents.length === 1) {
-                            form.setFieldValue("supporting_documents", [
-                              { name: "", file: null },
-                            ]);
-                          } else {
-                            const updatedDocs =
-                              form.values.supporting_documents.filter(
-                                (_, i) => i !== index,
-                              );
-                            form.setFieldValue(
-                              "supporting_documents",
-                              updatedDocs,
-                            );
-                            const newErrors: { [key: number]: string } = {};
-                            Object.keys(fileErrors).forEach((key) => {
-                              const keyNum = parseInt(key);
-                              if (keyNum < index) {
-                                newErrors[keyNum] = fileErrors[keyNum];
-                              } else if (keyNum > index) {
-                                newErrors[keyNum - 1] = fileErrors[keyNum];
-                              }
-                            });
+                            newErrors[index] = "File size exceeds 5MB limit";
                             setFileErrors(newErrors);
                           }
                         }}
+                        maxSize={MAX_FILE_SIZE}
+                        accept={undefined}
+                        multiple={false}
+                        styles={{
+                          root: {
+                            border: "1px solid var(--mantine-color-gray-4)",
+                            borderRadius: "var(--mantine-radius-sm)",
+                            backgroundColor: "var(--mantine-color-white)",
+                            minHeight: "36px",
+                            padding: "0",
+                          },
+                          inner: {
+                            padding: "0",
+                            minHeight: "36px",
+                          },
+                        }}
                       >
-                        <IconTrash size={16} />
-                      </Button>
-                    </Grid.Col>
-                    <Grid.Col span={1} offset={11}>
-                      {!isReadOnly &&
-                        index ===
-                          form.values.supporting_documents.length - 1 && (
+                        <Group
+                          justify="space-between"
+                          gap="xs"
+                          px="sm"
+                          style={{
+                            minHeight: "36px",
+                            pointerEvents: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                            {doc.file ? (
+                              <>
+                                <IconUpload
+                                  size={16}
+                                  color="var(--mantine-color-dimmed)"
+                                />
+                                <Text
+                                  size="sm"
+                                  truncate
+                                  style={{
+                                    flex: 1,
+                                    color: "var(--mantine-color-dark)",
+                                  }}
+                                >
+                                  {doc.file.name}
+                                </Text>
+                              </>
+                            ) : doc.document_url ? (
+                              <>
+                                <IconDownload
+                                  size={16}
+                                  color="var(--mantine-color-blue-6)"
+                                />
+                                <Text
+                                  size="sm"
+                                  truncate
+                                  style={{
+                                    flex: 1,
+                                    color: "var(--mantine-color-blue-6)",
+                                    cursor: "pointer",
+                                    textDecoration: "underline",
+                                    pointerEvents: "auto",
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      doc.document_url &&
+                                      doc.original_document_name
+                                    ) {
+                                      downloadFile(
+                                        doc.document_url,
+                                        doc.original_document_name,
+                                      );
+                                    }
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.opacity = "0.8";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.opacity = "1";
+                                  }}
+                                >
+                                  {doc.original_document_name ||
+                                    "Download file"}
+                                </Text>
+                              </>
+                            ) : (
+                              <>
+                                <IconUpload
+                                  size={16}
+                                  color="var(--mantine-color-dimmed)"
+                                />
+                                <Text
+                                  size="sm"
+                                  c="dimmed"
+                                  truncate
+                                  style={{ flex: 1 }}
+                                >
+                                  Drag and drop or click to select file
+                                </Text>
+                              </>
+                            )}
+                          </Group>
+                          {!isReadOnly && (doc.file || doc.document_url) && (
+                            <Button
+                              variant="subtle"
+                              color="red"
+                              size="xs"
+                              p={4}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (fileErrors[index]) {
+                                  const newErrors = { ...fileErrors };
+                                  delete newErrors[index];
+                                  setFileErrors(newErrors);
+                                }
+                                const updatedDocs = [
+                                  ...form.values.supporting_documents,
+                                ];
+                                updatedDocs[index] = {
+                                  ...updatedDocs[index],
+                                  file: null,
+                                  document_url: undefined,
+                                  document_id: undefined,
+                                };
+                                form.setFieldValue(
+                                  "supporting_documents",
+                                  updatedDocs,
+                                );
+                              }}
+                              style={{ pointerEvents: "auto" }}
+                            >
+                              <IconX size={14} />
+                            </Button>
+                          )}
+                        </Group>
+                      </Dropzone>
+                      {fileErrors[index] && (
+                        <Text size="xs" c="red" mt={4}>
+                          {fileErrors[index]}
+                        </Text>
+                      )}
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={1}>
+                    <Button
+                      variant="light"
+                      color="red"
+                      onClick={() => {
+                        if (fileErrors[index]) {
+                          const newErrors = { ...fileErrors };
+                          delete newErrors[index];
+                          setFileErrors(newErrors);
+                        }
+                        if (form.values.supporting_documents.length === 1) {
+                          form.setFieldValue("supporting_documents", [
+                            { name: "", file: null },
+                          ]);
+                        } else {
+                          const updatedDocs =
+                            form.values.supporting_documents.filter(
+                              (_, i) => i !== index,
+                            );
+                          form.setFieldValue(
+                            "supporting_documents",
+                            updatedDocs,
+                          );
+                          const newErrors: { [key: number]: string } = {};
+                          Object.keys(fileErrors).forEach((key) => {
+                            const keyNum = parseInt(key);
+                            if (keyNum < index) {
+                              newErrors[keyNum] = fileErrors[keyNum];
+                            } else if (keyNum > index) {
+                              newErrors[keyNum - 1] = fileErrors[keyNum];
+                            }
+                          });
+                          setFileErrors(newErrors);
+                        }
+                      }}
+                    >
+                      <IconTrash size={16} />
+                    </Button>
+                  </Grid.Col>
+                  <Grid.Col span={1} offset={11}>
+                    {!isReadOnly &&
+                      index === form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
                           color="#105476"
@@ -3015,34 +2983,33 @@ payload.is_agent = true;
                           <IconPlus size={16} />
                         </Button>
                       )}
-                    </Grid.Col>
-                  </Grid>
-                ))}
+                  </Grid.Col>
+                </Grid>
+              ))}
 
-                {!isReadOnly &&
-                  form.values.supporting_documents.length === 0 && (
-                  <Button
-                    variant="light"
-                    color="#105476"
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => {
-                      form.setFieldValue("supporting_documents", [
-                        { name: "", file: null },
-                      ]);
-                    }}
-                    fullWidth
-                  >
-                    Add Document
-                  </Button>
-                )}
+              {!isReadOnly && form.values.supporting_documents.length === 0 && (
+                <Button
+                  variant="light"
+                  color="#105476"
+                  leftSection={<IconPlus size={16} />}
+                  onClick={() => {
+                    form.setFieldValue("supporting_documents", [
+                      { name: "", file: null },
+                    ]);
+                  }}
+                  fullWidth
+                >
+                  Add Document
+                </Button>
+              )}
 
-                <Group justify="flex-end" mt="md">
-                  <Button variant="outline" onClick={closeDocumentsModal}>
-                    Close
-                  </Button>
-                </Group>
-              </Stack>
-            </Modal>
+              <Group justify="flex-end" mt="md">
+                <Button variant="outline" onClick={closeDocumentsModal}>
+                  Close
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
 
           <Group justify="flex-end" mt="xl">
             <Button
@@ -3058,12 +3025,15 @@ payload.is_agent = true;
               }}
               onClick={() => {
                 if (form.values.supporting_documents.length === 0) {
-                  form.setFieldValue("supporting_documents", [{ name: "", file: null }]);
+                  form.setFieldValue("supporting_documents", [
+                    { name: "", file: null },
+                  ]);
                 }
                 const newErrors: { [key: number]: string } = {};
                 form.values.supporting_documents.forEach((doc, idx) => {
                   if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                    newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                    newErrors[idx] =
+                      `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                   }
                 });
                 setFileErrors(newErrors);
@@ -3103,28 +3073,28 @@ payload.is_agent = true;
                 {_isReversal
                   ? reversePaymentSaveResponse &&
                     reversalStatusUpper === "UNPOSTED" && (
-                    <Button
-                      type="button"
-                      color="black"
-                      variant="filled"
-                      loading={isPosting}
-                      onClick={handlePostPayment}
-                    >
-                      Post Payment Reversal
-                    </Button>
-                  )
+                      <Button
+                        type="button"
+                        color="black"
+                        variant="filled"
+                        loading={isPosting}
+                        onClick={handlePostPayment}
+                      >
+                        Post Payment Reversal
+                      </Button>
+                    )
                   : saveResponse &&
                     statusUpper === "UNPOSTED" && (
-                    <Button
-                      type="button"
-                      color="black"
-                      variant="filled"
-                      loading={isPosting}
-                      onClick={handlePostPayment}
-                    >
-                      Post Payment
-                    </Button>
-                  )}
+                      <Button
+                        type="button"
+                        color="black"
+                        variant="filled"
+                        loading={isPosting}
+                        onClick={handlePostPayment}
+                      >
+                        Post Payment
+                      </Button>
+                    )}
               </>
             )}
           </Group>

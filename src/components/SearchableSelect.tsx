@@ -30,7 +30,10 @@ interface SearchableSelectProps {
   size?: string; // Add size prop
   returnOriginalData?: boolean; // New prop to control whether to return original data
   additionalParams?: Record<string, string>; // Additional query parameters to add to the API call
-  styles?: Record<string, any>; // Styles prop for label and input styling
+  styles?: Record<string, unknown>; // Styles prop for label and input styling
+  classNames?: Record<string, string>;
+  /** When true, focuses the underlying Mantine `Select` input as soon as it mounts. */
+  autoFocus?: boolean;
 }
 
 export default function SearchableSelect({
@@ -54,6 +57,8 @@ export default function SearchableSelect({
   returnOriginalData = false, // Default to false for backward compatibility
   additionalParams,
   styles,
+  classNames,
+  autoFocus = false,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -268,7 +273,16 @@ export default function SearchableSelect({
     setSearch(val);
 
     if (!val.trim()) {
-      // User cleared the search
+      // Only treat this as a "user cleared the input" event when the user was
+      // actually in search mode. Mantine's `Select` can call `onSearchChange("")`
+      // during its internal mount/sync (e.g. when a controlled `value` is set
+      // but the matching option hasn't reached `data` yet), and that spurious
+      // empty event would otherwise wipe the upstream filter -- which is what
+      // caused the filter API to fire as soon as the user clicked the column
+      // header to open the `SearchableSelect` editor.
+      if (!isSearchMode) {
+        return;
+      }
       setSelected(null);
       setSelectedItem(null);
       setIsSearchMode(false);
@@ -329,11 +343,19 @@ export default function SearchableSelect({
     <>
       <Select
         label={label}
+        autoFocus={autoFocus}
+        classNames={classNames}
         comboboxProps={{
           zIndex: dropdownZIndex,
         }}
         styles={{
-          input: { fontSize: "13px", height: "36px", fontFamily: "Inter", ...styles?.input },
+          ...styles,
+          input: {
+            fontSize: "13px",
+            height: "36px",
+            fontFamily: "Inter",
+            ...styles?.input,
+          },
           label: {
             fontSize: "13px",
             fontWeight: 500,
@@ -343,7 +365,6 @@ export default function SearchableSelect({
             fontStyle: "medium",
             ...styles?.label,
           },
-          ...styles,
         }}
         searchable
         data={data}

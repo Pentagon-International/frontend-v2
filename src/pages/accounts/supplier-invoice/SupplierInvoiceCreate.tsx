@@ -25,7 +25,7 @@ import {
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -189,7 +189,7 @@ type SupplierInvoiceFormValues = {
   customer_gst_no: string;
   location_gst_no: string;
   type: "INV" | "CRN";
-  Inv_Crn_note: string;
+  Inv_Crn_note: Date | null;
   Inv_Crn_no: string;
   roe: number | null;
   currency_id: string;
@@ -388,17 +388,81 @@ export default function SupplierInvoiceCreate({
 }: SupplierInvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: supplierInvoiceIdFromRoute } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate =
     isReversal && pathname.includes("/reversal/create");
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const supplierInvoiceResolvedBackPath =
+    isReversalCreate && !financeReturnTo
+      ? "/supplier-invoice"
+      : financeReturnTo || backPath;
+  /** Loaded via `/supplier-invoice/view|edit/:id` (e.g. opened from Payment allocation modal). */
+  const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
+    useState<SupplierInvoiceListItem | null>(null);
   // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
   const invoiceFromState =
-    location.state as SupplierInvoiceListItem | null | undefined;
+    invoiceFromRouteFetch ??
+    (location.state as SupplierInvoiceListItem | null | undefined);
   const prefillFromJob = (location.state as any)
     ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
+
+  useEffect(() => {
+    const idStr = supplierInvoiceIdFromRoute?.trim();
+    if (!idStr || (!isViewMode && !isEditMode) || isReversalCreate) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+    const idNum = Number(idStr);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiCallProtected.get(
+          `${URL.supplierInvoice}${idNum}/`,
+          API_HEADER,
+        );
+        const rawData = (res as { data?: unknown })?.data ?? res;
+        const record =
+          rawData &&
+          typeof rawData === "object" &&
+          "data" in (rawData as Record<string, unknown>) &&
+          (rawData as { data?: unknown }).data &&
+          typeof (rawData as { data?: unknown }).data === "object"
+            ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+            : rawData && typeof rawData === "object"
+              ? (rawData as Record<string, unknown>)
+              : null;
+        if (!cancelled && record && typeof record === "object") {
+          setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
+        }
+      } catch (e) {
+        console.error("Failed to load supplier invoice by id", e);
+        if (!cancelled) {
+          setInvoiceFromRouteFetch(null);
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    supplierInvoiceIdFromRoute,
+    isViewMode,
+    isEditMode,
+    isReversalCreate,
+  ]);
 
   // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
   useEffect(() => {
@@ -491,7 +555,7 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: "",
       location_gst_no: "",
       type: "INV",
-      Inv_Crn_note: "",
+      Inv_Crn_note: null,
       Inv_Crn_no: "",
       roe: null,
       currency_id: defaultBranchCurrencyId || "",
@@ -537,6 +601,14 @@ export default function SupplierInvoiceCreate({
         !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
     },
   });
+
+  const getDrCrDefaultsByType = useCallback(
+    (type: "INV" | "CRN") =>
+      type === "CRN"
+        ? ({ header: "Dr", charge: "Cr" } as const)
+        : ({ header: "Cr", charge: "Dr" } as const),
+    [],
+  );
 
   const { data: currencyData = [], isLoading: isCurrencyLoading } = useQuery({
     queryKey: ["currencyMaster"],
@@ -657,6 +729,15 @@ export default function SupplierInvoiceCreate({
     shipment_id?: string;
     service_id?: number;
   }[];
+  const fallbackServiceIdFromState = useMemo(() => {
+    const raw =
+      (location.state as { job?: { service_id?: number } } | null)?.job
+        ?.service_id ??
+      ((prefillFromJob as unknown as { service_id?: number } | null)
+        ?.service_id ?? null);
+    const parsed = raw != null ? Number(raw) : null;
+    return parsed != null && Number.isFinite(parsed) ? parsed : null;
+  }, [location.state, prefillFromJob]);
 
   const getServiceIdByShipmentId = useCallback(
     (shipmentId: string | null | undefined): number | null => {
@@ -679,6 +760,9 @@ export default function SupplierInvoiceCreate({
       const direct = getServiceIdByShipmentId(shipmentNo);
       if (direct != null) return direct;
 
+      // Same fallback style as InvoiceCreate: use navigation/job service_id when available.
+      if (fallbackServiceIdFromState != null) return fallbackServiceIdFromState;
+
       // Next: use cache
       if (shipmentNo in shipmentServiceIdCacheRef.current) {
         return shipmentServiceIdCacheRef.current[shipmentNo] ?? null;
@@ -696,8 +780,13 @@ export default function SupplierInvoiceCreate({
         const match = arr.find(
           (x) => String(x?.shipment_id ?? "").trim() === shipmentNo,
         );
-        const serviceId =
-          match?.service_id != null ? Number(match.service_id) : null;
+        const serviceIdRaw =
+          (match as { service_id?: unknown; serviceId?: unknown; job?: { service_id?: unknown } } | undefined)
+            ?.service_id ??
+          (match as { serviceId?: unknown } | undefined)?.serviceId ??
+          (match as { job?: { service_id?: unknown } } | undefined)?.job?.service_id ??
+          null;
+        const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
 
         shipmentServiceIdCacheRef.current[shipmentNo] =
           serviceId != null && Number.isFinite(serviceId) ? serviceId : null;
@@ -707,7 +796,7 @@ export default function SupplierInvoiceCreate({
         return null;
       }
     },
-    [getServiceIdByShipmentId],
+    [getServiceIdByShipmentId, fallbackServiceIdFromState],
   );
 
   const fetchSacForChargeRow = useCallback(
@@ -792,7 +881,8 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("currency_id", defaultBranchCurrencyId);
     }
     // Don't overwrite charges_data in view/edit — they were loaded from list state
-    if (isViewMode || isEditMode) return;
+    // Don't touch reversal rows programmatically — amounts must mirror source so difference_amount stays 0
+    if (isViewMode || isEditMode || isReversal) return;
     // Set local currency on charge rows that don't have currency_id (including first row)
     const charges = form.values.charges_data;
     const next = charges.map((c) =>
@@ -810,11 +900,12 @@ export default function SupplierInvoiceCreate({
     isEditMode,
   ]);
 
-  // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes
+  // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes (not for supplier reversal — preserve API figures)
   const chargesAmountRoeKey = form.values.charges_data
     .map((c) => `${c.amount}-${c.roe}`)
     .join(",");
   useEffect(() => {
+    if (isReversal) return;
     const charges = form.values.charges_data;
     let changed = false;
     const next = charges.map((c) => {
@@ -825,9 +916,9 @@ export default function SupplierInvoiceCreate({
       return { ...c, amount_in_local: local };
     });
     if (changed) form.setFieldValue("charges_data", next);
-  }, [chargesAmountRoeKey]);
+  }, [chargesAmountRoeKey, isReversal]);
 
-  // Auto-calc Inv/Crn Amount = sum of breakup amounts
+  // Auto-calc Inv/Crn Amount = sum of breakup amounts (skipped for reversal — totals come from server)
   const invCrnCalcKey = [
     form.values.taxable_amount,
     form.values.non_taxable_amount,
@@ -836,6 +927,7 @@ export default function SupplierInvoiceCreate({
     form.values.igst_amount,
   ].join("|");
   useEffect(() => {
+    if (isReversal) return;
     const inv =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
@@ -847,13 +939,14 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invCrnCalcKey]);
+  }, [invCrnCalcKey, isReversal]);
 
-  // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved
+  // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved (skipped for reversal)
   const chargesNetKey = form.values.charges_data
     .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
     .join(",");
   useEffect(() => {
+    if (isReversal) return;
     const charges = form.values.charges_data ?? [];
     const netLocal = round2(
       charges.reduce((acc, row) => {
@@ -873,7 +966,7 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount]);
+  }, [chargesNetKey, form.values.Inv_crn_amount, isReversal]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
@@ -949,7 +1042,9 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
-      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_note:
+        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       roe:
         data.roe != null && data.roe !== ""
@@ -1171,7 +1266,7 @@ export default function SupplierInvoiceCreate({
             amount: amountNum,
             amount_in_local: null,
             tax_code: "",
-            Dr_Cr: "Dr" as const,
+            Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
           };
         })
         .filter(Boolean) as ChargeRow[];
@@ -1180,7 +1275,7 @@ export default function SupplierInvoiceCreate({
         form.setFieldValue("charges_data", mappedCharges);
       }
     },
-    [prefillFromJob, isViewMode, isEditMode, isReversal, form],
+    [prefillFromJob, isViewMode, isEditMode, isReversal, form, getDrCrDefaultsByType],
   );
 
   useEffect(() => {
@@ -1228,7 +1323,9 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
       type: values.type ?? "INV",
-      Inv_Crn_note: values.Inv_Crn_note || "",
+      Inv_Crn_note: values.Inv_Crn_note
+        ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
+        : "",
       Inv_Crn_no: values.Inv_Crn_no || "",
       roe: values.roe ?? null,
       currency_id: values.currency_id ? Number(values.currency_id) : null,
@@ -1333,7 +1430,9 @@ export default function SupplierInvoiceCreate({
       narration: (data.narration ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
-      Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+      Inv_Crn_note:
+        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       currency_id: data.currency_id != null ? String(data.currency_id) : "",
       taxable_amount:
@@ -1660,7 +1759,7 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
-      Dr_Cr: isReversal ? "Cr" : "Dr",
+      Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
     });
   };
 
@@ -1751,7 +1850,7 @@ export default function SupplierInvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => navigate(supplierInvoiceResolvedBackPath)}
             >
               Back
             </Button>
@@ -1982,7 +2081,7 @@ export default function SupplierInvoiceCreate({
           <Text size="sm" fw={600} c="#105476" mb="xs">
             Agent INV/CRN Detail
           </Text>
-          <Grid mb="md" columns={12}>
+          <Grid mb="md" columns={12} align="flex-end">
 
             <Grid.Col span={0.7}>
               <Dropdown
@@ -1993,23 +2092,20 @@ export default function SupplierInvoiceCreate({
                   { value: "CRN", label: "CRN" },
                 ]}
                 value={form.values.type}
-                onChange={(v) =>
-                  form.setFieldValue("type", v === "CRN" ? "CRN" : "INV")
-                }
+                onChange={(v) => {
+                  const nextType = v === "CRN" ? "CRN" : "INV";
+                  const defaults = getDrCrDefaultsByType(nextType);
+                  form.setFieldValue("type", nextType);
+                  form.setFieldValue("Dr_Cr", defaults.header);
+                  form.values.charges_data.forEach((_, idx) => {
+                    form.setFieldValue(
+                      `charges_data.${idx}.Dr_Cr`,
+                      defaults.charge,
+                    );
+                  });
+                }}
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={0.9}>
-              <TextInput
-                label="Inv/Crn Note"
-                placeholder="Inv/Crn Note"
-                value={form.values.Inv_Crn_note}
-                onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_note", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
             <Grid.Col span={0.9}>
@@ -2026,7 +2122,16 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={0.8}>
+            <Grid.Col span={1.15}>
+              <SingleDateInput
+                label="Inv/Crn Date"
+                placeholder="Select Inv/Crn Date"
+                value={normalizeDate(form.values.Inv_Crn_note)}
+                onChange={(d) => form.setFieldValue("Inv_Crn_note", d)}
+                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+              />
+            </Grid.Col>
+            <Grid.Col span={0.85}>
               <Dropdown
                 label="Currency"
                 placeholder={
@@ -2700,14 +2805,15 @@ export default function SupplierInvoiceCreate({
                         }
                         dropdownZIndex={1100}
                         minSearchLength={1}
-                        searchFields={["gl_account_code", "account_name", "id"]}
+                        searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
                         displayFormat={(item: Record<string, unknown>) => {
                           const id = String(item.id ?? "").trim();
+                          const glName = String(item.gl_name ?? "").trim();
                           const gl = String(item.gl_account_code ?? "").trim();
                           const name = String(item.account_name ?? "").trim();
                           return {
                             value: id,
-                            label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                            label: [name, gl, glName].filter(Boolean).join(" - "),
                           };
                         }}
                         displayValue={
@@ -2760,10 +2866,22 @@ export default function SupplierInvoiceCreate({
                           );
                           form.setFieldValue(
                             `charges_data.${index}.account_name`,
-                            originalData.account_name !== undefined &&
-                              originalData.account_name !== null
-                              ? String(originalData.account_name)
-                              : "",
+                            [
+                              String(
+                                (originalData as Record<string, unknown>)
+                                  .gl_account_code ?? "",
+                              ).trim(),
+                              String(
+                                (originalData as Record<string, unknown>)
+                                  .account_name ?? "",
+                              ).trim(),
+                              String(
+                                (originalData as Record<string, unknown>).gl_name ??
+                                  "",
+                              ).trim(),
+                            ]
+                              .filter(Boolean)
+                              .join(" - "),
                           );
                         }}
                         disabled={

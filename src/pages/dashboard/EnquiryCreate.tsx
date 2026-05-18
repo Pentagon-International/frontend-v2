@@ -4545,7 +4545,7 @@ function EnquiryCreate() {
                                   fontFamily: "Inter",
                                   fontStyle: "medium",
                                   fontSize: "16px",
-                                  color: "#22252B",
+                                  color: "#1E293B",
                                 }}
                               >
                                 {`Service ${serviceIndex + 1}`}

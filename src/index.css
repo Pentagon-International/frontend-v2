@@ -1,80 +1,195 @@
-*{
-  transition: "width 0.2s ease-in-out",
-}
-body{
-    /* overflow: hidden; */
-    min-height: 100vh;
-    margin: 0;
-    padding: 0;
-    
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* v0 Air Export redesign parity (Geist + Geist Mono) */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
+
+:root {
+  /* Override Mantine default border to match ERP palette */
+  --mantine-color-default-border: #E2E8F0;
+
+  --sidebar-bg: #0D1B2E;
+  --sidebar-text: #7A9AB8;
+  --sidebar-text-active: #E8F4FF;
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-active-bg: rgba(59, 130, 246, 0.18);
+  --sidebar-active-border: #3B82F6;
+  --sidebar-section-title: #3D5470;
+  --sidebar-divider: #1A2D42;
+  --page-bg: #F0F4F8;
+  --header-bg: #ffffff;
+  --accent: #105476;
+  --accent-light: #DBEAFE;
+  /* Pipeline chart — potential bar gradient */
+  --navy-700: #0a2540;
+  --navy-500: #135578;
+  --surface: #ffffff;
+  --border: #E2E8F0;
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
 }
 
-/* Add responsive styles for login page */
-@media (max-width: 768px) {
-  /* Mobile styles */
-  /* .login-container {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .login-image-section {
-    height: 40vh;
-    min-height: 250px;
-  }
-  
-  .login-form-section {
-    height: 60vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
-  /* Tablet styles */
-  /* .login-container {
-    min-height: 100vh;
-  }
-  
-  .login-image-section {
-    height: 100vh;
-  }
-  
-  .login-form-section {
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (min-width: 1025px) {
-  /* Desktop styles */
-  /* .login-container {
-    min-height: 100vh;
-  }
-  
-  .login-image-section {
-    height: 100vh;
-  }
-  
-  .login-form-section {
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  } */
+/* Smooth sidebar width transition */
+.mantine-AppShell-navbar {
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  min-width: unset !important;
 }
 
-/* Ensure proper form sizing on mobile */
-@media (max-width: 480px) {
-  /* .login-form-container {
-    padding: 12px !important;
+/* Thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Sidebar-specific scrollbar (darker) */
+.mantine-AppShell-navbar ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mantine-AppShell-navbar ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Focus ring accessibility */
+:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* ─── Landing page Card / Paper shells ───────────────────────────── */
+/* Ensure all withBorder cards use the ERP border palette */
+.mantine-Card-root {
+  border-color: #E2E8F0;
+}
+
+/* MantineReactTable paper wrapper */
+.mantine-Paper-root {
+  border-color: #E2E8F0;
+}
+
+/* ─── Table header cells (MantineReactTable) ─────────────────────── */
+.mantine-Table-thead th {
+  background-color: #F8FAFC !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  border-bottom-color: #E2E8F0 !important;
+  letter-spacing: 0.02em;
+}
+
+/* Customer-outstanding vs overdue Mantine tables — enquiry-style header tokens (beats global MRT thead rule). */
+.co-ec-table .mantine-Table-thead th {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+/* Customer-outstanding drawer — align with enquiry modal table headers (`fw` 500). */
+.co-ec-drawer-table .mantine-Table-thead th {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+}
+
+/* Table row hover */
+.mantine-Table-tbody tr:hover td {
+  background-color: #F8FAFC !important;
+}
+
+/* ─── Filter panel ───────────────────────────────────────────────── */
+.erp-filter-panel {
+  background: #ffffff;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.erp-filter-header {
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #E2E8F0;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ─── Pagination bar ─────────────────────────────────────────────── */
+.erp-pagination {
+  border-top: 1px solid #E2E8F0;
+  background: #ffffff;
+}
+
+/* Air Export Booking master — only Geist / Geist Mono (beats global Inter + Mantine). */
+.air-export-booking-geist-root,
+.air-export-booking-geist-root * {
+  font-family: 'Geist', sans-serif !important;
+}
+
+.air-export-booking-geist-root .air-export-geist-mono {
+  font-family: 'Geist Mono', monospace !important;
+}
+
+/*
+ * Customer Outstanding vs Overdue — match Enquiry conversion modal tables (Plus Jakarta).
+ * Must follow the Geist root rule: same * !important but higher specificity so it wins.
+ */
+.air-export-booking-geist-root .co-ostd-jakarta-values,
+.air-export-booking-geist-root .co-ostd-jakarta-values * {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* Drawer content is portaled outside the Geist root — same face when this class is used. */
+.co-ostd-jakarta-values,
+.co-ostd-jakarta-values * {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* ─── Native table header click-to-edit filters (Enquiry / RFQ shared) ──
+ * Smooth fade when toggling between the column header label and its inline
+ * edit input. The animation runs each time the element is freshly mounted
+ * (label -> input or input -> label), so the swap no longer snaps.
+ */
+@keyframes erpHeaderFilterFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-1px);
   }
-  
-  .login-form-container input,
-  .login-form-container button {
-    font-size: 16px !important; /* Prevents zoom on iOS */
-  /* } */ 
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.erp-header-filter-fade {
+  animation: erpHeaderFilterFadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
 }

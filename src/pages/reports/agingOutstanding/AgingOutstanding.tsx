@@ -2,6 +2,7 @@ import { Box, Button, Card, Grid, Group, Select, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SingleDateInput from "../../../components/SingleDateInput";
 import Dropdown from "../../../components/Dropdown";
 import SearchableSelect from "../../../components/SearchableSelect";
@@ -30,6 +31,7 @@ type AgingOutstandingFormValues = {
   branch_code: string | null;
   account_id: string | null;
   account_code: string;
+  subledger_code: string;
   account_name: string;
 };
 
@@ -107,6 +109,7 @@ function branchesForProfileCountry(
 type BranchScopeMode = "initial" | "country" | "branch";
 
 export default function AgingOutstanding() {
+  const navigate = useNavigate();
   const [printing, setPrinting] = useState(false);
   const [branchScopeMode, setBranchScopeMode] =
     useState<BranchScopeMode>("initial");
@@ -189,6 +192,7 @@ export default function AgingOutstanding() {
       branch_code: scopedDefaultBranchCode,
       account_id: null,
       account_code: "",
+      subledger_code: "",
       account_name: "",
     },
   });
@@ -249,6 +253,9 @@ export default function AgingOutstanding() {
 
     if (form.values.account_code?.trim()) {
       filters.account_code = form.values.account_code.trim();
+    }
+    if (form.values.subledger_code?.trim()) {
+      filters.subledger_code = form.values.subledger_code.trim();
     }
 
     if (branchScopeMode === "country" && form.values.country_id) {
@@ -378,9 +385,10 @@ export default function AgingOutstanding() {
                 const id = String(item.id ?? "").trim();
                 const gl = String(item.gl_account_code ?? "").trim();
                 const name = String(item.account_name ?? "").trim();
+                const glName = String(item.gl_name ?? "").trim();
                 return {
                   value: id,
-                  label: name ? `${name}${gl ? ` - ${gl}` : ""}` : gl,
+                  label: [name, gl, glName].filter(Boolean).join(" - "),
                 };
               }}
               displayValue={
@@ -393,6 +401,7 @@ export default function AgingOutstanding() {
                 if (!value || !originalData) {
                   form.setFieldValue("account_id", null);
                   form.setFieldValue("account_code", "");
+                  form.setFieldValue("subledger_code", "");
                   form.setFieldValue("account_name", "");
                   return;
                 }
@@ -402,6 +411,13 @@ export default function AgingOutstanding() {
                   originalData.gl_account_code !== undefined &&
                     originalData.gl_account_code !== null
                     ? String(originalData.gl_account_code)
+                    : "",
+                );
+                form.setFieldValue(
+                  "subledger_code",
+                  (originalData as { sl_code?: unknown })?.sl_code !== undefined &&
+                    (originalData as { sl_code?: unknown })?.sl_code !== null
+                    ? String((originalData as { sl_code?: unknown })?.sl_code)
                     : "",
                 );
                 form.setFieldValue(
@@ -490,6 +506,9 @@ export default function AgingOutstanding() {
 
           <Grid.Col span={12}>
             <Group justify="flex-end" mt="xs">
+              <Button variant="default" onClick={() => navigate("/reports")}>
+                Back
+              </Button>
               <Button loading={printing} onClick={handlePrint}>
                 Print
               </Button>

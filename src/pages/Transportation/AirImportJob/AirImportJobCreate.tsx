@@ -677,67 +677,6 @@ function AirImportJobCreate() {
     });
   }, [estimatesForm.values.estimates, mode]);
 
-  // If something overwrites estimates (common when restoring navigation state),
-  // re-apply the job-mapped estimates so dropdown fields don't go blank.
-  useEffect(() => {
-    if (!jobData) return;
-    if (mode !== "edit" && mode !== "view") return;
-    const expected = lastJobMappedEstimatesRef.current;
-    if (!expected || expected.length === 0) return;
-
-    const current = estimatesForm.values.estimates ?? [];
-    if (current.length !== expected.length) return;
-
-    const hasBlankDropdownRow = current.some((row, idx) => {
-      const exp = expected[idx];
-      // Only treat as overwrite if expected had values but current lost them.
-      const expHas =
-        !!exp?.supplier_code ||
-        !!exp?.supplier_name ||
-        exp?.charge_id != null ||
-        !!exp?.charge_name ||
-        !!exp?.pp_cc ||
-        !!exp?.unit_id ||
-        !!exp?.currency_id;
-      if (!expHas) return false;
-
-      return (
-        !row.supplier_code ||
-        !row.supplier_name ||
-        row.charge_id == null ||
-        !row.charge_name ||
-        !row.pp_cc ||
-        !row.unit_id ||
-        !row.currency_id
-      );
-    });
-
-    if (!hasBlankDropdownRow) return;
-
-    // Throttle to prevent loops
-    const now = Date.now();
-    if (now - lastAutoHealAtRef.current < 500) return;
-    lastAutoHealAtRef.current = now;
-
-    console.log("🧾 [AIR_IMPORT_JOB] Detected estimates overwrite. Re-applying job-mapped estimates.", {
-      current,
-      expected,
-    });
-
-    estimatesForm.setFieldValue(
-      "estimates",
-      expected as unknown as typeof estimatesForm.values.estimates,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimatesForm.values.estimates, jobData, mode]);
-
-  // Cache the last mapped estimates from jobData (edit/view) and auto-heal if something overwrites them.
-  const lastJobMappedEstimatesRef = useRef<
-    (typeof estimatesForm.values.estimates) | null
-  >(null);
-  const lastAutoHealAtRef = useRef<number>(0);
-  
-
   // Note: Container Details are not used for Air Import Jobs
 
   // Load job data if in edit or view mode - Only initialize once from jobData
@@ -1363,10 +1302,6 @@ function AirImportJobCreate() {
           console.log("🧾 [AIR_IMPORT_JOB] estimatesForm.setFieldValue applied", {
             sanitizedEstimates,
           });
-
-          // Keep a copy so we can detect later overwrites/resets.
-          lastJobMappedEstimatesRef.current =
-            sanitizedEstimates as unknown as typeof estimatesForm.values.estimates;
         }
         // Force re-render of select/search components after all values are set
         // Use a small delay to ensure setValues has completed
@@ -2433,8 +2368,114 @@ function AirImportJobCreate() {
     }
   };
 
-  
-  const handleEdiFileDownload = async () => {
+  // EDI checklist preview state (Air Import Job)
+  const [ediChecklistOpen, setEdiChecklistOpen] = useState(false);
+  const [ediChecklistLoading, setEdiChecklistLoading] = useState(false);
+  type EdiChecklistMasterDetails = {
+    code?: string;
+    igm_no?: string;
+    igm_date?: string;
+    flight_no?: string;
+    flight_date?: string;
+    message?: string;
+    mawb_no?: string;
+    pack?: number;
+    gross_weight?: number;
+    origin_code?: string;
+    origin_name?: string;
+    destination_code?: string;
+    destination_name?: string;
+    description?: string;
+  };
+
+  type EdiChecklistHouseDetails = {
+    hawb_no?: string;
+    pack?: number;
+    gross_weight?: number;
+    origin_code?: string;
+    origin_name?: string;
+    destination_code?: string;
+    destination_name?: string;
+    item_description?: string;
+    message?: string;
+  };
+
+  type EdiChecklistTotals = {
+    pack?: number;
+    gross_weight?: number;
+  };
+
+  type EdiChecklistData = {
+    job_id?: string;
+    id?: number;
+    filename?: string;
+    master_air_way_bill_details?: EdiChecklistMasterDetails;
+    house_air_way_bill_details?: EdiChecklistHouseDetails[];
+    totals?: EdiChecklistTotals;
+  };
+
+  type EdiChecklistResponse = {
+    status?: boolean;
+    message?: string;
+    data?: EdiChecklistData;
+  };
+
+  const [ediChecklistData, setEdiChecklistData] =
+    useState<EdiChecklistResponse | null>(null);
+
+  const normalizeEdiChecklistResponse = (res: unknown): EdiChecklistResponse => {
+    // `getAPICall` may return either:
+    // - AxiosResponse { data, status:number, headers, ... }
+    // - already-unwrapped payload { status:boolean, message, data }
+    // We normalize both into { status, message, data } shape.
+    const maybeObj = res as Record<string, unknown> | null;
+    const isAxiosResponse =
+      !!maybeObj &&
+      typeof maybeObj === "object" &&
+      "data" in maybeObj &&
+      (typeof maybeObj.status === "number" || "headers" in maybeObj);
+
+    const payload = isAxiosResponse ? maybeObj.data : res;
+
+    if (payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      // If backend wrapper exists already
+      if ("data" in p) return p as EdiChecklistResponse;
+      // If we only got the inner `data` object, wrap it
+      return { status: true, data: p as EdiChecklistData };
+    }
+
+    return { status: false, message: "Invalid EDI checklist response" };
+  };
+
+  const handleOpenEdiChecklist = async () => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Job not found for EDI preview",
+      });
+      return;
+    }
+
+    setEdiChecklistOpen(true);
+    setEdiChecklistLoading(true);
+    try {
+      const res = await getAPICall(`${URL.edi}${jobData.id}/`, API_HEADER);
+      const normalized = normalizeEdiChecklistResponse(res);
+      setEdiChecklistData(normalized);
+    } catch (error) {
+      console.error("Error loading EDI checklist:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load EDI checklist preview",
+      });
+      setEdiChecklistOpen(false);
+    } finally {
+      setEdiChecklistLoading(false);
+    }
+  };
+
+  const handleDownloadEdiFromChecklist = async () => {
     if (!jobData?.id) {
       ToastNotification({
         type: "error",
@@ -2444,16 +2485,16 @@ function AirImportJobCreate() {
     }
 
     try {
-      const res = await getAPICall(
+      const res = await postAPICall(
         `${URL.edi}${jobData.id}/`,
+        {},
         {
           ...API_HEADER,
-          // EDI endpoint returns plain text (.in content).
+          // Download returns plain text EDI content.
           responseType: "text",
         },
       );
 
-      // getAPICall can return either axios response object or raw payload.
       const payload =
         res && typeof res === "object" && "data" in (res as Record<string, unknown>)
           ? (res as { data?: unknown }).data
@@ -2468,7 +2509,12 @@ function AirImportJobCreate() {
       const fileUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = fileUrl;
-      link.download = `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.in`;
+
+      const suggestedName =
+        ediChecklistData?.data?.filename ||
+        `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.edi`;
+      link.download = String(suggestedName);
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -3254,9 +3300,9 @@ function AirImportJobCreate() {
                           color: "#424242",
                         },
                       }}
-                      onClick={handleEdiFileDownload}
+                      onClick={handleOpenEdiChecklist}
                     >
-                      EDI file download
+                      Checklist Preview
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>
@@ -4614,6 +4660,7 @@ function AirImportJobCreate() {
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
+                <Group gap="sm">
                 <Button
                   variant="outline"
                   color="#105476"
@@ -4658,20 +4705,26 @@ function AirImportJobCreate() {
                       })
                       .filter(
                         (c) =>
-                          toStr((c as any).shipment_no) &&
-                          (c as any).charge_id != null &&
-                          (c as any).amount != null &&
-                          (c as any).amount !== "",
+                          toStr((c as { shipment_no?: unknown }).shipment_no) &&
+                          (c as { charge_id?: unknown }).charge_id != null &&
+                          (c as { amount?: unknown }).amount != null &&
+                          (c as { amount?: unknown }).amount !== "",
                       );
 
                     const houseCharges = houseList
                       .flatMap((h) => {
                         const hr = h as unknown as Record<string, unknown>;
-                        const shipmentNo = toStr((hr as any).shipment_id); // house shipment_id
+                        const shipmentNo = toStr(
+                          (hr as { shipment_id?: unknown }).shipment_id,
+                        ); // house shipment_id
                         const chargesArr = Array.isArray(hr.charges)
                           ? (hr.charges as unknown[])
-                          : Array.isArray((hr as any).mawb_charges)
-                            ? (((hr as any).mawb_charges as unknown[]) ?? [])
+                          : Array.isArray(
+                                (hr as { mawb_charges?: unknown }).mawb_charges,
+                              )
+                            ? (((hr as { mawb_charges?: unknown }).mawb_charges as
+                                | unknown[]
+                                | undefined) ?? [])
                             : [];
                         return chargesArr
                           .map((c) => {
@@ -4682,8 +4735,8 @@ function AirImportJobCreate() {
                               cr.charge_id != null ? Number(cr.charge_id) : null,
                             charge_name: toStr(cr.charge_name),
                             currency_id:
-                              (cr as any).currency_id ??
-                              (cr as any).currency ??
+                              (cr as { currency_id?: unknown }).currency_id ??
+                              (cr as { currency?: unknown }).currency ??
                               null,
                             roe: cr.roe ?? null,
                             amount:
@@ -4697,10 +4750,10 @@ function AirImportJobCreate() {
                           })
                           .filter(
                             (x) =>
-                              toStr((x as any).shipment_no) &&
-                              (x as any).charge_id != null &&
-                              (x as any).amount != null &&
-                              (x as any).amount !== "",
+                              toStr((x as { shipment_no?: unknown }).shipment_no) &&
+                              (x as { charge_id?: unknown }).charge_id != null &&
+                              (x as { amount?: unknown }).amount != null &&
+                              (x as { amount?: unknown }).amount !== "",
                           );
                       })
                       .filter(Boolean);
@@ -4728,6 +4781,89 @@ function AirImportJobCreate() {
                 >
                   Create Supplier Invoice
                 </Button>
+                <Button
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  leftSection={<IconFileInvoice size={16} />}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    },
+                  }}
+                  onClick={() => {
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: "AIR",
+                        voucherType: "AIR IMPORTS",
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobWithMergedHousingDetails && {
+                          job: jobWithMergedHousingDetails,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create PRQ
+                </Button>
+                </Group>
               )}
             </Group>
             <EstimatesSection
@@ -5724,6 +5860,410 @@ function AirImportJobCreate() {
           </Stack>
         </Box>
       )}
+
+      {/* EDI Checklist Preview Modal */}
+      <Modal
+        opened={ediChecklistOpen}
+        onClose={() => {
+          setEdiChecklistOpen(false);
+          setEdiChecklistData(null);
+
+
+        }}
+        withCloseButton={false}
+        // Use a plain div to avoid Mantine's internal scroll area (prevents double scrollbars)
+        // scrollAreaComponent="div"
+        title={
+          <Box
+            w="100%"
+            style={{
+              padding: "14px 14px 12px 14px",
+              borderRadius: "12px",
+              background: "#ffffff",
+              border: "1px solid #e9ecef",
+            }}
+          >
+            <Group justify="space-between" align="flex-start" w="100%">
+              <Stack gap={6}>
+                <Text
+                  fw={600}
+                  style={{
+                    fontSize: "20px",
+                    letterSpacing: "-0.2px",
+                    color: "#1f2937",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                >
+                  Checklist Preview
+                </Text>
+                <Group gap="xs">
+                  {ediChecklistData?.data?.job_id ? (
+                    <Badge
+                      variant="light"
+                      style={{
+                        background: "#f8f9fa",
+                        color: "#374151",
+                        border: "1px solid #e9ecef",
+                        fontFamily: "Inter, sans-serif",
+                      }}
+                    >
+                      Job: {ediChecklistData.data.job_id}
+                    </Badge>
+                  ) : null}
+                </Group>
+              </Stack>
+
+              {ediChecklistData?.data?.filename ? (
+                <Badge
+                  variant="filled"
+                  style={{
+                    background: "#0B7285",
+                    color: "#ffffff",
+                    fontFamily: "Inter, sans-serif",
+                    padding: "8px 10px",
+                    borderRadius: "999px",
+                    boxShadow: "0 8px 18px rgba(11, 114, 133, 0.16)",
+                  }}
+                >
+                  {ediChecklistData.data.filename}
+                </Badge>
+              ) : null}
+            </Group>
+          </Box>
+        }
+        size="95%"
+        centered
+        overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+        styles={{
+          content: { maxWidth: "1250px" },
+          body: {
+            padding: 0,
+            background: "#ffffff",
+            // Make the Modal body the single scroll container
+            // maxHeight: "82vh",
+            // overflowY: "auto",
+          },
+        }}
+      >
+        <Stack gap={0}>
+          {ediChecklistLoading ? (
+            <Center py="xl">
+              <Stack align="center" gap="xs">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Loading checklist…</Text>
+              </Stack>
+            </Center>
+          ) : (
+            <Box p="lg">
+              {(() => {
+                const d: EdiChecklistData = ediChecklistData?.data || {};
+                const master: EdiChecklistMasterDetails =
+                  d.master_air_way_bill_details || {};
+                const houses: EdiChecklistHouseDetails[] = Array.isArray(
+                  d.house_air_way_bill_details,
+                )
+                  ? d.house_air_way_bill_details
+                  : [];
+                const totals: EdiChecklistTotals = d.totals || {};
+
+                const cell = (v: unknown) =>
+                  v === null || v === undefined || v === "" ? "-" : String(v);
+
+                return (
+                  <Stack gap="xl">
+                    <Card
+                      withBorder
+                      radius="lg"
+                      p="lg"
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e9ecef",
+                        boxShadow: "0 10px 24px rgba(0,0,0,0.05)",
+                      }}
+                    >
+                      <Group justify="center" mb="sm">
+                        <Text
+                          fw={600}
+                          style={{
+                            fontSize: "15px",
+                            letterSpacing: "0.2px",
+                            color: "#111827",
+                            fontFamily: "Inter, sans-serif",
+                          }}
+                        >
+                          Master Air Way Bill Details
+                        </Text>
+                      </Group>
+                      <Table
+                        withTableBorder
+                        withColumnBorders
+                        striped
+                        style={{ tableLayout: "fixed", width: "100%" }}
+                        styles={{
+                          th: {
+                            backgroundColor: "#f3f4f6",
+                            color: "#111827",
+                            fontWeight: 700,
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            whiteSpace: "nowrap",
+                            padding: "10px 12px",
+                          },
+                          td: {
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            color: "#1F2937",
+                            padding: "10px 12px",
+                            wordBreak: "break-word",
+                          },
+                        }}
+                      >
+                        <colgroup>
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                        </colgroup>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Code</Table.Th>
+                            <Table.Th>Igm No</Table.Th>
+                            <Table.Th>Igm Date</Table.Th>
+                            <Table.Th>Flight No</Table.Th>
+                            <Table.Th>Flight Date</Table.Th>
+                            <Table.Th>Message</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          <Table.Tr>
+                            <Table.Td>{cell(master.code)}</Table.Td>
+                            <Table.Td>{cell(master.igm_no)}</Table.Td>
+                            <Table.Td>{cell(master.igm_date)}</Table.Td>
+                            <Table.Td>{cell(master.flight_no)}</Table.Td>
+                            <Table.Td>{cell(master.flight_date)}</Table.Td>
+                            <Table.Td>{cell(master.message)}</Table.Td>
+                          </Table.Tr>
+                        </Table.Tbody>
+                      </Table>
+
+                      <Divider my="md" />
+
+                      <Table
+                        withTableBorder
+                        withColumnBorders
+                        striped
+                        style={{ tableLayout: "fixed", width: "100%" }}
+                        styles={{
+                          th: {
+                            backgroundColor: "#f3f4f6",
+                            color: "#111827",
+                            fontWeight: 700,
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            whiteSpace: "nowrap",
+                            padding: "10px 12px",
+                          },
+                          td: {
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            color: "#1F2937",
+                            padding: "10px 12px",
+                            wordBreak: "break-word",
+                          },
+                        }}
+                      >
+                        <colgroup>
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                          <col style={{ width: "16.66%" }} />
+                        </colgroup>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Mawb No</Table.Th>
+                            <Table.Th>Pack</Table.Th>
+                            <Table.Th>Gr. Wt.</Table.Th>
+                            <Table.Th>Origin</Table.Th>
+                            <Table.Th>Destination</Table.Th>
+                            <Table.Th>Description</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          <Table.Tr>
+                            <Table.Td>{cell(master.mawb_no)}</Table.Td>
+                            <Table.Td>{cell(master.pack)}</Table.Td>
+                            <Table.Td>{cell(master.gross_weight)}</Table.Td>
+                            <Table.Td>{cell(master.origin_code)}</Table.Td>
+                            <Table.Td>{cell(master.destination_code)}</Table.Td>
+                            <Table.Td>{cell(master.description)}</Table.Td>
+                          </Table.Tr>
+                        </Table.Tbody>
+                      </Table>
+                    </Card>
+
+                    <Card
+                      withBorder
+                      radius="lg"
+                      p="lg"
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e9ecef",
+                        boxShadow: "0 10px 24px rgba(0,0,0,0.05)",
+                      }}
+                    >
+                      <Group justify="center" mb="sm">
+                        <Text
+                          fw={600}
+                          style={{
+                            fontSize: "15px",
+                            letterSpacing: "0.2px",
+                            color: "#111827",
+                            fontFamily: "Inter, sans-serif",
+                          }}
+                        >
+                          House Air Way Bill Details
+                        </Text>
+                      </Group>
+                      <Table
+                        withTableBorder
+                        withColumnBorders
+                        striped
+                        style={{ tableLayout: "fixed", width: "100%" }}
+                        styles={{
+                          th: {
+                            backgroundColor: "#f3f4f6",
+                            color: "#111827",
+                            fontWeight: 700,
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            whiteSpace: "nowrap",
+                            padding: "10px 12px",
+                          },
+                          td: {
+                            fontFamily: "Inter, sans-serif",
+                            fontSize: "13px",
+                            color: "#1F2937",
+                            padding: "10px 12px",
+                            wordBreak: "break-word",
+                          },
+                        }}
+                      >
+                        <colgroup>
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                          <col style={{ width: "14.285%" }} />
+                        </colgroup>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Hawb No.</Table.Th>
+                            <Table.Th>Pack</Table.Th>
+                            <Table.Th>Gr. Wt.</Table.Th>
+                            <Table.Th>Origin</Table.Th>
+                            <Table.Th>Destination</Table.Th>
+                            <Table.Th>Item Description</Table.Th>
+                            <Table.Th>Message</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {houses.length ? (
+                            houses.map((h, idx) => (
+                              <Table.Tr key={`${h.hawb_no || "hawb"}-${idx}`}>
+                                <Table.Td>{cell(h.hawb_no)}</Table.Td>
+                                <Table.Td>{cell(h.pack)}</Table.Td>
+                                <Table.Td>{cell(h.gross_weight)}</Table.Td>
+                                <Table.Td>{cell(h.origin_code)}</Table.Td>
+                                <Table.Td>{cell(h.destination_code)}</Table.Td>
+                                <Table.Td>{cell(h.item_description)}</Table.Td>
+                                <Table.Td>{cell(h.message)}</Table.Td>
+                              </Table.Tr>
+                            ))
+                          ) : (
+                            <Table.Tr>
+                              <Table.Td colSpan={7}>
+                                <Text c="dimmed" size="sm" ta="center">
+                                  No house bill details found.
+                                </Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          )}
+                          <Table.Tr style={{ background: "#f8f9fa" }}>
+                            <Table.Td />
+                            <Table.Td>
+                              <Text fw={700}>{cell(totals.pack)}</Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text fw={700}>{cell(totals.gross_weight)}</Text>
+                            </Table.Td>
+                            <Table.Td />
+                            <Table.Td>
+                              <Text fw={700}>Total</Text>
+                            </Table.Td>
+                            <Table.Td />
+                            <Table.Td />
+                          </Table.Tr>
+                        </Table.Tbody>
+                      </Table>
+                    </Card>
+                  </Stack>
+                );
+              })()}
+            </Box>
+          )}
+
+          <Group
+            justify="flex-end"
+            p="md"
+            style={{
+              borderTop: "1px solid #e9ecef",
+              background: "#ffffff",
+              position: "sticky",
+              bottom: 0,
+              zIndex: 2,
+            }}
+          >
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEdiChecklistOpen(false);
+                setEdiChecklistData(null);
+              }}
+              leftSection={<IconX size={16} />}
+              styles={{
+                root: {
+                  borderColor: "#d1d5db",
+                  color: "#111827",
+                  fontFamily: "Inter, sans-serif",
+                },
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={handleDownloadEdiFromChecklist}
+              leftSection={<IconDownload size={16} />}
+              color="#105476"
+              disabled={ediChecklistLoading}
+              styles={{
+                root: {
+                  background: "#0B7285",
+                  fontFamily: "Inter, sans-serif",
+                  boxShadow: "0 10px 22px rgba(11, 114, 133, 0.18)",
+                },
+              }}
+            >
+              Download EDI
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal

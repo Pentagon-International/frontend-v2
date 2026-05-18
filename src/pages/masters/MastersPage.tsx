@@ -194,7 +194,16 @@ export default function MastersPage() {
         >
           {sections.map((section) => (
             <Box key={section.title}>
-              <Text size="sm" fw={600} c="#105476" mb="md">
+              <Text
+                mb="md"
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "#105476",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
                 {section.title}
               </Text>
               <Grid gutter="md" columns={12}>

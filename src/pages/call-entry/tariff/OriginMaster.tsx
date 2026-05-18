@@ -1,60 +1,72 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import {
-  MantineReactTable,
-  useMantineReactTable,
-  type MRT_ColumnDef,
-} from "mantine-react-table";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Badge,
   Box,
   Button,
-  Card,
   Center,
-  Flex,
   Group,
-  Loader,
   Menu,
   Modal,
-  Popover,
   Select,
   Stack,
   Text,
   TextInput,
+  Tooltip,
   UnstyledButton,
   Grid,
+  MantineProvider,
 } from "@mantine/core";
 import {
-  IconChevronDown,
   IconDotsVertical,
   IconEdit,
   IconEyeSpark,
-  IconFilterOff,
+  IconFilter,
+  IconListDetails,
+  IconListNumbers,
+  IconMapPin,
   IconPlus,
   IconSearch,
-  IconTrash,
-  IconUpload,
-  IconArrowLeft,
-  IconFilter,
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
   IconX,
 } from "@tabler/icons-react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ToastNotification, SearchableSelect, DateRangeInput, SingleDateInput } from "../../../components";
-import { getAPICall } from "../../../service/getApiCall";
+import { Outlet, useNavigate } from "react-router-dom";
+import {
+  ToastNotification,
+  SearchableSelect,
+  SingleDateInput,
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  erpListGeistMantineTheme,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListFilterUnifiedMantineStyles,
+  erpListFilterFieldCellStyle,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  ERPListStatPill,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+} from "../../../components";
+import type { ErpListTheme } from "../../../components";
 import { URL } from "../../../api/serverUrls";
-import { deleteApiCall } from "../../../service/deleteApiCall";
-import { API_HEADER } from "../../../store/storeKeys";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import useAuthStore from "../../../store/authStore";
 import { useForm } from "@mantine/form";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../api/axios";
-import { DateInput } from "@mantine/dates";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useDebouncedValue } from "@mantine/hooks";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useListFilterStore } from "../../../store/listFilterStore";
+import {
+  TariffMasterListNativeTable,
+  type TariffListColumn,
+  type TariffHeaderFilterValues,
+  type TariffHeaderFiltersProp,
+  type TariffHeaderRenderInput,
+} from "./TariffMasterListNativeTable";
+import { getTariffFilterListTotal } from "./tariffFilterListTotal";
 
 type Origin = {
   id: number;
@@ -64,21 +76,22 @@ type Origin = {
   status?: string;
   tariff_charges?: any[];
   service?: string;
+  tariff_code?: string;
 };
 
 type FilterState = {
   carrier_name: string | null;
   service: string | null;
+  tariff_code: string | null;
   valid_from: Date | null;
   valid_to: Date | null;
 };
 
+const LIST_KEY = "ORIGIN_MASTER";
+
 export default function OriginMaster() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
-
-  const isMountedRef = useRef(false);
 
   const dateFormat = useDateFormat();
 
@@ -123,8 +136,9 @@ export default function OriginMaster() {
 
   // Remove old state - now using memoized originData from useQuery
 
-  // Add local search state
+  // Add local search state — 1000ms keeps it consistent with header column filters.
   const [localSearchTerm, setLocalSearchTerm] = useState("");
+  const [debouncedSearch] = useDebouncedValue(localSearchTerm, 1000);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,7 +147,9 @@ export default function OriginMaster() {
 
   // Filter states - similar to CallEntryMaster
   const [showFilters, setShowFilters] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+  // NOTE: `filtersApplied` used to gate a separate filtered-data query, but
+  // the unified query now reacts to `appliedFiltersKey` directly so the flag
+  // is no longer needed.
 
   // Store display values (labels) for SearchableSelect fields
   const [carrierDisplayValue, setCarrierDisplayValue] = useState<string | null>(null);
@@ -143,6 +159,7 @@ export default function OriginMaster() {
     initialValues: {
       carrier_name: null,
       service: null,
+      tariff_code: null,
       valid_from: null,
       valid_to: null,
     },
@@ -152,9 +169,16 @@ export default function OriginMaster() {
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
     carrier_name: null,
     service: null,
+    tariff_code: null,
     valid_from: null,
     valid_to: null,
   });
+  const hasRestoredFromStore = useRef(false);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearStoreFilters = useListFilterStore((s) => s.clearFilters);
+  const clearStoreSearch = useListFilterStore((s) => s.clearSearch);
+  const clearStoreAllExcept = useListFilterStore((s) => s.clearAllExcept);
 
   // Service options - simple list like EnquiryMaster
   const serviceOptions = useMemo(
@@ -166,180 +190,528 @@ export default function OriginMaster() {
     []
   );
 
-  // Fetch origin data with React Query - using filter API with origin code from modal
-  const {
-    data: originVal = [],
-    isLoading: isOriginLoading,
-    refetch: refetchOrigin,
-  } = useQuery({
-    queryKey: ["origin", currentOriginCode, pageSize],
+  /**
+   * Single unified data query — same refetch principle as EnquiryMaster.
+   *
+   * `queryKey` includes every input that should trigger a refetch: the modal-
+   * selected `currentOriginCode`, pagination, the applied filters object
+   * (stringified for a stable structural key), and the debounced global
+   * search. React Query natively re-runs the `queryFn` whenever any of these
+   * change, so pagination, filter Apply, column-header filter changes and
+   * global search all flow through a single fetch + a single `isFetching`
+   * flag — no `useMemo` switching between two queries, and the loader always
+   * reflects an in-flight refetch.
+   */
+  const appliedFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        carrier_name: appliedFilters.carrier_name,
+        service: appliedFilters.service,
+        tariff_code: appliedFilters.tariff_code,
+        valid_from: appliedFilters.valid_from
+          ? dayjs(appliedFilters.valid_from).format("YYYY-MM-DD")
+          : null,
+        valid_to: appliedFilters.valid_to
+          ? dayjs(appliedFilters.valid_to).format("YYYY-MM-DD")
+          : null,
+      }),
+    [appliedFilters],
+  );
+
+  const { data: originResult, isFetching: originFetching } = useQuery({
+    queryKey: [
+      "origin",
+      currentOriginCode,
+      currentPage,
+      pageSize,
+      appliedFiltersKey,
+      debouncedSearch,
+    ],
     queryFn: async () => {
       try {
-        const requestBody: { filters: any } = { filters: {} };
-
-        // Add origin_code filter if origin is selected from modal (use port code)
-        if (currentOriginCode) {
-          requestBody.filters.origin_code = currentOriginCode;
-        }
-
-        const response = await apiCallProtected.post(
-          `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
-        );
-        const data = response as any;
-        console.log("Initial load API response:", data);
-
-        // Handle response - API returns { results: [...] } or { result: [...] }
-        // Handle response - API returns { data: [...], total: ... } or { results: [...], total: ... }
-        if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
-        } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
-        } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
-        }
-        setTotalRecords(0);
-        return [];
-      } catch (error) {
-        console.error("Error fetching origin data:", error);
-        setTotalRecords(0);
-        return [];
-      }
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnWindowFocus: false,
-    enabled: false, // Don't run automatically - we'll trigger it manually
-  });
-
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredOriginData = [],
-    isLoading: filteredOriginLoading,
-    refetch: refetchFilteredOrigin,
-  } = useQuery({
-    queryKey: ["filteredOrigin", filtersApplied, appliedFilters, currentOriginCode, pageSize],
-    queryFn: async () => {
-      try {
-        if (!filtersApplied) return [];
-
-        const payload: any = {};
-
-        // Always include origin_code from modal selection if available
-        if (currentOriginCode) {
-          payload.origin_code = currentOriginCode;
-        }
-
+        const payload: Record<string, unknown> = {};
+        if (currentOriginCode) payload.origin_code = currentOriginCode;
         if (appliedFilters.carrier_name)
           payload.carrier_name = appliedFilters.carrier_name;
-        if (appliedFilters.service)
-          payload.service = appliedFilters.service;
+        if (appliedFilters.service) payload.service = appliedFilters.service;
+        if (appliedFilters.tariff_code)
+          payload.tariff_code = appliedFilters.tariff_code;
         if (appliedFilters.valid_from)
-          payload.valid_from = dayjs(appliedFilters.valid_from).format("YYYY-MM-DD");
+          payload.valid_from = dayjs(appliedFilters.valid_from).format(
+            "YYYY-MM-DD",
+          );
         if (appliedFilters.valid_to)
-          payload.valid_to = dayjs(appliedFilters.valid_to).format("YYYY-MM-DD");
+          payload.valid_to = dayjs(appliedFilters.valid_to).format(
+            "YYYY-MM-DD",
+          );
+        if (debouncedSearch.trim())
+          payload.search = debouncedSearch.trim();
 
-        if (Object.keys(payload)?.length === 0) return [];
-
-        const requestBody = { filters: payload };
         const response = await apiCallProtected.post(
           `${URL.filter_origin}?index=${(currentPage - 1) * pageSize}&limit=${pageSize}`,
-          requestBody
+          { filters: payload },
         );
         const data = response as any;
-        console.log("Filter API response:", data);
-
-        // Handle response with total count
-        if (data && Array.isArray(data.data)) {
-          setTotalRecords(data.total || data.data.length);
-          return data.data;
-        } else if (data && Array.isArray(data.result)) {
-          setTotalRecords(data.total || data.result.length);
-          return data.result;
-        } else if (data && Array.isArray(data.results)) {
-          setTotalRecords(data.total || data.results.length);
-          return data.results;
-        }
-        setTotalRecords(0);
-        return [];
+        const rows = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.result)
+          ? data.result
+          : [];
+        const total = getTariffFilterListTotal(data, rows);
+        return { data: rows, total };
       } catch (error) {
-        console.error("Error fetching filtered origin data:", error);
-        setTotalRecords(0);
-        return [];
+        console.error("Error fetching origin data:", error);
+        return { data: [] as Origin[], total: 0 };
       }
     },
-    enabled: false, // Don't run automatically - only when Apply Filters is clicked
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    // Modal-driven gating: only run when the user has selected an origin and
+    // confirmed via the "Search" action. All other refetch triggers (filter
+    // Apply, pagination, search) flow through the queryKey changes above.
+    enabled: hasSearched && Boolean(currentOriginCode),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
-  // Trigger initial fetch when page mounts with saved origin
   useEffect(() => {
-    if (currentOriginName) {
-      setHasSearched(true);
-      refetchOrigin();
+    if (originResult && typeof originResult.total === "number") {
+      setTotalRecords(originResult.total);
     }
-  }, []); // Run only once on mount
+  }, [originResult]);
 
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    // Check if we have filtered data (filters were applied)
-    if (filtersApplied) {
-      console.log("Displaying filtered data:", filteredOriginData);
-      return filteredOriginData;
+  useEffect(() => {
+    clearStoreAllExcept(LIST_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (hasRestoredFromStore.current) return;
+    const restored = useListFilterStore.getState().getState(LIST_KEY);
+    if (restored?.shouldRestore) {
+      const restoredFilters = (restored.filters as FilterState) || null;
+      if (restoredFilters) {
+        filterForm.setValues(restoredFilters);
+        setAppliedFilters(restoredFilters);
+      }
+      if (typeof restored.search === "string")
+        setLocalSearchTerm(restored.search);
+      // Rehydrate friendly carrier label.
+      const restoredCarrierLabel = restored.displayValues?.carrier_name;
+      if (
+        typeof restoredCarrierLabel === "string" &&
+        restoredCarrierLabel.trim() !== ""
+      ) {
+        setCarrierDisplayValue(restoredCarrierLabel);
+      }
+      // Restoring `appliedFilters`/`debouncedSearch` flips the unified query's
+      // key, so the table will refetch with the restored values automatically.
+      setCurrentPage(1);
+      useListFilterStore.getState().setShouldRestore(LIST_KEY, false);
+      hasRestoredFromStore.current = true;
     }
-    console.log("Displaying unfiltered data:", originVal);
-    return originVal;
-  }, [originVal, filteredOriginData, filtersApplied]);
+  }, [filterForm]);
 
-  // Filter data based on local search term (client-side search on displayed data)
-  const filteredOriginDataForDisplay = useMemo<Origin[]>(() => {
-    if (!localSearchTerm.trim()) {
-      return displayData as Origin[];
-    }
+  useEffect(() => {
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
-    const searchLower = localSearchTerm.toLowerCase();
+  const displayData = (originResult?.data ?? []) as Origin[];
+  // Single source of truth for the table loader: any in-flight refetch shows
+  // the loader. Pagination, Apply, column-header filters and search all go
+  // through React Query so this flag covers every refresh.
+  const isLoading = originFetching;
 
-    return (displayData as Origin[]).filter((item) => {
-      // Search in tariff charges for carrier and charge details
-      const tariffCharges = item.tariff_charges || [];
+  // Stable reference so the header-filter `renderInput` memo doesn't churn.
+  const erpTheme: ErpListTheme = useMemo(
+    () => ({
+      border: DEFAULT_ERP_LIST_THEME.border,
+      muted: DEFAULT_ERP_LIST_THEME.muted,
+      fg: DEFAULT_ERP_LIST_THEME.fg,
+      primary: DEFAULT_ERP_LIST_THEME.primary,
+      headerBg: DEFAULT_ERP_LIST_THEME.headerBg,
+      pageBg: DEFAULT_ERP_LIST_THEME.pageBg,
+      cardBg: DEFAULT_ERP_LIST_THEME.cardBg,
+      fontSans: DEFAULT_ERP_LIST_THEME.fontSans,
+    }),
+    [],
+  );
+  const { border, fg, fontSans, primary, muted } = erpTheme;
+  const preserveListState = useCallback(() => {
+    setStoreFilters(LIST_KEY, appliedFilters);
+    setStoreSearch(LIST_KEY, localSearchTerm);
+    useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+  }, [appliedFilters, localSearchTerm, setStoreFilters, setStoreSearch]);
 
-      // Check if any tariff charge matches the search criteria
-      const chargeMatches = tariffCharges.some((charge: any) => {
-        const carrierName = charge.carrier_name?.toLowerCase() || "";
-        return carrierName.includes(searchLower);
+  // ── Column header filters ────────────────────────────────────────────────
+  // Strictly non-invasive: header filter changes update BOTH `filterForm`
+  // (so the advanced filter UI stays in sync) AND `appliedFilters` (so the
+  // existing React Query refetches via its `queryKey`). No new API.
+  const handleHeaderFilterChange = useCallback(
+    (key: string, rawValue: string, displayLabel?: string | null) => {
+      const next = rawValue || null;
+      const newApplied: FilterState = { ...appliedFilters };
+      let nextCarrierLabel = carrierDisplayValue;
+
+      switch (key) {
+        case "carrier_name":
+          filterForm.setFieldValue("carrier_name", next);
+          newApplied.carrier_name = next;
+          nextCarrierLabel = next ? (displayLabel ?? null) : null;
+          setCarrierDisplayValue(nextCarrierLabel);
+          break;
+        case "service":
+          filterForm.setFieldValue("service", next);
+          newApplied.service = next;
+          break;
+        case "tariff_code":
+          filterForm.setFieldValue("tariff_code", next);
+          newApplied.tariff_code = next;
+          break;
+        case "valid_from": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_from", d);
+          newApplied.valid_from = d;
+          break;
+        }
+        case "valid_to": {
+          const d = next ? dayjs(next).toDate() : null;
+          filterForm.setFieldValue("valid_to", d);
+          newApplied.valid_to = d;
+          break;
+        }
+      }
+
+      setAppliedFilters(newApplied);
+      setCurrentPage(1);
+
+      const filtersForStore: FilterState = {
+        carrier_name:
+          key === "carrier_name" ? next : filterForm.values.carrier_name,
+        service: key === "service" ? next : filterForm.values.service,
+        tariff_code:
+          key === "tariff_code" ? next : filterForm.values.tariff_code,
+        valid_from:
+          key === "valid_from"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_from,
+        valid_to:
+          key === "valid_to"
+            ? next
+              ? dayjs(next).toDate()
+              : null
+            : filterForm.values.valid_to,
+      };
+      setStoreFilters(LIST_KEY, filtersForStore);
+      setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        carrier_name: filtersForStore.carrier_name ? nextCarrierLabel : null,
       });
+    },
+    [
+      appliedFilters,
+      filterForm,
+      localSearchTerm,
+      carrierDisplayValue,
+      setStoreFilters,
+      setStoreSearch,
+    ],
+  );
 
-      // Search in other fields
-      const originName = item.origin_name?.toLowerCase() || "";
-      const validFrom = item.valid_from?.toLowerCase() || "";
-      const validTo = item.valid_to?.toLowerCase() || "";
-      const status = item.status?.toLowerCase() || "";
-      const service = (item.service || "").toLowerCase();
+  const originHeaderFilterValues: TariffHeaderFilterValues = useMemo(
+    () => ({
+      carrier_name: filterForm.values.carrier_name ?? "",
+      service: filterForm.values.service ?? "",
+      tariff_code: filterForm.values.tariff_code ?? "",
+      valid_from: filterForm.values.valid_from
+        ? dayjs(filterForm.values.valid_from).format("YYYY-MM-DD")
+        : "",
+      valid_to: filterForm.values.valid_to
+        ? dayjs(filterForm.values.valid_to).format("YYYY-MM-DD")
+        : "",
+    }),
+    [
+      filterForm.values.carrier_name,
+      filterForm.values.service,
+      filterForm.values.tariff_code,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+    ],
+  );
 
-      // Check if search term matches any of these fields
-      return (
-        chargeMatches ||
-        originName.includes(searchLower) ||
-        validFrom.includes(searchLower) ||
-        validTo.includes(searchLower) ||
-        status.includes(searchLower) ||
-        service.includes(searchLower)
-      );
-    });
-  }, [displayData, localSearchTerm]);
+  const originHeaderRenderInput = useMemo<
+    Record<string, TariffHeaderRenderInput>
+  >(
+    () => ({
+      carrier_name: ({ autoFocus, onClose }) => (
+        <SearchableSelect
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Type carrier name"
+          apiEndpoint={URL.carrier}
+          searchFields={["carrier_name", "carrier_code"]}
+          displayFormat={(item: Record<string, unknown>) => ({
+            value: String(item.carrier_name),
+            label: String(item.carrier_name),
+          })}
+          value={filterForm.values.carrier_name}
+          displayValue={carrierDisplayValue}
+          dropdownZIndex={1000}
+          onChange={(value, selected) => {
+            const label = selected?.label ?? null;
+            handleHeaderFilterChange("carrier_name", value ?? "", label);
+            if (value) onClose();
+          }}
+          minSearchLength={2}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      service: ({ autoFocus, onClose }) => (
+        <Select
+          autoFocus={autoFocus}
+          size="xs"
+          placeholder="Select Service"
+          data={serviceOptions}
+          value={filterForm.values.service}
+          onChange={(value) => {
+            handleHeaderFilterChange("service", value ?? "");
+            if (value) onClose();
+          }}
+          searchable
+          clearable
+          comboboxProps={{ zIndex: 1000 }}
+          classNames={erpListGeistSelectClassNames}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_from: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_from}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_from", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+      valid_to: ({ onClose }) => (
+        <SingleDateInput
+          size="xs"
+          placeholder="YYYY-MM-DD"
+          value={filterForm.values.valid_to}
+          onChange={(v) => {
+            const str = v ? dayjs(v).format("YYYY-MM-DD") : "";
+            handleHeaderFilterChange("valid_to", str);
+            if (v) onClose();
+          }}
+          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+        />
+      ),
+    }),
+    [
+      filterForm.values.carrier_name,
+      filterForm.values.service,
+      filterForm.values.valid_from,
+      filterForm.values.valid_to,
+      carrierDisplayValue,
+      serviceOptions,
+      handleHeaderFilterChange,
+      erpTheme,
+    ],
+  );
 
-  // Loading state
-  const isLoading = useMemo(() => {
-    if (filtersApplied) {
-      return filteredOriginLoading;
-    }
-    return isOriginLoading;
-  }, [isOriginLoading, filteredOriginLoading, filtersApplied]);
+  const originHeaderDisplayFormatter = useMemo<
+    Record<string, (value: string) => string>
+  >(
+    () => ({
+      carrier_name: (raw) => (raw ? carrierDisplayValue ?? raw : ""),
+      valid_from: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+      valid_to: (raw) => (raw ? dayjs(raw).format(dateFormat) : ""),
+    }),
+    [carrierDisplayValue, dateFormat],
+  );
 
+  const originHeaderFiltersProp: TariffHeaderFiltersProp = useMemo(
+    () => ({
+      values: originHeaderFilterValues,
+      onChange: (key, value) => handleHeaderFilterChange(key, value),
+      renderInput: originHeaderRenderInput,
+      displayFormatter: originHeaderDisplayFormatter,
+    }),
+    [
+      originHeaderFilterValues,
+      originHeaderRenderInput,
+      originHeaderDisplayFormatter,
+      handleHeaderFilterChange,
+    ],
+  );
+
+  const renderOriginActions = useCallback(
+    (row: Origin) => (
+      <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+        <Menu.Target>
+          <ActionIcon variant="subtle" color="gray" aria-label="Row actions">
+            <IconDotsVertical size={16} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Box px={10} py={5}>
+            <UnstyledButton
+              onClick={() => {
+                preserveListState();
+                navigate("/tariff/origin/create", {
+                  state: { ...row, actionType: "view" },
+                });
+              }}
+            >
+              <Group gap="sm">
+                <IconEyeSpark size={16} style={{ color: primary }} />
+                <Text size="sm">View Origin</Text>
+              </Group>
+            </UnstyledButton>
+          </Box>
+          {user?.is_staff ? (
+            <>
+              <Menu.Divider />
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => {
+                    preserveListState();
+                    navigate("/tariff/origin/create", {
+                      state: { ...row, actionType: "edit" },
+                    });
+                  }}
+                >
+                  <Group gap="sm">
+                    <IconEdit size={16} style={{ color: primary }} />
+                    <Text size="sm">Edit Origin</Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </>
+          ) : null}
+        </Menu.Dropdown>
+      </Menu>
+    ),
+    [navigate, user?.is_staff, primary, preserveListState]
+  );
+
+  const originListColumns = useMemo<TariffListColumn<Origin>[]>(
+    () => [
+      {
+        id: "tariff_code",
+        header: "Tariff Code",
+        cellMaxWidth: 180,
+        filterKey: "tariff_code",
+        filterPlaceholder: "Tariff Code",
+        filterMinWidth: 140,
+        cell: (r) => {
+          const v = r.tariff_code ?? "—";
+          return (
+            <Text
+            size="sm"
+            c={fg}
+            lineClamp={1}
+            style={{ fontFamily: fontSans, cursor: "default" }}
+            title={v}
+            >
+              {v}
+            </Text>
+          );
+        },
+      },
+      {
+        id: "carrier",
+        header: "Carrier Name",
+        cellMaxWidth: 240,
+        filterKey: "carrier_name",
+        filterPlaceholder: "Carrier",
+        filterMinWidth: 200,
+        cell: (r) => {
+          const charges = r.tariff_charges || [];
+          if (charges.length === 0) {
+            return (
+              <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                —
+              </Text>
+            );
+          }
+          const uniqueCarriers = [
+            ...new Set(charges.map((c: { carrier_name?: string }) => c.carrier_name)),
+          ];
+          const raw = uniqueCarriers.join(", ");
+          return (
+            <Tooltip
+              label={raw}
+              withArrow
+              multiline
+              w={320}
+              position="top"
+              styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+            >
+              <Text
+                size="sm"
+                c={fg}
+                lineClamp={2}
+                style={{ fontFamily: fontSans, cursor: "default" }}
+              >
+                {raw}
+              </Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "service",
+        header: "Service",
+        filterKey: "service",
+        filterPlaceholder: "Service",
+        filterMinWidth: 110,
+        cell: (r) => (
+          <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+            {r.service ?? "—"}
+          </Text>
+        ),
+      },
+      {
+        id: "valid_from",
+        header: "Valid From",
+        cellTone: "muted",
+        filterKey: "valid_from",
+        filterPlaceholder: "Valid From",
+        filterMinWidth: 140,
+        cell: (r) => (
+          <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+            {r.valid_from ? dayjs(r.valid_from).format(dateFormat) : "—"}
+          </Text>
+        ),
+      },
+      {
+        id: "valid_to",
+        header: "Valid To",
+        cellTone: "muted",
+        filterKey: "valid_to",
+        filterPlaceholder: "Valid To",
+        filterMinWidth: 140,
+        cell: (r) => (
+          <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+            {r.valid_to ? dayjs(r.valid_to).format(dateFormat) : "—"}
+          </Text>
+        ),
+      },
+    ],
+    [dateFormat, fg, fontSans, muted]
+  );
 
   const handleOriginSubmit = async () => {
     if (!originName.trim() || !selectedOriginData) {
@@ -367,16 +739,10 @@ export default function OriginMaster() {
       localStorage.setItem("origin-current-name", originDisplayName);
       localStorage.setItem("origin-current-code", selectedOriginData.code);
 
-      // Invalidate and refetch data with new origin name using filter API
-      // Use setTimeout to ensure state update has propagated
-      await queryClient.invalidateQueries({ queryKey: ["origin"] });
-      setTimeout(async () => {
-        await refetchOrigin();
-      }, 100);
-
       setShowOriginModal(false); // Close the modal
       setIsChangeOriginMode(false); // Reset change mode
       setHasSearched(true); // Mark that user has searched
+      setCurrentPage(1);
       ToastNotification({
         type: "success",
         message: `Loading origins for: ${originDisplayName}`,
@@ -437,49 +803,48 @@ export default function OriginMaster() {
       const hasFilterValues =
         filterForm.values.carrier_name ||
         filterForm.values.service ||
+        filterForm.values.tariff_code ||
         filterForm.values.valid_from ||
         filterForm.values.valid_to;
 
       if (!hasFilterValues) {
-        // If no filter values, show unfiltered data
-        setFiltersApplied(false);
+        // If no filter values, show unfiltered data — clearing
+        // `appliedFilters` flips `appliedFiltersKey` and the unified query
+        // refetches automatically with empty filters.
         setAppliedFilters({
           carrier_name: null,
           service: null,
+          tariff_code: null,
           valid_from: null,
           valid_to: null,
         });
-
-        // Invalidate and refetch unfiltered data
-        await queryClient.invalidateQueries({ queryKey: ["origin"] });
-        await refetchOrigin();
+        clearStoreFilters(LIST_KEY);
         ToastNotification({
           type: "info",
           message: "No filters selected, showing all data",
         });
-        console.log("No filter values provided, showing unfiltered data");
         return;
       }
 
-      setFiltersApplied(true); // Mark filters as applied
-
-      // Store the current filter form values as applied filters
+      // Store the current filter form values as applied filters. The unified
+      // query's `queryKey` includes `appliedFiltersKey` and `currentPage`, so
+      // the state updates here are sufficient to trigger a refetch.
       setAppliedFilters({
         carrier_name: filterForm.values.carrier_name,
         service: filterForm.values.service,
+        tariff_code: filterForm.values.tariff_code,
         valid_from: filterForm.values.valid_from,
         valid_to: filterForm.values.valid_to,
       });
-
-      // Enable the filtered query and refetch
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredOrigin"],
+      setStoreFilters(LIST_KEY, { ...filterForm.values });
+      setStoreSearch(LIST_KEY, localSearchTerm);
+      useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+        carrier_name: filterForm.values.carrier_name
+          ? carrierDisplayValue
+          : null,
       });
+      setCurrentPage(1);
       setShowFilters(false);
-
-      await refetchFilteredOrigin();
-
-      console.log("Filters applied successfully");
     } catch (error) {
       console.error("Error applying filters:", error);
     }
@@ -488,272 +853,28 @@ export default function OriginMaster() {
   const clearAllFilters = async () => {
     setShowFilters(false);
     filterForm.reset(); // Reset form to initial values
-    setLocalSearchTerm("");
-    setFiltersApplied(false); // Reset filters applied state
 
-    // Reset applied filters state
+    // Reset applied filters — flips `appliedFiltersKey` so the unified query
+    // automatically refetches unfiltered data with the loader visible.
     setAppliedFilters({
       carrier_name: null,
       service: null,
+      tariff_code: null,
       valid_from: null,
       valid_to: null,
     });
 
     // Clear display values
     setCarrierDisplayValue(null);
-
-    // Invalidate queries and refetch unfiltered data
-    await queryClient.invalidateQueries({ queryKey: ["origin"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredOrigin"] });
-    await queryClient.removeQueries({ queryKey: ["filteredOrigin"] }); // Remove filtered data from cache
-    await refetchOrigin();
+    clearStoreFilters(LIST_KEY);
+    useListFilterStore.getState().setDisplayValues(LIST_KEY, {
+      carrier_name: null,
+    });
 
     ToastNotification({
       type: "success",
       message: "All filters cleared successfully",
     });
-  };
-
-  const handleDelete = async (value: any) => {
-    try {
-      const res = await deleteApiCall(URL.groupCompany, API_HEADER, value);
-      await refetchOrigin();
-      ToastNotification({
-        type: "success",
-        message: `Origin is successfully deleted`,
-      });
-    } catch (err: any) {
-      ToastNotification({
-        type: "error",
-        message: `Error while deleting data: ${err?.message || err}`,
-      });
-    }
-  };
-
-  const columns = useMemo<MRT_ColumnDef<Origin>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "tariff_charges",
-        header: "Carrier Name",
-        size: 200,
-        Cell: ({ row }) => {
-          const charges = row.original.tariff_charges || [];
-          if (charges.length === 0) return "—";
-
-          // Get unique carrier names from tariff charges
-          const uniqueCarriers = [
-            ...new Set(charges.map((charge: any) => charge.carrier_name)),
-          ];
-          return uniqueCarriers.join(", ");
-        },
-      },
-      {
-        accessorKey: "service",
-        header: "Service",
-        size: 100,
-      },
-      {
-        accessorKey: "valid_from",
-        header: "Valid From",
-        size: 100,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.valid_from
-              ? dayjs(row.original.valid_from).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "valid_to",
-        header: "Valid To",
-        size: 100,
-        Cell:({ row }) => (
-          <Text size="sm">
-            {row.original.valid_to
-              ? dayjs(row.original.valid_to).format(dateFormat)
-              : "-"}
-          </Text>
-        ),
-      },
-      {
-        id: "actions",
-        header: "Action",
-        size: 80,
-        Cell: ({ row }) => (
-          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() =>
-                    navigate("/tariff/origin/create", {
-                      state: {
-                        ...row.original,
-                        actionType: "view",
-                      },
-                    })
-                  }
-                >
-                  <Group gap={"sm"}>
-                    <IconEyeSpark size={16} style={{ color: "#105476" }} />
-                    <Text size="sm">View Origin</Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              {user?.is_staff && (
-                <>
-                  <Menu.Divider />
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/tariff/origin/create", {
-                          state: {
-                            ...row.original,
-                            actionType: "edit",
-                          },
-                        })
-                      }
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm">Edit Origin</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                </>
-              )}
-            </Menu.Dropdown>
-          </Menu>
-        ),
-      },
-    ],
-    [navigate, user?.is_staff]
-  );
-
-  const table = useMantineReactTable({
-    columns,
-    data: filteredOriginDataForDisplay as Origin[],
-    enableColumnFilters: false,
-    enablePagination: true,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      pagination: { pageSize: pageSize, pageIndex: currentPage - 1 },
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      radius: "md",
-      style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
-      },
-    },
-    mantineTableBodyCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "30px",
-            zIndex: 2,
-            borderLeft: "1px solid #F3F3F3",
-            boxShadow: "1px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontstyle: "regular",
-          fontFamily: "Inter",
-          color: "#333740",
-          backgroundColor: "#ffffff",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableHeadCellProps: ({ column }) => {
-      let extraStyles: Record<string, any> = {};
-      switch (column.id) {
-        case "actions":
-          extraStyles = {
-            position: "sticky",
-            right: 0,
-            minWidth: "80px",
-            zIndex: 2,
-            backgroundColor: "#FBFBFB",
-            boxShadow: "0px -2px 4px 0px #00000040",
-          };
-          break;
-        default:
-          extraStyles = {};
-      }
-      return {
-        style: {
-          width: "fit-content",
-          padding: "8px 16px",
-          fontSize: "14px",
-          fontFamily: "Inter",
-          fontstyle: "bold",
-          color: "#444955",
-          backgroundColor: "#FBFBFB",
-          top: 0,
-          zIndex: 3,
-          borderBottom: "1px solid #F3F3F3",
-          ...extraStyles,
-        },
-      };
-    },
-    mantineTableContainerProps: {
-      style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
-        position: "relative",
-        overflow: "auto",
-      },
-    },
-  });
-
-  // Handle page change
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
   };
 
   // Handle page size change
@@ -762,15 +883,13 @@ export default function OriginMaster() {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
-  // Refetch data when pagination changes
-    useEffect(() => {
-      if (filtersApplied) {
-        refetchFilteredOrigin();
-      } else {
-        refetchOrigin();
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, pageSize]);
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalRecords, pageSize, currentPage]);
+
   return (
     <>
       {/* Origin Name Modal */}
@@ -873,471 +992,324 @@ export default function OriginMaster() {
         </Box>
       </Modal>
 
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="md"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          <Group justify="space-between" align="center" pb="sm">
-            <Group align="center" gap="xs">
-              <Text
-                size="md"
-                fw={600}
-                c={"#444955"}
-                style={{ fontFamily: "Inter", fontSize: "16px" }}
-              >
-                List of Origin
-              </Text>
-              {currentOriginName && (
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          style={{
+            ...erpListGeistRootTypography,
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <ERPListScreen
+            theme={erpTheme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
                 <>
-                  <Text
-                    size="md"
-                    fw={600}
-                    c={"#444955"}
-                    style={{ fontFamily: "Inter", fontSize: "16px" }}
-                  >
-                    for:
-                  </Text>
-                  <Badge variant="light" color="#105476" size="md">
-                    {currentOriginName}
-                  </Badge>
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconListDetails size={14} color={primary} />}
+                    value={totalRecords}
+                    label="Total"
+                  />
                 </>
-              )}
-            </Group>
-
-            <Group gap="xs" wrap="nowrap">
-              {hasSearched && (
-                <TextInput
-                  placeholder="Search in origin name"
-                  leftSection={<IconSearch size={16} />}
-                  rightSection={
-                    localSearchTerm ? (
-                      <ActionIcon
-                        variant="transparent"
-                        size="sm"
-                        aria-label="Clear search"
-                        onClick={() => setLocalSearchTerm("")}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
-                    ) : null
-                  }
-                  w={260}
-                  size="xs"
-                  value={localSearchTerm}
-                  onChange={(e) => setLocalSearchTerm(e.target.value)}
-                  disabled={!hasSearched || isOriginLoading}
-                  styles={{
-                    input: {
-                      fontSize: "13px",
-                      height: "36px",
-                      borderRadius: "4px",
-                      fontFamily: "Inter",
-                      fontstyle: "regular",
-                      color: "#333740",
-                      border: "1px solid #D0D1D4",
-                      "&:focus": {
-                        border: "1px solid #105476",
-                      },
-                    },
-                  }}
-                />
-              )}
-
-              {hasSearched && (
-                <ActionIcon
-                  variant={showFilters ? "filled" : "outline"}
-                  size={36}
-                  color={showFilters ? "#E0F5FF" : "gray"}
-                  onClick={() => setShowFilters(!showFilters)}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                      border: showFilters
-                        ? "1px solid #105476"
-                        : "1px solid #737780",
-                      color: showFilters ? "#105476" : "#737780",
-                      "&:active": {
-                        border: "1px solid #105476",
-                        color: "#FFFFFF",
-                      },
-                    },
-                  }}
-                >
-                  <IconFilter size={18} />
-                </ActionIcon>
-              )}
-
-              {hasSearched && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleChangeOrigin}
-                  styles={{
-                    root: {
-                      borderRadius: "4px",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontWeight: 600,
-                      height: "36px",
-                      border: "1px solid #D0D1D4",
-                      color: "#444955",
-                    },
-                  }}
-                >
-                  Change Origin
-                </Button>
-              )}
-
-              {user?.is_staff && (
-                <Button
-                  leftSection={<IconPlus size={16} />}
-                  size="sm"
-                  onClick={() => navigate("/tariff/origin/create")}
-                  disabled={false}
-                  styles={{
-                    root: {
-                      backgroundColor: "#105476",
-                      borderRadius: "4px",
-                      color: "#FFFFFF",
-                      fontSize: "14px",
-                      fontFamily: "Inter",
-                      fontStyle: "semibold",
-                      "&:hover": {
-                        backgroundColor: "#105476",
-                      },
-                    },
-                  }}
-                >
-                  Create New
-                </Button>
-              )}
-            </Group>
-          </Group>
-        </Box>
-
-        {/* Filter Section */}
-        {showFilters && hasSearched && (
-          <Box
-            tt="capitalize"
-            mb="sm"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
-            }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              mb="sm"
-              px="md"
-              style={{
-                backgroundColor: "#FAFAFA",
-                padding: "4px 8px",
-                borderRadius: "8px 8px 0 0",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#000000"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="sm" px="md" pt="xs" pb="sm">
-              {/* Carrier Name Filter */}
-              <Grid.Col span={3}>
-                <SearchableSelect
-                  size="xs"
-                  label="Carrier Name"
-                  placeholder="Type carrier name"
-                  apiEndpoint={URL.carrier}
-                  searchFields={["carrier_name", "carrier_code"]}
-                  displayFormat={(item: any) => ({
-                    value: String(item.carrier_name),
-                    label: item.carrier_name,
-                  })}
-                  value={filterForm.values.carrier_name}
-                  displayValue={carrierDisplayValue}
-                  onChange={(value, selectedData) => {
-                    filterForm.setFieldValue("carrier_name", value || null);
-                    setCarrierDisplayValue(selectedData?.label || null);
-                  }}
-                  minSearchLength={2}
-                  className="filter-searchable-select"
-                />
-              </Grid.Col>
-
-              {/* Service Filter */}
-              <Grid.Col span={3}>
-                <Select
-                  key={`service-${filterForm.values.service}`}
-                  label="Service"
-                  placeholder="Select Service"
-                  searchable
-                  clearable
-                  size="xs"
-                  data={serviceOptions}
-                  {...filterForm.getInputProps("service")}
-                  onFocus={(event) => {
-                    const input = event.target as HTMLInputElement;
-                    if (input && input.value) {
-                      input.select();
+              ),
+              secondary: (
+                <Group gap="xs" wrap="nowrap" align="center">
+                  <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                    List of Origin
+                  </Text>
+                  {currentOriginName ? (
+                    <>
+                      <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                        for:
+                      </Text>
+                      <Badge variant="light" color="#105476" size="md">
+                        {currentOriginName}
+                      </Badge>
+                    </>
+                  ) : null}
+                </Group>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    placeholder="Search carriers and fields"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      localSearchTerm ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          aria-label="Clear search"
+                          onClick={() => {
+                            // Clearing search updates `debouncedSearch` (after
+                            // 1000ms) which is part of the unified query's
+                            // key — the table refetches automatically.
+                            setLocalSearchTerm("");
+                            clearStoreSearch(LIST_KEY);
+                            setCurrentPage(1);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
                     }
-                  }}
-                  styles={{
-                    input: { fontSize: "13px", height: "36px" },
-                    label: {
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#000000",
-                      marginBottom: "4px",
-                      fontFamily: "Inter",
-                    },
-                  }}
-                />
-              </Grid.Col>
-
-              {/* Valid From Date Filter */}
-              <Grid.Col span={3}>
-                <SingleDateInput
-                  key={`valid-from-${filterForm.values.valid_from}`}
-                  label="Valid From"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  {...filterForm.getInputProps("valid_from")}
-                />
-              </Grid.Col>
-
-              {/* Valid To Date Filter */}
-              <Grid.Col span={3}>
-                <SingleDateInput
-                  key={`valid-to-${filterForm.values.valid_to}`}
-                  label="Valid To"
-                  placeholder="YYYY-MM-DD"
-                  size="xs"
-                  {...filterForm.getInputProps("valid_to")}
-                />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearAllFilters}
-                leftSection={<IconX size={16} />}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#444955",
-                  },
-                }}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                loading={isLoading}
-                disabled={isLoading}
-                leftSection={<IconFilter size={16} />}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {/* Show table only after search and when not in modal */}
-        {hasSearched && (
-          <>
-            {isLoading || filteredOriginLoading ? (
-              <Center py="xl" style={{ flex: 1 }}>
-                <Stack align="center" gap="md">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed">Loading origin data...</Text>
-                </Stack>
-              </Center>
-            ) : (displayData as Origin[]).length === 0 ? (
-              <Box p="xl" style={{ textAlign: "center" }}>
-                <Text c="dimmed">
-                  No origins found for {filtersApplied && "this filter"} {!filtersApplied && currentOriginName && `${currentOriginName}`}
-                </Text>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  mt="md"
-                  onClick={handleChangeOrigin}
-                >
-                  Try Different Origin
-                </Button>
-              </Box>
-            ) : (
-              <>
-                {/* {localSearchTerm && (
-                  <Box mb="md">
-                    <Text size="sm" c="dimmed">
-                      Showing {filteredOriginData.length} of{" "}
-                      {(originVal as Origin[]).length} results
-                      {localSearchTerm && ` for "${localSearchTerm}"`}
-                    </Text>
-                  </Box>
-                )} */}
-                <MantineReactTable table={table} />
-
-                <PaginationBar
-                  pageSize={pageSize}
-                  currentPage={currentPage}
-                  totalRecords={totalRecords}
-                  onPageSizeChange={handlePageSizeChange}
-                  onPageChange={handlePageChange}
-                  pageSizeOptions={["10", "25", "50"]}
-                />
-
-                {/* Custom Pagination Bar */}
-                {/* <Group
-                  w="100%"
-                  justify="space-between"
-                  align="center"
-                  pt="sm"
-                  pl="sm"
-                  pr="xl"
-                  style={{ borderTop: "1px solid #e9ecef", flexShrink: 0 }}
-                  wrap="nowrap"
-                  mt="sm"
-                >
-                  <Group gap="sm" align="center" wrap="nowrap">
-                    <Text size="sm" c="dimmed">
-                      Rows per page
-                    </Text>
-                    <Select
+                    w={260}
+                    size="xs"
+                    value={localSearchTerm}
+                    onChange={(e) => setLocalSearchTerm(e.currentTarget.value)}
+                    disabled={!hasSearched || isLoading}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                  {hasSearched ? (
+                    <Button
+                      variant="default"
                       size="xs"
-                      data={["10", "25", "50"]}
-                      value={String(pageSize)}
-                      onChange={(val) => {
-                        if (!val) return;
-                        handlePageSizeChange(Number(val));
-                      }}
-                      w={110}
-                      styles={{ input: { fontSize: 12, height: 30 } }}
-                    />
-                    <Text size="sm" c="dimmed">
-                      {(() => {
-                        const total =
-                          totalRecords || filteredOriginDataForDisplay.length || 0;
-                        if (total === 0) return "0–0 of 0";
-                        const start = (currentPage - 1) * pageSize + 1;
-                        const end = Math.min(currentPage * pageSize, total);
-                        return `${start}–${end} of ${total}`;
-                      })()}
-                    </Text>
-                  </Group>
-
-                  <Group gap="xs" align="center" wrap="nowrap">
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      onClick={() =>
-                        handlePageChange(Math.max(1, currentPage - 1))
-                      }
-                      disabled={currentPage === 1}
+                      styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                      leftSection={<IconFilter size={14} />}
+                      onClick={() => setShowFilters((s) => !s)}
                     >
-                      <IconChevronLeft size={16} />
-                    </ActionIcon>
-                    <Text size="sm" ta="center" style={{ width: 26 }}>
-                      {currentPage}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      of{" "}
-                      {Math.max(
-                        1,
-                        Math.ceil(
-                          (totalRecords || filteredOriginDataForDisplay.length || 0) /
-                            pageSize
-                        )
-                      )}
-                    </Text>
-                    <ActionIcon
+                      {showFilters ? "Hide filters" : "Filters"}
+                    </Button>
+                  ) : null}
+                  {hasSearched ? (
+                    <Button
                       variant="default"
-                      size="sm"
+                      size="xs"
+                      styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                      onClick={handleChangeOrigin}
+                    >
+                      Change Origin
+                    </Button>
+                  ) : null}
+                  {user?.is_staff ? (
+                    <Button
+                      size="xs"
+                      leftSection={<IconPlus size={14} />}
+                      styles={erpToolbarPrimaryButtonStyles(erpTheme)}
                       onClick={() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (totalRecords || filteredOriginDataForDisplay.length || 0) /
-                              pageSize
-                          )
-                        );
-                        handlePageChange(Math.min(totalPages, currentPage + 1));
+                        preserveListState();
+                        navigate("/tariff/origin/create");
                       }}
-                      disabled={(() => {
-                        const totalPages = Math.max(
-                          1,
-                          Math.ceil(
-                            (totalRecords || filteredOriginDataForDisplay.length || 0) /
-                              pageSize
-                          )
-                        );
-                        return currentPage >= totalPages;
-                      })()}
                     >
-                      <IconChevronRight size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Group> */}
-              </>
-            )}
-          </>
-        )}
-
-        <Outlet />
-      </Card>
+                      Create New
+                    </Button>
+                  ) : null}
+                </>
+              ),
+            }}
+            filters={
+              hasSearched
+                ? {
+                    opened: showFilters,
+                    title: "Filters",
+                    subtitle: "Carrier, service, or validity dates",
+                    onClose: () => setShowFilters(false),
+                    footer: (
+                      <ERPListFilterActionsFooter
+                        theme={erpTheme}
+                        onClear={() => {
+                          void clearAllFilters();
+                        }}
+                        onApply={() => {
+                          void applyFilters();
+                        }}
+                        applyLoading={isLoading}
+                        applyDisabled={isLoading}
+                      />
+                    ),
+                    children: (
+                      <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
+                          <SearchableSelect
+                            dropdownZIndex={1000}
+                            size="xs"
+                            label="Carrier Name"
+                            placeholder="Type carrier name"
+                            apiEndpoint={URL.carrier}
+                            searchFields={["carrier_name", "carrier_code"]}
+                            displayFormat={(item: any) => ({
+                              value: String(item.carrier_name),
+                              label: item.carrier_name,
+                            })}
+                            value={filterForm.values.carrier_name}
+                            displayValue={carrierDisplayValue}
+                            onChange={(value, selectedData) => {
+                              filterForm.setFieldValue("carrier_name", value || null);
+                              setCarrierDisplayValue(selectedData?.label || null);
+                            }}
+                            minSearchLength={2}
+                            classNames={erpListGeistSelectClassNames}
+                            styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                            className="filter-searchable-select"
+                          />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
+                          <Select
+                            key={`service-${filterForm.values.service}`}
+                            label="Service"
+                            placeholder="Select Service"
+                            searchable
+                            clearable
+                            size="xs"
+                            data={serviceOptions}
+                            {...filterForm.getInputProps("service")}
+                            onFocus={(event) => {
+                              const input = event.target as HTMLInputElement;
+                              if (input && input.value) {
+                                input.select();
+                              }
+                            }}
+                            classNames={erpListGeistSelectClassNames}
+                            styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
+                            <TextInput
+                              label="Tariff Code"
+                              placeholder="Type tariff code"
+                              size="xs"
+                              value={filterForm.values.tariff_code ?? ""}
+                              onChange={(e) =>
+                                filterForm.setFieldValue(
+                                  "tariff_code",
+                                  e.currentTarget.value || null,
+                                )
+                              }
+                              classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                              styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                            />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
+                          <SingleDateInput
+                            key={`valid-from-${filterForm.values.valid_from}`}
+                            label="Valid From"
+                            placeholder="YYYY-MM-DD"
+                            size="xs"
+                            value={filterForm.values.valid_from}
+                            onChange={(v) =>
+                              filterForm.setFieldValue("valid_from", v)
+                            }
+                            classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                            styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                          <Box style={erpListFilterFieldCellStyle}>
+                          <SingleDateInput
+                            key={`valid-to-${filterForm.values.valid_to}`}
+                            label="Valid To"
+                            placeholder="YYYY-MM-DD"
+                            size="xs"
+                            value={filterForm.values.valid_to}
+                            onChange={(v) =>
+                              filterForm.setFieldValue("valid_to", v)
+                            }
+                            classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                            styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          />
+                          </Box>
+                        </Grid.Col>
+                      </Grid>
+                    ),
+                  }
+                : null
+            }
+            table={{
+              footer: hasSearched ? (
+                <ERPListPaginationFooter
+                  theme={erpTheme}
+                  totalRecords={totalRecords}
+                  pageIndex={currentPage - 1}
+                  pageSize={pageSize}
+                  onPageIndexChange={(idx) => setCurrentPage(idx + 1)}
+                  onPageSizeChange={handlePageSizeChange}
+                  pageSizeOptions={["10", "25", "50"]}
+                  selectClassNames={erpListGeistSelectClassNames}
+                />
+              ) : undefined,
+              children: !hasSearched ? (
+                <Center py={60} style={{ backgroundColor: erpTheme.cardBg }}>
+                  <Text size="sm" c="dimmed" style={{ fontFamily: fontSans }} ta="center" maw={360}>
+                    Select an origin port in the dialog to load tariff lines for that location.
+                  </Text>
+                </Center>
+              ) : !isLoading &&
+                (displayData as Origin[]).length === 0 &&
+                !(
+                  appliedFilters.carrier_name ||
+                  appliedFilters.service ||
+                  appliedFilters.tariff_code ||
+                  appliedFilters.valid_from ||
+                  appliedFilters.valid_to
+                ) &&
+                debouncedSearch.trim() === "" ? (
+                // Pristine "no rows for this origin" state — show the
+                // "Try Different Origin" button to allow re-picking. When the
+                // user is mid-typing in column header filters we keep the
+                // table (and header filters) mounted instead.
+                <Center py="xl" style={{ backgroundColor: erpTheme.cardBg, flex: 1 }}>
+                  <Stack align="center" gap="md">
+                    <Text c="dimmed" ta="center">
+                      No origins found
+                      {currentOriginName ? ` for ${currentOriginName}` : ""}
+                    </Text>
+                    <Button variant="default" size="sm" onClick={handleChangeOrigin}>
+                      Try Different Origin
+                    </Button>
+                  </Stack>
+                </Center>
+              ) : (
+                <Box
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <TariffMasterListNativeTable
+                    theme={erpTheme}
+                    rows={displayData as Origin[]}
+                    getRowKey={(row) => String(row.id)}
+                    getSno={(_row, index) => (currentPage - 1) * pageSize + index + 1}
+                    columns={originListColumns}
+                    isEmpty={(displayData as Origin[]).length === 0}
+                    emptyIcon={<IconMapPin size={24} color={erpTheme.muted} />}
+                    emptyTitle="No origin lines match your search"
+                    renderActions={renderOriginActions}
+                    headerFilters={originHeaderFiltersProp}
+                    loading={isLoading}
+                    loadingMessage="Loading origin data…"
+                  />
+                </Box>
+              ),
+            }}
+          />
+          <Outlet />
+        </Box>
+      </MantineProvider>
     </>
   );
 }

@@ -37,8 +37,13 @@ export const SimpleNavLink = ({
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  const isActive =
+    label === "Dashboard"
+      ? pathname === "/"
+      : pathname === path || pathname.startsWith(`${path}/`) || activeNav === label;
+
   const style = getLinkStyles(
-    activeNav === label,
+    isActive,
     label,
     undefined,
     undefined,
@@ -83,7 +88,6 @@ export const SimpleNavLink = ({
     setOpenCollapsible("Tariff", false);
     setOpenCollapsible("Accounts", false);
   };
-  const isActive = activeNav === label;
   const iconColor = sectionIconColors[label] || "white";
   const iconBackground = sectionIconBackground[label] || "#105476";
 
@@ -96,7 +100,7 @@ export const SimpleNavLink = ({
             width: 24,
             height: 24,
             borderRadius: 4,
-            backgroundColor: isActive ? "#105476" : iconBackground,
+            backgroundColor: isActive ? iconColor : iconBackground,
             color: isActive ? "#fff" : iconColor,
             display: "flex",
             alignItems: "center",
@@ -114,10 +118,10 @@ export const SimpleNavLink = ({
   return isSidebarCollapsed ? (
     <Tooltip
       label={label}
-      color="#363636"
+      color="#0F2035"
       position="right"
       arrowOffset={50}
-      style={{ padding: "5px 15px", fontWeight: 400 }}
+      style={{ padding: "5px 14px", fontWeight: 400, fontSize: "13px" }}
       arrowSize={8}
       withArrow
     >

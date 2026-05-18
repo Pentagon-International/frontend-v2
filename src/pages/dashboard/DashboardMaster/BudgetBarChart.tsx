@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import {
-  Card,
+  Box,
   Group,
   Text,
   Button,
   Select,
   SegmentedControl,
+  Badge,
 } from "@mantine/core";
 import { BarChart, BarChartDataItem } from "../../../components";
 import dayjs from "dayjs";
@@ -13,9 +14,14 @@ import {
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
   calculateFinancialYearBudgetRangeForYear,
-  calculateStartMonthFromEndMonth,
   BudgetAggregatedData,
 } from "../../../service/dashboard.service";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelTitleStyle,
+  dashboardViewAllStyle,
+} from "./dashboardPanelStyles";
 
 interface BudgetBarChartProps {
   // State props
@@ -85,6 +91,40 @@ const BudgetBarChart = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetBarChartProps) => {
+  const normalizedBudgetEndMonth = useMemo(() => {
+    if (!selectedYear || !budgetEndMonth) return budgetEndMonth;
+    const endMonthPart = budgetEndMonth.split("-")[1];
+    return endMonthPart ? `${selectedYear}-${endMonthPart}` : budgetEndMonth;
+  }, [selectedYear, budgetEndMonth]);
+
+  const payloadPeriod = useMemo(() => {
+    const startMonthPart = budgetStartMonth?.split("-")[1];
+    const endMonthPart = budgetEndMonth?.split("-")[1];
+    const startYearPart = budgetStartMonth?.split("-")[0];
+    const selectedYearNum = selectedYear
+      ? parseInt(selectedYear, 10)
+      : startYearPart
+        ? parseInt(startYearPart, 10)
+        : undefined;
+    const startMonthNum = startMonthPart ? parseInt(startMonthPart, 10) : undefined;
+    const endMonthNum = endMonthPart ? parseInt(endMonthPart, 10) : undefined;
+    const isCrossYearRange =
+      typeof startMonthNum === "number" &&
+      typeof endMonthNum === "number" &&
+      startMonthNum >= endMonthNum;
+
+    const payloadStart =
+      selectedYearNum && startMonthPart
+        ? `${selectedYearNum}-${startMonthPart}`
+        : budgetStartMonth;
+    const payloadEnd =
+      selectedYearNum && endMonthPart
+        ? `${isCrossYearRange ? selectedYearNum + 1 : selectedYearNum}-${endMonthPart}`
+        : budgetEndMonth;
+
+    return { payloadStart, payloadEnd };
+  }, [selectedYear, budgetStartMonth, budgetEndMonth]);
+
   // Memoized chart data preparation
   const barChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -168,121 +208,121 @@ const BudgetBarChart = ({
   };
 
   return (
-    <Card
-      shadow="sm"
-      p="md"
-      radius="md"
-      style={{ border: "1px solid #e9ecef", height: "100%" }}
-    >
-      {/* Title and Controls */}
-      <Group justify="space-between" align="center" mb="md">
-        <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Budget vs Actual
-        </Text>
-        <Group gap="sm">
-          <SegmentedControl
-            value={budgetType}
-            onChange={(value) =>
-              handleBudgetTypeChange(value as "salesperson" | "non-salesperson")
-            }
-            data={[
-              { label: "Sales", value: "salesperson" },
-              { label: "Non-Sales", value: "non-salesperson" },
-            ]}
-            size="xs"
-            styles={{
-              root: {
-                backgroundColor: "#f1f3f5",
-                fontFamily: "Inter, sans-serif",
-              },
-              label: {
-                fontSize: "12px",
-              },
-            }}
-          />
-          <Group gap="xs" align="center">
-            <Select
-              placeholder="Select Year"
-              value={selectedYear}
-              onChange={(value) => {
-                if (value) {
-                  setSelectedYear(value);
-                  // When year changes, recalculate month range for that financial year
-                  const yearRange = calculateFinancialYearBudgetRangeForYear(
-                    parseInt(value)
-                  );
-                  handleBudgetMonthFilterChange(
-                    yearRange.start_month,
-                    yearRange.end_month
-                  );
-                }
-              }}
-              w={150}
-              size="xs"
-              data={yearOptions}
-              styles={{
-                input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
-              }}
-            />
-            <Select
-              placeholder="From Month"
-              data={fromMonthOptions}
-              value={budgetStartMonth}
-              onChange={(value) => {
-                if (value) {
-                  const endMonth =
-                    !budgetEndMonth || budgetEndMonth < value
-                      ? value
-                      : budgetEndMonth;
-                  handleBudgetMonthFilterChange(value, endMonth);
-                }
-              }}
-              size="xs"
-              w={110}
-              withAsterisk
-              required
-            />
-            <Select
-              placeholder="To Month"
-              data={toMonthOptions}
-              value={budgetEndMonth}
-              onChange={(value) => {
-                if (value) {
-                  // Calculate start month based on end month (financial year logic)
-                  // This will be handled in handleBudgetMonthFilterChange
-                  handleBudgetMonthFilterChange(null, value);
-                }
-              }}
-              size="xs"
-              w={110}
-              withAsterisk
-              required
-            />
+    <Box style={{ ...dashboardPanelShell, flex: "0 0 auto" }}>
+      <Box style={dashboardPanelHeaderBand}>
+        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
+          <Group
+            gap="sm"
+            align="center"
+            wrap="nowrap"
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            <Text style={dashboardPanelTitleStyle}>Budget vs Actual</Text>
+            <Badge
+              variant="light"
+              color="#105476"
+              size="sm"
+              radius="sm"
+              style={{ flexShrink: 0 }}
+            >
+              {payloadPeriod.payloadStart} — {payloadPeriod.payloadEnd}
+            </Badge>
           </Group>
+          <Text
+            size="sm"
+            c="#105476"
+            style={{ ...dashboardViewAllStyle, flexShrink: 0 }}
+            onClick={handleBudgetViewAll}
+          >
+            View All
+          </Text>
         </Group>
-      </Group>
+      </Box>
 
-      {/* Header row: Month filters + View All */}
-      <Group justify="end" align="center" mb="sm" gap="xs">
-        <Text
-          size="sm"
-          c="#105476"
-          style={{
-            textDecoration: "underline",
-            cursor: "pointer",
+      <Group
+        gap="sm"
+        align="center"
+        wrap="wrap"
+        mb="md"
+        style={{ rowGap: 8 }}
+      >
+        <SegmentedControl
+          value={budgetType}
+          onChange={(value) =>
+            handleBudgetTypeChange(value as "salesperson" | "non-salesperson")
+          }
+          data={[
+            { label: "Sales", value: "salesperson" },
+            { label: "Non-Sales", value: "non-salesperson" },
+          ]}
+          size="xs"
+          styles={{
+            root: {
+              backgroundColor: "#E8EDF5",
+              fontFamily: "Inter, sans-serif",
+            },
+            label: {
+              fontSize: "12px",
+            },
           }}
-          onClick={handleBudgetViewAll}
-        >
-          View All
-        </Text>
+        />
+        <Select
+          placeholder="Select Year"
+          value={selectedYear}
+          onChange={(value) => {
+            if (value) {
+              setSelectedYear(value);
+              const yearRange = calculateFinancialYearBudgetRangeForYear(
+                parseInt(value)
+              );
+              handleBudgetMonthFilterChange(
+                yearRange.start_month,
+                yearRange.end_month
+              );
+            }
+          }}
+          w={150}
+          size="xs"
+          data={yearOptions}
+          styles={{
+            input: { fontSize: "12px", fontFamily: "Inter, sans-serif" },
+          }}
+        />
+        <Select
+          placeholder="From Month"
+          data={fromMonthOptions}
+          value={budgetStartMonth}
+          onChange={(value) => {
+            if (value) {
+              const endMonth =
+                !budgetEndMonth || budgetEndMonth < value
+                  ? value
+                  : budgetEndMonth;
+              handleBudgetMonthFilterChange(value, endMonth);
+            }
+          }}
+          size="xs"
+          w={110}
+          withAsterisk
+          required
+        />
+        <Select
+          placeholder="To Month"
+          data={toMonthOptions}
+          value={normalizedBudgetEndMonth}
+          onChange={(value) => {
+            if (value) {
+              handleBudgetMonthFilterChange(budgetStartMonth, value);
+            }
+          }}
+          size="xs"
+          w={110}
+          withAsterisk
+          required
+        />
       </Group>
 
-      {/* Second row: Back Button */}
+      {/* Back Button */}
       <Group justify="space-between" align="center" mb="xs">
         {budgetDrillLevel > 1 && (
           <Button
@@ -348,7 +388,7 @@ const BudgetBarChart = ({
         showLegend={true}
         legendPosition="bottom"
       />
-    </Card>
+    </Box>
   );
 };
 

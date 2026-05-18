@@ -35,7 +35,7 @@ import {
   IconFileInvoice,
   IconRefresh,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
+import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -66,6 +66,9 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
+import { useAgentStatus } from "../../../hooks/useAgentStatus";
+import OdexStatusPanel from "../../../components/OdexStatusPanel";
+import OdexAgentDownloadModal from "../../../components/OdexAgentModal";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -410,6 +413,17 @@ function ImportJobCreate() {
     string | null
   >(null);
 
+  const { recheck } = useAgentStatus({ autoCheck: false });
+  const [showAgentModal,   setShowAgentModal]   = useState(false);
+  const [odexJob,          setOdexJob]          = useState<string | null>(null);
+  const [odexJobStatus,    setOdexJobStatus]    = useState<string | null>(null);
+  const [isCheckingAgent,  setIsCheckingAgent]  = useState(false);
+  const [agentToken,       setAgentToken]       = useState<string | null>(null);
+  const [agentServerUrl,   setAgentServerUrl]   = useState<string | null>(null);
+  const wsRef      = useRef<WebSocket | null>(null);
+  const toastIdRef = useRef<string | number | null>(null);
+  const [agentModalMode, setAgentModalMode] = useState<string | null>("not_installed");
+
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
     const pathname = location.pathname.toLowerCase();
@@ -642,6 +656,16 @@ function ImportJobCreate() {
           }
         }
 
+        const mblFlat = mblData as Record<string, unknown>;
+        const stateMbl = (location.state?.mblDetails ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const shipperNest =
+          mblFlat.shipper && typeof mblFlat.shipper === "object"
+            ? (mblFlat.shipper as Record<string, unknown>)
+            : undefined;
+
         mblDetailsForm.setValues({
           service: mblData.service || "",
           origin_agent:
@@ -679,23 +703,105 @@ function ImportJobCreate() {
             mblData.igm_date && dayjs(mblData.igm_date).isValid()
               ? dayjs(mblData.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
-          shipper_id: location.state?.mblDetails?.shipper_id || "",
-          shipper_name: String(mblData.shipper_name || ""),
-          shipper_email: String(mblData.shipper_email || ""),
-          shipper_address_id: location.state?.mblDetails?.shipper_address_id || "",
-          shipper_address: String(mblData.shipper_address || ""),
-          consignee_id: location.state?.mblDetails?.consignee_id || "",
-          consignee_name: String(mblData.consignee_name || ""),
-          consignee_email: String(mblData.consignee_email || ""),
-          consignee_address_id:
-            location.state?.mblDetails?.consignee_address_id || "",
-          consignee_address: String(mblData.consignee_address || ""),
-          carrier_agent_id: location.state?.mblDetails?.carrier_agent_id || "",
-          carrier_agent_name: String(mblData.carrier_agent_name || ""),
-          carrier_agent_email: String(mblData.carrier_agent_email || ""),
-          carrier_agent_address_id:
-            location.state?.mblDetails?.carrier_agent_address_id || "",
-          carrier_agent_address: String(mblData.carrier_agent_address || ""),
+          shipper_id: String(
+            mblFlat.shipper_id ??
+              shipperNest?.id ??
+              stateMbl.shipper_id ??
+              "",
+          ),
+          shipper_name: String(
+            mblFlat.shipper_name ??
+              shipperNest?.customer_name ??
+              shipperNest?.name ??
+              stateMbl.shipper_name ??
+              "",
+          ),
+          shipper_email: String(
+            mblFlat.shipper_email ??
+              shipperNest?.email ??
+              stateMbl.shipper_email ??
+              "",
+          ),
+          shipper_address_id: String(
+            mblFlat.shipper_address_id ?? stateMbl.shipper_address_id ?? "",
+          ),
+          shipper_address: String(
+            mblFlat.shipper_address ??
+              shipperNest?.address ??
+              stateMbl.shipper_address ??
+              "",
+          ),
+          consignee_id: String(
+            (mblData as { consignee_id?: unknown }).consignee_id ??
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.id as string | number | undefined
+              ) ??
+              stateMbl.consignee_id ??
+              "",
+          ),
+          consignee_name: String(
+            mblData.consignee_name ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.customer_name as string | undefined
+              ) ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.name as string | undefined
+              ) ||
+              stateMbl.consignee_name ||
+              "",
+          ),
+          consignee_email: String(
+            mblData.consignee_email ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.email as string | undefined
+              ) ||
+              stateMbl.consignee_email ||
+              "",
+          ),
+          consignee_address_id: String(
+            mblFlat.consignee_address_id ??
+              stateMbl.consignee_address_id ??
+              "",
+          ),
+          consignee_address: String(
+            mblData.consignee_address ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.address as string | undefined
+              ) ||
+              stateMbl.consignee_address ||
+              "",
+          ),
+          carrier_agent_id: String(
+            (mblData as { carrier_agent_id?: unknown }).carrier_agent_id ??
+              stateMbl.carrier_agent_id ??
+              "",
+          ),
+          carrier_agent_name: String(
+            mblData.carrier_agent_name ||
+              stateMbl.carrier_agent_name ||
+              "",
+          ),
+          carrier_agent_email: String(
+            mblData.carrier_agent_email ||
+              stateMbl.carrier_agent_email ||
+              "",
+          ),
+          carrier_agent_address_id: String(
+            (mblData as { carrier_agent_address_id?: unknown })
+              .carrier_agent_address_id ??
+              stateMbl.carrier_agent_address_id ??
+              "",
+          ),
+          carrier_agent_address: String(
+            mblData.carrier_agent_address ||
+              stateMbl.carrier_agent_address ||
+              "",
+          ),
         });
 
         // Populate Carrier Details using setValues
@@ -753,6 +859,17 @@ function ImportJobCreate() {
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
+              agent_code: house.agent_code ? String(house.agent_code) : "",
+              agent_state_id:
+                house.agent_state_id !== null &&
+                house.agent_state_id !== undefined
+                  ? String(house.agent_state_id)
+                  : "",
+              shipper_code: house.shipper_code ? String(house.shipper_code) : "",
+              shipper_id:
+                house.shipper_id !== null && house.shipper_id !== undefined
+                  ? String(house.shipper_id)
+                  : "",
               shipper_name: house.shipper_name
                 ? String(house.shipper_name)
                 : "",
@@ -762,9 +879,23 @@ function ImportJobCreate() {
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
                 : "",
-              shipper_state_id: house.shipper_state_id
-                ? String(house.shipper_state_id)
+              shipper_state_id:
+                house.shipper_state_id !== null &&
+                house.shipper_state_id !== undefined
+                  ? String(house.shipper_state_id)
+                  : "",
+              shipper_gst_id:
+                house.shipper_gst_id !== null &&
+                house.shipper_gst_id !== undefined
+                  ? String(house.shipper_gst_id)
+                  : "",
+              consignee_code: house.consignee_code
+                ? String(house.consignee_code)
                 : "",
+              consignee_id:
+                house.consignee_id !== null && house.consignee_id !== undefined
+                  ? String(house.consignee_id)
+                  : "",
               consignee_name: house.consignee_name
                 ? String(house.consignee_name)
                 : "",
@@ -774,6 +905,16 @@ function ImportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
+              consignee_state_id:
+                house.consignee_state_id !== null &&
+                house.consignee_state_id !== undefined
+                  ? String(house.consignee_state_id)
+                  : "",
+              consignee_gst_id:
+                house.consignee_gst_id !== null &&
+                house.consignee_gst_id !== undefined
+                  ? String(house.consignee_gst_id)
+                  : "",
               notify1_customer_name: (house.notify1_customer_name)
                 ? String(house.notify1_customer_name)
                 : "",
@@ -2484,6 +2625,172 @@ function ImportJobCreate() {
     }
   };
 
+  useEffect(() => {
+    if (!odexJobStatus) return;
+
+    const STATUS_TOASTS: Record<string, { type: "info" | "success" | "error" | "warning"; message: string }> = {
+      pending:         { type: "info",    message: "⏳ Job queued — waiting for agent..." },
+      running:         { type: "info",    message: "🤖 Automation running..." },
+      waiting_captcha: { type: "warning", message: "⚠ Solve the captcha in the browser window, then click Continue below." },
+      completed:       { type: "success", message: "✅ Submitted to Odex successfully!" },
+      failed:          { type: "error",   message: "❌ Automation failed — check agent logs." },
+    };
+
+    const cfg = STATUS_TOASTS[odexJobStatus];
+    if (cfg) {
+      ToastNotification({ type: cfg.type, message: cfg.message });
+    }
+
+    // Close WebSocket when terminal state
+    if (["completed", "failed"].includes(odexJobStatus)) {
+      wsRef.current?.close();
+      wsRef.current = null;
+    }
+  }, [odexJobStatus]);
+
+
+  const triggerOdexJob = useCallback(async () => {
+    const rowSnapshot = ((jobWithMergedHousingDetails ?? jobData ?? {}) as Record<
+      string,
+      unknown
+    >);
+    const housingFromRow = Array.isArray(rowSnapshot.housing_details)
+      ? (rowSnapshot.housing_details as unknown[])
+      : Array.isArray(rowSnapshot.hbl)
+        ? (rowSnapshot.hbl as unknown[])
+        : [];
+    const { housing_details: _ignoredHousingDetails, ...mblPayload } = rowSnapshot;
+
+    const odexPayload = {
+      job_ref:
+        String(jobData?.job_id ?? jobData?.id ?? "").trim() ||
+        `LOGIN-${Date.now()}`,
+      "odex_type": "HBL_REQUEST",
+      "payload": {
+        mbl: mblPayload,
+        hbl: housingFromRow,
+      },
+    };
+
+    try {
+      const res = await apiCallProtected.post(
+        "/job-create/odex/jobs/create/",
+        odexPayload,
+      );
+
+      const raw = res;
+      const parsed =
+        typeof raw === "string"
+          ? (() => {
+              try {
+                return JSON.parse(raw);
+              } catch {
+                return {};
+              }
+            })()
+          : raw;
+      const payload =
+        (parsed as { data?: { job_id?: string | number; status?: string } })
+          ?.data ?? (parsed as { job_id?: string | number; status?: string }) ?? parsed;
+      const jobId = payload?.job_id;
+      if (jobId == null || String(jobId).trim() === "") {
+        throw new Error("ODEX job_id not found in create response.");
+      }
+      setOdexJob(jobId as any);
+      setOdexJobStatus(
+        String(payload?.status ?? "pending")
+          .trim()
+          .toLowerCase(),
+      );
+
+      // WebSocket for real-time status
+      const apiBase = String(URL.base ?? "").trim();
+      const apiOrigin = apiBase
+        ? new globalThis.URL(apiBase, window.location.origin).origin
+        : window.location.origin;
+      const wsProtocol = apiOrigin.startsWith("https") ? "wss" : "ws";
+      const wsHost = apiOrigin.replace(/^https?:\/\//, "");
+      const ws = new WebSocket(
+        `${wsProtocol}://${wsHost}/ws/odex/job/${jobId}/`,
+      );
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        setOdexJobStatus(data.status);
+        if (["completed", "failed"].includes(data.status)) ws.close();
+      };
+    } catch (err) {
+      console.error("Failed to create job", err);
+      const message =
+        (err as { response?: { data?: { message?: string; detail?: string } } })
+          ?.response?.data?.message ??
+        (err as { response?: { data?: { message?: string; detail?: string } } })
+          ?.response?.data?.detail ??
+        "Unable to start ODEX login automation.";
+      ToastNotification({ type: "error", message });
+    }
+  }, [jobData, jobWithMergedHousingDetails]);
+
+  const handlePushToOdexDownload = useCallback(async () => {
+    if (isCheckingAgent) return;
+    setIsCheckingAgent(true);
+
+    try {
+      ToastNotification({
+        type: "info",
+        message: "Checking agent connection...",
+      });
+
+      const latestStatus = String((await recheck()) ?? "")
+        .trim()
+        .toLowerCase();
+
+      // ── Case 1: Never installed ──────────────────────────────
+      if (latestStatus === "not_installed") {
+        ToastNotification({
+          type: "warning",
+          message: "Odex Agent is not installed. Please download and set it up.",
+        });
+        try {
+          const tokenRes = await apiCallProtected.post(
+            "/job-create/odex/agent/token/generate/"
+          );
+          const d = (tokenRes as any)?.data ?? tokenRes;
+          setAgentToken(d?.token ?? null);
+          setAgentServerUrl(d?.server_url ?? window.location.origin);
+        } catch {
+          setAgentToken(null);
+          setAgentServerUrl(window.location.origin);
+        }
+        setAgentModalMode("not_installed");  // ← new state (see Step 4)
+        setShowAgentModal(true);
+        return;
+      }
+
+      // ── Case 2: Installed but not running ────────────────────
+      if (latestStatus === "registered") {
+        ToastNotification({
+          type: "warning",
+          message: "Agent is installed but not running. Please start it.",
+        });
+        setAgentModalMode("not_running");    // ← show different modal content
+        setShowAgentModal(true);
+        return;
+      }
+
+      // ── Case 3: Online → create job ──────────────────────────
+      ToastNotification({
+        type: "success",
+        message: "✅ Agent connected! Starting automation...",
+      });
+      await triggerOdexJob();
+
+    } finally {
+      setIsCheckingAgent(false);
+    }
+  }, [isCheckingAgent, recheck, triggerOdexJob]);
+
+  
   const handleSubmit = async () => {
     // Ensure we're using the latest form values by constructing payload right before API call
     setIsSubmitting(true);
@@ -3064,6 +3371,45 @@ function ImportJobCreate() {
                       Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
                     </Menu.Item>
                   ))}
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconDownload size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    disabled={isCheckingAgent}
+                    onClick={handlePushToOdexDownload}
+                  >
+                    Push To Odex
+                  </Menu.Item>
                   {jobData?.id != null && (
                     <Menu.Item
                       leftSection={
@@ -3702,6 +4048,7 @@ function ImportJobCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <SearchableSelect
+                  key={`ocean-import-party-shipper-${partyDetailsForm.values.shipper_id}:${partyDetailsForm.values.shipper_name ?? "_"}`}
                   size="sm"
                   label="Shipper Name"
                   dropdownZIndex={10}
@@ -4940,6 +5287,7 @@ function ImportJobCreate() {
                 Estimates
               </Text>
               {mode === "edit" && !isReadOnly && (
+                <Group gap="sm">
                 <Button
                   variant="outline"
                   color="#105476"
@@ -5043,6 +5391,89 @@ function ImportJobCreate() {
                 >
                   Create Supplier Invoice
                 </Button>
+                <Button
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  leftSection={<IconFileInvoice size={16} />}
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    },
+                  }}
+                  onClick={() => {
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: ["FCL", "LCL"],
+                        voucherType: "SEA IMPORTS",
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobWithMergedHousingDetails && {
+                          job: jobWithMergedHousingDetails,
+                        }),
+                      },
+                    });
+                  }}
+                >
+                  Create PRQ
+                </Button>
+                </Group>
               )}
             </Group>
             <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
@@ -5736,11 +6167,7 @@ function ImportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() =>
-              navigate("/SeaExport/import-job", {
-                state: { refreshData: true },
-              })
-            }
+            onClick={() => navigate("/SeaExport/import-job")}
           >
             Back to List
           </Button>
@@ -6135,6 +6562,42 @@ function ImportJobCreate() {
             ))}
           </Stack>
         </Box>
+      )}
+
+      {showAgentModal && (
+        <OdexAgentDownloadModal
+          opened={showAgentModal}
+          onClose={() => setShowAgentModal(false)}
+          mode={agentModalMode}
+          agentToken={agentToken ?? undefined}
+          serverUrl={agentServerUrl ?? undefined}
+          onAgentReady={() => {
+            setShowAgentModal(false);
+            triggerOdexJob();
+          }}
+        />
+      )}
+
+      {odexJobStatus && (
+        <OdexStatusPanel
+          status={odexJobStatus}
+          onCaptchaDone={async () => {
+            try {
+              await apiCallProtected.post(
+                `/job-create/odex/jobs/${odexJob}/captcha-done/`
+              );
+              ToastNotification({
+                type: "info",
+                message: "Captcha confirmed. Resuming automation...",
+              });
+            } catch {
+              ToastNotification({
+                type: "error",
+                message: "Failed to confirm captcha. Please try again.",
+              });
+            }
+          }}
+        />
       )}
 
       {/* PDF Preview Modal */}

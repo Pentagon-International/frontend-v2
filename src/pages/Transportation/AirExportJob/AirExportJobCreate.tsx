@@ -547,64 +547,6 @@ function AirExportJobCreate() {
       : undefined,
   );
 
-  // Cache the last mapped estimates from jobData (edit/view) and auto-heal if something overwrites them.
-  const lastJobMappedEstimatesRef = useRef<
-    (typeof estimatesForm.values.estimates) | null
-  >(null);
-  const lastAutoHealAtRef = useRef<number>(0);
-
-  // If something overwrites estimates (e.g. a restore effect), re-apply the job-mapped estimates
-  // so dropdown fields don't go blank in edit/view mode.
-  useEffect(() => {
-    if (!jobData) return;
-    if (mode !== "edit" && mode !== "view") return;
-    const expected = lastJobMappedEstimatesRef.current;
-    if (!expected || expected.length === 0) return;
-
-    const current = estimatesForm.values.estimates ?? [];
-    if (current.length !== expected.length) return;
-
-    const hasBlankDropdownRow = current.some((row, idx) => {
-      const exp = expected[idx];
-      const expHas =
-        !!exp?.supplier_code ||
-        !!exp?.supplier_name ||
-        exp?.charge_id != null ||
-        !!exp?.charge_name ||
-        !!exp?.pp_cc ||
-        !!exp?.unit_id ||
-        !!exp?.currency_id;
-      if (!expHas) return false;
-
-      return (
-        !row.supplier_code ||
-        !row.supplier_name ||
-        row.charge_id == null ||
-        !row.charge_name ||
-        !row.pp_cc ||
-        !row.unit_id ||
-        !row.currency_id
-      );
-    });
-
-    if (!hasBlankDropdownRow) return;
-
-    const now = Date.now();
-    if (now - lastAutoHealAtRef.current < 500) return;
-    lastAutoHealAtRef.current = now;
-
-    console.log(
-      "🧾 [AIR_EXPORT_JOB] Detected estimates overwrite. Re-applying job-mapped estimates.",
-      { current, expected },
-    );
-
-    estimatesForm.setFieldValue(
-      "estimates",
-      expected as unknown as typeof estimatesForm.values.estimates,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimatesForm.values.estimates, jobData, mode]);
-
   // Note: Container Details are not used for Air Export Jobs
 
   // Load job data if in edit or view mode - Only initialize once from jobData
@@ -1119,10 +1061,6 @@ function AirExportJobCreate() {
           console.log("🧾 [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied", {
             sanitizedEstimates,
           });
-
-          // Keep a copy so we can detect later overwrites/resets.
-          lastJobMappedEstimatesRef.current =
-            sanitizedEstimates as unknown as typeof estimatesForm.values.estimates;
         }
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed

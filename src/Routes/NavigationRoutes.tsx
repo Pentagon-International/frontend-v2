@@ -1,4 +1,4 @@
-import { Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate, Outlet } from "react-router-dom";
 import RootLayout from "../layout/RootLayout";
 import {
   CallModeEdit,
@@ -6,6 +6,7 @@ import {
   CallModeView,
   CustomerPanMaster,
   Dashboard,
+  EnquiryConversionPage,
   GroupCompany,
   GroupCompanyEdit,
   GroupCompanyView,
@@ -153,6 +154,7 @@ import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
 import PaymentReversalMaster from "../pages/accounts/reverse-payment/PaymentReversalMaster";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
+import UnpostedDocumentsList from "../pages/accounts/invoices/UnpostedDocumentsList";
 import SupplierInvoiceCreate from "../pages/accounts/supplier-invoice/SupplierInvoiceCreate";
 import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/SupplierInvoiceReversal";
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
@@ -178,11 +180,24 @@ import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAllocation";
+import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
+import DebitCreditNoteNonTradeMaster from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeMaster";
+import DebitCreditNoteNonTradeCreate from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeCreate";
+import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeMaster";
+import DebitCreditNoteTradeCreate from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeCreate";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
+import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
+import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
+import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
+import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
+import AirImportDsr from "../pages/Air/AirImportDsr";
+import AirExportDsr from "../pages/Air/AirExportDsr";
+import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
+import OceanExportDsr from "../pages/Ocean/OceanExportDsr";
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -192,8 +207,26 @@ const NavigationRoutes = () => {
     <Routes>
       <Route path="/" element={<RootLayout />}>
         <Route index element={isStaff ? <Dashboard /> : <Dashboard />} />
+        <Route
+          path="/dashboard/enquiry-conversion"
+          element={<EnquiryConversionPage />}
+        />
+        <Route
+          path="/dashboard/call-entry-dashboard"
+          element={<CallEntryDashboardPage />}
+        />
+        <Route
+          path="/dashboard/customer-outstanding-vs-overdue"
+          element={<CustomerOutstandingVsOverdueDashboard />}
+        />
+        <Route
+          path="/dashboard/budget-vs-actual"
+          element={<BudgetVsActualDashboard />}
+        />
         <Route path="/road" element={<Road />} />
         <Route path="/air">
+          <Route path="import-dsr" element={<AirImportDsr />} />
+          <Route path="export-dsr" element={<AirExportDsr />} />
           <Route path="export-job">
             <Route index element={<AirExportJobMaster />} />
             <Route path="create" element={<AirExportJobCreate />} />
@@ -286,6 +319,8 @@ const NavigationRoutes = () => {
             path="import-to-export-booking"
             element={<OceanImportToExportBooking />}
           />
+          <Route path="import-dsr" element={<OceanImportDsr />} />
+          <Route path="export-dsr" element={<OceanExportDsr />} />
           <Route path="export-job">
             <Route index element={<ExportJobMaster />} />
             <Route path="create" element={<ExportJobCreate />} />
@@ -321,10 +356,16 @@ const NavigationRoutes = () => {
           <Route path="trial-balance" element={<TrialBalance />} />
           <Route path="aging-outstanding" element={<AgingOutstanding />} />
           <Route path="subledger-outstanding" element={<SubledgerOutstanding />} />
+          <Route path="purchase-register" element={<PurchaseRegister />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
         <Route path="/job-ledger" element={<JobLedger />} />
+        {/* Generic invoice routes (shared component across modules) */}
+        <Route path="/invoice" element={<InvoiceCreate />} />
+        <Route path="/invoice/edit/:id" element={<InvoiceCreate />} />
+        <Route path="/invoice/view/:id" element={<InvoiceCreate />} />
+        <Route path="/invoice-reverse" element={<InvoiceReverse />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
         <Route path="/receipt/view" element={<ReceiptCreate />} />
@@ -365,16 +406,23 @@ const NavigationRoutes = () => {
           path="/overseas-payment/reversal/view"
           element={<OverseasPaymentCreate isReversal />}
         />
+        <Route path="/unposted-documents" element={<UnpostedDocumentsList />} />
+        <Route path="/invoices" element={<Navigate to="/unposted-documents" replace />} />
         <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
         <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/view/:id" element={<SupplierInvoiceCreate />} />
+        <Route path="/supplier-invoice/edit/:id" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
         <Route path="/supplier-invoice-rcm" element={<SupplierInvoiceRCMMaster />} />
         <Route path="/supplier-invoice-rcm/create" element={<SupplierInvoiceRCMCreate />} />
+        <Route path="/supplier-invoice-rcm/view" element={<SupplierInvoiceRCMCreate />} />
+        <Route path="/supplier-invoice-rcm/edit" element={<SupplierInvoiceRCMCreate />} />
         <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
         <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
         <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
+        <Route path="/supplier-invoice-rcm/reversal/create" element={<SupplierInvoiceReversal />} />
         <Route path="/journal-voucher" element={<JournalVoucherMaster />} />
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />
         <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />
@@ -387,7 +435,20 @@ const NavigationRoutes = () => {
         <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
         <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
-        <Route path="/document-allocation" element={<DocumentAllocation />} />
+        <Route path="/document-allocation" element={<DocumentAllocationList />} />
+        <Route path="/document-allocation/create" element={<DocumentAllocation />} />
+        <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
+          <Route index element={<DebitCreditNoteNonTradeMaster />} />
+          <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
+          <Route path="edit/:id" element={<DebitCreditNoteNonTradeCreate />} />
+          <Route path="view/:id" element={<DebitCreditNoteNonTradeCreate />} />
+        </Route>
+        <Route path="/debit-credit-note-trade" element={<Outlet />}>
+          <Route index element={<DebitCreditNoteTradeMaster />} />
+          <Route path="create" element={<DebitCreditNoteTradeCreate />} />
+          <Route path="edit/:id" element={<DebitCreditNoteTradeCreate />} />
+          <Route path="view/:id" element={<DebitCreditNoteTradeCreate />} />
+        </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

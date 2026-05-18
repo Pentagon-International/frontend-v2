@@ -37,6 +37,19 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
+import useAuthStore from "../../../store/authStore";
+
+function parseYesNoBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (value == null) return false;
+  if (typeof value === "number") return value === 1;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return false;
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "y") return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "n") return false;
+  return Boolean(value);
+}
 
 // Type definitions
 type CountryData = {
@@ -107,6 +120,8 @@ type AddressData = {
   phone_no: string;
   mobile_no: string;
   email: string;
+  trn_no?: string;
+  validity_date?: string | null;
   pan_no?: string;
   gst_id?: string;
   tan_no?: string;
@@ -114,7 +129,8 @@ type AddressData = {
   uin_no?: string;
   gst_registration_status?: string;
   composite_regular?: string;
-  sez?: boolean;
+  sez?: boolean | string | number | null;
+  msme?: boolean | string | number | null;
   pan_aadhaar_link?: boolean;
   Itr_filed?: "Yes" | "No" | "NA" | "";
   tds_threshold_flag?: boolean;
@@ -217,72 +233,82 @@ const customerValidationSchema = yup.object({
     .oneOf(["true", "false"], "Please select a valid option"),
 });
 
+const addressItemSchema = yup.object({
+  // customer_location: yup.string().required("Location is required"),
+  address_type: yup
+    .string()
+    .required("Address type is required")
+    .oneOf(
+      ["Primary", "Secondary", "Billing", "Shipping"],
+      "Please select a valid address type",
+    ),
+  address: yup
+    .string()
+    .required("Address is required")
+    .min(5, "Address must be at least 5 characters")
+    .max(500, "Address must not exceed 500 characters"),
+  country: yup
+    .string()
+    .required("Country is required")
+    .min(2, "Country must be at least 2 characters")
+    .max(50, "Country must not exceed 50 characters"),
+  phone_no: yup
+    .string()
+    .matches(
+      /^$|^[\d\s\-+()]+$/,
+      "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
+    )
+    .max(20, "Phone number must not exceed 20 characters"),
+  mobile_no: yup.string().required("Mobile number is required"),
+  email: yup
+    .string()
+    .email("Please enter a valid email address")
+    .required("Email is required")
+    .max(100, "Email must not exceed 100 characters"),
+  trn_no: yup.string().optional().max(30, "TRN No must not exceed 30 characters"),
+  validity_date: yup.string().nullable().optional(),
+  pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
+  gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
+  tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
+  arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
+  uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
+  gst_registration_status: yup.string().optional(),
+  composite_regular: yup
+    .string()
+    .optional()
+    .oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
+  sez: yup.boolean().optional(),
+  msme: yup.boolean().optional(),
+  latitude: yup
+    .number()
+    .optional()
+    .min(-90, "Latitude must be between -90 and 90")
+    .max(90, "Latitude must be between -90 and 90"),
+  longitude: yup
+    .number()
+    .optional()
+    .min(-180, "Longitude must be between -180 and 180")
+    .max(180, "Longitude must be between -180 and 180"),
+});
+
 const addressValidationSchema = yup.object({
+  addresses_data: yup.array().of(addressItemSchema).min(1, "At least one address is required"),
+});
+
+const addressValidationSchemaCreate = yup.object({
   addresses_data: yup
     .array()
     .of(
-      yup.object({
-        // customer_location: yup
-        //   .string()
-        //   .required("Location is required")
-        //   .min(2, "Location must be at least 2 characters")
-        //   .max(100, "Location must not exceed 100 characters"),
-        address_type: yup
+      addressItemSchema.shape({
+        // PAN/GST mandatory during create for Indian app users only (same condition as GST UI block).
+        pan_no: yup
           .string()
-          .required("Address type is required")
-          .oneOf(
-            ["Primary", "Secondary", "Billing", "Shipping"],
-            "Please select a valid address type",
-          ),
-        address: yup
+          .required("PAN No is required")
+          .max(20, "PAN must not exceed 20 characters"),
+        gst_id: yup
           .string()
-          .required("Address is required")
-          .min(5, "Address must be at least 5 characters")
-          .max(500, "Address must not exceed 500 characters"),
-        country: yup
-          .string()
-          .required("Country is required")
-          .min(2, "Country must be at least 2 characters")
-          .max(50, "Country must not exceed 50 characters"),
-        phone_no: yup
-          .string()
-          .matches(
-            /^$|^[\d\s\-+()]+$/,
-            "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
-          )
-          .max(20, "Phone number must not exceed 20 characters"), // Optional - lanline number
-        mobile_no: yup
-          .string()
-          .required("Mobile number is required")
-          .matches(
-            /^[\d\s\-+()]+$/,
-            "Mobile number can only contain digits, spaces, hyphens, plus signs, and parentheses",
-          )
-          .min(10, "Mobile number must be at least 10 digits")
-          .max(15, "Mobile number must not exceed 15 digits"),
-        email: yup
-          .string()
-          .email("Please enter a valid email address")
-          .required("Email is required")
-          .max(100, "Email must not exceed 100 characters"),
-        pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
-        gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
-        tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
-        arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
-        uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
-        gst_registration_status: yup.string().optional(),
-        composite_regular: yup.string().optional().oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
-        sez: yup.boolean().optional(),
-        latitude: yup
-          .number()
-          .optional()
-          .min(-90, "Latitude must be between -90 and 90")
-          .max(90, "Latitude must be between -90 and 90"),
-        longitude: yup
-          .number()
-          .optional()
-          .min(-180, "Longitude must be between -180 and 180")
-          .max(180, "Longitude must be between -180 and 180"),
+          .required("GST No is required")
+          .max(20, "GST No must not exceed 20 characters"),
       }),
     )
     .min(1, "At least one address is required"),
@@ -435,6 +461,9 @@ const AddressCard = memo(
     index,
     isViewMode,
     isVendorMasterRoute,
+    isDubaiUser,
+    isIndiaUser,
+    panGstRequired,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -456,6 +485,9 @@ const AddressCard = memo(
     index: number;
     isViewMode: boolean;
     isVendorMasterRoute: boolean;
+    isDubaiUser: boolean;
+    isIndiaUser: boolean;
+    panGstRequired: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -699,9 +731,41 @@ const AddressCard = memo(
               {...addressForm.getInputProps(`addresses_data.${index}.email`)}
             />
             </Grid.Col>
+            {isDubaiUser && (
+              <>
+                <Grid.Col span={4}>
+                  <TextInput
+                    label="TRN No"
+                    placeholder="Enter TRN no"
+                    disabled={isViewMode}
+                    {...addressForm.getInputProps(
+                      `addresses_data.${index}.trn_no`,
+                    )}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="Validity Date"
+                    placeholder="Select validity date"
+                    disabled={isViewMode}
+                    value={parseDateYYYYMMDD(
+                      addressForm.values.addresses_data[index]?.validity_date ??
+                        null,
+                    )}
+                    onChange={(value) =>
+                      addressForm.setFieldValue(
+                        `addresses_data.${index}.validity_date`,
+                        formatDateYYYYMMDD(value),
+                      )
+                    }
+                  />
+                </Grid.Col>
+              </>
+            )}
             </Grid>
           </Card>
 
+          {isIndiaUser && (
           <Card withBorder radius="md" padding="md">
             <Box
               mb="sm"
@@ -721,6 +785,7 @@ const AddressCard = memo(
             <Grid.Col span={4}>
               <TextInput
                 label="PAN No"
+                withAsterisk={panGstRequired && !isViewMode}
                 placeholder="Enter PAN number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
@@ -729,6 +794,7 @@ const AddressCard = memo(
             <Grid.Col span={4}>
               <TextInput
                 label="GST No"
+                withAsterisk={panGstRequired && !isViewMode}
                 placeholder="Enter GST number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
@@ -804,22 +870,45 @@ const AddressCard = memo(
             )}
 
             <Grid.Col span={4}>
-              <Box pt={22}>
-                <Switch
-                  label="SEZ"
-                  description={
-                    addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
-                  }
-                  disabled={isViewMode}
-                  checked={Boolean(addressForm.values.addresses_data[index]?.sez)}
-                  onChange={(e) =>
-                    addressForm.setFieldValue(
-                      `addresses_data.${index}.sez`,
-                      e.currentTarget.checked,
-                    )
-                  }
-                />
-              </Box>
+              <Select
+                label="SEZ"
+                placeholder="Select"
+                disabled={isViewMode}
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={
+                  addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
+                }
+                onChange={(value) =>
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.sez`,
+                    value === "Yes",
+                  )
+                }
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <Select
+                label="MSME"
+                placeholder="Select"
+                disabled={isViewMode}
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={
+                  addressForm.values.addresses_data[index]?.msme ? "Yes" : "No"
+                }
+                onChange={(value) =>
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.msme`,
+                    value === "Yes",
+                  )
+                }
+              />
             </Grid.Col>
 
             {isVendorMasterRoute && (
@@ -892,6 +981,7 @@ const AddressCard = memo(
             </Grid.Col>
             </Grid>
           </Card>
+          )}
         </Stack>
       </Card>
     );
@@ -921,6 +1011,15 @@ function CustomerCreate() {
   const [active, setActive] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const userCountry = useAuthStore((s) => s.user?.country);
+  const isIndiaUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("india");
+  const isDubaiUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "AE" ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("united arab emirates") ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("uae") ||
+    String(userCountry?.country_name ?? "").toLowerCase().includes("dubai");
   const [selectedCountries, setSelectedCountries] = useState<
     Record<number, string>
   >({});
@@ -950,6 +1049,7 @@ function CustomerCreate() {
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
   const isCreateMode = !params.id;
+  const maxStep = isVendorMasterRoute ? 2 : 1;
 
   const tdsDisplayForm = useForm<TdsDisplayFormValues>({
     initialValues: {
@@ -1201,6 +1301,8 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          trn_no: "",
+          validity_date: null,
           pan_no: "",
           gst_id: "",
           tan_no: "",
@@ -1209,6 +1311,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1239,6 +1342,8 @@ function CustomerCreate() {
           phone_no: "",
           mobile_no: "",
           email: "",
+          trn_no: "",
+          validity_date: null,
           pan_no: "",
           gst_id: "",
           tan_no: "",
@@ -1247,6 +1352,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1255,8 +1361,14 @@ function CustomerCreate() {
         },
       ],
     },
-    // Only apply validation in edit mode, not in view mode
-    validate: isViewMode ? undefined : yupResolver(addressValidationSchema),
+    // Create: PAN/GST mandatory only for Indian app users (GST section visible). Foreign users omit these fields.
+    validate: isViewMode
+      ? undefined
+      : yupResolver(
+          isCreateMode && isIndiaUser
+            ? addressValidationSchemaCreate
+            : addressValidationSchema,
+        ),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,
@@ -1501,6 +1613,8 @@ function CustomerCreate() {
                 phone_no: addr.phone_no || addr.landline || addr.phone || "",
                 mobile_no: addr.mobile_no || addr.mobile || "",
                 email: addr.email || "",
+                trn_no: (addr as AddressData).trn_no ?? "",
+                validity_date: (addr as AddressData).validity_date ?? null,
                 pan_no: addr.pan_no ?? "",
                 pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
                 Itr_filed: (addr as AddressData).Itr_filed ?? "",
@@ -1513,7 +1627,12 @@ function CustomerCreate() {
                 uin_no: addr.uin_no ?? "",
                 gst_registration_status: addr.gst_registration_status ?? "",
                 composite_regular: addr.composite_regular ?? "",
-                sez: Boolean(addr.sez),
+                sez: parseYesNoBoolean(addr.sez),
+                msme: parseYesNoBoolean(
+                  addr.msme ??
+                    (addr as unknown as { msme_flag?: unknown }).msme_flag ??
+                    (addr as unknown as { msme_status?: unknown }).msme_status,
+                ),
                 latitude: addr.latitude || 0,
                 longitude: addr.longitude || 0,
               };
@@ -1538,6 +1657,7 @@ function CustomerCreate() {
               gst_registration_status: "",
               composite_regular: "",
               sez: false,
+              msme: false,
               latitude: 0,
               longitude: 0,
             },
@@ -1744,6 +1864,8 @@ function CustomerCreate() {
             phone_no: addr.phone_no || addr.landline || addr.phone || "",
             mobile_no: addr.mobile_no || addr.mobile || "",
             email: addr.email || "",
+            trn_no: (addr as AddressData).trn_no ?? "",
+            validity_date: (addr as AddressData).validity_date ?? null,
             pan_no: addr.pan_no ?? "",
             pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
             Itr_filed: (addr as AddressData).Itr_filed ?? "",
@@ -1756,7 +1878,8 @@ function CustomerCreate() {
             uin_no: addr.uin_no ?? "",
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
-            sez: Boolean(addr.sez),
+            sez: parseYesNoBoolean(addr.sez),
+            msme: parseYesNoBoolean(addr.msme),
             latitude: addr.latitude || 0,
             longitude: addr.longitude || 0,
           };
@@ -1781,6 +1904,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          msme: false,
           latitude: 0,
           longitude: 0,
         },
@@ -1951,6 +2075,8 @@ function CustomerCreate() {
       phone_no: "",
       mobile_no: "",
       email: "",
+      trn_no: "",
+      validity_date: null,
       pan_no: "",
       gst_id: "",
       tan_no: "",
@@ -1959,6 +2085,7 @@ function CustomerCreate() {
       gst_registration_status: "",
       composite_regular: "",
       sez: false,
+      msme: false,
       latitude: 0,
       longitude: 0,
     };
@@ -2223,6 +2350,8 @@ function CustomerCreate() {
           ...addr,
           address_type:
             addr.address_type === "Primary" ? "Primary" : addr.address_type,
+          trn_no: addr.trn_no ?? "",
+          validity_date: addr.validity_date ?? null,
           pan_no: addr.pan_no ?? "",
           gst_id: addr.gst_id ?? "",
           tan_no: addr.tan_no ?? "",
@@ -2230,7 +2359,8 @@ function CustomerCreate() {
           uin_no: addr.uin_no ?? "",
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
-          sez: Boolean(addr.sez),
+          sez: parseYesNoBoolean(addr.sez),
+          msme: parseYesNoBoolean(addr.msme),
           ...(isVendorMasterRoute
             ? {
                 pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2305,6 +2435,8 @@ function CustomerCreate() {
             ...addr,
             address_type:
               addr.address_type === "Primary" ? "Primary" : addr.address_type,
+            trn_no: addr.trn_no ?? "",
+            validity_date: addr.validity_date ?? null,
             pan_no: addr.pan_no ?? "",
             gst_id: addr.gst_id ?? "",
             tan_no: addr.tan_no ?? "",
@@ -2312,7 +2444,8 @@ function CustomerCreate() {
             uin_no: addr.uin_no ?? "",
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
-            sez: Boolean(addr.sez),
+          sez: parseYesNoBoolean(addr.sez),
+          msme: parseYesNoBoolean(addr.msme),
             ...(isVendorMasterRoute
               ? {
                   pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2376,6 +2509,42 @@ function CustomerCreate() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRelationshipMapping = () => {
+    if (isViewMode) return;
+
+    // Validate both forms before navigating to relationship mapping
+    const customerResult = customerForm.validate();
+    const addressResult = addressForm.validate();
+
+    if (!customerResult.hasErrors && !addressResult.hasErrors) {
+      if (isCreateMode) {
+        navigate("/master/customer-relationship-mapping/create", {
+          state: {
+            fromCustomerMaster: true,
+            customerFormData: customerForm.values,
+            addressFormData: addressForm.values,
+          },
+        });
+        return;
+      }
+
+      if (isEditMode && customerId) {
+        navigate("/master/customer-relationship-mapping/edit", {
+          state: {
+            customer_id: Number(customerId),
+            fromCustomerMaster: true,
+            customerFormData: customerForm.values,
+            addressFormData: addressForm.values,
+          },
+        });
+      }
+    } else {
+      // Force re-render to show validation errors inline
+      if (customerResult.hasErrors) customerForm.validate();
+      if (addressResult.hasErrors) addressForm.validate();
     }
   };
 
@@ -2509,40 +2678,53 @@ function CustomerCreate() {
         </Box>
       )}
 
-      {/* Header */}
-      <Group justify="space-between" align="center" mb="lg">
-        <Text size="xl" fw={600} c="#105476">
-          {isCreateMode
-            ? isVendorMasterRoute
-              ? "Create Vendor"
-              : "Create Customer"
-            : isEditMode
-              ? isVendorMasterRoute
-                ? "Edit Vendor"
-                : "Edit Customer"
-              : isVendorMasterRoute
-                ? "View Vendor"
-                : "View Customer"}
-        </Text>
-
-        {!isViewMode && (
-          <Button
-            rightSection={<IconCheck size={16} />}
-            onClick={handleFinalSubmit}
-            color="teal"
-            disabled={isSubmitting}
-            loading={isSubmitting}
-          >
-            {isCreateMode ? "Create" : "Update"}
-          </Button>
-        )}
-      </Group>
-
-      <Tabs
-        value={String(active)}
-        onChange={(v) => v !== null && setActive(Number(v))}
-        color="#105476"
+      <Box
+        style={{
+          backgroundColor: "#ffffff",
+          borderRadius: 8,
+          display: "flex",
+          flexDirection: "column",
+          height: "calc(100vh - 100px)",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
       >
+        <Box
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "16px",
+            backgroundColor: "#F8F8F8",
+          }}
+        >
+          {/* Header */}
+          <Group justify="space-between" align="center" mb="lg">
+            <Text size="xl" fw={600} c="#105476">
+              {isCreateMode
+                ? isVendorMasterRoute
+                  ? "Create Vendor"
+                  : "Create Customer"
+                : isEditMode
+                  ? isVendorMasterRoute
+                    ? "Edit Vendor"
+                    : "Edit Customer"
+                  : isVendorMasterRoute
+                    ? "View Vendor"
+                    : "View Customer"}
+            </Text>
+          </Group>
+
+          <Tabs
+            value={String(active)}
+            onChange={(v) => v !== null && setActive(Number(v))}
+            color="#105476"
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+          >
         <Tabs.List
           mb="md"
           style={{
@@ -2600,7 +2782,15 @@ function CustomerCreate() {
           )}
         </Tabs.List>
 
-        <Tabs.Panel value="0">
+        <Tabs.Panel value="0" style={{ flex: 1, minHeight: 0 }}>
+          <Box
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              paddingBottom: "16px",
+              backgroundColor: "#F8F8F8",
+            }}
+          >
           <Box mt="md">
             <Card shadow="sm" padding="lg" radius="md">
               <Grid gutter={"sm"}>
@@ -2717,33 +2907,20 @@ function CustomerCreate() {
                 )}
               </Grid>
 
-              <Group justify="space-between" mt="xl">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => navigate(baseMasterPath)}
-                >
-                  {isVendorMasterRoute
-                    ? "Back to Vendor List"
-                    : "Back to Customer List"}
-                </Button>
-                <Group>
-                  <Button
-                    variant="default"
-                    onClick={() => setActive(1)}
-                    rightSection={<IconArrowRight size={14} />}
-                    disabled={isSubmitting}
-                  >
-                    Next
-                  </Button>
-                </Group>
-              </Group>
             </Card>
+          </Box>
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel value="1">
+        <Tabs.Panel value="1" style={{ flex: 1, minHeight: 0 }}>
+          <Box
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              paddingBottom: "16px",
+              backgroundColor: "#F8F8F8",
+            }}
+          >
           <Box mt="md">
             <Card shadow="sm" padding="xs" radius="md">
               {/* <Text size="sm" fw={500}>
@@ -2753,10 +2930,13 @@ function CustomerCreate() {
               <Stack>
                 {addressForm.values.addresses_data.map((_, index) => (
                   <AddressCard
-                    key={`address-${index}-${addressForm.values.addresses_data[index]?.city || ""}-${addressStateRestored}`}
+                    key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
                     index={index}
                     isViewMode={isViewMode}
                     isVendorMasterRoute={isVendorMasterRoute}
+                    isDubaiUser={isDubaiUser}
+                    isIndiaUser={isIndiaUser}
+                    panGstRequired={isCreateMode && isIndiaUser}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}
@@ -2789,129 +2969,21 @@ function CustomerCreate() {
                   Add Address
                 </Button>
               </Group>
-
-              <Group justify="space-between" mt="xl">
-                <Button
-                  variant="default"
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => setActive(0)}
-                  disabled={isSubmitting}
-                >
-                  Back
-                </Button>
-                <Group>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    onClick={() => navigate(baseMasterPath)}
-                    disabled={isSubmitting}
-                  >
-                    {isViewMode ? "Back to List" : "Cancel"}
-                  </Button>
-                  {isCreateMode && !isViewMode && (
-                    <Button
-                      bg="#105476"
-                      onClick={() => {
-                        // Validate both forms before navigating to relationship mapping
-                        const customerResult = customerForm.validate();
-                        const addressResult = addressForm.validate();
-
-                        if (
-                          !customerResult.hasErrors &&
-                          !addressResult.hasErrors
-                        ) {
-                          // Navigate to customer relationship mapping with customer form data
-                          navigate(
-                            "/master/customer-relationship-mapping/create",
-                            {
-                              state: {
-                                fromCustomerMaster: true,
-                                customerFormData: customerForm.values,
-                                addressFormData: addressForm.values,
-                              },
-                            },
-                          );
-                        } else {
-                          // Force re-render to show validation errors inline
-                          if (customerResult.hasErrors) {
-                            customerForm.validate();
-                          }
-                          if (addressResult.hasErrors) {
-                            addressForm.validate();
-                          }
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      style={{ border: "1px solid #105476" }}
-                      color="white"
-                    >
-                      {isVendorMasterRoute
-                        ? "Add Vendor Relationships"
-                        : "Add Customer Relationships"}
-                    </Button>
-                  )}
-                  {isEditMode && !isViewMode && customerId && (
-                    <Button
-                      bg="#105476"
-                      onClick={() => {
-                        // Validate both forms before navigating to relationship mapping
-                        const customerResult = customerForm.validate();
-                        const addressResult = addressForm.validate();
-
-                        if (
-                          !customerResult.hasErrors &&
-                          !addressResult.hasErrors
-                        ) {
-                          // Navigate to customer relationship mapping edit with customer_id
-                          navigate(
-                            "/master/customer-relationship-mapping/edit",
-                            {
-                              state: {
-                                customer_id: Number(customerId),
-                                fromCustomerMaster: true,
-                                customerFormData: customerForm.values,
-                                addressFormData: addressForm.values,
-                              },
-                            },
-                          );
-                        } else {
-                          // Force re-render to show validation errors inline
-                          if (customerResult.hasErrors) {
-                            customerForm.validate();
-                          }
-                          if (addressResult.hasErrors) {
-                            addressForm.validate();
-                          }
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      style={{ border: "1px solid #105476" }}
-                      color="white"
-                    >
-                      {isVendorMasterRoute
-                        ? "Edit Vendor Relationships"
-                        : "Edit Customer Relationships"}
-                    </Button>
-                  )}
-                  {isVendorMasterRoute && !isViewMode && (
-                    <Button
-                      rightSection={<IconArrowRight size={14} />}
-                      onClick={() => setActive(2)}
-                      color="#105476"
-                      disabled={isSubmitting}
-                    >
-                      Next
-                    </Button>
-                  )}
-
-                </Group>
-              </Group>
             </Card>
+          </Box>
           </Box>
         </Tabs.Panel>
 
         {isVendorMasterRoute && (
-          <Tabs.Panel value="2">
+          <Tabs.Panel value="2" style={{ flex: 1, minHeight: 0 }}>
+            <Box
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                paddingBottom: "16px",
+                backgroundColor: "#F8F8F8",
+              }}
+            >
             <Box mt="md">
               <Card shadow="sm" padding="lg" radius="md">
                 <Stack gap="md">
@@ -3286,35 +3358,135 @@ function CustomerCreate() {
                     </Button>
                   </Group>
                 </Stack>
-
-                <Group justify="space-between" mt="xl">
-                  <Button
-                    variant="default"
-                    leftSection={<IconArrowLeft size={16} />}
-                    onClick={() => setActive(1)}
-                    disabled={isSubmitting}
-                  >
-                    Back
-                  </Button>
-                  <Group>
-                    <Button
-                      variant="outline"
-                      color="#105476"
-                      onClick={() => navigate(baseMasterPath)}
-                      disabled={isSubmitting}
-                    >
-                      {isViewMode ? "Back to List" : "Cancel"}
-                    </Button>
-                    {!isViewMode && (
-                      <Box />
-                    )}
-                  </Group>
-                </Group>
               </Card>
+            </Box>
             </Box>
           </Tabs.Panel>
         )}
-      </Tabs>
+          </Tabs>
+        </Box>
+
+        {/* Footer Buttons */}
+        <Box
+          style={{
+            borderTop: "1px solid #e9ecef",
+            padding: "20px 32px",
+            backgroundColor: "#ffffff",
+          }}
+        >
+        <Group justify="space-between">
+          <Group gap="sm">
+            {active > 0 && (
+              <Button
+                variant="outline"
+                color="gray"
+                size="sm"
+                leftSection={<IconArrowLeft size={16} />}
+                styles={{
+                  root: {
+                    borderColor: "#d0d0d0",
+                    color: "#666",
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  },
+                }}
+                onClick={() => setActive((v) => Math.max(0, v - 1))}
+                disabled={isSubmitting}
+              >
+                Back
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              color="gray"
+              size="sm"
+              styles={{
+                root: {
+                  borderColor: "#d0d0d0",
+                  color: "#666",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                },
+              }}
+              onClick={() => navigate(baseMasterPath)}
+              disabled={isSubmitting}
+            >
+              {isViewMode ? "Back to List" : "Cancel"}
+            </Button>
+          </Group>
+
+          <Group gap="sm">
+            {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
+              <Button
+                bg="#105476"
+                onClick={handleRelationshipMapping}
+                disabled={isSubmitting}
+                style={{ border: "1px solid #105476" }}
+                color="white"
+                size="sm"
+              >
+                {isCreateMode
+                  ? isVendorMasterRoute
+                    ? "Add Vendor Relationships"
+                    : "Add Customer Relationships"
+                  : isVendorMasterRoute
+                    ? "Edit Vendor Relationships"
+                    : "Edit Customer Relationships"}
+              </Button>
+            )}
+
+            {active < maxStep && (
+              <Button
+                size="sm"
+                style={{
+                  backgroundColor: "#105476",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                }}
+                rightSection={<IconArrowRight size={14} />}
+                onClick={() => setActive((v) => Math.min(maxStep, v + 1))}
+                disabled={isSubmitting}
+              >
+                Next
+              </Button>
+            )}
+
+            {active === maxStep && !isViewMode && (
+              <Button
+                size="sm"
+                style={{
+                  backgroundColor: "#105476",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                  fontStyle: "medium",
+                }}
+                rightSection={
+                  isSubmitting ? <Loader size={16} color="white" /> : <IconCheck size={16} />
+                }
+                onClick={handleFinalSubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting
+                  ? isCreateMode
+                    ? isVendorMasterRoute
+                      ? "Creating Vendor..."
+                      : "Creating Customer..."
+                    : isVendorMasterRoute
+                      ? "Updating Vendor..."
+                      : "Updating Customer..."
+                  : isCreateMode
+                    ? "Create"
+                    : "Update"}
+              </Button>
+            )}
+          </Group>
+        </Group>
+        </Box>
+      </Box>
     </Box>
   );
 }

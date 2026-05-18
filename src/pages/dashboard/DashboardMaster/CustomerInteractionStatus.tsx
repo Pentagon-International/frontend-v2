@@ -1,6 +1,13 @@
 import { Box, Text, Group } from "@mantine/core";
 import { DateRangeInput } from "../../../components";
 import CustomerInteractionStatusCard from "./CustomerInteractionStatusCard";
+import {
+  dashboardPanelShell,
+  dashboardPanelHeaderBand,
+  dashboardPanelBody,
+  dashboardPanelTitleStyle,
+  dashboardViewAllStyle,
+} from "./dashboardPanelStyles";
 
 interface CustomerInteractionData {
   gain: number;
@@ -45,34 +52,20 @@ const CustomerInteractionStatus = ({
   onNotVisitedClick,
 }: CustomerInteractionStatusProps) => {
   return (
-    <Box
-      style={{
-        border: "1px solid #F7F7F7",
-        borderRadius: "8px",
-        padding: "12px",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <Group justify="space-between" align="center" mb="md">
-        <Text
-          size="md"
-          fw={500}
-          c="#22252B"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          Customer Interaction Status
-        </Text>
-        <Group gap="xs">
+    <Box style={dashboardPanelShell}>
+      <Box style={dashboardPanelHeaderBand}>
+        <Group justify="space-between" align="center" wrap="nowrap" gap="sm" w="100%">
+          <Box style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <Text style={dashboardPanelTitleStyle}>
+              Customer Interaction Status
+            </Text>
+          </Box>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
           {handleViewAll && (
             <Text
               size="sm"
               c="#105476"
-              style={{
-                textDecoration: "underline",
-                cursor: "pointer",
-              }}
+              style={dashboardViewAllStyle}
               onClick={handleViewAll}
             >
               View All
@@ -116,10 +109,11 @@ const CustomerInteractionStatus = ({
               input: { fontSize: "12px" },
             }}
           /> */}
+          </Group>
         </Group>
-      </Group>
+      </Box>
 
-      <Box style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <Box style={dashboardPanelBody}>
         <CustomerInteractionStatusCard
           data={data}
           loading={loading}

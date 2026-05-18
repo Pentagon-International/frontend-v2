@@ -77,6 +77,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/air/import-to-export-booking")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Import to Export Booking");
+    } else if (path.startsWith("/air/import-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Air import DSR");
+    } else if (path.startsWith("/air/export-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Air export DSR");
     } else if (path.startsWith("/air")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Export Job Generation"); // Default
@@ -107,12 +113,30 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport/import-to-export-booking")) {
       setActiveNav("Transportation");
       setActiveSubNav("Ocean Import to Export Booking");
+    } else if (path.startsWith("/SeaExport/import-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Ocean Import DSR");
+    } else if (path.startsWith("/SeaExport/export-dsr")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Ocean Export DSR");
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Job Generation"); // Default to FCL
+    } else if (path.startsWith("/payment-request-approval")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Payment Request Approval");
+    } else if (path.startsWith("/supplier-invoice-rcm")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Supplier Invoice RCM");
     } else if (path.startsWith("/supplier-invoice/reversal")) {
       setActiveNav("Desk");
-      setActiveSubNav("Supplier Invoice Reverse");
+      setActiveSubNav("Supplier Invoice Reversal");
+    } else if (path.startsWith("/invoice-reverse")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Invoice Reverse");
+    } else if (path.startsWith("/unposted-documents") || path === "/invoices") {
+      setActiveNav("Desk");
+      setActiveSubNav("Unposted Documents");
     } else if (path.startsWith("/supplier-invoice")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice");
@@ -128,9 +152,36 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/payment/reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment Reversal");
+    } else if (path.startsWith("/overseas-payment")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Overseas Payment");
     } else if (path.startsWith("/payment")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment");
+    } else if (path.startsWith("/journal-voucher-reversal")) {
+      setActiveNav("Desk");
+      setActiveSubNav("JournalVoucherReversal");
+    } else if (path.startsWith("/journal-voucher")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Journal Voucher");
+    } else if (path.startsWith("/subledger-enquiry")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Subledger Enquiry");
+    } else if (path.startsWith("/document-allocation")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Document Allocation");
+    } else if (path.startsWith("/debit-credit-note-trade")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Debit/Credit Note Trade");
+    } else if (path.startsWith("/debit-credit-note-non-trade")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Debit/Credit Note Non Trade");
+    } else if (path.startsWith("/hbl-document-manager")) {
+      setActiveNav("Jobcreation");
+      setActiveSubNav("");
+    } else if (path === "/invoice" || path.startsWith("/invoice/")) {
+      setActiveNav("Invoice");
+      setActiveSubNav("");
     } else if (path.startsWith("/accounts")) {
       setActiveNav("Desk");
       setActiveSubNav("Accounts");
@@ -146,9 +197,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/help")) {
       setActiveNav("System");
       setActiveSubNav("Help");
+    } else if (path.startsWith("/dashboard/enquiry-conversion")) {
+      setActiveNav("Dashboard");
+      setActiveSubNav("Enquiry Conversion");
     } else if (path === "/") {
       setActiveNav("Dashboard");
-      setActiveSubNav("");
+      setActiveSubNav("Overview");
     } else if (path === "/get-rate") {
       setActiveNav("Sales");
       setActiveSubNav("Enquiry");

@@ -11,7 +11,7 @@ import {
   Tabs,
   Table,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronRight,
@@ -162,12 +162,11 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
 };
 
 function clampAmount(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
-  const maxVal = 99999999.99;
-  if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
-  return rounded;
+  if (value === null || value === undefined)
+    return value === undefined ? null : null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
 }
 
 type ChargeItem = {
@@ -232,6 +231,7 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
 
 type ReversableDataResponse = {
   id?: number;
+  customer_id?: number;
   state_id?: number;
   state_name?: string;
   currency_id?: number;
@@ -273,6 +273,118 @@ type ReversableDataResponse = {
   }>;
 };
 
+function applyReversableDataToReverseForm(
+  data: ReversableDataResponse,
+  form: UseFormReturnType<InvoiceFormData>,
+  opts: {
+    setIsAgentInvoice: (v: boolean) => void;
+    setBillToDisplayName: (v: string | null) => void;
+    emptyDaybook: boolean;
+  },
+) {
+  opts.setIsAgentInvoice(data.is_agent === true);
+  const roeNum =
+    data.roe != null
+      ? typeof data.roe === "string"
+        ? parseFloat(data.roe)
+        : data.roe
+      : null;
+  opts.setBillToDisplayName(data.bill_to_name ?? null);
+  form.setValues({
+    bill_to: data.bill_to ?? "",
+    address: data.address ?? "",
+    state: data.state_id != null ? String(data.state_id) : "",
+    gstn: data.gstn ?? "",
+    shipment_no: data.shipment_no ?? "",
+    daybook_id:
+      opts.emptyDaybook
+        ? ""
+        : data.day_book_id != null
+          ? String(data.day_book_id)
+          : "",
+    document_date: normalizeDate(data.document_date ?? null),
+    due_date: normalizeDate(data.due_date ?? null),
+    currency: data.currency_code ?? "",
+    roe: Number.isFinite(roeNum) ? roeNum : null,
+    narration: data.narration ?? "",
+    irn_no: data.irn_no ?? "",
+    charges:
+      data.charges && data.charges.length > 0
+        ? data.charges.map((c) => {
+            const noOfUnit =
+              c.no_of_unit != null
+                ? typeof c.no_of_unit === "string"
+                  ? parseFloat(c.no_of_unit)
+                  : c.no_of_unit
+                : null;
+            const roe =
+              c.roe != null
+                ? typeof c.roe === "string"
+                  ? parseFloat(c.roe)
+                  : c.roe
+                : null;
+            const amountPerUnit =
+              c.amount_per_unit != null
+                ? typeof c.amount_per_unit === "string"
+                  ? parseFloat(c.amount_per_unit)
+                  : c.amount_per_unit
+                : null;
+            const amount =
+              c.amount != null
+                ? typeof c.amount === "string"
+                  ? parseFloat(c.amount)
+                  : c.amount
+                : null;
+            const amountInLocal =
+              c.amount_in_local != null
+                ? typeof c.amount_in_local === "string"
+                  ? parseFloat(c.amount_in_local)
+                  : c.amount_in_local
+                : null;
+            const headerAmount =
+              c.amount_in_header != null
+                ? typeof c.amount_in_header === "string"
+                  ? parseFloat(c.amount_in_header)
+                  : c.amount_in_header
+                : null;
+            return {
+              id: c.id ?? null,
+              charge_id: c.charge_id ?? null,
+              charge_name: c.charge_name ?? "",
+              shipment_id: c.shipment_id ?? c.shipment_no ?? "",
+              unit_code: c.unit_code ?? "",
+              no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
+              currency: c.currency_code ?? "",
+              roe: Number.isFinite(roe) ? roe : null,
+              amount_per_unit: Number.isFinite(amountPerUnit)
+                ? amountPerUnit
+                : null,
+              amount: Number.isFinite(amount) ? amount : null,
+              header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
+              amount_in_local: Number.isFinite(amountInLocal)
+                ? amountInLocal
+                : null,
+              tax_code: c.tax_code ?? "",
+              dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+            };
+          })
+        : [],
+  });
+}
+
+function firstNonEmptyString(...vals: unknown[]): string {
+  const junk = new Set(["false", "true", "null", "undefined", "none"]);
+  for (const v of vals) {
+    if (v === false || v === true) continue;
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (!s) continue;
+    if (junk.has(s.toLowerCase())) continue;
+    return s;
+  }
+  return "";
+}
+
 function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -283,6 +395,16 @@ function InvoiceReverse() {
         (b: { is_default?: boolean }) => b.is_default === true,
       ) as { currency?: { currency_code?: string } } | undefined
     )?.currency?.currency_code ?? "";
+
+  const returnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const navigateBack = useCallback(() => {
+    if (returnTo) navigate(returnTo);
+    else navigate(-1);
+  }, [returnTo, navigate]);
+
+  const [reverseDocLabel, setReverseDocLabel] = useState("");
+  const [invoiceDocLabel, setInvoiceDocLabel] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -478,49 +600,63 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrencies, getRoeValue]);
 
-  // Auto-calculate amount (currency amount) when no_of_unit, amount_per_unit, or roe changes: amount = no_of_unit * roe * amount_per_unit
+  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit (InvoiceCreate parity — charge ROE is not multiplied here)
   const chargeAmountPerUnits = form.values.charges
     .map((c) => c.amount_per_unit)
     .join(",");
   const chargeNoOfUnits = form.values.charges
     .map((c) => c.no_of_unit)
     .join(",");
-  const chargeRoes = form.values.charges.map((c) => c.roe).join(",");
+
   useEffect(() => {
     const updatedCharges = form.values.charges.map((charge) => {
       if (
         charge.amount_per_unit != null &&
         charge.amount_per_unit > 0 &&
         charge.no_of_unit != null &&
-        charge.no_of_unit > 0 &&
-        charge.roe != null &&
-        charge.roe > 0
+        charge.no_of_unit > 0
       ) {
-        const calculatedAmount =
-          charge.no_of_unit * charge.roe * charge.amount_per_unit;
+        const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
         const clamped = clampAmount(calculatedAmount);
-        if (clamped != null && clamped > 0 && clamped !== charge.amount) {
-          return { ...charge, amount: clamped };
+        if (clamped != null && clamped !== charge.amount) {
+          return {
+            ...charge,
+            amount: clamped,
+          };
         }
       }
+
       return charge;
     });
+
     const hasChanges = updatedCharges.some(
       (charge, index) => charge.amount !== form.values.charges[index]?.amount,
     );
-    if (hasChanges) form.setFieldValue("charges", updatedCharges);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits, chargeRoes]);
 
-  // Auto-calculate amount_in_local when amount or charge roe changes: amount_in_local = amount * roe
+    if (hasChanges) {
+      form.setFieldValue("charges", updatedCharges);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeAmountPerUnits, chargeNoOfUnits]);
+
+  // Auto-calculate amount_in_local as: amount (currency_amount) * charge.roe — and keep header_amount in sync (InvoiceCreate parity)
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
   const chargeRoesForLocal = form.values.charges.map((c) => c.roe).join(",");
+
   useEffect(() => {
+    const billingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+    const topRoe =
+      form.values.roe != null && form.values.roe > 0
+        ? Number(form.values.roe)
+        : null;
+
     const updatedCharges = form.values.charges.map((charge) => {
       if (
-        charge.amount != null &&
+        charge.amount !== null &&
+        charge.amount !== undefined &&
         charge.amount > 0 &&
-        charge.roe != null &&
+        charge.roe !== null &&
+        charge.roe !== undefined &&
         charge.roe > 0
       ) {
         const calculatedLocalAmount = charge.amount * charge.roe;
@@ -530,16 +666,35 @@ function InvoiceReverse() {
           clamped > 0 &&
           clamped !== charge.amount_in_local
         ) {
-          return { ...charge, amount_in_local: clamped };
+          const chargeCurr = (charge.currency ?? "").trim().toUpperCase();
+          const newHeaderAmount =
+            billingCurrency && chargeCurr && billingCurrency === chargeCurr
+              ? clamped
+              : topRoe != null
+                ? clampAmount(clamped / topRoe)
+                : clamped;
+          return {
+            ...charge,
+            amount_in_local: clamped,
+            header_amount:
+              newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
+          };
         }
       }
+
       return charge;
     });
+
     const hasChanges = updatedCharges.some(
       (charge, index) =>
-        charge.amount_in_local !== form.values.charges[index]?.amount_in_local,
+        charge.amount_in_local !==
+          form.values.charges[index]?.amount_in_local ||
+        charge.header_amount !== form.values.charges[index]?.header_amount,
     );
-    if (hasChanges) form.setFieldValue("charges", updatedCharges);
+
+    if (hasChanges) {
+      form.setFieldValue("charges", updatedCharges);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmounts, chargeRoesForLocal]);
 
@@ -705,16 +860,80 @@ function InvoiceReverse() {
   ]);
 
   useEffect(() => {
-    const docNo = (location.state as { document_no?: string } | null)
-      ?.document_no;
-    if (!docNo?.trim()) {
+    type NavState = {
+      document_no?: string;
+      financeReverseRecord?: ReversableDataResponse;
+      reverse_document_no?: string;
+      invoice_document_no?: string;
+    } | null;
+    const st = location.state as NavState;
+    const prebuilt = st?.financeReverseRecord;
+
+    if (prebuilt && typeof prebuilt === "object") {
+      let cancelled = false;
+      setLoading(true);
+      setLoadError(null);
+      applyReversableDataToReverseForm(prebuilt as ReversableDataResponse, form, {
+        setIsAgentInvoice,
+        setBillToDisplayName,
+        emptyDaybook: false,
+      });
+      setDocumentNo(String(prebuilt.document_no ?? st?.document_no ?? ""));
+      const p = prebuilt as Record<string, unknown>;
+      setReverseDocLabel(
+        firstNonEmptyString(
+          st?.reverse_document_no,
+          p.reverse_document_no,
+          p.document_no,
+        ),
+      );
+      setInvoiceDocLabel(
+        firstNonEmptyString(
+          st?.invoice_document_no,
+          p.invoice_document_no,
+          p.invoice_no,
+          p.original_invoice_no,
+          p.reference_document_no,
+          p.ref_invoice_no,
+          typeof p.invoice === "object" &&
+            p.invoice !== null &&
+            (p.invoice as Record<string, unknown>).document_no,
+        ),
+      );
+      if (prebuilt.id != null && Number(prebuilt.id) > 0) {
+        setSaveResponse({
+          id: Number(prebuilt.id),
+          customer_id:
+            prebuilt.customer_id != null ? Number(prebuilt.customer_id) : undefined,
+          document_no: String(prebuilt.document_no ?? ""),
+          status: String(prebuilt.status ?? "UNPOSTED"),
+        });
+        setInvoiceIsPosted(
+          String(prebuilt.status ?? "").toUpperCase() === "POSTED",
+        );
+      } else {
+        setSaveResponse(null);
+        setInvoiceIsPosted(false);
+      }
+      if (!cancelled) setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const docNo = st?.document_no?.trim() ?? "";
+    if (!docNo) {
       setLoadError(
-        "Document number is required. Please go back and use Invoice Reverse from the Accounts table.",
+        "Document number is required. Open this screen from a job invoice, or from Unposted Documents with a valid document.",
       );
       setLoading(false);
+      setReverseDocLabel("");
+      setInvoiceDocLabel("");
       return;
     }
     setDocumentNo(docNo);
+    setInvoiceDocLabel(firstNonEmptyString(docNo));
+    setReverseDocLabel("");
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
@@ -723,91 +942,18 @@ function InvoiceReverse() {
         if (cancelled) return;
         const data = ((res as { data?: ReversableDataResponse })?.data ??
           res) as ReversableDataResponse;
-        setIsAgentInvoice(data.is_agent === true);
-        const roeNum =
-          data.roe != null
-            ? typeof data.roe === "string"
-              ? parseFloat(data.roe)
-              : data.roe
-            : null;
-        setBillToDisplayName(data.bill_to_name ?? null);
-        form.setValues({
-          bill_to: data.bill_to ?? "",
-          address: data.address ?? "",
-          state: data.state_id != null ? String(data.state_id) : "",
-          gstn: data.gstn ?? "",
-          shipment_no: data.shipment_no ?? "",
-          daybook_id: "", // Do not set daybook from response; user selects from CRN-filtered dropdown
-          document_date: normalizeDate(data.document_date ?? null),
-          due_date: normalizeDate(data.due_date ?? null),
-          currency: data.currency_code ?? "",
-          roe: Number.isFinite(roeNum) ? roeNum : null,
-          narration: data.narration ?? "",
-          irn_no: data.irn_no ?? "",
-          charges:
-            data.charges && data.charges.length > 0
-              ? data.charges.map((c) => {
-                  const noOfUnit =
-                    c.no_of_unit != null
-                      ? typeof c.no_of_unit === "string"
-                        ? parseFloat(c.no_of_unit)
-                        : c.no_of_unit
-                      : null;
-                  const roe =
-                    c.roe != null
-                      ? typeof c.roe === "string"
-                        ? parseFloat(c.roe)
-                        : c.roe
-                      : null;
-                  const amountPerUnit =
-                    c.amount_per_unit != null
-                      ? typeof c.amount_per_unit === "string"
-                        ? parseFloat(c.amount_per_unit)
-                        : c.amount_per_unit
-                      : null;
-                  const amount =
-                    c.amount != null
-                      ? typeof c.amount === "string"
-                        ? parseFloat(c.amount)
-                        : c.amount
-                      : null;
-                  const amountInLocal =
-                    c.amount_in_local != null
-                      ? typeof c.amount_in_local === "string"
-                        ? parseFloat(c.amount_in_local)
-                        : c.amount_in_local
-                      : null;
-                  const headerAmount =
-                    c.amount_in_header != null
-                      ? typeof c.amount_in_header === "string"
-                        ? parseFloat(c.amount_in_header)
-                        : c.amount_in_header
-                      : null;
-                  return {
-                    id: c.id ?? null,
-                    charge_id: c.charge_id ?? null,
-                    charge_name: c.charge_name ?? "",
-                    shipment_id: c.shipment_id ?? c.shipment_no ?? "",
-                    unit_code: c.unit_code ?? "",
-                    no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
-                    currency: c.currency_code ?? "",
-                    roe: Number.isFinite(roe) ? roe : null,
-                    amount_per_unit: Number.isFinite(amountPerUnit)
-                      ? amountPerUnit
-                      : null,
-                    amount: Number.isFinite(amount) ? amount : null,
-                    header_amount: Number.isFinite(headerAmount)
-                      ? headerAmount
-                      : null,
-                    amount_in_local: Number.isFinite(amountInLocal)
-                      ? amountInLocal
-                      : null,
-                    tax_code: c.tax_code ?? "",
-                    dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
-                  };
-                })
-              : [],
+        applyReversableDataToReverseForm(data, form, {
+          setIsAgentInvoice,
+          setBillToDisplayName,
+          emptyDaybook: true,
         });
+        const dr = data as unknown as Record<string, unknown>;
+        setInvoiceDocLabel(
+          firstNonEmptyString(data.document_no, docNo, dr.ref_invoice_no),
+        );
+        setReverseDocLabel(
+          firstNonEmptyString(dr.reverse_document_no, dr.reverse_document_number),
+        );
       })
       .catch((err) => {
         if (!cancelled) {
@@ -826,7 +972,16 @@ function InvoiceReverse() {
     return () => {
       cancelled = true;
     };
+    // form from useForm is stable; load is driven by location.state (same pattern as before extract).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
+
+  useEffect(() => {
+    if (!saveResponse?.document_no) return;
+    setReverseDocLabel((prev) =>
+      firstNonEmptyString(saveResponse.document_no, prev),
+    );
+  }, [saveResponse?.document_no]);
 
   useEffect(() => {
     // if (
@@ -1540,8 +1695,18 @@ function InvoiceReverse() {
 
   if (loading) {
     return (
-      <Box p="md">
-        <Stack align="center" justify="center" py="xl" gap="md">
+      <Box
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <Stack align="center" justify="center" gap="md">
           <Loader size="lg" color="#105476" />
           <Text size="sm" c="#105476" fw={500}>
             Loading invoice data...
@@ -1563,7 +1728,7 @@ function InvoiceReverse() {
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Back
             </Button>
@@ -1607,58 +1772,66 @@ function InvoiceReverse() {
           <Text size="xl" fw={600} c="#105476">
             {reversalPageTitle}
           </Text>
-          <Group gap="md" wrap="nowrap">
-            {saveResponse && (
-              <Group gap="sm" wrap="nowrap">
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    {saveResponse.status?.toUpperCase() === "POSTED"
-                      ? "Invoice Reversal Number"
-                      : "Draft Invoice Reversal Number"}
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color="#105476"
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {saveResponse.document_no || documentNo || "—"}
-                  </Badge>
-                </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" fw={500} c="dimmed">
-                    Status:
-                  </Text>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={
-                      saveResponse.status?.toUpperCase() === "UNPOSTED"
-                        ? "gray"
-                        : saveResponse.status?.toUpperCase() === "POSTED"
-                          ? "green"
-                          : "#105476"
-                    }
-                    styles={{ root: { textTransform: "none" } }}
-                  >
-                    {saveResponse.status?.toUpperCase() || "—"}
-                  </Badge>
-                </Group>
-              </Group>
-            )}
-            {/* {documentNo && !saveResponse && (
+          <Group gap="md" wrap="wrap" justify="flex-end">
+            {firstNonEmptyString(reverseDocLabel, saveResponse?.document_no) && (
               <Group gap="xs" wrap="nowrap">
-                <Text size="sm" fw={500} c="dimmed">Original Document No</Text>
-                <Badge size="sm" variant="light" color="#105476" styles={{ root: { textTransform: "none" } }}>
-                  {documentNo}
+                <Text size="sm" fw={500} c="dimmed">
+                  Reverse document no
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color="#105476"
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {firstNonEmptyString(
+                    reverseDocLabel,
+                    saveResponse?.document_no,
+                  ) || "—"}
                 </Badge>
               </Group>
-            )} */}
+            )}
+            {firstNonEmptyString(invoiceDocLabel) ? (
+              <Group gap="xs" wrap="nowrap">
+                <Text size="sm" fw={500} c="dimmed">
+                  Invoice document no
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color="#105476"
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {firstNonEmptyString(invoiceDocLabel)}
+                </Badge>
+              </Group>
+            ) : null}
+            {saveResponse && (
+              <Group gap="xs" wrap="nowrap">
+                <Text size="sm" fw={500} c="dimmed">
+                  Status
+                </Text>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color={
+                    saveResponse.status?.toUpperCase() === "UNPOSTED"
+                      ? "gray"
+                      : saveResponse.status?.toUpperCase() === "POSTED"
+                        ? "green"
+                        : "#105476"
+                  }
+                  styles={{ root: { textTransform: "none" } }}
+                >
+                  {saveResponse.status?.toUpperCase() || "—"}
+                </Badge>
+              </Group>
+            )}
             <Button
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Back
             </Button>
@@ -1684,6 +1857,7 @@ function InvoiceReverse() {
           <Grid>
             <Grid.Col span={4}>
               <SearchableSelect
+                key={`invoice-reverse-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
                 placeholder="Type customer name"
                 apiEndpoint={URL.allCustomers}
@@ -2747,7 +2921,7 @@ function InvoiceReverse() {
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={navigateBack}
             >
               Cancel
             </Button>

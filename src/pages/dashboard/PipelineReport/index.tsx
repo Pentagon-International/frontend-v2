@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   Text,
   Box,
@@ -6,8 +12,11 @@ import {
   Button,
   Tabs,
   SegmentedControl,
+  Drawer,
+  ScrollArea,
+  ActionIcon,
 } from "@mantine/core";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import {
@@ -27,7 +36,25 @@ import {
   PotentialCustomerItem,
 } from "../../../service/dashboard.service";
 import useAuthStore from "../../../store/authStore";
-import { DetailedViewTable } from "../../../components";
+import {
+  DetailedViewTable,
+  PipelineSalespersonByRepTable,
+  PipelineSalespersonBreakdownDrawerTable,
+  PipelineSalespersonCustomerDrawerTable,
+  PipelineCustomerProfitTable,
+  PipelineProductByServiceTable,
+  PipelineRegionByRegionTable,
+} from "../../../components";
+import {
+  mapPipelineColumnTypeToApiType,
+  withPipelineCustomerCode,
+  withPipelineDrillType,
+} from "./pipelineDrillType";
+import {
+  fetchPipelineCustomerProfitDrill,
+  type PipelineCustomerProfitRow,
+  type QuotationDrillFetchKind,
+} from "./pipelineCustomerProfit";
 
 interface PipelineReportProps {
   onBack?: () => void;
@@ -46,10 +73,15 @@ interface PipelineReportProps {
     fromDate?: Date | null;
     toDate?: Date | null;
     period?: string;
+    /** Exact API payload last used for drill-level-2 line list (e.g. quotations); restored on return from quotation view. */
+    quotationListDrillPayload?: PipelineReportFilters;
+    quotationListDrillFetchKind?: QuotationDrillFetchKind;
   };
   globalSearch?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  branchCode?: string | null;
+  coordinatorName?: string | null;
 }
 
 const PipelineReport: React.FC<PipelineReportProps> = ({
@@ -58,9 +90,15 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   globalSearch,
   fromDate,
   toDate,
+  branchCode,
+  coordinatorName,
 }) => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const lastQuotationDrillRef = useRef<{
+    filters: PipelineReportFilters;
+    kind: QuotationDrillFetchKind;
+  } | null>(null);
   const isInitialMount = useRef(true);
   const isInitialMountForSearch = useRef(true);
   const isInitialMountForCalculation = useRef(true);
@@ -84,6 +122,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   );
   type PipelineSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     potential: number;
     pipeline: number;
     gained: number;
@@ -128,6 +168,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   type PipelineProductSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     service: string; // Combined: "FCL Import", "FCL Export", etc.
     service_type: string;
     service_original?: string; // Original service value for click handling
@@ -141,6 +183,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   type PipelineSectorSalespersonRow = {
     salesperson: string;
+    coordinator_name?: string;
+    branch_code?: string;
     potential: number;
     pipeline: number;
     gained: number;
@@ -173,6 +217,19 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     total_gained: number;
     total_lost: number;
   } | null>(null);
+  const [customerProfitRows, setCustomerProfitRows] = useState<
+    PipelineCustomerProfitRow[]
+  >([]);
+  const [customerProfitSummary, setCustomerProfitSummary] =
+    useState<{
+      total_expected: number;
+      total_potential: number;
+      total_pipeline: number;
+      total_quoted: number;
+      total_gained: number;
+      total_lost: number;
+    } | null>(null);
+  const [customerProfitLoading, setCustomerProfitLoading] = useState(false);
   const [pipelineData, setPipelineData] = useState<PipelineSalespersonRow[]>(
     []
   );
@@ -276,6 +333,20 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const [activeTab, setActiveTab] = useState<string>(
     initialState?.activeTab ?? "salesperson"
   );
+  const [pipelineSalespersonCustomerDrawer, setPipelineSalespersonCustomerDrawer] =
+    useState(() => {
+      const d = initialState?.drillLevel ?? 0;
+      const hasRep = Boolean(initialState?.selectedSalesperson);
+      const noProduct = (initialState?.productDrillLevel ?? 0) === 0;
+      const noSector = (initialState?.sectorDrillLevel ?? 0) === 0;
+      const noSectorSel = !initialState?.selectedSector;
+      const noServiceSel = !initialState?.selectedService;
+      if (!hasRep || !noProduct || !noSector || !noSectorSel || !noServiceSel)
+        return false;
+      if (d === 1 && !initialState?.selectedColumnType) return true;
+      if (d === 2 && Boolean(initialState?.selectedColumnType)) return true;
+      return false;
+    });
 
   // Helper function to convert service_type to title case (e.g., "IMPORT" -> "Import")
   const toTitleCase = (str: string): string => {
@@ -291,6 +362,280 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       dateFilters.date_to = dayjs(toDate).format("DD-MM-YYYY");
     }
     return dateFilters;
+  };
+
+  const buildPipelineCommonFilters = () => ({
+    ...buildDateFilters(),
+    ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+    ...(user?.pulse_id === "P2CCI" && { calculation }),
+    ...(branchCode?.trim() && { branch_code: branchCode.trim() }),
+    ...(coordinatorName?.trim() && {
+      coordinator_name: coordinatorName.trim(),
+    }),
+  });
+
+  const rememberQuotationDrillRequest = useCallback(
+    (filters: PipelineReportFilters, kind: QuotationDrillFetchKind) => {
+      lastQuotationDrillRef.current = { filters: { ...filters }, kind };
+    },
+    [],
+  );
+
+  const mergeRestoredQuotationDrillFilters = useCallback(
+    (payload: PipelineReportFilters): PipelineReportFilters => ({
+      ...payload,
+      company: user?.company?.company_name || payload.company,
+    }),
+    [user?.company?.company_name],
+  );
+
+  const buildQuotationNavigatePipelineState = useCallback(
+    (base: Record<string, unknown>) => ({
+      ...base,
+      ...(lastQuotationDrillRef.current
+        ? {
+            quotationListDrillPayload: lastQuotationDrillRef.current.filters,
+            quotationListDrillFetchKind: lastQuotationDrillRef.current.kind,
+          }
+        : {}),
+    }),
+    [],
+  );
+
+  type PipelineRestoreState = NonNullable<PipelineReportProps["initialState"]>;
+
+  const fetchQuotationDrill2List = async (
+    filters: PipelineReportFilters,
+    kind: QuotationDrillFetchKind,
+  ) => {
+    rememberQuotationDrillRequest(filters, kind);
+    if (kind === "regional") {
+      return getPotentialCustomersDataForRegional(filters);
+    }
+    if (kind === "product") {
+      return getPotentialCustomersDataForProduct(filters);
+    }
+    return getPotentialCustomersData(filters);
+  };
+
+  const openCustomerProfitDrill = useCallback(
+    async (
+      filters: PipelineReportFilters,
+      kind: QuotationDrillFetchKind
+    ) => {
+      if (!filters.type) return;
+      setSelectedColumnType(filters.type);
+      setDrillLevel(1);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setPotentialCustomersData([]);
+      setPotentialCustomersSummary(null);
+      setCustomerProfitLoading(true);
+      try {
+        const result = await fetchPipelineCustomerProfitDrill(filters, kind);
+        setCustomerProfitRows(result.rows);
+        setCustomerProfitSummary(result.summary);
+      } catch (error) {
+        console.error("Error loading customer profit drill:", error);
+        setCustomerProfitRows([]);
+        setCustomerProfitSummary(null);
+      } finally {
+        setCustomerProfitLoading(false);
+      }
+    },
+    []
+  );
+
+  const openQuotationLineDrill = useCallback(
+    async (
+      filters: PipelineReportFilters,
+      kind: QuotationDrillFetchKind,
+      customer: PipelineCustomerProfitRow
+    ) => {
+      const customerCode =
+        customer.customer_code && customer.customer_code !== "-"
+          ? customer.customer_code
+          : null;
+      const drillFilters = withPipelineCustomerCode(
+        {
+          ...filters,
+          ...(filters.type
+            ? {}
+            : selectedColumnType
+              ? { type: selectedColumnType }
+              : {}),
+        },
+        customerCode
+      );
+      setSelectedCustomer(customer.customer_name || "Customer");
+      setSelectedCustomerCode(customerCode);
+      setDrillLevel(2);
+      setDrilldownLoading(true);
+      try {
+        const response = await fetchQuotationDrill2List(drillFilters, kind);
+        setPotentialCustomersData(transformNullValues(response.data || []));
+        if ((response as { summary?: typeof potentialCustomersSummary }).summary) {
+          setPotentialCustomersSummary(
+            (response as { summary: typeof potentialCustomersSummary }).summary
+          );
+        } else {
+          setPotentialCustomersSummary(null);
+        }
+      } catch (error) {
+        console.error("Error loading quotation line drill:", error);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
+      } finally {
+        setDrilldownLoading(false);
+      }
+    },
+    [rememberQuotationDrillRequest, selectedColumnType]
+  );
+
+  const handleCustomerProfitMetricClick = useCallback(
+    async (
+      columnType: string,
+      row: PipelineCustomerProfitRow,
+      kind: QuotationDrillFetchKind
+    ) => {
+      const companyName = user?.company?.company_name || "";
+      const apiType =
+        mapPipelineColumnTypeToApiType(columnType) || selectedColumnType;
+      if (!companyName || !apiType) return;
+
+      const baseFilters: PipelineReportFilters = {
+        company: companyName,
+        type: apiType,
+        ...buildPipelineCommonFilters(),
+      };
+      if (selectedSalesperson) baseFilters.salesperson = selectedSalesperson;
+      if (selectedSector) baseFilters.region = selectedSector;
+      if (selectedService) baseFilters.service = selectedService;
+      if (selectedServiceType) {
+        baseFilters.service_type = toTitleCase(selectedServiceType);
+      }
+
+      const drillFilters = withPipelineCustomerCode(
+        baseFilters,
+        row.customer_code
+      );
+      if (!drillFilters.customer_code) return;
+
+      await openQuotationLineDrill(drillFilters, kind, row);
+    },
+    [
+      openQuotationLineDrill,
+      selectedColumnType,
+      selectedSalesperson,
+      selectedSector,
+      selectedService,
+      selectedServiceType,
+      user?.company?.company_name,
+      fromDate,
+      toDate,
+      globalSearch,
+      branchCode,
+      coordinatorName,
+      calculation,
+    ]
+  );
+
+  const resolveQuotationDrill2Restore = (
+    state: PipelineRestoreState,
+  ): { filters: PipelineReportFilters; kind: QuotationDrillFetchKind } => {
+    if (state.quotationListDrillPayload && state.quotationListDrillFetchKind) {
+      return {
+        filters: mergeRestoredQuotationDrillFilters(
+          state.quotationListDrillPayload,
+        ),
+        kind: state.quotationListDrillFetchKind,
+      };
+    }
+    const companyName = user?.company?.company_name || "";
+    const type =
+      mapPipelineColumnTypeToApiType(state.selectedColumnType) || "";
+    const shared = {
+      ...buildDateFilters(),
+      ...(user?.pulse_id === "P2CCI" && { calculation }),
+      ...(globalSearch?.trim() && { search: globalSearch.trim() }),
+    };
+    if (state.selectedSector) {
+      return {
+        kind: "regional",
+        filters: {
+          company: companyName,
+          region: state.selectedSector,
+          type,
+          ...(state.selectedSalesperson && {
+            salesperson: state.selectedSalesperson,
+          }),
+          ...(state.selectedCustomerCode && {
+            customer_code: state.selectedCustomerCode,
+          }),
+          ...shared,
+        },
+      };
+    }
+    if (state.selectedService) {
+      return {
+        kind: "product",
+        filters: {
+          company: companyName,
+          service: state.selectedService,
+          service_type: state.selectedServiceType
+            ? toTitleCase(state.selectedServiceType)
+            : "",
+          type,
+          ...(state.selectedSalesperson && {
+            salesperson: state.selectedSalesperson,
+          }),
+          ...(state.selectedCustomerCode && {
+            customer_code: state.selectedCustomerCode,
+          }),
+          ...shared,
+        },
+      };
+    }
+    return {
+      kind: "salesperson",
+      filters: {
+        company: companyName,
+        salesperson: state.selectedSalesperson || "",
+        type,
+        ...(state.selectedCustomerCode && {
+          customer_code: state.selectedCustomerCode,
+        }),
+        ...shared,
+      },
+    };
+  };
+
+  const applyQuotationDrill2UiFromRestore = (state: PipelineRestoreState) => {
+    if (state.period) setPeriod(state.period);
+    if (state.activeTab) setActiveTab(state.activeTab);
+    if (state.sectorDrillLevel !== undefined) {
+      setSectorDrillLevel(state.sectorDrillLevel);
+    }
+    if (state.productDrillLevel !== undefined) {
+      setProductDrillLevel(state.productDrillLevel);
+    }
+    if (state.selectedSector) setSelectedSector(state.selectedSector);
+    if (state.selectedService) setSelectedService(state.selectedService);
+    if (state.selectedServiceType) {
+      setSelectedServiceType(state.selectedServiceType);
+    }
+    setDrillLevel(2);
+    setSelectedColumnType(state.selectedColumnType ?? null);
+    setSelectedSalesperson(state.selectedSalesperson ?? null);
+    setSelectedCustomer(state.selectedCustomer ?? null);
+    setSelectedCustomerCode(state.selectedCustomerCode ?? null);
+    if (
+      state.selectedSalesperson &&
+      !state.selectedSector &&
+      !state.selectedService
+    ) {
+      setPipelineSalespersonCustomerDrawer(true);
+    }
   };
 
   // Helper function to replace null/undefined values with '-' for display
@@ -360,9 +705,68 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     const run = async () => {
       // Reload data based on current drill level
       if (drillLevel === 0) {
+        if (
+          productDrillLevel === 1 &&
+          selectedService &&
+          selectedServiceType
+        ) {
+          loadProductData(
+            undefined,
+            selectedService,
+            toTitleCase(selectedServiceType),
+            selectedColumnType || undefined
+          );
+          return;
+        }
+        if (sectorDrillLevel === 1 && selectedSector) {
+          loadSectorData(
+            undefined,
+            selectedSector,
+            selectedColumnType || undefined
+          );
+          return;
+        }
         loadPipelineData();
         loadSectorData();
         loadProductData();
+        return;
+      }
+
+      if (drillLevel === 1 && selectedColumnType && selectedSalesperson) {
+        const companyName = user?.company?.company_name || "";
+        if (!companyName) return;
+
+        const profitFilters: PipelineReportFilters = {
+          company: companyName,
+          type: selectedColumnType,
+          ...buildPipelineCommonFilters(),
+        };
+        if (selectedSalesperson) profitFilters.salesperson = selectedSalesperson;
+        if (selectedSector) profitFilters.region = selectedSector;
+        if (selectedService) profitFilters.service = selectedService;
+        if (selectedServiceType) {
+          profitFilters.service_type = toTitleCase(selectedServiceType);
+        }
+
+        let profitKind: QuotationDrillFetchKind = "salesperson";
+        if (selectedSector) profitKind = "regional";
+        else if (selectedService) profitKind = "product";
+
+        setCustomerProfitLoading(true);
+        try {
+          const result = await fetchPipelineCustomerProfitDrill(
+            profitFilters,
+            profitKind
+          );
+          setCustomerProfitRows(result.rows);
+          setCustomerProfitSummary(result.summary);
+        } catch (error) {
+          console.error("Error reloading customer profit drill:", error);
+          setCustomerProfitRows([]);
+          setCustomerProfitSummary(null);
+        } finally {
+          setCustomerProfitLoading(false);
+        }
         return;
       }
 
@@ -375,23 +779,19 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         const companyName = user?.company?.company_name || "";
         if (!companyName) return;
 
-        const normalizedColumnType =
-          selectedColumnType === "quote"
-            ? "quoted_created"
-            : selectedColumnType;
+        const normalizedColumnType = mapPipelineColumnTypeToApiType(
+          selectedColumnType
+        )!;
 
-        const filters: PipelineReportFilters = {
+        let filters: PipelineReportFilters = {
           company: companyName,
           salesperson: selectedSalesperson,
           type: normalizedColumnType,
           // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          ...buildPipelineCommonFilters(),
         };
 
-        if (selectedCustomerCode) filters.customer_code = selectedCustomerCode;
+        filters = withPipelineCustomerCode(filters, selectedCustomerCode);
         if (selectedSector) filters.region = selectedSector;
         if (selectedService) filters.service = selectedService;
         if (selectedServiceType)
@@ -402,10 +802,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         try {
           let response;
           if (selectedSector) {
+            rememberQuotationDrillRequest(filters, "regional");
             response = await getPotentialCustomersDataForRegional(filters);
           } else if (selectedService) {
+            rememberQuotationDrillRequest(filters, "product");
             response = await getPotentialCustomersDataForProduct(filters);
           } else {
+            rememberQuotationDrillRequest(filters, "salesperson");
             response = await getPotentialCustomersData(filters);
           }
 
@@ -428,7 +831,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalSearch, fromDate, toDate]);
+  }, [globalSearch, fromDate, toDate, branchCode, coordinatorName]);
 
   // Restore pipeline state based on drill level
   const restorePipelineState = async (state: {
@@ -444,6 +847,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     selectedSector?: string | null;
     activeTab?: string;
     period?: string;
+    quotationListDrillPayload?: PipelineReportFilters;
+    quotationListDrillFetchKind?: QuotationDrillFetchKind;
   }) => {
     try {
       // Restore period if provided
@@ -506,25 +911,46 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
               try {
                 const companyName = user?.company?.company_name || "";
-                const filters: PipelineReportFilters = {
-                  company: companyName,
-                  service: state.selectedService || "",
-                  service_type: state.selectedServiceType
-                    ? toTitleCase(state.selectedServiceType)
-                    : "",
-                  salesperson: state.selectedSalesperson || "",
-                  customer_code: state.selectedCustomerCode || undefined,
-                  type: state.selectedColumnType,
-                  ...buildDateFilters(),
-                  ...(user?.pulse_id === "P2CCI" && { calculation }),
-                  ...(globalSearch &&
-                    globalSearch.trim() && { search: globalSearch.trim() }),
-                };
+                let filters: PipelineReportFilters;
+                let drillKind: QuotationDrillFetchKind = "product";
+
+                if (
+                  state.quotationListDrillPayload &&
+                  state.quotationListDrillFetchKind
+                ) {
+                  filters = mergeRestoredQuotationDrillFilters(
+                    state.quotationListDrillPayload,
+                  );
+                  drillKind = state.quotationListDrillFetchKind;
+                } else {
+                  filters = {
+                    company: companyName,
+                    service: state.selectedService || "",
+                    service_type: state.selectedServiceType
+                      ? toTitleCase(state.selectedServiceType)
+                      : "",
+                    salesperson: state.selectedSalesperson || "",
+                    customer_code: state.selectedCustomerCode || undefined,
+                    type: mapPipelineColumnTypeToApiType(
+                      state.selectedColumnType
+                    ),
+                    ...buildDateFilters(),
+                    ...(user?.pulse_id === "P2CCI" && { calculation }),
+                    ...(globalSearch &&
+                      globalSearch.trim() && { search: globalSearch.trim() }),
+                  };
+                }
+
+                rememberQuotationDrillRequest(filters, drillKind);
 
                 const response =
-                  await getPotentialCustomersDataForProduct(filters);
+                  drillKind === "regional"
+                    ? await getPotentialCustomersDataForRegional(filters)
+                    : drillKind === "product"
+                      ? await getPotentialCustomersDataForProduct(filters)
+                      : await getPotentialCustomersData(filters);
                 setPotentialCustomersData(
-                  transformNullValues(response.data || [])
+                  transformNullValues(response.data || []),
                 );
                 // Store summary if available
                 if (response.summary) {
@@ -535,7 +961,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               } catch (error) {
                 console.error(
                   "Error loading product customer financial column data:",
-                  error
+                  error,
                 );
                 setPotentialCustomersData([]);
               } finally {
@@ -600,20 +1026,41 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
               try {
                 const companyName = user?.company?.company_name || "";
-                const filters: PipelineReportFilters = {
-                  company: companyName,
-                  region: state.selectedSector || "",
-                  salesperson: state.selectedSalesperson || "",
-                  customer_code: state.selectedCustomerCode || undefined,
-                  type: state.selectedColumnType,
-                  ...buildDateFilters(),
-                  ...(user?.pulse_id === "P2CCI" && { calculation }),
-                  ...(globalSearch &&
-                    globalSearch.trim() && { search: globalSearch.trim() }),
-                };
+                let filters: PipelineReportFilters;
+                let drillKind: QuotationDrillFetchKind = "regional";
+
+                if (
+                  state.quotationListDrillPayload &&
+                  state.quotationListDrillFetchKind
+                ) {
+                  filters = mergeRestoredQuotationDrillFilters(
+                    state.quotationListDrillPayload,
+                  );
+                  drillKind = state.quotationListDrillFetchKind;
+                } else {
+                  filters = {
+                    company: companyName,
+                    region: state.selectedSector || "",
+                    salesperson: state.selectedSalesperson || "",
+                    customer_code: state.selectedCustomerCode || undefined,
+                    type: mapPipelineColumnTypeToApiType(
+                      state.selectedColumnType
+                    ),
+                    ...buildDateFilters(),
+                    ...(user?.pulse_id === "P2CCI" && { calculation }),
+                    ...(globalSearch &&
+                      globalSearch.trim() && { search: globalSearch.trim() }),
+                  };
+                }
+
+                rememberQuotationDrillRequest(filters, drillKind);
 
                 const response =
-                  await getPotentialCustomersDataForRegional(filters);
+                  drillKind === "product"
+                    ? await getPotentialCustomersDataForProduct(filters)
+                    : drillKind === "salesperson"
+                      ? await getPotentialCustomersData(filters)
+                      : await getPotentialCustomersDataForRegional(filters);
                 setPotentialCustomersData(
                   transformNullValues(response.data || [])
                 );
@@ -644,12 +1091,81 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         return; // Exit early if restoring sector drill level
       }
 
+      // Region tab: quotation line list at drillLevel 2 when sectorDrillLevel is 0 or 1
+      // (sectorDrillLevel === 2 is handled in the sector block above)
+      if (
+        state.drillLevel === 2 &&
+        state.selectedColumnType &&
+        state.selectedSector &&
+        state.sectorDrillLevel !== 2
+      ) {
+        applyQuotationDrill2UiFromRestore(state);
+        setDrilldownLoading(true);
+        try {
+          const { filters, kind } = resolveQuotationDrill2Restore(state);
+          const response = await fetchQuotationDrill2List(filters, kind);
+          setPotentialCustomersData(transformNullValues(response.data || []));
+          if ((response as { summary?: unknown }).summary) {
+            setPotentialCustomersSummary(
+              (response as { summary?: unknown }).summary,
+            );
+          } else {
+            setPotentialCustomersSummary(null);
+          }
+        } catch (error) {
+          console.error(
+            "Error restoring region quotation drill list:",
+            error,
+          );
+          setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
+        } finally {
+          setDrilldownLoading(false);
+        }
+        return;
+      }
+
+      // Product tab: quotation line list at drillLevel 2 when not handled by productDrillLevel block
+      if (
+        state.drillLevel === 2 &&
+        state.selectedColumnType &&
+        state.selectedService &&
+        !state.selectedSector &&
+        (state.productDrillLevel === undefined || state.productDrillLevel < 2)
+      ) {
+        applyQuotationDrill2UiFromRestore(state);
+        setDrilldownLoading(true);
+        try {
+          const { filters, kind } = resolveQuotationDrill2Restore(state);
+          const response = await fetchQuotationDrill2List(filters, kind);
+          setPotentialCustomersData(transformNullValues(response.data || []));
+          if ((response as { summary?: unknown }).summary) {
+            setPotentialCustomersSummary(
+              (response as { summary?: unknown }).summary,
+            );
+          } else {
+            setPotentialCustomersSummary(null);
+          }
+        } catch (error) {
+          console.error(
+            "Error restoring product quotation drill list:",
+            error,
+          );
+          setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
+        } finally {
+          setDrilldownLoading(false);
+        }
+        return;
+      }
+
       // Handle salesperson drill level restoration
       if (state.drillLevel === 0) {
         await loadPipelineData(undefined, state.period || period);
       } else if (state.drillLevel === 1 && state.selectedSalesperson) {
         setDrillLevel(1);
         setSelectedSalesperson(state.selectedSalesperson);
+        setPipelineSalespersonCustomerDrawer(true);
         await loadPipelineData(
           state.selectedSalesperson,
           state.period || period
@@ -669,6 +1185,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
         // Then load level 2 data
         setDrillLevel(2);
+        setPipelineSalespersonCustomerDrawer(true);
         setSelectedCustomer(state.selectedCustomer || null);
         setSelectedCustomerCode(state.selectedCustomerCode || null);
         setSelectedColumnType(state.selectedColumnType);
@@ -676,18 +1193,39 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
         try {
           const companyName = user?.company?.company_name || "";
-          const filters: PipelineReportFilters = {
-            company: companyName,
-            salesperson: state.selectedSalesperson || "",
-            type: state.selectedColumnType || "",
-            // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
-          };
+          let filters: PipelineReportFilters;
+          let drillKind: QuotationDrillFetchKind = "salesperson";
 
-          const response = await getPotentialCustomersData(filters);
+          if (
+            state.quotationListDrillPayload &&
+            state.quotationListDrillFetchKind
+          ) {
+            filters = mergeRestoredQuotationDrillFilters(
+              state.quotationListDrillPayload,
+            );
+            drillKind = state.quotationListDrillFetchKind;
+          } else {
+            filters = {
+              company: companyName,
+              salesperson: state.selectedSalesperson || "",
+              type:
+                mapPipelineColumnTypeToApiType(state.selectedColumnType) || "",
+              // period, // Commented out - can be used in future case
+              ...buildDateFilters(),
+              ...(user?.pulse_id === "P2CCI" && { calculation }),
+              ...(globalSearch &&
+                globalSearch.trim() && { search: globalSearch.trim() }),
+            };
+          }
+
+          rememberQuotationDrillRequest(filters, drillKind);
+
+          const response =
+            drillKind === "regional"
+              ? await getPotentialCustomersDataForRegional(filters)
+              : drillKind === "product"
+                ? await getPotentialCustomersDataForProduct(filters)
+                : await getPotentialCustomersData(filters);
           setPotentialCustomersData(transformNullValues(response.data || []));
           // Store summary if available
           if ((response as any).summary) {
@@ -725,11 +1263,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const filters: PipelineReportFilters = {
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(salesperson && { salesperson }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       };
 
       const response = await getPipelineReportData(filters);
@@ -760,6 +1295,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         const salespersonData = (response.data as PipelineReportItem[]).map(
           (item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             potential: item.potential_profit || 0,
             pipeline: item.pipeline_profit || 0,
             gained: item.gained_profit || 0,
@@ -804,12 +1341,11 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportRegionalData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(region && { region }),
-        ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
+        ...(type && {
+          type: mapPipelineColumnTypeToApiType(type),
+        }),
       });
 
       if (region) {
@@ -823,6 +1359,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               data as unknown as PipelineReportItem[]
             ).map((item) => ({
               salesperson: item.salesperson || "-",
+              coordinator_name: item.coordinator_name || undefined,
+              branch_code: item.branch_code || undefined,
               potential: item.potential_profit || 0,
               pipeline: item.pipeline_profit || 0,
               gained: item.gained_profit || 0,
@@ -912,13 +1450,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportRegionalData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         region: selectedSector,
         salesperson: salesperson,
         ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
       });
 
       const data = response.data || [];
@@ -953,6 +1488,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           // Still try to display it
           const salespersonData = (data as any[]).map((item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             potential: item.potential_profit || item.potential || 0,
             pipeline: item.pipeline_profit || item.pipeline || 0,
             gained: item.gained_profit || item.gained || 0,
@@ -1000,13 +1537,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportProductData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         ...(service && { service }),
         ...(serviceType && { service_type: toTitleCase(serviceType) }),
-        ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
+        ...(type && {
+          type: mapPipelineColumnTypeToApiType(type),
+        }),
       });
 
       const data = response.data || [];
@@ -1018,6 +1554,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             data as PipelineReportProductSalespersonItem[]
           ).map((item) => ({
             salesperson: item.salesperson || "-",
+            coordinator_name: item.coordinator_name || undefined,
+            branch_code: item.branch_code || undefined,
             service: `${item.service || "-"} ${item.service_type || "-"}`, // Combined: "FCL Import", "FCL Export", etc.
             service_type: item.service_type || "-", // Keep for reference but will be hidden
             service_original: item.service || "-", // Store original service for click handling
@@ -1029,7 +1567,6 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             expected: item.expected_profit || 0,
           }));
           setProductSalespersonData(salespersonData);
-          setProductData([]); // Clear base data when showing salesperson data
           // Store summary if available
           if (response.summary) {
             setProductSalespersonSummary(response.summary);
@@ -1138,16 +1675,15 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const response = await getPipelineReportProductData({
         company: companyName,
         // period: periodValue || period, // Commented out - can be used in future case
-        ...buildDateFilters(),
+        ...buildPipelineCommonFilters(),
         service: selectedService,
         service_type: selectedServiceType
           ? toTitleCase(selectedServiceType)
           : undefined,
         salesperson: salesperson,
-        ...(type && { type }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
+        ...(type && {
+          type: mapPipelineColumnTypeToApiType(type),
+        }),
       });
 
       const data = response.data || [];
@@ -1213,10 +1749,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       | PipelineCustomerRow
       | PipelineSectorRow
       | PipelineProductRow
+      | PipelineSalespersonRow
   ) => {
     if (columnType === "salesperson" && drillLevel === 0) {
       setSelectedSalesperson(value);
       setDrillLevel(1);
+      setPipelineSalespersonCustomerDrawer(true);
       loadPipelineData(value);
     } else if (
       (columnType === "potential" ||
@@ -1237,41 +1775,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       if (additionalData && "salesperson" in additionalData) {
         const salespersonData = additionalData as PipelineSalespersonRow;
         setSelectedSalesperson(salespersonData.salesperson);
-        // Normalize "quote" to "quoted_created" for API
-        const normalizedColumnType =
-          columnType === "quote" ? "quoted_created" : columnType;
-        setSelectedColumnType(normalizedColumnType);
-        setDrillLevel(2); // Skip level 1, go directly to filtered customer view
-        setDrilldownLoading(true);
-
-        try {
-          const companyName = user?.company?.company_name || "";
-          const filters: PipelineReportFilters = {
+        setPipelineSalespersonCustomerDrawer(true);
+        const companyName = user?.company?.company_name || "";
+        const filters = withPipelineDrillType(
+          {
             company: companyName,
             salesperson: salespersonData.salesperson,
-            type: normalizedColumnType,
-            // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
-          };
-
-          const response = await getPotentialCustomersData(filters);
-          setPotentialCustomersData(transformNullValues(response.data || []));
-          // Store summary if available
-          if ((response as any).summary) {
-            setPotentialCustomersSummary((response as any).summary);
-          } else {
-            setPotentialCustomersSummary(null);
-          }
-        } catch (error) {
-          console.error("Error loading financial column data:", error);
-          setPotentialCustomersData([]);
-          setPotentialCustomersSummary(null);
-        } finally {
-          setDrilldownLoading(false);
-        }
+            ...buildPipelineCommonFilters(),
+          },
+          columnType
+        );
+        if (!filters) return;
+        await openCustomerProfitDrill(filters, "salesperson");
       }
     } else if (
       (columnType === "potential" ||
@@ -1295,53 +1810,45 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         "customer_name" in additionalData
       ) {
         const customerData = additionalData as PipelineCustomerRow;
-        setSelectedCustomer(customerData.customer_name || "Customer");
-        setSelectedCustomerCode(customerData.customer_code || null);
-        // Normalize "quote" to "quoted_created" for API
-        const normalizedColumnType =
-          columnType === "quote" ? "quoted_created" : columnType;
-        setSelectedColumnType(normalizedColumnType);
-        setDrillLevel(2);
-        setDrilldownLoading(true);
-
-        try {
-          const companyName = user?.company?.company_name || "";
-          const filters: PipelineReportFilters = {
+        const companyName = user?.company?.company_name || "";
+        const typedFilters = withPipelineDrillType(
+          {
             company: companyName,
             salesperson: selectedSalesperson || "",
-            type: normalizedColumnType,
-            // period, // Commented out - can be used in future case
-            ...buildDateFilters(),
-            ...(user?.pulse_id === "P2CCI" && { calculation }),
-            ...(globalSearch &&
-              globalSearch.trim() && { search: globalSearch.trim() }),
-          };
-          if (customerData.customer_code) {
-            filters.customer_code = customerData.customer_code;
-          }
-
-          const response = await getPotentialCustomersData(filters);
-          setPotentialCustomersData(transformNullValues(response.data || []));
-          // Store summary if available
-          if ((response as any).summary) {
-            setPotentialCustomersSummary((response as any).summary);
-          } else {
-            setPotentialCustomersSummary(null);
-          }
-        } catch (error) {
-          console.error("Error loading financial column data:", error);
-          setPotentialCustomersData([]);
-          setPotentialCustomersSummary(null);
-        } finally {
-          setDrilldownLoading(false);
+            ...buildPipelineCommonFilters(),
+          },
+          columnType
+        );
+        if (!typedFilters?.type) return;
+        if (!selectedColumnType) {
+          setSelectedColumnType(typedFilters.type);
         }
+        const filters = withPipelineCustomerCode(
+          typedFilters,
+          customerData.customer_code
+        );
+        if (!filters.customer_code) return;
+        await openQuotationLineDrill(
+          filters,
+          "salesperson",
+          {
+            customer_code: customerData.customer_code,
+            customer_name: customerData.customer_name,
+            potential: customerData.potential,
+            pipeline: customerData.pipeline,
+            gained: customerData.gained,
+            lost: customerData.lost,
+            quote: customerData.quote,
+            expected: customerData.expected,
+          }
+        );
       }
     } else if (columnType === "quotation_id") {
       // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
-          pipelineReportState: {
+          pipelineReportState: buildQuotationNavigatePipelineState({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
@@ -1356,7 +1863,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             fromDate,
             toDate,
             period,
-          },
+          }),
           viewMode: true,
         },
       });
@@ -1498,42 +2005,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Get region from additionalData
       const sectorData = additionalData as PipelineSectorRow;
       setSelectedSector(sectorData.region);
-      setSelectedCustomer(`Sector: ${sectorData.region}`); // Set for title display
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType);
-      setDrillLevel(2); // Go to detailed transaction view
-      setDrilldownLoading(true);
-
-      try {
-        const companyName = user?.company?.company_name || "";
-        const filters: PipelineReportFilters = {
-          company: companyName,
-          region: sectorData.region,
-          type: normalizedColumnType,
-          // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
-        };
-
-        const response = await getPotentialCustomersDataForRegional(filters);
-        setPotentialCustomersData(transformNullValues(response.data || []));
-        // Store summary if available
-        if (response.summary) {
-          setPotentialCustomersSummary(response.summary);
-        } else {
-          setPotentialCustomersSummary(null);
-        }
-      } catch (error) {
-        console.error("Error loading sector financial detail data:", error);
-        setPotentialCustomersData([]);
-        setPotentialCustomersSummary(null);
-      } finally {
-        setDrilldownLoading(false);
-      }
+      const apiType = mapPipelineColumnTypeToApiType(columnType);
+      if (!apiType) return;
+      setSelectedColumnType(apiType);
+      setSectorDrillLevel(1);
+      setDrillLevel(0);
+      setSelectedSalesperson(null);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setCustomerProfitRows([]);
+      setCustomerProfitSummary(null);
+      setPotentialCustomersData([]);
+      await loadSectorData(period, sectorData.region, columnType);
     } else if (
       // Handle financial column click at sector drill level 1 (salesperson level) - drill down to detailed transaction view with type filter
       (columnType === "potential" ||
@@ -1556,39 +2039,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const salespersonName = salespersonData.salesperson;
 
       setSelectedSalesperson(salespersonName);
-      setSelectedCustomer(`Sector: ${selectedSector} - ${salespersonName}`); // Set for title display
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType);
-      setDrillLevel(2); // Go to detailed transaction view (main drill level)
-      setDrilldownLoading(true);
-
-      try {
-        const companyName = user?.company?.company_name || "";
-        const filters: PipelineReportFilters = {
+      const companyName = user?.company?.company_name || "";
+      const regionSalesFilters = withPipelineDrillType(
+        {
           company: companyName,
           region: selectedSector || "",
           salesperson: salespersonName,
-          type: normalizedColumnType,
-          // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
-        };
-
-        const response = await getPotentialCustomersDataForRegional(filters);
-        setPotentialCustomersData(transformNullValues(response.data || []));
-      } catch (error) {
-        console.error(
-          "Error loading sector salesperson financial detail data:",
-          error
-        );
-        setPotentialCustomersData([]);
-      } finally {
-        setDrilldownLoading(false);
-      }
+          ...buildPipelineCommonFilters(),
+        },
+        columnType
+      );
+      if (!regionSalesFilters) return;
+      await openCustomerProfitDrill(regionSalesFilters, "regional");
     } else if (columnType === "salesperson" && sectorDrillLevel === 1) {
       // Handle salesperson click in sector drilldown (level 1)
       setSelectedSalesperson(value);
@@ -1615,57 +2077,41 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Handle financial column click at sector drill level 2 (customer level) - same as level 0 and 1
       // Get customer info from additionalData
       const customerData = additionalData as PipelineCustomerRow;
-      const customerCode = customerData.customer_code;
-      const customerName = customerData.customer_name;
-
-      setSelectedCustomer(customerName || "Customer");
-      setSelectedCustomerCode(customerCode || null);
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType);
-      setDrillLevel(2); // Go to financial detail level
-      setDrilldownLoading(true);
-
-      try {
-        const companyName = user?.company?.company_name || "";
-        const filters: PipelineReportFilters = {
+      const companyName = user?.company?.company_name || "";
+      const typedFilters = withPipelineDrillType(
+        {
           company: companyName,
           region: selectedSector || "",
           salesperson: selectedSalesperson || "",
-          customer_code: customerCode,
-          type: normalizedColumnType,
-          // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
-        };
-
-        const response = await getPotentialCustomersDataForRegional(filters);
-        setPotentialCustomersData(transformNullValues(response.data || []));
-        // Store summary if available
-        if (response.summary) {
-          setPotentialCustomersSummary(response.summary);
-        } else {
-          setPotentialCustomersSummary(null);
-        }
-      } catch (error) {
-        console.error(
-          "Error loading sector customer financial column data:",
-          error
-        );
-        setPotentialCustomersData([]);
-        setPotentialCustomersSummary(null);
-      } finally {
-        setDrilldownLoading(false);
+          ...buildPipelineCommonFilters(),
+        },
+        columnType
+      );
+      if (!typedFilters?.type) return;
+      if (!selectedColumnType) {
+        setSelectedColumnType(typedFilters.type);
       }
+      const filters = withPipelineCustomerCode(
+        typedFilters,
+        customerData.customer_code
+      );
+      if (!filters.customer_code) return;
+      await openQuotationLineDrill(filters, "regional", {
+        customer_code: customerData.customer_code,
+        customer_name: customerData.customer_name,
+        potential: customerData.potential,
+        pipeline: customerData.pipeline,
+        gained: customerData.gained,
+        lost: customerData.lost,
+        quote: customerData.quote,
+        expected: customerData.expected,
+      });
     } else if (columnType === "quotation_id") {
       // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
-          pipelineReportState: {
+          pipelineReportState: buildQuotationNavigatePipelineState({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
@@ -1680,7 +2126,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             fromDate,
             toDate,
             period,
-          },
+          }),
           viewMode: true,
         },
       });
@@ -1756,6 +2202,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     setProductDrilldownData([]);
     setProductSalespersonData([]);
     setPotentialCustomersData([]);
+    setCustomerProfitRows([]);
+    setCustomerProfitSummary(null);
 
     // Clear all summaries
     setPipelineSummary(null);
@@ -1769,6 +2217,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
     // Set active tab to the determined tab (preserves current tab or sets based on drill level)
     setActiveTab(targetTab);
+
+    setPipelineSalespersonCustomerDrawer(false);
 
     // Reload initial data
     loadPipelineData();
@@ -1834,18 +2284,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const companyName = user?.company?.company_name || "";
       if (!companyName) return;
 
-      const normalizedColumnType =
-        selectedColumnType === "quote" ? "quoted_created" : selectedColumnType;
+      const normalizedColumnType = mapPipelineColumnTypeToApiType(
+        selectedColumnType
+      )!;
 
       const filters: PipelineReportFilters = {
         company: companyName,
         salesperson: selectedSalesperson || "",
         type: normalizedColumnType,
         // period, // Commented out - can be used in future case
-        ...buildDateFilters(),
-        ...(user?.pulse_id === "P2CCI" && { calculation }),
-        ...(globalSearch &&
-          globalSearch.trim() && { search: globalSearch.trim() }),
+        ...buildPipelineCommonFilters(),
       };
 
       if (
@@ -1872,10 +2320,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         try {
           let response;
           if (selectedSector) {
+            rememberQuotationDrillRequest(filters, "regional");
             response = await getPotentialCustomersDataForRegional(filters);
           } else if (selectedService) {
+            rememberQuotationDrillRequest(filters, "product");
             response = await getPotentialCustomersDataForProduct(filters);
           } else {
+            rememberQuotationDrillRequest(filters, "salesperson");
             response = await getPotentialCustomersData(filters);
           }
           setPotentialCustomersData(transformNullValues(response.data || []));
@@ -1935,18 +2386,24 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         setSelectedColumnType(null);
         setPotentialCustomersData([]);
         // productDrillLevel remains 2, so it will show product customer data
+      } else if (drillLevel === 2 && selectedColumnType && customerProfitRows.length) {
+        setDrillLevel(1);
+        setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
       } else if (selectedColumnType && !selectedCustomer) {
-        // Came from drill level 0 badge click (skipped level 1)
-        // Go back to drill level 0
         setDrillLevel(0);
         setSelectedSalesperson(null);
         setSelectedColumnType(null);
+        setCustomerProfitRows([]);
+        setCustomerProfitSummary(null);
         setPotentialCustomersData([]);
-        // Reload initial data
+        setPipelineSalespersonCustomerDrawer(false);
         loadPipelineData();
       } else {
-        // Came from salesperson drilldown (level 1 -> 2)
         setDrillLevel(1);
+        setPipelineSalespersonCustomerDrawer(true);
         setSelectedCustomer(null);
         setSelectedCustomerCode(null);
         setSelectedColumnType(null);
@@ -1954,15 +2411,43 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       }
     } else if (drillLevel === 1) {
       setDrillLevel(0);
+      setPipelineSalespersonCustomerDrawer(false);
       setSelectedSalesperson(null);
+      setSelectedColumnType(null);
+      setCustomerProfitRows([]);
+      setCustomerProfitSummary(null);
       setDrilldownData([]);
-      // Reload initial data
       loadPipelineData();
     }
   };
 
   // Handle sector back navigation
   const handleSectorBack = () => {
+    if (drillLevel === 2 && selectedColumnType && selectedSector && customerProfitRows.length) {
+      setDrillLevel(1);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setPotentialCustomersData([]);
+      setPotentialCustomersSummary(null);
+      return;
+    }
+    if (
+      drillLevel === 1 &&
+      selectedColumnType &&
+      selectedSector &&
+      selectedSalesperson
+    ) {
+      setDrillLevel(0);
+      setSelectedSalesperson(null);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setCustomerProfitRows([]);
+      setCustomerProfitSummary(null);
+      if (selectedSector) {
+        void loadSectorData(period, selectedSector, selectedColumnType);
+      }
+      return;
+    }
     // Coming back from detailed transaction view (drillLevel === 2)
     if (drillLevel === 2 && selectedColumnType && selectedSector) {
       // Check if we came from sector level 1 (salesperson badge click)
@@ -2166,29 +2651,23 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
       setSelectedService(service);
       setSelectedServiceType(serviceType);
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType);
-      setProductDrillLevel(1); // Navigate to salesperson list (level 1)
-      setProductSalespersonLoading(true);
-
-      try {
-        // Load salesperson data with type filter
-        await loadProductData(
-          period,
-          service,
-          toTitleCase(serviceType),
-          normalizedColumnType
-        );
-      } catch (error) {
-        console.error(
-          "Error loading product salesperson data with type filter:",
-          error
-        );
-      } finally {
-        setProductSalespersonLoading(false);
-      }
+      const apiType = mapPipelineColumnTypeToApiType(columnType);
+      if (!apiType) return;
+      setSelectedColumnType(apiType);
+      setProductDrillLevel(1);
+      setDrillLevel(0);
+      setSelectedSalesperson(null);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setCustomerProfitRows([]);
+      setCustomerProfitSummary(null);
+      setPotentialCustomersData([]);
+      await loadProductData(
+        period,
+        service,
+        toTitleCase(serviceType),
+        columnType
+      );
     } else if (
       // Handle financial column click at product drill level 1 - drill down to customer list for that salesperson + product with type filter
       (columnType === "potential" ||
@@ -2211,16 +2690,21 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       const salespersonName = salespersonData.salesperson;
 
       setSelectedSalesperson(salespersonName);
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType); // Keep type filter for customer list
-      setProductDrillLevel(2); // Navigate to customer list (level 2)
-      await loadProductCustomerData(
-        salespersonName,
-        period,
-        normalizedColumnType
+      const companyName = user?.company?.company_name || "";
+      const productSalesFilters = withPipelineDrillType(
+        {
+          company: companyName,
+          service: selectedService || "",
+          service_type: selectedServiceType
+            ? toTitleCase(selectedServiceType)
+            : "",
+          salesperson: salespersonName,
+          ...buildPipelineCommonFilters(),
+        },
+        columnType
       );
+      if (!productSalesFilters) return;
+      await openCustomerProfitDrill(productSalesFilters, "product");
     } else if (columnType === "salesperson" && productDrillLevel === 1) {
       // Handle salesperson click in product drilldown (level 1)
       setSelectedSalesperson(value);
@@ -2247,60 +2731,44 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       // Handle financial column click at product drill level 2 (customer level) - same as level 0 and 1
       // Get customer info from additionalData
       const customerData = additionalData as PipelineCustomerRow;
-      const customerCode = customerData.customer_code;
-      const customerName = customerData.customer_name;
-
-      setSelectedCustomer(customerName || "Customer");
-      setSelectedCustomerCode(customerCode || null);
-      // Normalize "quote" to "quoted_created" for API
-      const normalizedColumnType =
-        columnType === "quote" ? "quoted_created" : columnType;
-      setSelectedColumnType(normalizedColumnType);
-      setDrillLevel(2); // Go to financial detail level
-      setDrilldownLoading(true);
-
-      try {
-        const companyName = user?.company?.company_name || "";
-        const filters: PipelineReportFilters = {
+      const companyName = user?.company?.company_name || "";
+      const typedFilters = withPipelineDrillType(
+        {
           company: companyName,
           service: selectedService || "",
           service_type: selectedServiceType
             ? toTitleCase(selectedServiceType)
             : "",
           salesperson: selectedSalesperson || "",
-          customer_code: customerCode,
-          type: normalizedColumnType,
-          // period, // Commented out - can be used in future case
-          ...buildDateFilters(),
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
-        };
-
-        const response = await getPotentialCustomersDataForProduct(filters);
-        setPotentialCustomersData(transformNullValues(response.data || []));
-        // Store summary if available
-        if ((response as any).summary) {
-          setPotentialCustomersSummary((response as any).summary);
-        } else {
-          setPotentialCustomersSummary(null);
-        }
-      } catch (error) {
-        console.error(
-          "Error loading product customer financial column data:",
-          error
-        );
-        setPotentialCustomersData([]);
-        setPotentialCustomersSummary(null);
-      } finally {
-        setDrilldownLoading(false);
+          ...buildPipelineCommonFilters(),
+        },
+        columnType
+      );
+      if (!typedFilters?.type) return;
+      if (!selectedColumnType) {
+        setSelectedColumnType(typedFilters.type);
       }
+      const filters = withPipelineCustomerCode(
+        typedFilters,
+        customerData.customer_code
+      );
+      if (!filters.customer_code) return;
+      await openQuotationLineDrill(filters, "product", {
+        customer_code: customerData.customer_code,
+        customer_name: customerData.customer_name,
+        potential: customerData.potential,
+        pipeline: customerData.pipeline,
+        gained: customerData.gained,
+        lost: customerData.lost,
+        quote: customerData.quote,
+        expected: customerData.expected,
+      });
     } else if (columnType === "quotation_id") {
       // Handle quotation ID click - navigate to quotation page in view mode
       navigate(`/quotation-create/${value}`, {
         state: {
           returnTo: "dashboard-pipeline",
-          pipelineReportState: {
+          pipelineReportState: buildQuotationNavigatePipelineState({
             drillLevel,
             selectedSalesperson,
             selectedCustomer,
@@ -2315,7 +2783,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             fromDate,
             toDate,
             period,
-          },
+          }),
           viewMode: true,
         },
       });
@@ -2337,6 +2805,41 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   // Handle product back navigation
   const handleProductBack = () => {
+    if (
+      drillLevel === 2 &&
+      selectedColumnType &&
+      selectedService &&
+      customerProfitRows.length
+    ) {
+      setDrillLevel(1);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setPotentialCustomersData([]);
+      setPotentialCustomersSummary(null);
+      return;
+    }
+    if (
+      drillLevel === 1 &&
+      selectedColumnType &&
+      selectedService &&
+      selectedSalesperson
+    ) {
+      setDrillLevel(0);
+      setSelectedSalesperson(null);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setCustomerProfitRows([]);
+      setCustomerProfitSummary(null);
+      if (selectedService && selectedServiceType) {
+        void loadProductData(
+          period,
+          selectedService,
+          toTitleCase(selectedServiceType),
+          selectedColumnType
+        );
+      }
+      return;
+    }
     // Coming back from detailed transaction view (drillLevel === 2)
     if (
       drillLevel === 2 &&
@@ -2421,7 +2924,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       potential: "Potential",
       pipeline: "Pipeline",
       gained: "Gained",
-      quoted_created: "Quoted",
+      quote: "In progress",
+      quoted: "In progress",
+      quoted_created: "In progress",
       lost: "Lost",
       expected: "Expected",
     };
@@ -2527,21 +3032,56 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           );
         }
       }
+    } else if (drillLevel === 1 && selectedColumnType && selectedSalesperson) {
+      const companyName = user?.company?.company_name || "";
+      if (!companyName) return;
+
+      const profitFilters: PipelineReportFilters = {
+        company: companyName,
+        type: selectedColumnType,
+        ...buildPipelineCommonFilters(),
+        period: value,
+      };
+      profitFilters.salesperson = selectedSalesperson;
+      if (selectedSector) profitFilters.region = selectedSector;
+      if (selectedService) profitFilters.service = selectedService;
+      if (selectedServiceType) {
+        profitFilters.service_type = toTitleCase(selectedServiceType);
+      }
+
+      let profitKind: QuotationDrillFetchKind = "salesperson";
+      if (selectedSector) profitKind = "regional";
+      else if (selectedService) profitKind = "product";
+
+      setCustomerProfitLoading(true);
+      try {
+        const result = await fetchPipelineCustomerProfitDrill(
+          profitFilters,
+          profitKind
+        );
+        setCustomerProfitRows(result.rows);
+        setCustomerProfitSummary(result.summary);
+      } catch (error) {
+        console.error("Error reloading customer profit drill:", error);
+        setCustomerProfitRows([]);
+        setCustomerProfitSummary(null);
+      } finally {
+        setCustomerProfitLoading(false);
+      }
     } else if (drillLevel === 1 && selectedSalesperson) {
       await loadPipelineData(selectedSalesperson, value);
     } else if (drillLevel === 2 && selectedColumnType) {
       try {
         setDrilldownLoading(true);
         const companyName = user?.company?.company_name || "";
-        const filters: PipelineReportFilters = {
+        let filters: PipelineReportFilters = {
           company: companyName,
           salesperson: selectedSalesperson || "",
-          type: selectedColumnType || undefined,
-          ...(user?.pulse_id === "P2CCI" && { calculation }),
-          ...(globalSearch &&
-            globalSearch.trim() && { search: globalSearch.trim() }),
+          type: mapPipelineColumnTypeToApiType(selectedColumnType),
+          ...buildPipelineCommonFilters(),
           period: value,
         };
+        filters = withPipelineCustomerCode(filters, selectedCustomerCode);
         // Include region for sector drilldown
         if (selectedSector) {
           filters.region = selectedSector;
@@ -2557,12 +3097,15 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         let response;
         if (selectedSector) {
           // Sector drilldown - use regional endpoint
+          rememberQuotationDrillRequest(filters, "regional");
           response = await getPotentialCustomersDataForRegional(filters);
         } else if (selectedService) {
           // Product drilldown - use product endpoint
+          rememberQuotationDrillRequest(filters, "product");
           response = await getPotentialCustomersDataForProduct(filters);
         } else {
           // Salesperson drilldown - use default endpoint
+          rememberQuotationDrillRequest(filters, "salesperson");
           response = await getPotentialCustomersData(filters);
         }
         setPotentialCustomersData(transformNullValues(response.data || []));
@@ -2997,6 +3540,13 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     selectedColumnType,
   ]);
 
+  const pipelineSalespersonBarSubtitle = useMemo(() => {
+    if (fromDate && toDate) {
+      return `${dayjs(fromDate).format("DD MMM YYYY")} – ${dayjs(toDate).format("DD MMM YYYY")}`;
+    }
+    return undefined;
+  }, [fromDate, toDate]);
+
   // Filter data based on drill level
   // Use salespersonDataWithTotals for salesperson tab at all drill levels (except when type is selected)
   const currentData =
@@ -3005,6 +3555,119 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       : drillLevel === 1
         ? salespersonDataWithTotals
         : potentialCustomersData;
+
+  /** Salesperson tab: customer list + financial drill stay in the same right drawer (Enquiry Conversion pattern). */
+  const showSalespersonPipelineDrawer =
+    activeTab === "salesperson" &&
+    productDrillLevel === 0 &&
+    sectorDrillLevel === 0 &&
+    !selectedSector &&
+    !selectedService &&
+    (pipelineSalespersonCustomerDrawer ||
+      (drillLevel >= 1 && Boolean(selectedColumnType))) &&
+    ((drillLevel === 1 && !selectedColumnType) ||
+      (drillLevel === 1 && Boolean(selectedColumnType)) ||
+      (drillLevel === 2 && Boolean(selectedColumnType)));
+
+  /** Product tab: rep list, customer list, and product-originated financial drill in the right drawer. */
+  const showProductPipelineDrawer =
+    activeTab === "product" &&
+    (productDrillLevel > 0 ||
+      (drillLevel >= 1 &&
+        Boolean(selectedColumnType) &&
+        Boolean(selectedService) &&
+        !selectedSector));
+
+  /** Region/Sector tab: drill views and sector-originated financial drill in the right drawer. */
+  const showSectorPipelineDrawer =
+    activeTab === "region" &&
+    (sectorDrillLevel > 0 ||
+      (drillLevel >= 1 &&
+        Boolean(selectedColumnType) &&
+        Boolean(selectedSector)));
+
+  const salespersonCustomerDrawerTableModel = useMemo(() => {
+    const customerRows: PipelineCustomerRow[] = [];
+    const rowDrilldownIndices: number[] = [];
+    drilldownData.forEach((row, drilldownIndex) => {
+      const name = (row.customer_name ?? "").trim();
+      if (!name || name === "TOTAL") return;
+      customerRows.push(row);
+      rowDrilldownIndices.push(drilldownIndex);
+    });
+    return { customerRows, rowDrilldownIndices };
+  }, [drilldownData]);
+
+  const regionPipelineBaseRows = useMemo(
+    () =>
+      sectorData.map((item) => ({
+        region: item.region || "-",
+        potential: item.potential_profit || 0,
+        pipeline: item.pipeline_profit || 0,
+        gained: item.gained_profit || 0,
+        lost: item.lost_profit || 0,
+        quote: item.quoted_profit || 0,
+        expected: item.expected_profit || 0,
+      })),
+    [sectorData]
+  );
+
+  const productCustomerDrawerTableModel = useMemo(() => {
+    const customerRows: PipelineCustomerRow[] = [];
+    const rowDrilldownIndices: number[] = [];
+    productDrilldownData.forEach((row, drilldownIndex) => {
+      const name = (row.customer_name ?? "").trim();
+      if (!name || name === "TOTAL") return;
+      customerRows.push(row);
+      rowDrilldownIndices.push(drilldownIndex);
+    });
+    return { customerRows, rowDrilldownIndices };
+  }, [productDrilldownData]);
+
+  const sectorCustomerDrawerTableModel = useMemo(() => {
+    const customerRows: PipelineCustomerRow[] = [];
+    const rowDrilldownIndices: number[] = [];
+    sectorDrilldownData.forEach((row, drilldownIndex) => {
+      const name = (row.customer_name ?? "").trim();
+      if (!name || name === "TOTAL") return;
+      customerRows.push(row);
+      rowDrilldownIndices.push(drilldownIndex);
+    });
+    return { customerRows, rowDrilldownIndices };
+  }, [sectorDrilldownData]);
+
+  const displayPotentialCustomersDrill2Table = useMemo(() => {
+    if (!selectedColumnType) return potentialCustomersData;
+    return addTotalRowForDrillLevel2(
+      potentialCustomersData,
+      potentialCustomersSummary,
+      selectedColumnType,
+      "customer_name"
+    );
+  }, [
+    potentialCustomersData,
+    potentialCustomersSummary,
+    selectedColumnType,
+  ]);
+
+  /** Drill-level-2 quotation grid: Product / Region / Salesperson column-click routing. */
+  const pipelineQuotationDrill2ColumnClick = useMemo(
+    () =>
+      (selectedSector
+        ? handleSectorColumnClick
+        : selectedService
+          ? handleProductColumnClick
+          : handleColumnClick) as React.ComponentProps<
+        typeof DetailedViewTable
+      >["onColumnClick"],
+    [
+      selectedSector,
+      selectedService,
+      handleColumnClick,
+      handleSectorColumnClick,
+      handleProductColumnClick,
+    ],
+  );
 
   // Determine which product data to show and add totals
   const displayProductData = useMemo(() => {
@@ -3063,8 +3726,14 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   ]);
 
   // Show financial column detail view when drillLevel === 2 (from clicking financial columns)
-  // This takes precedence over sector/product drill level views
-  if (drillLevel === 2 && selectedColumnType) {
+  // Skip full-page when the same content is shown inside a pipeline right drawer
+  if (
+    drillLevel === 2 &&
+    selectedColumnType &&
+    !showSalespersonPipelineDrawer &&
+    !showProductPipelineDrawer &&
+    !showSectorPipelineDrawer
+  ) {
     // Determine which back handler to use based on context
     let backHandler = handleBack;
     if (selectedSector) {
@@ -3092,7 +3761,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
         moduleType="pipelineReport"
         onClose={handleResetToBase}
         loading={drilldownLoading}
-        onColumnClick={handleColumnClick}
+        onColumnClick={pipelineQuotationDrill2ColumnClick}
         onBack={backHandler}
         showBackButton={true}
         showCloseButton={true}
@@ -3146,149 +3815,57 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     );
   }
 
-  // Show product drill level view (similar to salesperson drill level)
-  if (productDrillLevel > 0) {
-    return (
-      <DetailedViewTable
-        data={displayProductData}
-        title={getTitle()}
-        drillLevel={productDrillLevel}
-        moduleType="pipelineReport"
-        onClose={handleResetToBase}
-        loading={
-          productLoading ||
-          productSalespersonLoading ||
-          productDrilldownLoading ||
-          cellEditLoading
-        }
-        onColumnClick={handleProductColumnClick}
-        onBack={productDrillLevel > 0 ? handleProductBack : undefined}
-        showBackButton={productDrillLevel > 0}
-        showCloseButton={productDrillLevel > 0}
-        selectedColumnType={productDrillLevel === 2 ? selectedColumnType : null}
-        hideExpected={true}
-        headerActions={
-          <Group gap="sm" align="center">
-            {/* <SegmentedControl
-              value={calculation}
-              onChange={(value) => {
-                setCalculation(value as "volume" | "no_of_shipments");
-              }}
-              data={[
-                { label: "Volume", value: "volume" },
-                { label: "No. of Shipments", value: "no_of_shipments" },
-              ]}
-              size="xs"
-              color="#105476"
-              styles={{
-                root: {
-                  backgroundColor: "#f0f0f0",
-                },
-                indicator: {
-                  backgroundColor: "#105476",
-                },
-                label: {
-                  color: "#105476",
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                },
-              }}
-            /> */}
-            {/* Commented out - can be used in future case */}
-            {/* <Select
-              placeholder="Select period"
-              data={[
-                { value: "current-month", label: "Current month" },
-                { value: "monthly", label: "Last Month" },
-                { value: "quarterly", label: "Last 3 Months" },
-                { value: "half-yearly", label: "Last 6 Months" },
-              ]}
-              value={period}
-              onChange={handlePeriodChange}
-              size="xs"
-              style={{ width: "150px" }}
-            /> */}
-          </Group>
-        }
-        onCellEdit={handleProductCellEdit}
-      />
-    );
-  }
-
-  // Show sector drill level view (similar to salesperson drill level)
-  if (sectorDrillLevel > 0) {
-    return (
-      <DetailedViewTable
-        data={displaySectorData}
-        title={getTitle()}
-        drillLevel={sectorDrillLevel}
-        moduleType="pipelineReport"
-        onClose={handleResetToBase}
-        loading={
-          sectorLoading ||
-          sectorSalespersonLoading ||
-          sectorDrilldownLoading ||
-          cellEditLoading
-        }
-        onColumnClick={handleSectorColumnClick}
-        onBack={sectorDrillLevel > 0 ? handleSectorBack : undefined}
-        showBackButton={sectorDrillLevel > 0}
-        showCloseButton={sectorDrillLevel > 0}
-        selectedColumnType={sectorDrillLevel === 2 ? selectedColumnType : null}
-        hideExpected={true}
-        headerActions={
-          <Group gap="sm" align="center">
-            {/* <SegmentedControl
-              value={calculation}
-              onChange={(value) => {
-                setCalculation(value as "volume" | "no_of_shipments");
-              }}
-              data={[
-                { label: "Volume", value: "volume" },
-                { label: "No. of Shipments", value: "no_of_shipments" },
-              ]}
-              size="xs"
-              color="#105476"
-              styles={{
-                root: {
-                  backgroundColor: "#f0f0f0",
-                },
-                indicator: {
-                  backgroundColor: "#105476",
-                },
-                label: {
-                  color: "#105476",
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                },
-              }}
-            /> */}
-            {/* Commented out - can be used in future case */}
-            {/* <Select
-              placeholder="Select period"
-              data={[
-                { value: "current-month", label: "Current month" },
-                { value: "monthly", label: "Last Month" },
-                { value: "quarterly", label: "Last 3 Months" },
-                { value: "half-yearly", label: "Last 6 Months" },
-              ]}
-              value={period}
-              onChange={handlePeriodChange}
-              size="xs"
-              style={{ width: "150px" }}
-            /> */}
-          </Group>
-        }
-        onCellEdit={handleSectorCellEdit}
-      />
-    );
-  }
-
   // Handle tab change - load data if not already loaded
   const handleTabChange = (value: string | null) => {
     if (!value) return;
+    if (value !== "salesperson" && pipelineSalespersonCustomerDrawer) {
+      setPipelineSalespersonCustomerDrawer(false);
+      setDrillLevel(0);
+      setSelectedSalesperson(null);
+      setSelectedCustomer(null);
+      setSelectedCustomerCode(null);
+      setSelectedColumnType(null);
+      setPotentialCustomersData([]);
+      setPotentialCustomersSummary(null);
+      setDrilldownData([]);
+      void loadPipelineData(undefined, period);
+    }
+    if (value !== "product" && (productDrillLevel > 0 || selectedService)) {
+      setProductDrillLevel(0);
+      setSelectedService(null);
+      setSelectedServiceType(null);
+      setProductSalespersonData([]);
+      setProductSalespersonSummary(null);
+      setProductDrilldownData([]);
+      setProductDrilldownSummary(null);
+      if (drillLevel === 2 && selectedService && !selectedSector) {
+        setDrillLevel(0);
+        setSelectedColumnType(null);
+        setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
+      }
+      void loadProductData(period);
+    }
+    if (value !== "region" && (sectorDrillLevel > 0 || selectedSector)) {
+      setSectorDrillLevel(0);
+      setSelectedSector(null);
+      setSectorSalespersonData([]);
+      setSectorSalespersonSummary(null);
+      setSectorDrilldownData([]);
+      setSectorDrilldownSummary(null);
+      if (drillLevel === 2 && selectedSector) {
+        setDrillLevel(0);
+        setSelectedColumnType(null);
+        setSelectedSalesperson(null);
+        setSelectedCustomer(null);
+        setSelectedCustomerCode(null);
+        setPotentialCustomersData([]);
+        setPotentialCustomersSummary(null);
+      }
+      void loadSectorData(period);
+    }
     setActiveTab(value);
 
     // Load data for the selected tab if not already loaded
@@ -3303,9 +3880,167 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     }
   };
 
-  // Show both sections in tabs panel only at drill level 0
-  if (drillLevel === 0) {
+  const handlePipelineDrawerNavBack = () => {
+    if (showSalespersonPipelineDrawer) handleBack();
+    else if (showProductPipelineDrawer) handleProductBack();
+    else if (showSectorPipelineDrawer) handleSectorBack();
+  };
+
+  const getPipelineColumnTypeLabel = () => {
+    if (!selectedColumnType) return "";
+    const columnTypeMap: Record<string, string> = {
+      potential: "Potential",
+      pipeline: "Pipeline",
+      gained: "Gained",
+      quote: "In progress",
+      quoted: "In progress",
+      quoted_created: "In progress",
+      lost: "Lost",
+      expected: "Expected",
+    };
+    return columnTypeMap[selectedColumnType] || selectedColumnType;
+  };
+
+  const formatPipelineDrawerLevel = (level: number, total = 3) =>
+    `Level ${level}/${total}`;
+
+  const joinPipelineDrawerLabel = (
+    parts: Array<string | null | undefined | false>
+  ) => parts.filter((p) => p && String(p).trim()).join(" · ");
+
+  let pipelineDrawerHeaderLabel = "";
+  if (showSalespersonPipelineDrawer) {
+    const rep = selectedSalesperson?.trim() || "Sales rep";
+    const typeLabel = getPipelineColumnTypeLabel();
+    if (drillLevel === 2 && selectedColumnType) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        rep,
+        typeLabel,
+        formatPipelineDrawerLevel(3),
+      ]);
+    } else if (drillLevel === 1 && selectedColumnType) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        rep,
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else if (drillLevel === 1) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        rep,
+        "Customers",
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel(["Pipeline", rep, "Customers"]);
+    }
+  } else if (showProductPipelineDrawer) {
+    const productLabel =
+      [selectedService, selectedServiceType].filter(Boolean).join(" ") || "Product";
+    const rep = selectedSalesperson?.trim();
+    const typeLabel = getPipelineColumnTypeLabel();
+    if (
+      drillLevel === 2 &&
+      selectedColumnType &&
+      selectedService &&
+      !selectedSector
+    ) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Product",
+        productLabel,
+        rep,
+        typeLabel,
+        formatPipelineDrawerLevel(3),
+      ]);
+    } else if (
+      drillLevel === 1 &&
+      selectedColumnType &&
+      selectedService &&
+      !selectedSector &&
+      selectedSalesperson
+    ) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Product",
+        productLabel,
+        rep,
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else if (productDrillLevel === 2 && drillLevel === 0) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Product",
+        productLabel,
+        rep || "Customers",
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else if (productDrillLevel === 1 && drillLevel === 0) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Product",
+        productLabel,
+        formatPipelineDrawerLevel(1),
+      ]);
+    } else {
+      pipelineDrawerHeaderLabel = "Pipeline · Product";
+    }
+  } else if (showSectorPipelineDrawer) {
+    const regionName = (selectedSector || "").trim() || "Region";
+    const rep = selectedSalesperson?.trim();
+    const typeLabel = getPipelineColumnTypeLabel();
+    if (drillLevel === 2 && selectedColumnType && selectedSector) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Region",
+        regionName,
+        rep,
+        typeLabel,
+        formatPipelineDrawerLevel(3),
+      ]);
+    } else if (
+      drillLevel === 1 &&
+      selectedColumnType &&
+      selectedSector &&
+      selectedSalesperson
+    ) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Region",
+        regionName,
+        rep,
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else if (sectorDrillLevel === 2 && drillLevel === 0) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Region",
+        regionName,
+        rep || "Customers",
+        formatPipelineDrawerLevel(2),
+      ]);
+    } else if (sectorDrillLevel === 1 && drillLevel === 0) {
+      pipelineDrawerHeaderLabel = joinPipelineDrawerLabel([
+        "Pipeline",
+        "Region",
+        regionName,
+        formatPipelineDrawerLevel(1),
+      ]);
+    } else {
+      pipelineDrawerHeaderLabel = "Pipeline · Region";
+    }
+  }
+
+  // Show tabs at base drill, or any pipeline right drawer (salesperson / product / region)
+  if (
+    drillLevel === 0 ||
+    showSalespersonPipelineDrawer ||
+    showProductPipelineDrawer ||
+    showSectorPipelineDrawer
+  ) {
     return (
+      <>
       <Box>
         <Group justify="space-between" align="center">
           <Text size="lg" fw={600} c="#105476">
@@ -3359,66 +4094,71 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             /> */}
           </Group>
         </Group>
-        <Tabs value={activeTab} onChange={handleTabChange}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          styles={{
+            root: { width: "100%" },
+            list: {
+              flexWrap: "wrap",
+              gap: 8,
+              padding: "6px 8px",
+              backgroundColor: "rgba(226, 232, 240, 0.65)",
+              border: "1px solid #cbd5e1",
+              borderRadius: 10,
+              marginBottom: 4,
+            },
+            tab: {
+              borderRadius: 8,
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#475569",
+              padding: "10px 18px",
+              border: "1px solid transparent",
+              backgroundColor: "transparent",
+              "&:hover": {
+                backgroundColor: "rgba(255, 255, 255, 0.85)",
+                color: "#0f172a",
+              },
+              "&[data-active]": {
+                backgroundColor: "#105476",
+                color: "#fff",
+                borderColor: "#0c3d52",
+                boxShadow: "0 1px 4px rgba(15, 23, 42, 0.12)",
+              },
+            },
+          }}
+        >
           <Tabs.List>
-            <Tabs.Tab
-              value="salesperson"
-              style={{
-                backgroundColor:
-                  activeTab === "salesperson" ? "#105476" : "transparent",
-                color: activeTab === "salesperson" ? "white" : "#105476",
-                fontWeight: activeTab === "salesperson" ? 600 : 400,
-              }}
-            >
-              Salesperson
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="product"
-              style={{
-                backgroundColor:
-                  activeTab === "product" ? "#105476" : "transparent",
-                color: activeTab === "product" ? "white" : "#105476",
-                fontWeight: activeTab === "product" ? 600 : 400,
-              }}
-            >
-              Product
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="region"
-              style={{
-                backgroundColor:
-                  activeTab === "region" ? "#105476" : "transparent",
-                color: activeTab === "region" ? "white" : "#105476",
-                fontWeight: activeTab === "region" ? 600 : 400,
-              }}
-            >
-              Region/Sector
-            </Tabs.Tab>
+            <Tabs.Tab value="salesperson">Salesperson</Tabs.Tab>
+            <Tabs.Tab value="product">Product</Tabs.Tab>
+            <Tabs.Tab value="region">Region/Sector</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="salesperson" pt="md">
             <Box
+              px={{ base: "sm", sm: "md" }}
+              py="md"
               style={{
-                height: "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
-              <DetailedViewTable
-                data={salespersonDataWithTotals}
-                title=""
-                drillLevel={drillLevel}
-                moduleType="pipelineReport"
-                onClose={() => {}}
+              <PipelineSalespersonByRepTable
+                title="By sales rep"
+                subtitle={pipelineSalespersonBarSubtitle}
+                rows={pipelineData}
+                summary={pipelineSummary}
                 loading={initialLoading || cellEditLoading}
-                onColumnClick={handleColumnClick}
-                onBack={undefined}
-                showBackButton={false}
-                showCloseButton={false}
-                headerActions={undefined}
-                onCellEdit={handleCellEdit}
+                onRowClick={(row) => {
+                  void handleColumnClick("salesperson", row.salesperson);
+                }}
+                onFinancialColumnClick={(columnType, row) => {
+                  void handleColumnClick(columnType, row.salesperson, row);
+                }}
+                emptyMessage="No salesperson pipeline data"
               />
             </Box>
           </Tabs.Panel>
@@ -3438,39 +4178,31 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               </Group>
             )}
             <Box
+              px={{ base: "sm", sm: "md" }}
+              py="md"
               style={{
-                height: onBack ? "60vh" : "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
-              <DetailedViewTable
-                data={displayProductData}
-                title=""
-                drillLevel={productDrillLevel}
-                moduleType="pipelineReport"
-                onClose={() => {
-                  if (onBack) {
-                    onBack();
-                  }
+              <PipelineProductByServiceTable
+                title="By product"
+                subtitle={pipelineSalespersonBarSubtitle}
+                rows={productData}
+                summary={productSummary}
+                loading={productLoading || cellEditLoading}
+                onRowClick={(row) => {
+                  void handleProductColumnClick("service", row.service, row);
                 }}
-                loading={
-                  productLoading ||
-                  productSalespersonLoading ||
-                  productDrilldownLoading
-                }
-                onColumnClick={handleProductColumnClick}
-                onBack={undefined}
-                showBackButton={false}
-                showCloseButton={false}
-                hideExpected={true}
-                headerActions={undefined}
-                onCellEdit={undefined}
+                onFinancialColumnClick={(columnType, row) => {
+                  void handleProductColumnClick(columnType, row.service, row);
+                }}
+                emptyMessage="No product pipeline data"
               />
             </Box>
-            </Tabs.Panel>
+          </Tabs.Panel>
 
           <Tabs.Panel value="region" pt="md">
             {onBack && (
@@ -3487,45 +4219,434 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               </Group>
             )}
             <Box
+              px={{ base: "sm", sm: "md" }}
+              py="md"
               style={{
-                height: onBack ? "60vh" : "65vh",
-                overflow: "hidden",
-                overflowX: "hidden",
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
                 position: "relative",
-                paddingBottom: "60px", // Add padding to ensure total row is visible with scroll
               }}
             >
-              <DetailedViewTable
-                data={displaySectorData}
-                title=""
-                drillLevel={sectorDrillLevel}
-                moduleType="pipelineReport"
-                onClose={() => {
-                  if (onBack) {
-                    onBack();
-                  }
+              <PipelineRegionByRegionTable
+                title="By region / sector"
+                subtitle={pipelineSalespersonBarSubtitle}
+                rows={regionPipelineBaseRows}
+                summary={sectorSummary}
+                loading={sectorLoading || cellEditLoading}
+                onRowClick={(row) => {
+                  void handleSectorColumnClick("region", row.region, {
+                    region: row.region,
+                    potential: row.potential,
+                    pipeline: row.pipeline,
+                    gained: row.gained,
+                    lost: row.lost,
+                    quote: row.quote,
+                    expected: row.expected,
+                    total: 0,
+                  });
                 }}
-                loading={
-                  sectorLoading ||
-                  sectorSalespersonLoading ||
-                  sectorDrilldownLoading
-                }
-                onColumnClick={handleSectorColumnClick}
-                onBack={undefined}
-                showBackButton={false}
-                showCloseButton={false}
-                hideExpected={true}
-                headerActions={undefined}
-                onCellEdit={handleSectorCellEdit}
+                onFinancialColumnClick={(columnType, row) => {
+                  void handleSectorColumnClick(columnType, row.region, {
+                    region: row.region,
+                    potential: row.potential,
+                    pipeline: row.pipeline,
+                    gained: row.gained,
+                    lost: row.lost,
+                    quote: row.quote,
+                    expected: row.expected,
+                    total: 0,
+                  });
+                }}
+                emptyMessage="No regional pipeline data"
               />
             </Box>
-            </Tabs.Panel>
+          </Tabs.Panel>
         </Tabs>
       </Box>
+
+      <Drawer
+        opened={
+          showSalespersonPipelineDrawer ||
+          showProductPipelineDrawer ||
+          showSectorPipelineDrawer
+        }
+        onClose={handlePipelineDrawerNavBack}
+        position="right"
+        size="max(520px, 75vw)"
+        padding={0}
+        offset={8}
+        radius="md"
+        zIndex={400}
+        withOverlay
+        overlayProps={{ opacity: 0.35, blur: 2 }}
+        styles={{
+          header: { display: "none" },
+          body: { padding: 0, height: "100%" },
+          content: {
+            fontFamily: "Geist, sans-serif",
+            borderLeft: "1px solid #E2E8F0",
+            boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.1)",
+          },
+        }}
+      >
+        <Box
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100vh",
+            maxHeight: "100%",
+          }}
+        >
+          <Box
+            px={20}
+            py={12}
+            style={{
+              borderBottom: "1px solid #EEF2F7",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Back"
+                onClick={handlePipelineDrawerNavBack}
+              >
+                <IconArrowLeft size={18} stroke={2} />
+              </ActionIcon>
+              <Text fz={12} fw={600} c="#64748B" truncate style={{ minWidth: 0 }}>
+                {pipelineDrawerHeaderLabel}
+              </Text>
+            </Group>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={handlePipelineDrawerNavBack}
+              aria-label="Close"
+            >
+              <IconX size={18} stroke={2} />
+            </ActionIcon>
+          </Box>
+
+          <ScrollArea
+            type="scroll"
+            scrollbarSize={8}
+            style={{ flex: 1, minHeight: 0 }}
+          >
+            <Box p={20} pb={28} style={{ minWidth: 0 }}>
+              {showSalespersonPipelineDrawer ? (
+                drillLevel === 2 && selectedColumnType ? (
+                  <DetailedViewTable
+                    data={displayPotentialCustomersDrill2Table}
+                    title=""
+                    drillLevel={2}
+                    moduleType="pipelineReport"
+                    onClose={handleResetToBase}
+                    loading={drilldownLoading}
+                    onColumnClick={pipelineQuotationDrill2ColumnClick}
+                    onBack={undefined}
+                    showBackButton={false}
+                    showCloseButton={false}
+                    selectedColumnType={selectedColumnType}
+                    headerActions={undefined}
+                    onCellEdit={undefined}
+                  />
+                ) : drillLevel === 1 && selectedColumnType ? (
+                  <PipelineCustomerProfitTable
+                    title="By customer"
+                    subtitle={pipelineSalespersonBarSubtitle}
+                    rows={customerProfitRows}
+                    summary={customerProfitSummary}
+                    loading={customerProfitLoading || drilldownLoading}
+                    drillableMetrics={[
+                      "potential",
+                      "pipeline",
+                      "gained",
+                      "quote",
+                      "lost",
+                    ]}
+                    onMetricClick={(columnType, row) => {
+                      void handleCustomerProfitMetricClick(
+                        columnType,
+                        row,
+                        "salesperson"
+                      );
+                    }}
+                  />
+                ) : (
+                  <PipelineSalespersonCustomerDrawerTable
+                    rows={salespersonCustomerDrawerTableModel.customerRows}
+                    rowDrilldownIndices={
+                      salespersonCustomerDrawerTableModel.rowDrilldownIndices
+                    }
+                    summary={drilldownSummary}
+                    salespersonLabel={selectedSalesperson}
+                    loading={
+                      initialLoading || drilldownLoading || cellEditLoading
+                    }
+                    periodLabel={pipelineSalespersonBarSubtitle}
+                    onFinancialColumnClick={(columnType, row) => {
+                      void handleColumnClick(
+                        columnType,
+                        row.customer_name,
+                        row
+                      );
+                    }}
+                    onExpectedEnter={(drilldownIndex, row, value) => {
+                      void handleCellEdit(
+                        drilldownIndex,
+                        "expected",
+                        value,
+                        row,
+                        true
+                      );
+                    }}
+                  />
+                )
+              ) : null}
+              {showProductPipelineDrawer ? (
+                <>
+                  {drillLevel === 2 &&
+                  selectedColumnType &&
+                  selectedService &&
+                  !selectedSector ? (
+                    <DetailedViewTable
+                      data={displayPotentialCustomersDrill2Table}
+                      title=""
+                      drillLevel={2}
+                      moduleType="pipelineReport"
+                      onClose={handleResetToBase}
+                      loading={drilldownLoading}
+                      onColumnClick={pipelineQuotationDrill2ColumnClick}
+                      onBack={undefined}
+                      showBackButton={false}
+                      showCloseButton={false}
+                      selectedColumnType={selectedColumnType}
+                      headerActions={undefined}
+                      onCellEdit={undefined}
+                    />
+                  ) : drillLevel === 1 &&
+                    selectedColumnType &&
+                    selectedService &&
+                    !selectedSector &&
+                    selectedSalesperson ? (
+                    <PipelineCustomerProfitTable
+                      title="By customer"
+                      subtitle={pipelineSalespersonBarSubtitle}
+                      rows={customerProfitRows}
+                      summary={customerProfitSummary}
+                      loading={customerProfitLoading || drilldownLoading}
+                      drillableMetrics={[
+                        "potential",
+                        "pipeline",
+                        "gained",
+                        "quote",
+                        "lost",
+                      ]}
+                      onMetricClick={(columnType, row) => {
+                        void handleCustomerProfitMetricClick(
+                          columnType,
+                          row,
+                          "product"
+                        );
+                      }}
+                    />
+                  ) : productDrillLevel === 2 && drillLevel === 0 ? (
+                    <PipelineSalespersonCustomerDrawerTable
+                      rows={productCustomerDrawerTableModel.customerRows}
+                      rowDrilldownIndices={
+                        productCustomerDrawerTableModel.rowDrilldownIndices
+                      }
+                      summary={productDrilldownSummary}
+                      salespersonLabel={selectedSalesperson}
+                      breakdownHeading={
+                        selectedSalesperson
+                          ? `${selectedSalesperson.trim()} · Customers breakdown`
+                          : null
+                      }
+                      loading={
+                        productDrilldownLoading ||
+                        productSalespersonLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleProductColumnClick(
+                          columnType,
+                          row.customer_name,
+                          row
+                        );
+                      }}
+                      onExpectedEnter={(drilldownIndex, row, value) => {
+                        void handleProductCellEdit(
+                          drilldownIndex,
+                          "expected",
+                          value,
+                          row,
+                          true
+                        );
+                      }}
+                    />
+                  ) : productDrillLevel === 1 ? (
+                    <PipelineSalespersonBreakdownDrawerTable
+                      rows={productSalespersonData}
+                      summary={productSalespersonSummary}
+                      breakdownHeading={`${[selectedService, selectedServiceType]
+                        .filter(Boolean)
+                        .join(" ") || "Product"} · Salesperson breakdown`}
+                      loading={
+                        productLoading ||
+                        productSalespersonLoading ||
+                        productDrilldownLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onSalespersonClick={(row) => {
+                        const salespersonRow = row as PipelineProductSalespersonRow;
+                        void handleProductColumnClick(
+                          "salesperson",
+                          salespersonRow.salesperson,
+                          salespersonRow
+                        );
+                      }}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleProductColumnClick(
+                          columnType,
+                          row.salesperson,
+                          row as PipelineProductSalespersonRow
+                        );
+                      }}
+                      emptyMessage="No salesperson pipeline data"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {showSectorPipelineDrawer ? (
+                <>
+                  {drillLevel === 2 && selectedColumnType && selectedSector ? (
+                    <DetailedViewTable
+                      data={displayPotentialCustomersDrill2Table}
+                      title=""
+                      drillLevel={2}
+                      moduleType="pipelineReport"
+                      onClose={handleResetToBase}
+                      loading={drilldownLoading}
+                      onColumnClick={pipelineQuotationDrill2ColumnClick}
+                      onBack={undefined}
+                      showBackButton={false}
+                      showCloseButton={false}
+                      selectedColumnType={selectedColumnType}
+                      headerActions={undefined}
+                      onCellEdit={undefined}
+                    />
+                  ) : drillLevel === 1 &&
+                    selectedColumnType &&
+                    selectedSector &&
+                    selectedSalesperson ? (
+                    <PipelineCustomerProfitTable
+                      title="By customer"
+                      subtitle={pipelineSalespersonBarSubtitle}
+                      rows={customerProfitRows}
+                      summary={customerProfitSummary}
+                      loading={customerProfitLoading || drilldownLoading}
+                      drillableMetrics={[
+                        "potential",
+                        "pipeline",
+                        "gained",
+                        "quote",
+                        "lost",
+                      ]}
+                      onMetricClick={(columnType, row) => {
+                        void handleCustomerProfitMetricClick(
+                          columnType,
+                          row,
+                          "regional"
+                        );
+                      }}
+                    />
+                  ) : sectorDrillLevel === 2 && drillLevel === 0 ? (
+                    <PipelineSalespersonCustomerDrawerTable
+                      rows={sectorCustomerDrawerTableModel.customerRows}
+                      rowDrilldownIndices={
+                        sectorCustomerDrawerTableModel.rowDrilldownIndices
+                      }
+                      summary={sectorDrilldownSummary}
+                      salespersonLabel={selectedSalesperson || selectedSector}
+                      breakdownHeading={
+                        selectedSalesperson
+                          ? `${(selectedSector || "").trim()} · ${selectedSalesperson.trim()} · Customers breakdown`
+                          : `${(selectedSector || "").trim()} · Customers breakdown`
+                      }
+                      loading={
+                        sectorDrilldownLoading ||
+                        sectorSalespersonLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleSectorColumnClick(
+                          columnType,
+                          row.customer_name,
+                          row
+                        );
+                      }}
+                      onExpectedEnter={(drilldownIndex, row, value) => {
+                        void handleSectorCellEdit(
+                          drilldownIndex,
+                          "expected",
+                          value,
+                          row,
+                          true
+                        );
+                      }}
+                    />
+                  ) : sectorDrillLevel === 1 ? (
+                    <PipelineSalespersonBreakdownDrawerTable
+                      rows={sectorSalespersonData}
+                      summary={sectorSalespersonSummary}
+                      breakdownHeading={`${(selectedSector || "").trim() || "Region"} · Salesperson breakdown`}
+                      loading={
+                        sectorLoading ||
+                        sectorSalespersonLoading ||
+                        sectorDrilldownLoading ||
+                        cellEditLoading
+                      }
+                      periodLabel={pipelineSalespersonBarSubtitle}
+                      onSalespersonClick={(row) => {
+                        const salespersonRow = row as PipelineSalespersonRow;
+                        void handleSectorColumnClick(
+                          "salesperson",
+                          salespersonRow.salesperson,
+                          salespersonRow
+                        );
+                      }}
+                      onFinancialColumnClick={(columnType, row) => {
+                        void handleSectorColumnClick(
+                          columnType,
+                          row.salesperson,
+                          row as PipelineSalespersonRow
+                        );
+                      }}
+                      emptyMessage="No salesperson pipeline data"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+            </Box>
+          </ScrollArea>
+        </Box>
+      </Drawer>
+      </>
     );
   }
 
-  // For drill levels 1 and 2, show the existing detailed view
+  // For drill levels 1 (full-page fallback) and other detailed views
   return (
     <DetailedViewTable
       data={currentData}

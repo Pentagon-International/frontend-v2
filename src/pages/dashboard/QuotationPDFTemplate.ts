@@ -298,49 +298,74 @@ const fetchUpcomingSchedules = async (
   }
 };
 
+/** Quotation PDF preview uses logged-in user country + default branch (see QuotationMaster). */
+const hideUpcomingScheduleForDubaiUser = (
+  country?: { country_name?: string } | null,
+  defaultBranch?: { branch_name?: string } | null,
+): boolean => {
+  if (
+    String(country?.country_name ?? "")
+      .toLowerCase()
+      .includes("dubai")
+  ) {
+    return true;
+  }
+  if (String(defaultBranch?.branch_name ?? "").toUpperCase().includes("DUBAI")) {
+    return true;
+  }
+  return false;
+};
+
 export const generateNewQuotationPDF = async (
   rowData: any,
   defaultBranch: any,
   country?: any,
   userCurrency?: any
 ): Promise<string> => {
+  const hideUpcomingSchedule = hideUpcomingScheduleForDubaiUser(
+    country,
+    defaultBranch,
+  );
+
   // ===== PRE-FETCH UPCOMING SCHEDULES =====
   let upcomingSchedules: any[] = [];
-  try {
-    const firstQuotation =
-      Array.isArray(rowData?.quotation) && rowData.quotation.length > 0
-        ? rowData.quotation[0]
-        : null;
+  if (!hideUpcomingSchedule) {
+    try {
+      const firstQuotation =
+        Array.isArray(rowData?.quotation) && rowData.quotation.length > 0
+          ? rowData.quotation[0]
+          : null;
 
-    if (firstQuotation) {
-      const originCode =
-        String(firstQuotation.origin_code || firstQuotation.origin || "").trim();
-      const destinationCode =
-        String(
-          firstQuotation.destination_code || firstQuotation.destination || "",
+      if (firstQuotation) {
+        const originCode =
+          String(firstQuotation.origin_code || firstQuotation.origin || "").trim();
+        const destinationCode =
+          String(
+            firstQuotation.destination_code || firstQuotation.destination || "",
+          ).trim();
+        const etdFrom = firstQuotation.created_at
+          ? (() => {
+              const d = new Date(firstQuotation.created_at);
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, "0");
+              const day = String(d.getDate()).padStart(2, "0");
+              return `${y}-${m}-${day}`;
+            })()
+          : "";
+        const carrierCode = String(
+          firstQuotation.carrier_code || firstQuotation.carrier || "",
         ).trim();
-      const etdFrom = firstQuotation.created_at
-        ? (() => {
-            const d = new Date(firstQuotation.created_at);
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, "0");
-            const day = String(d.getDate()).padStart(2, "0");
-            return `${y}-${m}-${day}`;
-          })()
-        : "";
-      const carrierCode = String(
-        firstQuotation.carrier_code || firstQuotation.carrier || "",
-      ).trim();
 
-      upcomingSchedules = await fetchUpcomingSchedules(
-        originCode,
-        destinationCode,
-        etdFrom,
-        carrierCode,
-      );
+        upcomingSchedules = await fetchUpcomingSchedules(
+          originCode,
+          destinationCode,
+          etdFrom,
+          carrierCode,
+        );
+      }
+    } catch {
+      upcomingSchedules = [];
     }
-  } catch {
-    upcomingSchedules = [];
   }
 
   try {
@@ -1420,8 +1445,8 @@ export const generateNewQuotationPDF = async (
       yPos += 5;
     } // End of TERMS & CONDITIONS section (only for non-Pentagon companies)
 
-    // ===== UPCOMING SCHEDULE SECTION =====
-    if (upcomingSchedules.length > 0) {
+    // ===== UPCOMING SCHEDULE SECTION (hidden for Dubai users — see hideUpcomingScheduleForDubaiUser) =====
+    if (!hideUpcomingSchedule && upcomingSchedules.length > 0) {
       yPos += 5;
 
       if (yPos > pageHeight - 40) {

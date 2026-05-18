@@ -43,6 +43,12 @@ export const CollapsibleNav = ({
 
   const hasActiveChild =
     (label === "Sales" && activeSubNav === "Tariff") ||
+    (label === "Dashboard" &&
+      (activeSubNav === "Overview" ||
+        activeSubNav === "Enquiry Conversion" ||
+        activeSubNav === "Call Entry" ||
+        activeSubNav === "Outstanding / Overdue" ||
+        activeSubNav === "Budget vs Actual")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
@@ -61,18 +67,18 @@ export const CollapsibleNav = ({
         activeSubNav === "Supplier Invoice Reversal" ||
         activeSubNav === "Journal Voucher" ||
         activeSubNav === "JournalVoucherReversal" ||
-        activeSubNav === "Subledger Enquiry"));
+        activeSubNav === "Subledger Enquiry" ||
+        activeSubNav === "Document Allocation" ||
+        activeSubNav === "Debit/Credit Note Non Trade"));
 
   // compute opened based on mode
   const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;
 
   // now compute isActive (depends on opened)
-  const isActive =
-    activeNav === label ||
-    (activeNav === "Transportation" &&
-      (label === "Air" || label === "Ocean")) ||
-    hasActiveChild ||
-    opened;
+  // Note: For "Air" and "Ocean", we deliberately rely on `hasActiveChild`
+  // (which inspects activeSubNav prefixes) rather than `activeNav === "Transportation"`
+  // — otherwise both collapsibles light up together for any Transportation sub-page.
+  const isActive = activeNav === label || hasActiveChild || opened;
 
   // refs for positioning flyout in collapsed mode
   const navRef = useRef<HTMLDivElement | null>(null);
@@ -160,7 +166,7 @@ export const CollapsibleNav = ({
   useEffect(() => {
     if (opened && isSidebarCollapsed && navRef.current) {
       const rect = navRef.current.getBoundingClientRect();
-      setFlyoutPos({ top: rect.top, left: rect.right + 8 });
+      setFlyoutPos({ top: rect.top, left: rect.right + 12 });
     }
   }, [opened, isSidebarCollapsed]);
 
@@ -206,10 +212,17 @@ export const CollapsibleNav = ({
         if (label === "Air") {
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
         } else if (label === "Ocean") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
         } else if (label === "Sales") {
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Dashboard", false);
+        } else if (label === "Dashboard") {
+          setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
         }
@@ -249,7 +262,7 @@ export const CollapsibleNav = ({
               backgroundColor:
                 label !== "Tariff"
                   ? isActive
-                    ? "#105476"
+                    ? iconColor
                     : iconBackground
                   : "transparent",
               color:
@@ -258,8 +271,8 @@ export const CollapsibleNav = ({
                     ? "#fff"
                     : iconColor
                   : isActive
-                    ? "#105476"
-                    : "#444955",
+                    ? "#E8F4FF"
+                    : "#7A9AB8",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -292,10 +305,10 @@ export const CollapsibleNav = ({
       {isSidebarCollapsed && !opened && label !== "Tariff" ? (
         <Tooltip
           label={label}
-          color="#363636"
+          color="#0F2035"
           position="right"
           arrowOffset={50}
-          style={{ padding: "5px 15px", fontWeight: 400 }}
+          style={{ padding: "5px 14px", fontWeight: 400, fontSize: "13px" }}
           arrowSize={8}
           withArrow
         >
@@ -336,13 +349,13 @@ export const CollapsibleNav = ({
             }}
             style={{
               position: "fixed",
-              top: flyoutPos.top,
+              top: label === "Accounts" ? 80 : flyoutPos.top,
               left: flyoutPos.left,
               zIndex: 100,
-              background: "#fff",
-              border: "1px solid #BADDEE",
-              borderRadius: 6,
-              boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+              background: "#0F2035",
+              border: "1px solid #1A2D42",
+              borderRadius: 8,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
               minWidth: 220,
               overflow: "hidden",
             }}
