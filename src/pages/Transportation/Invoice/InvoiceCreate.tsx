@@ -406,6 +406,36 @@ function getHousingChargeArray(
   return [];
 }
 
+function isCollectChargeRow(c: Record<string, unknown>): boolean {
+  const pp = String(c.pp_cc ?? "")
+    .trim()
+    .toUpperCase();
+  return pp === "COLLECT" || pp === "CC";
+}
+
+/** Agent invoice: Collect charges from every housing (all houses on the job). */
+function collectAgentChargesFromHousings(
+  housings: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return housings.flatMap((hawb) =>
+    getHousingChargeArray(hawb)
+      .filter(isCollectChargeRow)
+      .map((c) => ({
+        ...c,
+        shipment_id:
+          c.shipment_id ??
+          hawb.shipment_id ??
+          hawb.shipment_no ??
+          "",
+        shipper_id:
+          c.shipper_id ??
+          hawb.shipper_code ??
+          hawb.shipper_id ??
+          "",
+      })),
+  );
+}
+
 /** Map job/house party to master state_id for invoice State dropdown. */
 function resolvePartyStateIdFromHousing(
   isAgent: boolean,
@@ -589,6 +619,8 @@ function InvoiceCreate({
   >({});
   const vatRatesCacheRef = useRef<Map<number, VatRates>>(new Map());
   const lastVatRatesFetchKeyRef = useRef<string>("");
+  const chargesPrefilledFromJobRef = useRef(false);
+  const chargeUnitsByIndexRef = useRef<Record<number, string>>({});
 
   const [isPosting, setIsPosting] = useState(false);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
@@ -1043,11 +1075,17 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.bill_to]);
 
+  useEffect(() => {
+    chargesPrefilledFromJobRef.current = false;
+    chargeUnitsByIndexRef.current = {};
+  }, [location.key]);
+
   // Populate form from house (HAWB) state: shipper/Bill To/address and house charges → invoice charges
   useEffect(() => {
     // After POST, we rehydrate charges from API response. Avoid re-applying the initial
     // navigation (house) charges, which would overwrite the response values.
     if (invoiceIsPosted || isPosting) return;
+    if (chargesPrefilledFromJobRef.current) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const isAgent =
@@ -1283,41 +1321,21 @@ function InvoiceCreate({
         const chargesSource: unknown[] = (() => {
           if (documentType === "CRN") return [];
           if (isAgent) {
-            const houses = hawbDetails as Array<Record<string, unknown>>;
-            const merged = houses.flatMap((hawb) =>
-              getHousingChargeArray(hawb)
-                .filter(
-                  (c) =>
-                    String((c as { pp_cc?: unknown }).pp_cc ?? "").trim() ===
-                    "Collect",
-                )
-                .map((c) => {
-                  const row =
-                    typeof c === "object" && c !== null
-                      ? (c as Record<string, unknown>)
-                      : {};
-                  return {
-                    ...row,
-                    shipment_id:
-                      row.shipment_id ??
-                      hawb.shipment_id ??
-                      hawb.shipment_no ??
-                      "",
-                    shipper_id:
-                      row.shipper_id ??
-                      hawb.shipper_code ??
-                      hawb.shipper_id ??
-                      "",
-                  };
-                }),
-            );
-            if (merged.length > 0) return merged;
-            if (
-              firstHawb.charges &&
-              Array.isArray(firstHawb.charges) &&
-              firstHawb.charges.length > 0
-            )
-              return firstHawb.charges as unknown[];
+            const navHouses = hawbDetails as Array<Record<string, unknown>>;
+            const jobHouses = jobHousingArr;
+            const housesToScan =
+              jobHouses.length > 0 ? jobHouses : navHouses;
+            let merged = collectAgentChargesFromHousings(housesToScan);
+            if (merged.length === 0 && navHouses.length > 0) {
+              merged = collectAgentChargesFromHousings(navHouses);
+            }
+            if (merged.length === 0 && navHouses[0]) {
+              const premerged = getHousingChargeArray(navHouses[0]).filter(
+                isCollectChargeRow,
+              );
+              if (premerged.length > 0) return premerged as unknown[];
+            }
+            if (merged.length > 0) return merged as unknown[];
             return [];
           }
           if (
@@ -1517,6 +1535,11 @@ function InvoiceCreate({
             };
           });
           form.setFieldValue("charges", mappedCharges);
+          chargesPrefilledFromJobRef.current = true;
+          mappedCharges.forEach((c, idx) => {
+            chargeUnitsByIndexRef.current[idx] =
+              `${c.amount_per_unit ?? ""}|${c.no_of_unit ?? ""}`;
+          });
 
           const jobServiceIdForSac =
             (location.state as { job?: { service_id?: number } })?.job
@@ -2123,16 +2146,16 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.charges]);
 
-  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
-  const chargeAmountPerUnits = form.values.charges
-    .map((c) => c.amount_per_unit)
-    .join(",");
-  const chargeNoOfUnits = form.values.charges
-    .map((c) => c.no_of_unit)
-    .join(",");
-
+  // Auto-calculate currency amount only when no_of_unit or amount_per_unit changes on a row
   useEffect(() => {
-    const updatedCharges = form.values.charges.map((charge) => {
+    const updatedCharges = form.values.charges.map((charge, index) => {
+      if (charge.is_tax_row === true) return charge;
+
+      const unitsKey = `${charge.amount_per_unit ?? ""}|${charge.no_of_unit ?? ""}`;
+      const prevUnitsKey = chargeUnitsByIndexRef.current[index];
+      if (prevUnitsKey === unitsKey) return charge;
+      chargeUnitsByIndexRef.current[index] = unitsKey;
+
       if (
         charge.amount_per_unit != null &&
         charge.amount_per_unit > 0 &&
@@ -2160,7 +2183,7 @@ function InvoiceCreate({
       form.setFieldValue("charges", updatedCharges);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits]);
+  }, [form.values.charges]);
 
   // Auto-calculate amount_in_local (Local Amount) as: amount (currency_amount) * charge.roe
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
@@ -2846,8 +2869,6 @@ function InvoiceCreate({
       let percentageWiseTotals: NonNullable<
         InvoiceTaxBreakup["percentage_wise_totals"]
       > = [];
-      let taxes: Array<{ tax_code: string; rate: number; amount: number }> = [];
-
       if (isVatPost) {
         let breakupData = gstBreakup;
         if (!breakupData?.percentage_wise_totals?.length) {
@@ -2857,13 +2878,6 @@ function InvoiceCreate({
           });
         }
         percentageWiseTotals = breakupData?.percentage_wise_totals ?? [];
-        taxes = percentageWiseTotals
-          .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
-          .map((row) => ({
-            tax_code: row.vat_charge_code ?? row.rate_name ?? "",
-            rate: row.tax_rate ?? row.rate ?? 0,
-            amount: clampAmount(row.amount_in_local ?? 0) ?? 0,
-          }));
       } else if (!isAgentPost) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
@@ -2872,24 +2886,6 @@ function InvoiceCreate({
           });
         }
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-        taxes = sacWiseTotals
-          .filter((row) => {
-            const name = String(row.charge_name ?? "")
-              .trim()
-              .toUpperCase();
-            const rate = Number(row.rate ?? 0);
-            if (
-              (name === "IGST" || name === "CGST" || name === "SGST") &&
-              rate <= 0
-            )
-              return false;
-            return true;
-          })
-          .map((row) => ({
-            tax_code: row.sac_code ?? "",
-            rate: row.rate ?? 0,
-            amount: clampAmount(row.total_amount ?? 0) ?? 0,
-          }));
       }
 
       const topRoe =
@@ -3170,7 +3166,7 @@ function InvoiceCreate({
         Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
         charges: allChargesPayload,
-        taxes,
+        taxes: [],
       };
       const response = (await putAPICall(URL.invoice, payload, API_HEADER)) as
         | {
@@ -5127,6 +5123,15 @@ function InvoiceCreate({
                                   );
                                   return next;
                                 });
+                                const nextUnits: Record<number, string> = {};
+                                Object.entries(chargeUnitsByIndexRef.current).forEach(
+                                  ([key, value]) => {
+                                    const idx = Number(key);
+                                    if (Number.isNaN(idx) || idx === index) return;
+                                    nextUnits[idx > index ? idx - 1 : idx] = value;
+                                  },
+                                );
+                                chargeUnitsByIndexRef.current = nextUnits;
                                 lastVatRatesFetchKeyRef.current = "";
                                 form.removeListItem("charges", index);
                               }}
@@ -5156,6 +5161,9 @@ function InvoiceCreate({
                                       (newChargeCurrency || "").toUpperCase(),
                                   )?.value ??
                                     "");
+                                const newIndex = form.values.charges.length;
+                                chargeUnitsByIndexRef.current[newIndex] =
+                                  "|";
                                 form.insertListItem("charges", {
                                   charge_id: null,
                                   charge_name: "",
