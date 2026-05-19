@@ -209,6 +209,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/finance-dashboard/collection-target-vs-performance")) {
       setActiveNav("Finance Dashboard");
       setActiveSubNav("Collection Target vs Performance");
+    } else if (path.startsWith("/finance-dashboard/outstanding-ageing")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Outstanding & Ageing");
     } else if (path === "/") {
       setActiveNav("Dashboard");
       setActiveSubNav("Overview");

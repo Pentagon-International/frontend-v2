@@ -355,6 +355,21 @@ const Navbar = ({
                     setIsDashboardOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Finance Dashboard"
+                  label="Outstanding & Ageing"
+                  icon={IconReceipt2}
+                  path="/finance-dashboard/outstanding-ageing"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                    setIsDashboardOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav

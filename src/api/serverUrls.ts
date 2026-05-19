@@ -217,6 +217,7 @@ export const URL = {
     branchBudgetVsActual: "dashboard/branch-budget-vs-actual/",
     collectionTargetVsPerformance: "dashboard/collection-target-vs-performance/",
     collectionBranchInvoices: "dashboard/collection-branch-invoices/",
+    financeOutstandingAgeing: "dashboard/finance-outstanding-ageing/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",
