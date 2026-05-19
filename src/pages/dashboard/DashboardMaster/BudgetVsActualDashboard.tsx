@@ -641,29 +641,29 @@ export default function BudgetVsActualDashboard() {
                 <Box style={{ overflowX: "auto" }}>
                   <Box style={{ minWidth: isCompact ? 620 : undefined }}>
                     <Grid columns={24} mb={8}>
-                      <Grid.Col span={7} style={{ paddingLeft: 20 }}>
+                      <Grid.Col span={5} style={{ paddingLeft: 20 }}>
                         <Text fz={10} fw={700} c="#94A3B8" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Rep
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Budget
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={3}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                      <Grid.Col span={2}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Actual
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={7} />
-                      <Grid.Col span={2}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                      <Grid.Col span={4}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Variance
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                      <Grid.Col span={3}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Achvd.
                         </Text>
                       </Grid.Col>
@@ -703,7 +703,7 @@ export default function BudgetVsActualDashboard() {
                             }}
                           >
                             <Grid columns={24} align="center">
-                              <Grid.Col span={7} style={{ paddingLeft: 20 }}>
+                              <Grid.Col span={5} style={{ paddingLeft: 20 }}>
                                 <Text fw={700} fz={12} c="#111827" lineClamp={1}>
                                   {row.sales_person}
                                 </Text>
@@ -712,12 +712,12 @@ export default function BudgetVsActualDashboard() {
                                 </Text> */}
                               </Grid.Col>
                               <Grid.Col span={3}>
-                                <Text fw={600} fz={12} c="#64748B" ta="right">
+                                <Text fw={600} fz={12} c="#64748B" ta="center">
                                   {formatCrL(budget)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={3}>
-                                <Text fw={700} fz={12} c="#111827" ta="right">
+                              <Grid.Col span={2}>
+                                <Text fw={700} fz={12} c="#111827" ta="center">
                                   {formatCrL(actual)}
                                 </Text>
                               </Grid.Col>
@@ -763,19 +763,19 @@ export default function BudgetVsActualDashboard() {
                                   />
                                 </Box>
                               </Grid.Col>
-                              <Grid.Col span={2}>
+                              <Grid.Col span={4}>
                                 <Text
                                   fw={700}
                                   fz={12}
                                   c={variance < 0 ? "#DC2626" : "#16A34A"}
-                                  ta="right"
+                                  ta="center"
                                 >
                                   {variance > 0 ? "+" : ""}
                                   {formatCrL(variance)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={2}>
-                                <Text fw={700} fz={12} c="#374151" ta="right">
+                              <Grid.Col span={3}>
+                                <Text fw={700} fz={12} c="#374151" ta="center">
                                   {Math.round(achv)}%
                                 </Text>
                               </Grid.Col>
@@ -839,18 +839,18 @@ export default function BudgetVsActualDashboard() {
 
                     <Divider my={10} size="sm" style={{ borderTop: "2px solid #111827" }} />
                     <Grid columns={24} align="center" style={{ paddingLeft: 20 }}>
-                      <Grid.Col span={7} >
+                      <Grid.Col span={5}>
                         <Text fw={800} fz={12} c="#111827">
                           Team Total
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fw={700} fz={12} c="#64748B" ta="right">
+                        <Text fw={700} fz={12} c="#64748B" ta="center">
                           {formatCrL(teamSummary.budget)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={3}>
-                        <Text fw={700} fz={12} c="#111827" ta="right">
+                      <Grid.Col span={2}>
+                        <Text fw={700} fz={12} c="#111827" ta="center">
                           {formatCrL(teamSummary.actual)}
                         </Text>
                       </Grid.Col>
@@ -906,19 +906,19 @@ export default function BudgetVsActualDashboard() {
                           );
                         })()}
                       </Grid.Col>
-                      <Grid.Col span={2}>
+                      <Grid.Col span={4}>
                         <Text
                           fw={800}
                           fz={12}
                           c={teamSummary.variance < 0 ? "#DC2626" : "#16A34A"}
-                          ta="right"
+                          ta="center"
                         >
                           {teamSummary.variance > 0 ? "+" : ""}
                           {formatCrL(teamSummary.variance)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
-                        <Text fw={800} fz={12} c="#374151" ta="right">
+                      <Grid.Col span={3}>
+                        <Text fw={800} fz={12} c="#374151" ta="center">
                           {teamSummary.achv.toFixed(1)}%
                         </Text>
                       </Grid.Col>
