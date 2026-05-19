@@ -72,12 +72,6 @@ const BudgetVsActualCard = ({
   handleBudgetMonthFilterChange,
   setSelectedYear,
 }: BudgetVsActualCardProps) => {
-  const normalizedBudgetEndMonth = useMemo(() => {
-    if (!selectedYear || !budgetEndMonth) return budgetEndMonth;
-    const endMonthPart = budgetEndMonth.split("-")[1];
-    return endMonthPart ? `${selectedYear}-${endMonthPart}` : budgetEndMonth;
-  }, [selectedYear, budgetEndMonth]);
-
   const summaryView = useMemo<BudgetSummaryView>(() => {
     const summary = budgetRawData?.summary;
     if (summary && typeof summary === "object") {
@@ -192,7 +186,11 @@ const BudgetVsActualCard = ({
           <Select
             placeholder="To Month"
             data={toMonthOptions}
-            value={normalizedBudgetEndMonth}
+            value={
+              toMonthOptions.some((opt) => opt.value === budgetEndMonth)
+                ? budgetEndMonth
+                : toMonthOptions[toMonthOptions.length - 1]?.value ?? budgetEndMonth
+            }
             size="xs"
             w={122}
             onChange={(value) => {

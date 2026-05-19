@@ -91,40 +91,6 @@ const BudgetBarChart = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetBarChartProps) => {
-  const normalizedBudgetEndMonth = useMemo(() => {
-    if (!selectedYear || !budgetEndMonth) return budgetEndMonth;
-    const endMonthPart = budgetEndMonth.split("-")[1];
-    return endMonthPart ? `${selectedYear}-${endMonthPart}` : budgetEndMonth;
-  }, [selectedYear, budgetEndMonth]);
-
-  const payloadPeriod = useMemo(() => {
-    const startMonthPart = budgetStartMonth?.split("-")[1];
-    const endMonthPart = budgetEndMonth?.split("-")[1];
-    const startYearPart = budgetStartMonth?.split("-")[0];
-    const selectedYearNum = selectedYear
-      ? parseInt(selectedYear, 10)
-      : startYearPart
-        ? parseInt(startYearPart, 10)
-        : undefined;
-    const startMonthNum = startMonthPart ? parseInt(startMonthPart, 10) : undefined;
-    const endMonthNum = endMonthPart ? parseInt(endMonthPart, 10) : undefined;
-    const isCrossYearRange =
-      typeof startMonthNum === "number" &&
-      typeof endMonthNum === "number" &&
-      startMonthNum >= endMonthNum;
-
-    const payloadStart =
-      selectedYearNum && startMonthPart
-        ? `${selectedYearNum}-${startMonthPart}`
-        : budgetStartMonth;
-    const payloadEnd =
-      selectedYearNum && endMonthPart
-        ? `${isCrossYearRange ? selectedYearNum + 1 : selectedYearNum}-${endMonthPart}`
-        : budgetEndMonth;
-
-    return { payloadStart, payloadEnd };
-  }, [selectedYear, budgetStartMonth, budgetEndMonth]);
-
   // Memoized chart data preparation
   const barChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -225,7 +191,7 @@ const BudgetBarChart = ({
               radius="sm"
               style={{ flexShrink: 0 }}
             >
-              {payloadPeriod.payloadStart} — {payloadPeriod.payloadEnd}
+              {budgetStartMonth} — {budgetEndMonth}
             </Badge>
           </Group>
           <Text
@@ -309,7 +275,7 @@ const BudgetBarChart = ({
         <Select
           placeholder="To Month"
           data={toMonthOptions}
-          value={normalizedBudgetEndMonth}
+          value={budgetEndMonth}
           onChange={(value) => {
             if (value) {
               handleBudgetMonthFilterChange(budgetStartMonth, value);
