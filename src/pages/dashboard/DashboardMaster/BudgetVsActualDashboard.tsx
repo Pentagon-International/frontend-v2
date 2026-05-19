@@ -73,23 +73,29 @@ const MODE_BAR_NAVY = "#1E293B";
 const MODE_BAR_ORANGE = "#F59E0B";
 const MODE_BAR_GREEN = "#22C55E";
 
-/** Monthly Trend — Budget (grey plan) vs Actual (page accent teal). */
-const TREND_CHART_BUDGET = "#94A3B8";
-const TREND_CHART_BUDGET_HOVER = "#64748B";
-const TREND_CHART_ACTUAL = "#105476";
-const TREND_CHART_ACTUAL_HOVER = "#0D4560";
-
 function getModeBarColor(modeName: string): string {
   const m = modeName.toLowerCase();
+  // Air before LCL so names like "Air LCL" use Monthly Trend actual color (navy).
+  if (m.includes("air")) return MODE_BAR_NAVY;
   if (m.includes("custom")) return MODE_BAR_GREEN;
   if (m.includes("lcl")) return MODE_BAR_ORANGE;
   if (m.includes("fcl")) return MODE_BAR_NAVY;
-  if (m.includes("air")) return MODE_BAR_NAVY;
   if (m.includes("rail")) return MODE_BAR_NAVY;
   if (m.includes("road")) return MODE_BAR_ORANGE;
   if (m.includes("warehous")) return MODE_BAR_ORANGE;
   return MODE_BAR_NAVY;
 }
+
+/** By Mode · YTD — Air uses same actual/budget colors as Monthly Trend. */
+function getByModeActualBarColor(modeName: string): string {
+  const m = modeName.toLowerCase();
+  if (m.includes("air")) return MODE_BAR_NAVY;
+  return getModeBarColor(modeName);
+}
+
+const BY_MODE_BUDGET_MARKER = MODE_BAR_ORANGE;
+const TREND_CHART_FORECAST = "#64748B";
+const TREND_CHART_FORECAST_HOVER = "#475569";
 
 const selectInputStyles = {
   input: {
@@ -283,9 +289,9 @@ export default function BudgetVsActualDashboard() {
           name: "Budget",
           type: "bar",
           data: budget,
-          itemStyle: { color: TREND_CHART_BUDGET, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: MODE_BAR_ORANGE, borderRadius: [4, 4, 0, 0] },
           emphasis: {
-            itemStyle: { color: TREND_CHART_BUDGET_HOVER },
+            itemStyle: { color: "#D97706" },
           },
           barWidth: "52%",
           barGap: "-100%",
@@ -295,9 +301,9 @@ export default function BudgetVsActualDashboard() {
           name: "Actual",
           type: "bar",
           data: actualBarData,
-          itemStyle: { color: TREND_CHART_ACTUAL, borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: MODE_BAR_NAVY, borderRadius: [3, 3, 0, 0] },
           emphasis: {
-            itemStyle: { color: TREND_CHART_ACTUAL_HOVER },
+            itemStyle: { color: "#0F172A" },
           },
           barWidth: "34%",
           barGap: "-100%",
@@ -307,7 +313,10 @@ export default function BudgetVsActualDashboard() {
           name: "Forecast",
           type: "bar",
           data: forecastBarData,
-          itemStyle: { color: "#F59E0B", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: TREND_CHART_FORECAST, borderRadius: [3, 3, 0, 0] },
+          emphasis: {
+            itemStyle: { color: TREND_CHART_FORECAST_HOVER },
+          },
           barWidth: "34%",
           barGap: "-100%",
           z: 2,
@@ -992,7 +1001,7 @@ export default function BudgetVsActualDashboard() {
                       const actualPct = clamp((actual / base) * 100, 0, 100);
                       const markerPct = clamp((budget / base) * 100, 0, 100);
                       const modeName = String(row.mode || "Unknown");
-                      const color = getModeBarColor(modeName);
+                      const color = getByModeActualBarColor(modeName);
                       return (
                         <Group key={modeName} justify="space-between" wrap="nowrap" gap={10} align="center">
                           <Text
@@ -1030,7 +1039,7 @@ export default function BudgetVsActualDashboard() {
                                 top: 0,
                                 bottom: 0,
                                 width: 2,
-                                background: "#F59E0B",
+                                background: BY_MODE_BUDGET_MARKER,
                                 zIndex: 2,
                               }}
                             />
