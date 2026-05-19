@@ -26,7 +26,14 @@ import {
   IconDownload,
   IconX,
 } from "@tabler/icons-react";
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+  type CSSProperties,
+} from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -58,6 +65,8 @@ type GstRatesBySacResponse = {
   igst_percent?: number | string | null;
   cgst_percent?: number | string | null;
   sgst_percent?: number | string | null;
+  vat_percent?: number | string | null;
+  vat?: boolean;
   same_state?: boolean;
 };
 
@@ -68,11 +77,56 @@ type GstRates = {
   same_state: boolean;
 };
 
-const fetchGstRatesByStateSac = async (payload: {
-  state_id: number;
-  sac_code: string;
-}) => {
+type VatRates = {
+  vat_percent: number | null;
+};
+
+const fetchGstRatesByStateSac = async (
+  payload:
+    | { state_id: number; sac_code: string }
+    | { vat: true; charge_id: number },
+) => {
   return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
+};
+
+const parseGstRatesPayload = (res: unknown): GstRates | null => {
+  const resObj = res as {
+    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as GstRatesBySacResponse | null | undefined;
+  const igstRaw = data?.igst_percent;
+  const cgstRaw = data?.cgst_percent;
+  const sgstRaw = data?.sgst_percent;
+  const sameState = data?.same_state ?? false;
+  return {
+    igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+    cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+    sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+    same_state: sameState,
+  };
+};
+
+const parseVatRatesPayload = (res: unknown): VatRates | null => {
+  const resObj = res as {
+    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as GstRatesBySacResponse | null | undefined;
+  const vatRaw = data?.vat_percent;
+  if (vatRaw == null || vatRaw === "") return { vat_percent: null };
+  const parsed = Number(vatRaw);
+  return { vat_percent: Number.isFinite(parsed) ? parsed : null };
+};
+
+const calcTaxAmountFromRate = (
+  base: number | null | undefined,
+  rate: number | null | undefined,
+): number => {
+  if (base == null || rate == null || rate <= 0) return 0;
+  return clampAmount(base * (rate / 100)) ?? 0;
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -155,10 +209,59 @@ const fetchGetEffectiveSac = async (
   }
 };
 
-// Fetch GST breakup for invoice: POST body { customer_id, invoice_id }
+type InvoiceTaxBreakup = {
+  vat?: boolean;
+  charges?: Array<{
+    charge_id?: number;
+    charge_name?: string;
+    sac_code?: string;
+    rate_name?: string;
+    rate?: number;
+    rate_type?: string;
+    amount?: number;
+    tax_rate?: number;
+    taxable_total?: number;
+    amount_in_local?: number;
+    vat_charge_id?: number;
+    vat_charge_code?: string;
+  }>;
+  sac_wise_totals?: Array<{
+    sac_code?: string;
+    charge_name?: string;
+    total_amount?: number;
+    charge_names?: string[];
+    charge_count?: number;
+    charge_id?: number;
+    rate?: number;
+    rate_type?: string;
+  }>;
+  percentage_wise_totals?: Array<{
+    charge_id?: number;
+    charge_name?: string;
+    charge_code?: string;
+    vat_charge_id?: number;
+    vat_charge_name?: string;
+    vat_charge_code?: string;
+    rate_name?: string;
+    rate?: number;
+    tax_rate?: number;
+    rate_type?: string;
+    taxable_total?: number;
+    amount_in_local?: number;
+    source_charge_names?: string[];
+    source_charge_count?: number;
+  }>;
+  cgst_total?: string;
+  sgst_total?: string;
+  igst_total?: string;
+  vat_total?: string;
+  total?: string;
+};
+
+// Fetch GST/VAT breakup: POST { invoice_id, vat?: true }
 const fetchInvoiceCalculateGstBreakup = async (payload: {
-  // customer_id: number;
   invoice_id: number;
+  vat?: boolean;
 }) => {
   try {
     const response = await postAPICall(
@@ -166,31 +269,11 @@ const fetchInvoiceCalculateGstBreakup = async (payload: {
       payload,
       API_HEADER,
     );
-    return response as {
-      charges?: Array<{
-        charge_id?: number;
-        charge_name?: string;
-        sac_code?: string;
-        rate_name?: string;
-        rate?: number;
-        rate_type?: string;
-        amount?: number;
-      }>;
-      sac_wise_totals?: Array<{
-        sac_code?: string;
-        charge_name?: string;
-        total_amount?: number;
-        charge_names?: string[];
-        charge_count?: number;
-        charge_id?: number;
-        rate?: number;
-        rate_type?: string;
-      }>;
-      cgst_total?: string;
-      sgst_total?: string;
-      igst_total?: string;
-      total?: string;
+    const raw = response as {
+      data?: InvoiceTaxBreakup;
+      [k: string]: unknown;
     };
+    return (raw?.data ?? response) as InvoiceTaxBreakup;
   } catch (error) {
     console.error("Error fetching calculate-gst-breakup:", error);
     throw error;
@@ -221,6 +304,8 @@ type ChargeItem = {
   igst_rate?: number | null;
   cgst_rate?: number | null;
   sgst_rate?: number | null;
+  tax_rate?: number | null;
+  tax_amount?: number | null;
 };
 
 type InvoiceFormData = {
@@ -321,6 +406,36 @@ function getHousingChargeArray(
   return [];
 }
 
+function isCollectChargeRow(c: Record<string, unknown>): boolean {
+  const pp = String(c.pp_cc ?? "")
+    .trim()
+    .toUpperCase();
+  return pp === "COLLECT" || pp === "CC";
+}
+
+/** Agent invoice: Collect charges from every housing (all houses on the job). */
+function collectAgentChargesFromHousings(
+  housings: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return housings.flatMap((hawb) =>
+    getHousingChargeArray(hawb)
+      .filter(isCollectChargeRow)
+      .map((c) => ({
+        ...c,
+        shipment_id:
+          c.shipment_id ??
+          hawb.shipment_id ??
+          hawb.shipment_no ??
+          "",
+        shipper_id:
+          c.shipper_id ??
+          hawb.shipper_code ??
+          hawb.shipper_id ??
+          "",
+      })),
+  );
+}
+
 /** Map job/house party to master state_id for invoice State dropdown. */
 function resolvePartyStateIdFromHousing(
   isAgent: boolean,
@@ -358,11 +473,7 @@ function resolveInvoiceRecordId(
   data: Record<string, unknown> | null | undefined,
   urlId?: string,
 ): number | undefined {
-  const candidates = [
-    urlId,
-    data?.invoice_id,
-    data?.id,
-  ];
+  const candidates = [urlId, data?.invoice_id, data?.id];
   for (const c of candidates) {
     if (c == null || c === "") continue;
     const n = typeof c === "number" ? c : Number(String(c).trim());
@@ -381,9 +492,7 @@ function getInvoiceDataFromLocationState(
   }
   if (
     s.id != null &&
-    (s.document_no != null ||
-      s.bill_to != null ||
-      Array.isArray(s.charges))
+    (s.document_no != null || s.bill_to != null || Array.isArray(s.charges))
   ) {
     return s as InvoiceDataFromApi;
   }
@@ -490,31 +599,7 @@ function InvoiceCreate({
     null,
   );
   const [chargesTabActive, setChargesTabActive] = useState<string>("charges");
-  const [gstBreakup, setGstBreakup] = useState<{
-    charges?: Array<{
-      charge_id?: number;
-      charge_name?: string;
-      sac_code?: string;
-      rate_name?: string;
-      rate?: number;
-      rate_type?: string;
-      amount?: number;
-    }>;
-    sac_wise_totals?: Array<{
-      sac_code?: string;
-      charge_name?: string;
-      total_amount?: number;
-      charge_names?: string[];
-      charge_count?: number;
-      charge_id?: number;
-      rate?: number;
-      rate_type?: string;
-    }>;
-    cgst_total?: string;
-    sgst_total?: string;
-    igst_total?: string;
-    total?: string;
-  } | null>(null);
+  const [gstBreakup, setGstBreakup] = useState<InvoiceTaxBreakup | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
 
   const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
@@ -525,6 +610,17 @@ function InvoiceCreate({
   >({});
   const gstRatesCacheRef = useRef<Map<string, GstRates>>(new Map());
   const lastGstRatesFetchKeyRef = useRef<string>("");
+
+  const [vatRatesByChargeIndex, setVatRatesByChargeIndex] = useState<
+    Record<number, VatRates | null>
+  >({});
+  const [vatRatesLoadingByIndex, setVatRatesLoadingByIndex] = useState<
+    Record<number, boolean>
+  >({});
+  const vatRatesCacheRef = useRef<Map<number, VatRates>>(new Map());
+  const lastVatRatesFetchKeyRef = useRef<string>("");
+  const chargesPrefilledFromJobRef = useRef(false);
+  const chargeUnitsByIndexRef = useRef<Record<number, string>>({});
 
   const [isPosting, setIsPosting] = useState(false);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
@@ -568,8 +664,9 @@ function InvoiceCreate({
       ? `Edit ${resolvedDocumentLabel}`
       : `Create ${resolvedDocumentLabel}`;
 
-  // Ref for validate (state optional when agent invoice) — kept in sync with isAgentInvoice
+  // Ref for validate (state optional when agent / VAT invoice) — kept in sync
   const isAgentInvoiceRef = useRef(false);
+  const isVatInvoiceRef = useRef(false);
 
   // Agent invoice: hide SAC, IGST/CGST/SGST, Totals section, and Tax tab (customer invoice only)
   const isAgentInvoice = useMemo(() => {
@@ -656,6 +753,29 @@ function InvoiceCreate({
     return countryCode === "CN" || countryName === "CHINA";
   }, [user?.country?.country_code, user?.country?.country_name]);
 
+  // China & Kenya: VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
+  const isVatInvoiceUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return (
+      countryCode === "CN" ||
+      countryName === "CHINA" ||
+      countryCode === "KE" ||
+      countryName.includes("KENYA")
+    );
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
+  const isGstInvoiceUser = useMemo(
+    () => !isAgentInvoice && !isVatInvoiceUser,
+    [isAgentInvoice, isVatInvoiceUser],
+  );
+
+  useEffect(() => {
+    isVatInvoiceRef.current = isVatInvoiceUser;
+  }, [isVatInvoiceUser]);
+
+  const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
+
   // Helper function to calculate ROE based on currency and user's country
   const getRoeValue = useCallback(
     (currency: string): number => {
@@ -696,7 +816,11 @@ function InvoiceCreate({
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
       state: (value) =>
-        isAgentInvoiceRef.current ? null : !value ? "State is required" : null,
+        isAgentInvoiceRef.current || isVatInvoiceRef.current
+          ? null
+          : !value
+            ? "State is required"
+            : null,
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
@@ -797,7 +921,7 @@ function InvoiceCreate({
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
-    if (!firstHawb) return;
+    if (!firstHawb || isVatInvoiceUser) return;
 
     const stateIdNum = resolvePartyStateIdFromHousing(
       isAgent,
@@ -951,11 +1075,17 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.bill_to]);
 
+  useEffect(() => {
+    chargesPrefilledFromJobRef.current = false;
+    chargeUnitsByIndexRef.current = {};
+  }, [location.key]);
+
   // Populate form from house (HAWB) state: shipper/Bill To/address and house charges → invoice charges
   useEffect(() => {
     // After POST, we rehydrate charges from API response. Avoid re-applying the initial
     // navigation (house) charges, which would overwrite the response values.
     if (invoiceIsPosted || isPosting) return;
+    if (chargesPrefilledFromJobRef.current) return;
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const isAgent =
@@ -1092,11 +1222,11 @@ function InvoiceCreate({
               );
             }
 
-            // Populate GSTN from consignee GST, if available
+            // Populate GSTN from consignee GST (India GST flow only)
             const consigneeGstRaw = (
               firstHawb as { consignee_gst_id?: string | null }
             ).consignee_gst_id;
-            if (consigneeGstRaw) {
+            if (consigneeGstRaw && isGstInvoiceUser) {
               form.setFieldValue("gstn", String(consigneeGstRaw));
             } else if (
               job &&
@@ -1116,7 +1246,7 @@ function InvoiceCreate({
                 }
               ).housing_details;
               const fromJobGst = jobHousing?.[0]?.consignee_gst_id;
-              if (fromJobGst) {
+              if (fromJobGst && isGstInvoiceUser) {
                 form.setFieldValue("gstn", String(fromJobGst));
               }
             }
@@ -1145,11 +1275,11 @@ function InvoiceCreate({
               );
             }
 
-            // Populate GSTN from shipper GST, if available
+            // Populate GSTN from shipper GST (India GST flow only)
             const shipperGstRaw = (
               firstHawb as { shipper_gst_id?: string | null }
             ).shipper_gst_id;
-            if (shipperGstRaw) {
+            if (shipperGstRaw && isGstInvoiceUser) {
               form.setFieldValue("gstn", String(shipperGstRaw));
             } else if (
               job &&
@@ -1167,7 +1297,7 @@ function InvoiceCreate({
                 }
               ).housing_details;
               const fromJobGst = jobHousing?.[0]?.shipper_gst_id;
-              if (fromJobGst) {
+              if (fromJobGst && isGstInvoiceUser) {
                 form.setFieldValue("gstn", String(fromJobGst));
               }
             }
@@ -1191,41 +1321,21 @@ function InvoiceCreate({
         const chargesSource: unknown[] = (() => {
           if (documentType === "CRN") return [];
           if (isAgent) {
-            const houses = hawbDetails as Array<Record<string, unknown>>;
-            const merged = houses.flatMap((hawb) =>
-              getHousingChargeArray(hawb)
-                .filter(
-                  (c) =>
-                    String((c as { pp_cc?: unknown }).pp_cc ?? "").trim() ===
-                    "Collect",
-                )
-                .map((c) => {
-                  const row =
-                    typeof c === "object" && c !== null
-                      ? (c as Record<string, unknown>)
-                      : {};
-                  return {
-                    ...row,
-                    shipment_id:
-                      row.shipment_id ??
-                      hawb.shipment_id ??
-                      hawb.shipment_no ??
-                      "",
-                    shipper_id:
-                      row.shipper_id ??
-                      hawb.shipper_code ??
-                      hawb.shipper_id ??
-                      "",
-                  };
-                }),
-            );
-            if (merged.length > 0) return merged;
-            if (
-              firstHawb.charges &&
-              Array.isArray(firstHawb.charges) &&
-              firstHawb.charges.length > 0
-            )
-              return firstHawb.charges as unknown[];
+            const navHouses = hawbDetails as Array<Record<string, unknown>>;
+            const jobHouses = jobHousingArr;
+            const housesToScan =
+              jobHouses.length > 0 ? jobHouses : navHouses;
+            let merged = collectAgentChargesFromHousings(housesToScan);
+            if (merged.length === 0 && navHouses.length > 0) {
+              merged = collectAgentChargesFromHousings(navHouses);
+            }
+            if (merged.length === 0 && navHouses[0]) {
+              const premerged = getHousingChargeArray(navHouses[0]).filter(
+                isCollectChargeRow,
+              );
+              if (premerged.length > 0) return premerged as unknown[];
+            }
+            if (merged.length > 0) return merged as unknown[];
             return [];
           }
           if (
@@ -1425,12 +1535,18 @@ function InvoiceCreate({
             };
           });
           form.setFieldValue("charges", mappedCharges);
+          chargesPrefilledFromJobRef.current = true;
+          mappedCharges.forEach((c, idx) => {
+            chargeUnitsByIndexRef.current[idx] =
+              `${c.amount_per_unit ?? ""}|${c.no_of_unit ?? ""}`;
+          });
 
           const jobServiceIdForSac =
             (location.state as { job?: { service_id?: number } })?.job
               ?.service_id ?? null;
           if (
             !isAgent &&
+            !isVatInvoiceUser &&
             jobServiceIdForSac &&
             mappedCharges.some((c: ChargeItem) => c.charge_id != null)
           ) {
@@ -1572,7 +1688,9 @@ function InvoiceCreate({
         String((partial as InvoiceDataFromApi | undefined)?.document_no ?? ""),
       status:
         prev?.status ??
-        String((partial as InvoiceDataFromApi | undefined)?.status ?? "UNPOSTED"),
+        String(
+          (partial as InvoiceDataFromApi | undefined)?.status ?? "UNPOSTED",
+        ),
     }));
   }, [
     isEditOrViewMode,
@@ -1638,9 +1756,11 @@ function InvoiceCreate({
                 .trim()
                 .toUpperCase();
               const isTaxRow =
+                c.is_tax_row === true ||
                 chargeCodeUpper === "IGST" ||
                 chargeCodeUpper === "CGST" ||
-                chargeCodeUpper === "SGST";
+                chargeCodeUpper === "SGST" ||
+                chargeCodeUpper === "VAT";
 
               const parseNullableNumber = (v: unknown): number | null => {
                 if (v == null || v === "") return null;
@@ -1736,6 +1856,16 @@ function InvoiceCreate({
                 igst_rate: parseNullableNumber(c.igst_rate),
                 cgst_rate: parseNullableNumber(c.cgst_rate),
                 sgst_rate: parseNullableNumber(c.sgst_rate),
+                tax_rate: isTaxRow
+                  ? null
+                  : parseNullableNumber(
+                      (c as { tax_rate?: unknown }).tax_rate,
+                    ),
+                tax_amount: isTaxRow
+                  ? null
+                  : parseNullableNumber(
+                      (c as { tax_amount?: unknown }).tax_amount,
+                    ),
               };
             })
           : form.values.charges.length > 0
@@ -1762,8 +1892,115 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
+  // Fetch VAT rates by charge (China / Kenya — customer and agent invoice)
+  useEffect(() => {
+    if (!isVatInvoiceUser) {
+      setVatRatesLoadingByIndex({});
+      return;
+    }
+
+    const chargesToFetch = (form.values.charges || [])
+      .map((c, idx) => ({
+        idx,
+        chargeId: c.charge_id,
+        headerAmount: c.header_amount,
+        isTaxRow: c.is_tax_row === true,
+      }))
+      .filter((x) => x.chargeId != null && !x.isTaxRow);
+
+    if (chargesToFetch.length === 0) {
+      setVatRatesLoadingByIndex({});
+      return;
+    }
+
+    const fetchKey = JSON.stringify({
+      charges: chargesToFetch.map((c) => ({
+        chargeId: c.chargeId,
+        headerAmount: c.headerAmount,
+      })),
+    });
+    if (fetchKey === lastVatRatesFetchKeyRef.current) return;
+    lastVatRatesFetchKeyRef.current = fetchKey;
+
+    let cancelled = false;
+
+    const indicesToFetch: number[] = [];
+    chargesToFetch.forEach(({ idx, chargeId }) => {
+      const id = chargeId!;
+      const hasCache = vatRatesCacheRef.current.has(id);
+      const hasRates = vatRatesByChargeIndex[idx] != null;
+      if (!hasCache && !hasRates) indicesToFetch.push(idx);
+    });
+
+    if (indicesToFetch.length > 0) {
+      setVatRatesLoadingByIndex((prev) => {
+        const next = { ...prev };
+        indicesToFetch.forEach((idx) => {
+          next[idx] = true;
+        });
+        return next;
+      });
+    }
+
+    Promise.all(
+      chargesToFetch.map(async ({ idx, chargeId }) => {
+        const id = chargeId!;
+        const cached = vatRatesCacheRef.current.get(id);
+        if (cached) return { idx, rates: cached, fromCache: true };
+
+        try {
+          const res = await fetchGstRatesByStateSac({
+            vat: true,
+            charge_id: id,
+          });
+          const rates = parseVatRatesPayload(res);
+          if (rates) vatRatesCacheRef.current.set(id, rates);
+          return { idx, rates, fromCache: false };
+        } catch {
+          return { idx, rates: null, fromCache: false };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setVatRatesByChargeIndex((prev) => {
+        const next = { ...prev };
+        results.forEach(({ idx, rates }) => {
+          next[idx] = rates;
+        });
+        return next;
+      });
+      results.forEach(({ idx, rates }) => {
+        if (rates?.vat_percent != null) {
+          form.setFieldValue(`charges.${idx}.tax_rate`, rates.vat_percent);
+        }
+      });
+      const indicesToClear = results
+        .filter((r) => !r.fromCache)
+        .map((r) => r.idx);
+      if (indicesToClear.length > 0) {
+        setVatRatesLoadingByIndex((prev) => {
+          const next = { ...prev };
+          indicesToClear.forEach((idx) => {
+            next[idx] = false;
+          });
+          return next;
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.charges, isVatInvoiceUser]);
+
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
+    if (!isGstInvoiceUser) {
+      setGstRatesLoadingByIndex({});
+      return;
+    }
+
     const stateId = form.values.state ? Number(form.values.state) : null;
     if (!stateId || Number.isNaN(stateId)) {
       // Clear loading states if no state is selected
@@ -1825,26 +2062,12 @@ function InvoiceCreate({
         if (cached) return { idx, rates: cached, fromCache: true };
 
         try {
-          const res = (await fetchGstRatesByStateSac({
+          const res = await fetchGstRatesByStateSac({
             state_id: stateId,
             sac_code: sac,
-          })) as any;
-          const payload = res?.data?.data ?? res?.data ?? res;
-          const data = payload as GstRatesBySacResponse | null | undefined;
-
-          const igstRaw = data?.igst_percent;
-          const cgstRaw = data?.cgst_percent;
-          const sgstRaw = data?.sgst_percent;
-          const sameState = data?.same_state ?? false;
-
-          const rates: GstRates = {
-            igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-            cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-            sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-            same_state: sameState,
-          };
-
-          gstRatesCacheRef.current.set(cacheKey, rates);
+          });
+          const rates = parseGstRatesPayload(res);
+          if (rates) gstRatesCacheRef.current.set(cacheKey, rates);
           return { idx, rates, fromCache: false };
         } catch {
           return { idx, rates: null, fromCache: false };
@@ -1904,19 +2127,35 @@ function InvoiceCreate({
       });
       return next;
     });
+
+    setVatRatesByChargeIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = null;
+      });
+      return next;
+    });
+
+    setVatRatesLoadingByIndex((prev) => {
+      const next = { ...prev };
+      taxRowIndices.forEach((idx) => {
+        next[idx] = false;
+      });
+      return next;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.charges]);
 
-  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit
-  const chargeAmountPerUnits = form.values.charges
-    .map((c) => c.amount_per_unit)
-    .join(",");
-  const chargeNoOfUnits = form.values.charges
-    .map((c) => c.no_of_unit)
-    .join(",");
-
+  // Auto-calculate currency amount only when no_of_unit or amount_per_unit changes on a row
   useEffect(() => {
-    const updatedCharges = form.values.charges.map((charge) => {
+    const updatedCharges = form.values.charges.map((charge, index) => {
+      if (charge.is_tax_row === true) return charge;
+
+      const unitsKey = `${charge.amount_per_unit ?? ""}|${charge.no_of_unit ?? ""}`;
+      const prevUnitsKey = chargeUnitsByIndexRef.current[index];
+      if (prevUnitsKey === unitsKey) return charge;
+      chargeUnitsByIndexRef.current[index] = unitsKey;
+
       if (
         charge.amount_per_unit != null &&
         charge.amount_per_unit > 0 &&
@@ -1944,7 +2183,7 @@ function InvoiceCreate({
       form.setFieldValue("charges", updatedCharges);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits]);
+  }, [form.values.charges]);
 
   // Auto-calculate amount_in_local (Local Amount) as: amount (currency_amount) * charge.roe
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
@@ -2083,15 +2322,15 @@ function InvoiceCreate({
     //   !saveResponse?.id ||
     //   saveResponse?.customer_id == null
     // )
-    if (chargesTabActive !== "tax" || !saveResponse?.id) {
+    if (chargesTabActive !== "tax" || !saveResponse?.id || !showTaxTab) {
       return;
     }
     let cancelled = false;
     setGstBreakupLoading(true);
     setGstBreakup(null);
     fetchInvoiceCalculateGstBreakup({
-      customer_id: saveResponse.customer_id,
       invoice_id: saveResponse.id,
+      ...(isVatInvoiceUser ? { vat: true } : {}),
     })
       .then((data) => {
         if (!cancelled) setGstBreakup(data);
@@ -2105,7 +2344,7 @@ function InvoiceCreate({
     return () => {
       cancelled = true;
     };
-  }, [chargesTabActive, saveResponse?.id, saveResponse?.customer_id]);
+  }, [chargesTabActive, saveResponse?.id, showTaxTab, isVatInvoiceUser]);
 
   // Bill To change: (1) When cleared → clear state and address. (2) When customer selected from search → set Bill To + State from customer response (addresses_data.state_id). (3) When from house page → shipper/state set on load (mount effect).
   const handleBillToChange = (
@@ -2122,8 +2361,10 @@ function InvoiceCreate({
     if (isCleared) {
       setAddressOptions([]);
       form.setFieldValue("address", "");
-      form.setFieldValue("state", "");
-      form.setFieldValue("gstn", "");
+      if (isGstInvoiceUser) {
+        form.setFieldValue("state", "");
+        form.setFieldValue("gstn", "");
+      }
       return;
     }
 
@@ -2153,22 +2394,25 @@ function InvoiceCreate({
         (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
       );
 
-      const addrForState =
-        primaryAddress || (addressesData || []).find((a) => a.state_id != null);
-      if (addrForState?.state_id != null) {
-        form.setFieldValue("state", String(addrForState.state_id));
-      }
+      if (isGstInvoiceUser) {
+        const addrForState =
+          primaryAddress ||
+          (addressesData || []).find((a) => a.state_id != null);
+        if (addrForState?.state_id != null) {
+          form.setFieldValue("state", String(addrForState.state_id));
+        }
 
-      const addrForGst =
-        primaryAddress ||
-        (addressesData || []).find(
-          (a) => (a as { gst_id?: string | null }).gst_id != null,
-        );
-      const gstFromAddress = (
-        addrForGst as { gst_id?: string | null } | undefined
-      )?.gst_id;
-      if (gstFromAddress) {
-        form.setFieldValue("gstn", String(gstFromAddress));
+        const addrForGst =
+          primaryAddress ||
+          (addressesData || []).find(
+            (a) => (a as { gst_id?: string | null }).gst_id != null,
+          );
+        const gstFromAddress = (
+          addrForGst as { gst_id?: string | null } | undefined
+        )?.gst_id;
+        if (gstFromAddress) {
+          form.setFieldValue("gstn", String(gstFromAddress));
+        }
       }
     } else {
       setAddressOptions([]);
@@ -2222,7 +2466,12 @@ function InvoiceCreate({
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
           true;
-      if (!isAgentInvoiceFlow && (!stateId || stateId <= 0)) {
+      const isVatInvoiceFlow = isVatInvoiceUser;
+      if (
+        !isAgentInvoiceFlow &&
+        !isVatInvoiceFlow &&
+        (!stateId || stateId <= 0)
+      ) {
         ToastNotification({
           message: "Please select a valid State",
           type: "error",
@@ -2260,9 +2509,10 @@ function InvoiceCreate({
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
           true;
 
-      // Agent invoice: no tax integration — skip GST endpoint, use zeros for tax fields
-      // Customer invoice: resolve GST rates per charge (gst-rates-by-state-sac)
-      const gstRatesForCharges: (GstRates | null)[] = isAgentSave
+      const isVatSave = isVatInvoiceUser;
+
+      // VAT (China/Kenya): tax_rate + tax_amount. India GST: igst/cgst/sgst.
+      const gstRatesForCharges: (GstRates | null)[] = !isGstInvoiceUser
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
@@ -2271,115 +2521,151 @@ function InvoiceCreate({
               const sacCode = (charge.tax_code ?? "").trim();
               if (!sacCode || stateId == null || stateId <= 0) return null;
               try {
-                const res = (await fetchGstRatesByStateSac({
+                const res = await fetchGstRatesByStateSac({
                   state_id: stateId,
                   sac_code: sacCode,
-                })) as unknown;
-                const resObj = res as {
-                  data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
-                  [k: string]: unknown;
-                };
-                const payload = resObj?.data?.data ?? resObj?.data ?? res;
-                const gstData = payload as
-                  | GstRatesBySacResponse
-                  | null
-                  | undefined;
-                const igstRaw = gstData?.igst_percent;
-                const cgstRaw = gstData?.cgst_percent;
-                const sgstRaw = gstData?.sgst_percent;
-                const sameState = gstData?.same_state ?? false;
-                return {
-                  igst:
-                    igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-                  cgst:
-                    cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-                  sgst:
-                    sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-                  same_state: sameState,
-                };
+                });
+                return parseGstRatesPayload(res);
               } catch {
                 return null;
               }
             }),
           );
 
-      const chargesPayload = values.charges.map((charge, idx) => {
-        const currencyDataArr = currencyData as {
-          id?: number;
-          code?: string;
-          currency_code?: string;
-        }[];
-        const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find(
-              (c) => String(c.id) === String(charge.currency_id).trim(),
-            )
-          : currencyDataArr?.find(
-              (c) =>
-                (c.code || c.currency_code || "")
-                  .toString()
-                  .trim()
-                  .toUpperCase() ===
-                (charge.currency ?? "").toString().trim().toUpperCase(),
-            );
-        let chargeCurrencyId =
-          chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitDataArr = unitData as {
-          id?: number;
-          unit_code?: string;
-          code?: string;
-        }[];
-        const unitItem = charge.unit_id
-          ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
-          : unitDataArr?.find(
-              (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
-            );
-        const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
-        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
-        const rates = gstRatesForCharges[idx];
-        const igstRate = rates?.igst ?? 0;
-        const cgstRate = rates?.cgst ?? 0;
-        const sgstRate = rates?.sgst ?? 0;
-        const sameState = rates?.same_state ?? false;
-        const igstAmt =
-          !sameState && igstRate > 0
-            ? clampAmount(headerAmount * (Number(igstRate) / 100))
-            : 0;
-        const cgstAmt =
-          sameState && cgstRate > 0
-            ? clampAmount(headerAmount * (Number(cgstRate) / 100))
-            : 0;
-        const sgstAmt =
-          sameState && sgstRate > 0
-            ? clampAmount(headerAmount * (Number(sgstRate) / 100))
-            : 0;
-        return {
-          ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no:
-            charge.shipment_id != null &&
-            String(charge.shipment_id).trim() !== ""
-              ? String(charge.shipment_id)
-              : null,
-          // : values.shipment_no,
-          ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-          charge_id: charge.charge_id ?? null,
-          unit_id: unitId,
-          no_of_unit: charge.no_of_unit ?? 0,
-          currency_id: chargeCurrencyId,
-          roe: charge.roe ?? 0,
-          amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-          amount: clampAmount(charge.amount ?? 0) ?? 0,
-          amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: headerAmount,
-          tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
-          igst_rate: igstRate,
-          cgst_rate: cgstRate,
-          sgst_rate: sgstRate,
-          igst: igstAmt,
-          cgst: cgstAmt,
-          sgst: sgstAmt,
-        };
-      });
+      const vatRatesForCharges: (VatRates | null)[] = !isVatSave
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              if (charge.is_tax_row === true) return null;
+              const cached = vatRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const chargeId = charge.charge_id;
+              if (chargeId == null) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  vat: true,
+                  charge_id: chargeId,
+                });
+                return parseVatRatesPayload(res);
+              } catch {
+                return null;
+              }
+            }),
+          );
+
+      const chargesPayload = values.charges
+        .filter((c) => c.is_tax_row !== true)
+        .map((charge, idx) => {
+          const sourceIdx = form.values.charges.indexOf(charge);
+          const rateIdx = sourceIdx >= 0 ? sourceIdx : idx;
+          const currencyDataArr = currencyData as {
+            id?: number;
+            code?: string;
+            currency_code?: string;
+          }[];
+          const chargeCurrencyItem = charge.currency_id
+            ? currencyDataArr?.find(
+                (c) => String(c.id) === String(charge.currency_id).trim(),
+              )
+            : currencyDataArr?.find(
+                (c) =>
+                  (c.code || c.currency_code || "")
+                    .toString()
+                    .trim()
+                    .toUpperCase() ===
+                  (charge.currency ?? "").toString().trim().toUpperCase(),
+              );
+          let chargeCurrencyId =
+            chargeCurrencyItem?.id != null
+              ? Number(chargeCurrencyItem.id)
+              : null;
+          const unitDataArr = unitData as {
+            id?: number;
+            unit_code?: string;
+            code?: string;
+          }[];
+          const unitItem = charge.unit_id
+            ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
+            : unitDataArr?.find(
+                (u) =>
+                  String(u.unit_code || u.code || u.id) === charge.unit_code,
+              );
+          const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+          const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+
+          if (isVatSave) {
+            const vatRates = vatRatesForCharges[rateIdx];
+            const taxRate = vatRates?.vat_percent ?? charge.tax_rate ?? 0;
+            const taxBase = charge.amount_in_local ?? headerAmount;
+            const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+            return {
+              ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+              shipment_no:
+                charge.shipment_id != null &&
+                String(charge.shipment_id).trim() !== ""
+                  ? String(charge.shipment_id)
+                  : null,
+              ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
+              charge_id: charge.charge_id ?? null,
+              unit_id: unitId,
+              no_of_unit: charge.no_of_unit ?? 0,
+              currency_id: chargeCurrencyId,
+              roe: charge.roe ?? 0,
+              amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+              amount: clampAmount(charge.amount ?? 0) ?? 0,
+              amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+              amount_in_header: headerAmount,
+              Dr_Cr: charge.dr_cr ?? "Cr",
+              tax_rate: taxRate,
+              tax_amount: taxAmount,
+            };
+          }
+
+          const rates = gstRatesForCharges[rateIdx];
+          const igstRate = rates?.igst ?? 0;
+          const cgstRate = rates?.cgst ?? 0;
+          const sgstRate = rates?.sgst ?? 0;
+          const sameState = rates?.same_state ?? false;
+          const igstAmt =
+            !sameState && igstRate > 0
+              ? clampAmount(headerAmount * (Number(igstRate) / 100))
+              : 0;
+          const cgstAmt =
+            sameState && cgstRate > 0
+              ? clampAmount(headerAmount * (Number(cgstRate) / 100))
+              : 0;
+          const sgstAmt =
+            sameState && sgstRate > 0
+              ? clampAmount(headerAmount * (Number(sgstRate) / 100))
+              : 0;
+          return {
+            ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+            shipment_no:
+              charge.shipment_id != null &&
+              String(charge.shipment_id).trim() !== ""
+                ? String(charge.shipment_id)
+                : null,
+            // : values.shipment_no,
+            ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
+            charge_id: charge.charge_id ?? null,
+            unit_id: unitId,
+            no_of_unit: charge.no_of_unit ?? 0,
+            currency_id: chargeCurrencyId,
+            roe: charge.roe ?? 0,
+            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_in_header: headerAmount,
+            tax_code: charge.tax_code ?? "",
+            Dr_Cr: charge.dr_cr ?? "Cr",
+            igst_rate: igstRate,
+            cgst_rate: cgstRate,
+            sgst_rate: sgstRate,
+            igst: igstAmt,
+            cgst: cgstAmt,
+            sgst: sgstAmt,
+          };
+        });
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
       const isAgent =
@@ -2406,8 +2692,10 @@ function InvoiceCreate({
           ? stateId != null && stateId > 0
             ? stateId
             : null
-          : stateId,
-        gstn: values.gstn || null,
+          : isVatSave
+            ? null
+            : stateId,
+        gstn: isVatSave ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_date: values.document_date
@@ -2547,14 +2835,18 @@ function InvoiceCreate({
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
           true;
+      const isVatPost = isVatInvoiceUser;
       const stateValid = stateId != null && stateId > 0;
+      const needsStateForPost = !isAgentPost && !isVatPost;
       if (
-        (!isAgentPost && !stateValid) ||
+        (needsStateForPost && !stateValid) ||
         currencyId == null ||
         currencyId <= 0
       ) {
         ToastNotification({
-          message: "Please ensure State and Currency are valid.",
+          message: needsStateForPost
+            ? "Please ensure State and Currency are valid."
+            : "Please ensure Currency is valid.",
           type: "error",
         });
         setIsPosting(false);
@@ -2567,7 +2859,6 @@ function InvoiceCreate({
         return `${day}-${month}-${year}`;
       };
 
-      // Agent invoice: no tax integration — do not hit fetchInvoiceCalculateGstBreakup or gst-rates-by-state-sac
       let sacWiseTotals: Array<{
         sac_code?: string;
         charge_name?: string;
@@ -2575,35 +2866,26 @@ function InvoiceCreate({
         total_amount?: number;
         rate?: number;
       }> = [];
-      let taxes: Array<{ tax_code: string; rate: number; amount: number }> = [];
-      if (!isAgentPost) {
+      let percentageWiseTotals: NonNullable<
+        InvoiceTaxBreakup["percentage_wise_totals"]
+      > = [];
+      if (isVatPost) {
+        let breakupData = gstBreakup;
+        if (!breakupData?.percentage_wise_totals?.length) {
+          breakupData = await fetchInvoiceCalculateGstBreakup({
+            invoice_id: saveResponse.id as number,
+            vat: true,
+          });
+        }
+        percentageWiseTotals = breakupData?.percentage_wise_totals ?? [];
+      } else if (!isAgentPost) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
-          breakupData = (await fetchInvoiceCalculateGstBreakup({
-            customer_id: saveResponse.customer_id as number,
+          breakupData = await fetchInvoiceCalculateGstBreakup({
             invoice_id: saveResponse.id as number,
-          })) as typeof gstBreakup;
+          });
         }
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
-        taxes = sacWiseTotals
-          .filter((row) => {
-            const name = String(row.charge_name ?? "")
-              .trim()
-              .toUpperCase();
-            const rate = Number(row.rate ?? 0);
-            // If tax rate is 0%, do not send IGST/CGST/SGST in payload.
-            if (
-              (name === "IGST" || name === "CGST" || name === "SGST") &&
-              rate <= 0
-            )
-              return false;
-            return true;
-          })
-          .map((row) => ({
-            tax_code: row.sac_code ?? "",
-            rate: row.rate ?? 0,
-            amount: clampAmount(row.total_amount ?? 0) ?? 0,
-          }));
       }
 
       const topRoe =
@@ -2619,160 +2901,219 @@ function InvoiceCreate({
         code?: string;
       }[];
 
-      // Agent invoice: no GST fetch — use null rates so charge tax amounts are zero
-      const gstRatesForPostCharges: (GstRates | null)[] = isAgentPost
+      const gstRatesForPostCharges: (GstRates | null)[] = !isGstInvoiceUser
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
+              if (charge.is_tax_row === true) return null;
               const cached = gstRatesByChargeIndex[idx];
               if (cached) return cached;
               const sacCode = (charge.tax_code ?? "").trim();
               if (!sacCode || stateId == null || stateId <= 0) return null;
               try {
-                const res = (await fetchGstRatesByStateSac({
+                const res = await fetchGstRatesByStateSac({
                   state_id: stateId,
                   sac_code: sacCode,
-                })) as unknown;
-                const resObj = res as {
-                  data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
-                  [k: string]: unknown;
-                };
-                const payload = resObj?.data?.data ?? resObj?.data ?? res;
-                const gstData = payload as
-                  | GstRatesBySacResponse
-                  | null
-                  | undefined;
-                const igstRaw = gstData?.igst_percent;
-                const cgstRaw = gstData?.cgst_percent;
-                const sgstRaw = gstData?.sgst_percent;
-                const sameState = gstData?.same_state ?? false;
-                return {
-                  igst:
-                    igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-                  cgst:
-                    cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-                  sgst:
-                    sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-                  same_state: sameState,
-                };
+                });
+                return parseGstRatesPayload(res);
               } catch {
                 return null;
               }
             }),
           );
-      const chargesPayload = values.charges.map((charge, idx) => {
-        const chargeCurrencyItem = charge.currency_id
-          ? currencyDataArr?.find(
-              (c) => String(c.id) === String(charge.currency_id).trim(),
-            )
-          : currencyDataArr?.find(
-              (c) =>
-                (c.code || c.currency_code || "")
-                  .toString()
-                  .trim()
-                  .toUpperCase() ===
-                (charge.currency ?? "").toString().trim().toUpperCase(),
-            );
-        let chargeCurrencyId =
-          chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
-        const unitItem = charge.unit_id
-          ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
-          : unitDataArr?.find(
-              (u) => String(u.unit_code || u.code || u.id) === charge.unit_code,
-            );
-        const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
-        const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
-        const rates = gstRatesForPostCharges[idx];
-        const igstRate = rates?.igst ?? 0;
-        const cgstRate = rates?.cgst ?? 0;
-        const sgstRate = rates?.sgst ?? 0;
-        const sameState = rates?.same_state ?? false;
-        const igstAmt =
-          !sameState && igstRate > 0
-            ? clampAmount(headerAmount * (Number(igstRate) / 100))
-            : 0;
-        const cgstAmt =
-          sameState && cgstRate > 0
-            ? clampAmount(headerAmount * (Number(cgstRate) / 100))
-            : 0;
-        const sgstAmt =
-          sameState && sgstRate > 0
-            ? clampAmount(headerAmount * (Number(sgstRate) / 100))
-            : 0;
-        return {
-          ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
-          shipment_no:
-            charge.shipment_id != null &&
-            String(charge.shipment_id).trim() !== ""
-              ? String(charge.shipment_id)
-              : null,
-          // : values.shipment_no,
-          ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-          charge_id: charge.charge_id ?? null,
-          unit_id: unitId,
-          no_of_unit: charge.no_of_unit ?? 0,
-          currency_id: chargeCurrencyId,
-          roe: charge.roe ?? 0,
-          amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-          amount: clampAmount(charge.amount ?? 0) ?? 0,
-          amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
-          amount_in_header: headerAmount,
-          tax_code: charge.tax_code ?? "",
-          Dr_Cr: charge.dr_cr ?? "Cr",
-          igst_rate: igstRate,
-          cgst_rate: cgstRate,
-          sgst_rate: sgstRate,
-          igst: igstAmt,
-          cgst: cgstAmt,
-          sgst: sgstAmt,
-        };
-      });
-      // Agent invoice: no tax charges in payload. Customer invoice: append tax rows from sac_wise_totals
-      const taxCharges = isAgentPost
-        ? []
-        : sacWiseTotals
-            .filter((row) => {
-              const name = String(row.charge_name ?? "")
-                .trim()
-                .toUpperCase();
-              const rate = Number(row.rate ?? 0);
-              // If tax rate is 0%, do not include IGST/CGST/SGST rows in charge payload.
-              if (
-                (name === "IGST" || name === "CGST" || name === "SGST") &&
-                rate <= 0
+
+      const vatRatesForPostCharges: (VatRates | null)[] = !isVatPost
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              if (charge.is_tax_row === true) return null;
+              const cached = vatRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const chargeId = charge.charge_id;
+              if (chargeId == null) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  vat: true,
+                  charge_id: chargeId,
+                });
+                return parseVatRatesPayload(res);
+              } catch {
+                return null;
+              }
+            }),
+          );
+
+      const chargesPayload = values.charges
+        .filter((c) => c.is_tax_row !== true)
+        .map((charge, idx) => {
+          const sourceIdx = form.values.charges.indexOf(charge);
+          const rateIdx = sourceIdx >= 0 ? sourceIdx : idx;
+          const chargeCurrencyItem = charge.currency_id
+            ? currencyDataArr?.find(
+                (c) => String(c.id) === String(charge.currency_id).trim(),
               )
-                return false;
-              return true;
-            })
+            : currencyDataArr?.find(
+                (c) =>
+                  (c.code || c.currency_code || "")
+                    .toString()
+                    .trim()
+                    .toUpperCase() ===
+                  (charge.currency ?? "").toString().trim().toUpperCase(),
+              );
+          let chargeCurrencyId =
+            chargeCurrencyItem?.id != null
+              ? Number(chargeCurrencyItem.id)
+              : null;
+          const unitItem = charge.unit_id
+            ? unitDataArr?.find((u) => String(u.id) === charge.unit_id)
+            : unitDataArr?.find(
+                (u) =>
+                  String(u.unit_code || u.code || u.id) === charge.unit_code,
+              );
+          const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
+          const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+
+          if (isVatPost) {
+            const vatRates = vatRatesForPostCharges[rateIdx];
+            const taxRate = vatRates?.vat_percent ?? charge.tax_rate ?? 0;
+            const taxBase = charge.amount_in_local ?? headerAmount;
+            const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+            return {
+              ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+              shipment_no:
+                charge.shipment_id != null &&
+                String(charge.shipment_id).trim() !== ""
+                  ? String(charge.shipment_id)
+                  : null,
+              ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
+              charge_id: charge.charge_id ?? null,
+              unit_id: unitId,
+              no_of_unit: charge.no_of_unit ?? 0,
+              currency_id: chargeCurrencyId,
+              roe: charge.roe ?? 0,
+              amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+              amount: clampAmount(charge.amount ?? 0) ?? 0,
+              amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+              amount_in_header: headerAmount,
+              Dr_Cr: charge.dr_cr ?? "Cr",
+              tax_rate: taxRate,
+              tax_amount: taxAmount,
+            };
+          }
+
+          const rates = gstRatesForPostCharges[rateIdx];
+          const igstRate = rates?.igst ?? 0;
+          const cgstRate = rates?.cgst ?? 0;
+          const sgstRate = rates?.sgst ?? 0;
+          const sameState = rates?.same_state ?? false;
+          const igstAmt =
+            !sameState && igstRate > 0
+              ? clampAmount(headerAmount * (Number(igstRate) / 100))
+              : 0;
+          const cgstAmt =
+            sameState && cgstRate > 0
+              ? clampAmount(headerAmount * (Number(cgstRate) / 100))
+              : 0;
+          const sgstAmt =
+            sameState && sgstRate > 0
+              ? clampAmount(headerAmount * (Number(sgstRate) / 100))
+              : 0;
+          return {
+            ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+            shipment_no:
+              charge.shipment_id != null &&
+              String(charge.shipment_id).trim() !== ""
+                ? String(charge.shipment_id)
+                : null,
+            // : values.shipment_no,
+            ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
+            charge_id: charge.charge_id ?? null,
+            unit_id: unitId,
+            no_of_unit: charge.no_of_unit ?? 0,
+            currency_id: chargeCurrencyId,
+            roe: charge.roe ?? 0,
+            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_in_header: headerAmount,
+            tax_code: charge.tax_code ?? "",
+            Dr_Cr: charge.dr_cr ?? "Cr",
+            igst_rate: igstRate,
+            cgst_rate: cgstRate,
+            sgst_rate: sgstRate,
+            igst: igstAmt,
+            cgst: cgstAmt,
+            sgst: sgstAmt,
+          };
+        });
+      const taxCharges = isVatPost
+        ? percentageWiseTotals
+            .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-              const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+              const amountInLocal = clampAmount(row.amount_in_local ?? 0) ?? 0;
+              const headerAmt =
+                topRoe > 0
+                  ? (clampAmount(amountInLocal / topRoe) ?? amountInLocal)
+                  : amountInLocal;
               return {
                 shipment_no: values.shipment_no,
-                charge_id: row.charge_id ?? null,
+                charge_id: row.vat_charge_id ?? null,
                 unit_id: null,
                 no_of_unit: 0,
                 currency_id: currencyId,
                 roe: topRoe,
                 amount_per_unit: 0,
-                amount: amt,
+                amount: headerAmt,
                 amount_in_local: amountInLocal,
-                amount_in_header: amountInLocal,
-                // This row is itself a tax amount entry. Keep SAC code visible, but do NOT fetch/calc GST.
-                tax_code: row.sac_code ?? "",
-                is_tax_row: true,
-                igst_rate: null,
-                cgst_rate: null,
-                sgst_rate: null,
-                igst: null,
-                cgst: null,
-                sgst: null,
+                amount_in_header: headerAmt,
                 Dr_Cr: "Cr",
               };
-            });
-      const allChargesPayload = isAgentPost
-        ? chargesPayload
-        : [...chargesPayload, ...taxCharges];
+            })
+        : isAgentPost
+          ? []
+          : sacWiseTotals
+              .filter((row) => {
+                const name = String(row.charge_name ?? "")
+                  .trim()
+                  .toUpperCase();
+                const rate = Number(row.rate ?? 0);
+                if (
+                  (name === "IGST" || name === "CGST" || name === "SGST") &&
+                  rate <= 0
+                )
+                  return false;
+                return true;
+              })
+              .map((row) => {
+                const amt = clampAmount(row.total_amount ?? 0) ?? 0;
+                const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+                return {
+                  shipment_no: values.shipment_no,
+                  charge_id: row.charge_id ?? null,
+                  unit_id: null,
+                  no_of_unit: 0,
+                  currency_id: currencyId,
+                  roe: topRoe,
+                  amount_per_unit: 0,
+                  amount: amt,
+                  amount_in_local: amountInLocal,
+                  amount_in_header: amountInLocal,
+                  tax_code: row.sac_code ?? "",
+                  is_tax_row: true,
+                  igst_rate: null,
+                  cgst_rate: null,
+                  sgst_rate: null,
+                  igst: null,
+                  cgst: null,
+                  sgst: null,
+                  Dr_Cr: "Cr",
+                };
+              });
+
+      const appendTaxRows = isGstInvoiceUser || isVatPost;
+      const allChargesPayload = appendTaxRows
+        ? [...chargesPayload, ...taxCharges]
+        : chargesPayload;
 
       // Recompute totals from final charges payload (base charges + appended tax rows)
       const total = clampSumAmounts(
@@ -2801,8 +3142,10 @@ function InvoiceCreate({
           ? stateId != null && stateId > 0
             ? stateId
             : null
-          : stateId,
-        gstn: values.gstn || null,
+          : isVatPost
+            ? null
+            : stateId,
+        gstn: isVatPost ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_date: values.document_date
@@ -2823,7 +3166,7 @@ function InvoiceCreate({
         Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
         charges: allChargesPayload,
-        taxes,
+        taxes: [],
       };
       const response = (await putAPICall(URL.invoice, payload, API_HEADER)) as
         | {
@@ -2908,8 +3251,9 @@ function InvoiceCreate({
               chargeCodeUpper === "IGST" ||
               chargeCodeUpper === "CGST" ||
               chargeCodeUpper === "SGST" ||
-              // Heuristic fallback for tax-only line items
-              ((c.unit_id == null || String(c.unit_id).trim() === "") &&
+              chargeCodeUpper === "VAT" ||
+              (!isVatInvoiceUser &&
+                (c.unit_id == null || String(c.unit_id).trim() === "") &&
                 (noOfUnit == null || noOfUnit === 0) &&
                 (amountPerUnit == null || amountPerUnit === 0) &&
                 ((c as any).igst_rate == null ||
@@ -2919,6 +3263,7 @@ function InvoiceCreate({
             return {
               id: c.id ?? undefined,
               charge_id: c.charge_id ?? null,
+              charge_code: (c as { charge_code?: string }).charge_code ?? "",
               charge_name: c.charge_name ?? "",
               shipment_id: (c as { shipment_id?: string }).shipment_id
                 ? String((c as { shipment_id: string }).shipment_id)
@@ -2968,10 +3313,80 @@ function InvoiceCreate({
                   typeof raw === "number" ? raw : parseFloat(String(raw));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
+              tax_rate: isTaxRow
+                ? null
+                : (() => {
+                    const raw = (c as any).tax_rate;
+                    if (raw == null || raw === "") return null;
+                    const parsed =
+                      typeof raw === "number"
+                        ? raw
+                        : parseFloat(String(raw));
+                    return Number.isFinite(parsed) ? parsed : null;
+                  })(),
+              tax_amount: isTaxRow
+                ? null
+                : (() => {
+                    const raw = (c as any).tax_amount;
+                    if (raw == null || raw === "") return null;
+                    const parsed =
+                      typeof raw === "number"
+                        ? raw
+                        : parseFloat(String(raw));
+                    return Number.isFinite(parsed) ? parsed : null;
+                  })(),
             };
           });
 
           form.setFieldValue("charges", mappedCharges);
+          setVatRatesByChargeIndex((prev) => {
+            const next = { ...prev };
+            mappedCharges.forEach((charge, idx) => {
+              if (charge.is_tax_row === true) next[idx] = null;
+            });
+            return next;
+          });
+        } else if (isVatPost && taxCharges.length > 0) {
+          const baseCharges = form.values.charges.filter(
+            (c) => c.is_tax_row !== true,
+          );
+          const vatTaxRows: ChargeItem[] = percentageWiseTotals
+            .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
+            .map((row) => {
+              const amountInLocal =
+                clampAmount(row.amount_in_local ?? 0) ?? 0;
+              const headerAmt =
+                topRoe > 0
+                  ? (clampAmount(amountInLocal / topRoe) ?? amountInLocal)
+                  : amountInLocal;
+              return {
+                charge_id: row.vat_charge_id ?? null,
+                charge_code: row.vat_charge_code ?? "VAT",
+                charge_name:
+                  row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
+                unit_code: "",
+                no_of_unit: 0,
+                currency: form.values.currency ?? "",
+                currency_id: currencyId != null ? String(currencyId) : "",
+                roe: topRoe,
+                amount_per_unit: 0,
+                amount: headerAmt,
+                header_amount: headerAmt,
+                amount_in_local: amountInLocal,
+                dr_cr: "Cr",
+                is_tax_row: true,
+                tax_rate: null,
+                tax_amount: null,
+              };
+            });
+          form.setFieldValue("charges", [...baseCharges, ...vatTaxRows]);
+          setVatRatesByChargeIndex((prev) => {
+            const next = { ...prev };
+            [...baseCharges, ...vatTaxRows].forEach((charge, idx) => {
+              if (charge.is_tax_row === true) next[idx] = null;
+            });
+            return next;
+          });
         }
         ToastNotification({
           message: "Invoice posted successfully",
@@ -3063,6 +3478,59 @@ function InvoiceCreate({
     if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
     return undefined;
   })();
+
+  // Distribute Mantine grid spans (12 cols); VAT rate/amount match no-of-unit width
+  const chargeGridCols = useMemo(() => {
+    const cols = {
+      shipment: showShipmentIdInCharges ? 1 : 0,
+      charge: showShipmentIdInCharges
+        ? isVatInvoiceUser
+          ? 0.85
+          : 1.35
+        : isVatInvoiceUser
+          ? 0.7
+          : 1.65,
+      unit: 0.85,
+      currency: 0.85,
+      roe: 0.5,
+      noOfUnit: 0.65,
+      amountPerUnit: 0.95,
+      currencyAmount: 0.95,
+      headerAmount: 0.95,
+      localAmount: 0.85,
+      sac: isGstInvoiceUser ? 0.75 : 0,
+      drCr: isVatInvoiceUser ? 0.7 : 0.55,
+      vatRate: isVatInvoiceUser ? 0.9 : 0,
+      vatAmount: isVatInvoiceUser ? 0.9 : 0,
+      cgst: isGstInvoiceUser && headerSameState === true ? 0.55 : 0,
+      sgst: isGstInvoiceUser && headerSameState === true ? 0.55 : 0,
+      igst: isGstInvoiceUser && headerSameState === false ? 0.55 : 0,
+      actions: !isReadOnly ? 0.7 : 0,
+    };
+    const used = Object.values(cols).reduce((a, b) => a + b, 0);
+    const remainder = Math.max(0, 12 - used);
+    if (remainder <= 0) return cols;
+    return { ...cols, charge: cols.charge + remainder };
+  }, [
+    showShipmentIdInCharges,
+    isGstInvoiceUser,
+    isVatInvoiceUser,
+    headerSameState,
+    isReadOnly,
+  ]);
+
+  const chargeHeaderCellStyle: CSSProperties = {
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#105476",
+    paddingLeft: 4,
+    paddingRight: 4,
+    paddingBottom: 6,
+    minHeight: 36,
+    display: "flex",
+    alignItems: "flex-end",
+    lineHeight: 1.2,
+  };
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -3211,7 +3679,7 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {!isAgentInvoice && (
+            {isGstInvoiceUser && (
               <>
                 <Grid.Col span={2}>
                   <Dropdown
@@ -3532,7 +4000,7 @@ function InvoiceCreate({
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
             >
-              {saveResponse && !isAgentInvoice && (
+              {saveResponse && showTaxTab && (
                 <Tabs.List>
                   <Tabs.Tab value="charges">Charges</Tabs.Tab>
                   <Tabs.Tab value="tax">Tax</Tabs.Tab>
@@ -3544,80 +4012,139 @@ function InvoiceCreate({
                 {/* <Box mb="sm" mt="md"> */}
                 <Grid
                   w="100%"
-                  // gutter="sm"
+                  gutter="xs"
                   py="sm"
                   style={{
                     position: "sticky",
                     top: 45,
                     zIndex: 100,
                     backgroundColor: "white",
-                    fontWeight: 600,
-                    color: "#105476",
                   }}
                 >
                   {showShipmentIdInCharges && (
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeGridCols.shipment}
+                      style={chargeHeaderCellStyle}
+                    >
                       Shipment id
                     </Grid.Col>
                   )}
                   <Grid.Col
-                    span={showShipmentIdInCharges ? 1.3 : 1.5}
-                    style={{ fontSize: "13px" }}
+                    span={chargeGridCols.charge}
+                    style={chargeHeaderCellStyle}
                   >
                     Charge
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.unit}
+                    style={chargeHeaderCellStyle}
+                  >
                     Unit
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.currency}
+                    style={chargeHeaderCellStyle}
+                  >
                     Currency
                   </Grid.Col>
-                  <Grid.Col span={0.45} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.roe}
+                    style={chargeHeaderCellStyle}
+                  >
                     ROE
                   </Grid.Col>
-                  <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.noOfUnit}
+                    style={chargeHeaderCellStyle}
+                  >
                     No of Unit
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.amountPerUnit}
+                    style={chargeHeaderCellStyle}
+                  >
                     Amount per Unit
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.currencyAmount}
+                    style={chargeHeaderCellStyle}
+                  >
                     Currency Amount
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.headerAmount}
+                    style={chargeHeaderCellStyle}
+                  >
                     Amount in{" "}
                     {form.values.currency
                       ? form.values.currency.toUpperCase()
                       : "()"}
                   </Grid.Col>
-                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.localAmount}
+                    style={chargeHeaderCellStyle}
+                  >
                     Local Amount
                   </Grid.Col>
-                  {!isAgentInvoice && (
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                  {isGstInvoiceUser && (
+                    <Grid.Col
+                      span={chargeGridCols.sac}
+                      style={chargeHeaderCellStyle}
+                    >
                       SAC Code
                     </Grid.Col>
                   )}
-                  <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeGridCols.drCr}
+                    style={chargeHeaderCellStyle}
+                  >
                     Dr/Cr
                   </Grid.Col>
-                  {!isAgentInvoice && headerSameState === true && (
-                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                  {isVatInvoiceUser && (
+                    <Grid.Col
+                      span={chargeGridCols.vatRate}
+                      style={chargeHeaderCellStyle}
+                    >
+                      VAT Rate %
+                    </Grid.Col>
+                  )}
+                  {isVatInvoiceUser && (
+                    <Grid.Col
+                      span={chargeGridCols.vatAmount}
+                      style={chargeHeaderCellStyle}
+                    >
+                      VAT Amount
+                    </Grid.Col>
+                  )}
+                  {isGstInvoiceUser && headerSameState === true && (
+                    <Grid.Col
+                      span={chargeGridCols.cgst}
+                      style={chargeHeaderCellStyle}
+                    >
                       CGST
                     </Grid.Col>
                   )}
-                  {!isAgentInvoice && headerSameState === true && (
-                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                  {isGstInvoiceUser && headerSameState === true && (
+                    <Grid.Col
+                      span={chargeGridCols.sgst}
+                      style={chargeHeaderCellStyle}
+                    >
                       SGST
                     </Grid.Col>
                   )}
-                  {!isAgentInvoice && headerSameState === false && (
-                    <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
+                  {isGstInvoiceUser && headerSameState === false && (
+                    <Grid.Col
+                      span={chargeGridCols.igst}
+                      style={chargeHeaderCellStyle}
+                    >
                       IGST
                     </Grid.Col>
                   )}
                   {!isReadOnly && (
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeGridCols.actions}
+                      style={chargeHeaderCellStyle}
+                    >
                       Actions
                     </Grid.Col>
                   )}
@@ -3631,7 +4158,7 @@ function InvoiceCreate({
                     mt={index !== 0 ? "sm" : 0}
                   >
                     {showShipmentIdInCharges && (
-                      <Grid.Col span={1}>
+                      <Grid.Col span={chargeGridCols.shipment}>
                         <FormTextInput
                           value={charge.shipment_id ?? ""}
                           readOnly
@@ -3643,7 +4170,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    <Grid.Col span={showShipmentIdInCharges ? 1.3 : 1.5}>
+                    <Grid.Col span={chargeGridCols.charge}>
                       <SearchableSelect
                         placeholder="Type charge name"
                         apiEndpoint={URL.chargeMaster}
@@ -3680,15 +4207,45 @@ function InvoiceCreate({
                             }
                             setChargeErrors(newErrors);
                           }
-                          // Fetch effective SAC (tax code) when charge and service_id are set
-                          if (chargeId != null && jobServiceId != null) {
+                          if (isVatInvoiceUser && chargeId != null) {
+                            lastVatRatesFetchKeyRef.current = "";
+                            fetchGstRatesByStateSac({
+                              vat: true,
+                              charge_id: chargeId,
+                            })
+                              .then((res) => {
+                                const rates = parseVatRatesPayload(res);
+                                if (rates) {
+                                  vatRatesCacheRef.current.set(chargeId, rates);
+                                  setVatRatesByChargeIndex((prev) => ({
+                                    ...prev,
+                                    [index]: rates,
+                                  }));
+                                  if (rates.vat_percent != null) {
+                                    form.setFieldValue(
+                                      `charges.${index}.tax_rate`,
+                                      rates.vat_percent,
+                                    );
+                                  }
+                                }
+                              })
+                              .catch(() => {
+                                setVatRatesByChargeIndex((prev) => ({
+                                  ...prev,
+                                  [index]: null,
+                                }));
+                              });
+                          } else if (
+                            chargeId != null &&
+                            jobServiceId != null &&
+                            isGstInvoiceUser
+                          ) {
                             fetchGetEffectiveSac([
                               {
                                 charge_id: chargeId,
                                 service_id: jobServiceId,
                               },
                             ]).then((data) => {
-                              // Since we're sending only one item, response will have one item at index 0
                               const item = data[0];
                               if (
                                 item?.sac_code != null &&
@@ -3710,7 +4267,7 @@ function InvoiceCreate({
                         dropdownZIndex={1000}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeGridCols.unit}>
                       <Dropdown
                         placeholder="Select Unit"
                         searchable
@@ -3729,7 +4286,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeGridCols.currency}>
                       <Dropdown
                         placeholder="Select Currency"
                         withAsterisk
@@ -3889,7 +4446,7 @@ function InvoiceCreate({
                           </Button>
                          </Group> */}
                     </Grid.Col>
-                    <Grid.Col span={0.45}>
+                    <Grid.Col span={chargeGridCols.roe}>
                       <FormNumberInput
                         placeholder="ROE"
                         min={0}
@@ -3970,7 +4527,7 @@ function InvoiceCreate({
                         error={chargeErrors[index]?.roe}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.65}>
+                    <Grid.Col span={chargeGridCols.noOfUnit}>
                       <FormNumberInput
                         placeholder="No of Unit"
                         min={0}
@@ -4038,7 +4595,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeGridCols.amountPerUnit}>
                       <FormNumberInput
                         placeholder="Per Unit"
                         min={0}
@@ -4107,7 +4664,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeGridCols.currencyAmount}>
                       <FormNumberInput
                         placeholder="Currency Amount"
                         min={0}
@@ -4177,7 +4734,7 @@ function InvoiceCreate({
                         error={chargeErrors[index]?.amount}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeGridCols.headerAmount}>
                       <FormNumberInput
                         placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                         min={0}
@@ -4193,7 +4750,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeGridCols.localAmount}>
                       <FormNumberInput
                         placeholder="Local Amount"
                         min={0}
@@ -4231,12 +4788,11 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {!isAgentInvoice && (
-                      <Grid.Col span={0.8}>
+                    {isGstInvoiceUser && (
+                      <Grid.Col span={chargeGridCols.sac}>
                         <FormTextInput
                           placeholder="SAC Code"
                           withAsterisk
-                          // disabled={isReadOnly}
                           readOnly={isReadOnly}
                           value={charge.tax_code}
                           rightSection={
@@ -4256,7 +4812,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    <Grid.Col span={0.55}>
+                    <Grid.Col span={chargeGridCols.drCr}>
                       <Dropdown
                         placeholder="Dr/Cr"
                         data={[
@@ -4281,10 +4837,78 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
-                    {!isAgentInvoice && headerSameState === true && (
-                      <Grid.Col span={0.55}>
-                        {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                    {isVatInvoiceUser && (
+                      <Grid.Col span={chargeGridCols.vatRate}>
+                        <FormNumberInput
+                          placeholder="VAT %"
+                          min={0}
+                          max={100}
+                          hideControls
+                          readOnly={isReadOnly || charge.is_tax_row === true}
+                          value={(() => {
+                            if (charge.is_tax_row === true) return undefined;
+                            const rate =
+                              charge.tax_rate ??
+                              vatRatesByChargeIndex[index]?.vat_percent;
+                            return rate != null ? rate : undefined;
+                          })()}
+                          onChange={(value) => {
+                            const parsed = clampAmount(value as number | null);
+                            form.setFieldValue(
+                              `charges.${index}.tax_rate`,
+                              parsed,
+                            );
+                            setVatRatesByChargeIndex((prev) => ({
+                              ...prev,
+                              [index]: { vat_percent: parsed },
+                            }));
+                          }}
+                          rightSection={
+                            vatRatesLoadingByIndex[index] ? (
+                              <Loader size="xs" color="#105476" />
+                            ) : undefined
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
+                    {isVatInvoiceUser && (
+                      <Grid.Col span={chargeGridCols.vatAmount}>
+                        <FormNumberInput
+                          placeholder="VAT Amount"
+                          min={0}
+                          hideControls
+                          readOnly
+                          value={(() => {
+                            if (charge.is_tax_row === true) return undefined;
+                            const rate =
+                              charge.tax_rate ??
+                              vatRatesByChargeIndex[index]?.vat_percent;
+                            const taxBase =
+                              charge.amount_in_local ?? charge.header_amount;
+                            if (rate == null || taxBase == null)
+                              return undefined;
+                            const amount = calcTaxAmountFromRate(taxBase, rate);
+                            return amount > 0 ? amount : undefined;
+                          })()}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
+                    {isGstInvoiceUser && headerSameState === true && (
+                      <Grid.Col span={chargeGridCols.cgst}>
                         <FormTextInput
                           placeholder="CGST"
                           value={(() => {
@@ -4295,7 +4919,8 @@ function InvoiceCreate({
                               charge.is_tax_row === true ||
                               code === "IGST" ||
                               code === "CGST" ||
-                              code === "SGST"
+                              code === "SGST" ||
+                              code === "VAT"
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
@@ -4334,9 +4959,8 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {!isAgentInvoice && headerSameState === true && (
-                      <Grid.Col span={0.55}>
-                        {/* {gstRatesByChargeIndex[index]?.same_state === true && ( */}
+                    {isGstInvoiceUser && headerSameState === true && (
+                      <Grid.Col span={chargeGridCols.sgst}>
                         <FormTextInput
                           placeholder="SGST"
                           value={(() => {
@@ -4347,7 +4971,8 @@ function InvoiceCreate({
                               charge.is_tax_row === true ||
                               code === "IGST" ||
                               code === "CGST" ||
-                              code === "SGST"
+                              code === "SGST" ||
+                              code === "VAT"
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
@@ -4387,9 +5012,8 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {!isAgentInvoice && headerSameState === false && (
-                      <Grid.Col span={0.55}>
-                        {/* {gstRatesByChargeIndex[index]?.same_state === false && ( */}
+                    {isGstInvoiceUser && headerSameState === false && (
+                      <Grid.Col span={chargeGridCols.igst}>
                         <FormTextInput
                           placeholder="IGST"
                           value={(() => {
@@ -4400,7 +5024,8 @@ function InvoiceCreate({
                               charge.is_tax_row === true ||
                               code === "IGST" ||
                               code === "CGST" ||
-                              code === "SGST"
+                              code === "SGST" ||
+                              code === "VAT"
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
@@ -4438,7 +5063,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    <Grid.Col span={0.5}>
+                    <Grid.Col span={chargeGridCols.actions}>
                       {!isReadOnly && (
                         <Group gap="xs">
                           {form.values.charges.length > 1 && (
@@ -4473,6 +5098,41 @@ function InvoiceCreate({
                                   );
                                   return next;
                                 });
+                                setVatRatesByChargeIndex((prev) => {
+                                  const next: Record<number, VatRates | null> =
+                                    {};
+                                  Object.entries(prev).forEach(
+                                    ([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index)
+                                        return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    },
+                                  );
+                                  return next;
+                                });
+                                setVatRatesLoadingByIndex((prev) => {
+                                  const next: Record<number, boolean> = {};
+                                  Object.entries(prev).forEach(
+                                    ([key, value]) => {
+                                      const idx = Number(key);
+                                      if (Number.isNaN(idx) || idx === index)
+                                        return;
+                                      next[idx > index ? idx - 1 : idx] = value;
+                                    },
+                                  );
+                                  return next;
+                                });
+                                const nextUnits: Record<number, string> = {};
+                                Object.entries(chargeUnitsByIndexRef.current).forEach(
+                                  ([key, value]) => {
+                                    const idx = Number(key);
+                                    if (Number.isNaN(idx) || idx === index) return;
+                                    nextUnits[idx > index ? idx - 1 : idx] = value;
+                                  },
+                                );
+                                chargeUnitsByIndexRef.current = nextUnits;
+                                lastVatRatesFetchKeyRef.current = "";
                                 form.removeListItem("charges", index);
                               }}
                             >
@@ -4501,6 +5161,9 @@ function InvoiceCreate({
                                       (newChargeCurrency || "").toUpperCase(),
                                   )?.value ??
                                     "");
+                                const newIndex = form.values.charges.length;
+                                chargeUnitsByIndexRef.current[newIndex] =
+                                  "|";
                                 form.insertListItem("charges", {
                                   charge_id: null,
                                   charge_name: "",
@@ -4532,8 +5195,8 @@ function InvoiceCreate({
                 ))}
                 {/* </Box> */}
 
-                {/* Totals Section - customer invoice only (hidden for agent invoice) */}
-                {!isAgentInvoice && (
+                {/* Totals — GST customer invoice or VAT (China/Kenya customer + agent) */}
+                {(isGstInvoiceUser || isVatInvoiceUser) && (
                   <Box
                     mt="xl"
                     p="md"
@@ -4544,7 +5207,7 @@ function InvoiceCreate({
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col span={3}>
+                      <Grid.Col span={isVatInvoiceUser ? 6 : 3}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total
@@ -4559,94 +5222,205 @@ function InvoiceCreate({
                           </Text>
                         </Box>
                       </Grid.Col>
-                      <Grid.Col span={3}>
-                        <Box>
-                          <Text size="sm" fw={500} c="dimmed" mb={4}>
-                            IGST Total
-                          </Text>
-                          <Text size="lg" fw={600} c="#105476">
-                            {form.values.charges
-                              .reduce((sum, c, idx) => {
-                                const rate = gstRatesByChargeIndex[idx]?.igst;
-                                const localAmount = c.amount_in_local;
-                                if (rate == null || localAmount == null)
-                                  return sum;
-                                const amount = clampAmount(
-                                  (localAmount * rate) / 100,
-                                );
-                                return sum + (amount ?? 0);
-                              }, 0)
-                              .toFixed(2)}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
-                      <Grid.Col span={3}>
-                        <Box>
-                          <Text size="sm" fw={500} c="dimmed" mb={4}>
-                            CGST Total
-                          </Text>
-                          <Text size="lg" fw={600} c="#105476">
-                            {form.values.charges
-                              .reduce((sum, c, idx) => {
-                                const rate = gstRatesByChargeIndex[idx]?.cgst;
-                                const localAmount = c.amount_in_local;
-                                if (rate == null || localAmount == null)
-                                  return sum;
-                                const amount = clampAmount(
-                                  (localAmount * rate) / 100,
-                                );
-                                return sum + (amount ?? 0);
-                              }, 0)
-                              .toFixed(2)}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
-                      <Grid.Col span={3}>
-                        <Box>
-                          <Text size="sm" fw={500} c="dimmed" mb={4}>
-                            SGST Total
-                          </Text>
-                          <Text size="lg" fw={600} c="#105476">
-                            {form.values.charges
-                              .reduce((sum, c, idx) => {
-                                const rate = gstRatesByChargeIndex[idx]?.sgst;
-                                const localAmount = c.amount_in_local;
-                                if (rate == null || localAmount == null)
-                                  return sum;
-                                const amount = clampAmount(
-                                  (localAmount * rate) / 100,
-                                );
-                                return sum + (amount ?? 0);
-                              }, 0)
-                              .toFixed(2)}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
+                      {isVatInvoiceUser && (
+                        <Grid.Col span={6}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              VAT Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {form.values.charges
+                                .reduce((sum, c, idx) => {
+                                  if (c.is_tax_row === true) return sum;
+                                  const rate =
+                                    vatRatesByChargeIndex[idx]?.vat_percent ??
+                                    c.tax_rate;
+                                  const taxBase =
+                                    c.amount_in_local ?? c.header_amount;
+                                  return (
+                                    sum + calcTaxAmountFromRate(taxBase, rate)
+                                  );
+                                }, 0)
+                                .toFixed(2)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      )}
+                      {isGstInvoiceUser && (
+                        <>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                IGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.igst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                CGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.cgst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                SGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.sgst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                        </>
+                      )}
                     </Grid>
                   </Box>
                 )}
               </Tabs.Panel>
 
-              {saveResponse && !isAgentInvoice && (
+              {saveResponse && showTaxTab && (
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
                       <Loader size="md" color="#105476" />
                       <Text size="sm" c="dimmed">
-                        Loading GST breakup...
+                        {isVatInvoiceUser
+                          ? "Loading VAT breakup..."
+                          : "Loading GST breakup..."}
                       </Text>
                     </Stack>
                   )}
                   {!gstBreakupLoading &&
                     !gstBreakup &&
                     chargesTabActive === "tax" &&
-                    saveResponse?.id &&
-                    saveResponse?.customer_id != null && (
+                    saveResponse?.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        No GST breakup data.
+                        {isVatInvoiceUser
+                          ? "No VAT breakup data."
+                          : "No GST breakup data."}
                       </Text>
                     )}
-                  {!gstBreakupLoading && gstBreakup && (
+                  {!gstBreakupLoading && gstBreakup && isVatInvoiceUser && (
+                    <>
+                      <ScrollArea mt="md">
+                        <Table
+                          withTableBorder
+                          withColumnBorders
+                          striped
+                          highlightOnHover
+                          style={{ minWidth: 520 }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Name
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Rate
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Amount
+                              </Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {(gstBreakup.percentage_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.rate_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {(() => {
+                                      const rateVal = row.rate ?? row.tax_rate;
+                                      const rateType = row.rate_type ?? "";
+                                      if (rateVal == null || rateVal === "")
+                                        return "—";
+                                      const typeStr = String(rateType).trim();
+                                      if (typeStr === "%" || typeStr === "％")
+                                        return `${rateVal}%`;
+                                      if (typeStr !== "")
+                                        return `${rateVal}${typeStr}`;
+                                      return String(rateVal);
+                                    })()}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.taxable_total != null
+                                      ? Number(row.taxable_total).toFixed(2)
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
+                          </Table.Tbody>
+                          <Table.Tfoot>
+                            <Table.Tr>
+                              <Table.Td colSpan={2} />
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
+                                Total: {gstBreakup.total ?? "0.00"}
+                              </Table.Td>
+                            </Table.Tr>
+                          </Table.Tfoot>
+                        </Table>
+                      </ScrollArea>
+                    </>
+                  )}
+                  {!gstBreakupLoading && gstBreakup && isGstInvoiceUser && (
                     <>
                       <ScrollArea mt="md">
                         <Table
@@ -4734,11 +5508,9 @@ function InvoiceCreate({
                   )}
                   {chargesTabActive === "tax" &&
                     saveResponse &&
-                    // (!saveResponse.id || saveResponse.customer_id == null) && (
                     !saveResponse.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        Save the invoice to load GST breakup (customer_id from
-                        response is required).
+                        Save the invoice to load tax breakup.
                       </Text>
                     )}
                 </Tabs.Panel>

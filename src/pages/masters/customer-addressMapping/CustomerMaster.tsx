@@ -609,6 +609,7 @@ function CustomerMaster() {
     new Date().getFullYear()
   );
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
+  const [isRefreshingList, setIsRefreshingList] = useState(false);
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
     useState<number>(0);
 
@@ -724,35 +725,39 @@ function CustomerMaster() {
 
   // Loading state
   const isLoading =
+    isRefreshingList ||
     customerLoading ||
     (filtersApplied && filteredCustomerLoading) ||
     searchLoading;
 
   // Add effect to refresh data when returning from create/edit operations
   useEffect(() => {
-    // Check if we're returning from a create/edit operation
-    if (location.state?.refreshData) {
-      // Clear the refresh flag
-      navigate(location.pathname, { replace: true, state: {} });
+    if (!location.state?.refreshData) return;
 
-      // Clear search query to show fresh data
+    const refreshListAfterSave = async () => {
+      setIsRefreshingList(true);
+      navigate(location.pathname, { replace: true, state: {} });
       setSearchQuery("");
 
-      // Invalidate and refresh all customer data
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      queryClient.invalidateQueries({ queryKey: ["filteredCustomers"] });
-      queryClient.invalidateQueries({ queryKey: ["customerSearch"] });
-      queryClient.invalidateQueries({ queryKey: ["customersMetadata"] });
+      await queryClient.invalidateQueries({ queryKey: ["customers"] });
+      await queryClient.invalidateQueries({ queryKey: ["filteredCustomers"] });
+      await queryClient.invalidateQueries({ queryKey: ["customerSearch"] });
+      await queryClient.invalidateQueries({ queryKey: ["customersMetadata"] });
 
-      // Refresh data based on current filter state
-      if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-        refetchFilteredCustomers();
-      } else {
-        refetchCustomers();
+      try {
+        if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
+          await refetchFilteredCustomers();
+        } else {
+          await refetchCustomers();
+        }
+      } finally {
+        setIsRefreshingList(false);
       }
-    }
+    };
+
+    void refreshListAfterSave();
   }, [
-    location.state,
+    location.state?.refreshData,
     refetchFilteredCustomers,
     refetchCustomers,
     navigate,
@@ -1518,7 +1523,11 @@ function CustomerMaster() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading customers...</Text>
+              <Text c="dimmed">
+                {isRefreshingList
+                  ? "Refreshing customers..."
+                  : "Loading customers..."}
+              </Text>
             </Stack>
           </Center>
         ) : (
