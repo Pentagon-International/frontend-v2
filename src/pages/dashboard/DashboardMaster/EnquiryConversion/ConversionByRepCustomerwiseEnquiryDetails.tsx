@@ -187,6 +187,8 @@ function mapQuotationFilterRowToDrilldown(
       ? (row.destination_code_list as string[])
       : [],
     quotations,
+    reject_remark:
+      row.reject_remark == null ? undefined : String(row.reject_remark).trim() || undefined,
   };
 }
 
@@ -573,6 +575,10 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                   <DetailRow label="Weight" value={weightLabel(displayEnquiry)} />
                   <DetailRow label="Lane" value={lanePretty(displayEnquiry)} />
                   <DetailRow label="Sales rep" value={salesperson} />
+                  <DetailRow
+                    label="Reject remark"
+                    value={displayEnquiry.reject_remark?.trim() || "—"}
+                  />
                   <DetailRow label="Source" value="—" />
                 </Stack>
               </Box>

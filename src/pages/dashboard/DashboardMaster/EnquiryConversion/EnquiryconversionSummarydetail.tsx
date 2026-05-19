@@ -35,7 +35,7 @@ const FONT = "'Geist', sans-serif";
 /** Labels emitted by `buildEnquiryConversionMetrics` — must match tile labels on the page. */
 export type EnquiryConversionSummaryMetricLabel =
   | "ACTIVE"
-  | "QUOTE RATE"
+  | "QUOTE CREATED RATE"
   | "WIN RATE"
   | "TOTAL ENQUIRIES";
 
@@ -43,7 +43,7 @@ function metricToApiType(m: EnquiryConversionSummaryMetricLabel): string | null 
   switch (m) {
     case "ACTIVE":
       return "Active";
-    case "QUOTE RATE":
+    case "QUOTE CREATED RATE":
       return "QUOTE CREATED";
     case "WIN RATE":
       return "GAINED";
@@ -305,9 +305,9 @@ function buildDetailContent(
       });
       break;
     }
-    case "QUOTE RATE": {
+    case "QUOTE CREATED RATE": {
       const qpct = s?.quote_created_percentage?.trim() ?? "—";
-      title = `Quote rate · ${qpct}`;
+      title = `Quote created rate · ${qpct}`;
       subtitle = `${formatPeriodSubtitle(filters.fromDate, filters.toDate)} · ${totalQuote.toLocaleString("en-IN")} quotes · ${totalEnquiry.toLocaleString("en-IN")} enquiries`;
       trend = linearTrend(mom?.quote_created, totalQuote);
       breakdownTitle = "Quote activity by mode";
@@ -408,10 +408,10 @@ function buildDetailContent(
             d: topSvc?.percentage?.trim() ?? "—",
           },
         ];
-      case "QUOTE RATE":
+      case "QUOTE CREATED RATE":
         return [
           {
-            l: "QUOTE RATE",
+            l: "QUOTE CREATED RATE",
             v: s?.quote_created_percentage?.trim() ?? "—",
             d: `${totalQuote} / ${totalEnquiry}`,
           },
@@ -527,8 +527,8 @@ export function EnquiryconversionSummarydetail({
       ? "New enquiries"
       : metric === "ACTIVE"
         ? "Active enquiries"
-        : metric === "QUOTE RATE"
-          ? "Quote rate"
+        : metric === "QUOTE CREATED RATE"
+          ? "Quote created rate"
           : metric === "WIN RATE"
             ? "Win rate"
             : "Summary";

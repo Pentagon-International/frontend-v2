@@ -606,6 +606,7 @@ export interface EnquiryDrilldownEnquiry {
   origin_list?: string[];
   destination_list?: string[];
   quotations?: EnquiryDrilldownQuotation[];
+  reject_remark?: string;
 }
 
 export interface EnquiryConversionCustomerwiseCustomerRow
@@ -742,6 +743,15 @@ export interface BudgetAggregatedData {
   totalSalesBudget: number;
 }
 
+export interface SalespersonMonthlyBudgetBreakdownItem {
+  trade_type: string;
+  service_type: string;
+  actual_budget: number;
+  sales_budget: number;
+  incentive_percentage?: number;
+  incentive_amount?: number;
+}
+
 export interface SalespersonMonthlyBudgetItem {
   sno: number;
   month: string;
@@ -752,6 +762,7 @@ export interface SalespersonMonthlyBudgetItem {
   service_type?: string | null;
   incentive_percentage?: number;
   incentive_amount?: number;
+  breakdown?: SalespersonMonthlyBudgetBreakdownItem[];
 }
 
 export interface SalespersonMonthlyBudgetData {
@@ -2585,6 +2596,8 @@ export interface PipelineReportRegionalFilters {
   date_to?: string;
   region?: string;
   salesperson?: string;
+  type?: string;
+  customer_code?: string;
   search?: string;
   branch_code?: string;
   coordinator_name?: string;
@@ -2756,6 +2769,8 @@ export interface PipelineReportProductFilters {
   service?: string;
   service_type?: string;
   salesperson?: string;
+  type?: string;
+  customer_code?: string;
   search?: string;
   branch_code?: string;
   coordinator_name?: string;

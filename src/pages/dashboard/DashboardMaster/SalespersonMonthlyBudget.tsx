@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -13,10 +13,12 @@ import {
   Table,
   Text,
 } from "@mantine/core";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import ReactECharts from "echarts-for-react";
 import {
   getSalespersonMonthlyBudgetSummary,
+  type SalespersonMonthlyBudgetBreakdownItem,
   type SalespersonMonthlyBudgetItem,
 } from "../../../service/dashboard.service";
 
@@ -59,6 +61,49 @@ const getAchievementColor = (percentage: number): string => {
   return "#e74c3c";
 };
 
+function BreakdownRow({
+  segment,
+}: {
+  segment: SalespersonMonthlyBudgetBreakdownItem;
+}) {
+  const actual = segment.actual_budget;
+  const budget = segment.sales_budget;
+  const segAch = budget > 0 ? (actual / budget) * 100 : 0;
+  const label = [segment.service_type, segment.trade_type]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Table.Tr style={{ background: "#FAFBFC" }}>
+      <Table.Td pl={36}>
+        <Text fz={12} fw={600} c="#475569">
+          {label || "—"}
+        </Text>
+      </Table.Td>
+      <Table.Td ta="right">
+        <Text fz={12} fw={600} c="#0F172A">
+          {actual}
+        </Text>
+      </Table.Td>
+      <Table.Td ta="right">
+        <Text fz={12} fw={500} c="#64748B">
+          {budget}
+        </Text>
+      </Table.Td>
+      <Table.Td ta="right">
+        <Text fz={12} fw={600} c="#0F172A">
+          {segment.incentive_amount ?? 0}
+        </Text>
+      </Table.Td>
+      <Table.Td ta="right">
+        <Text fz={12} fw={600} c={getAchievementColor(segAch)}>
+          {segAch.toFixed(1)}%
+        </Text>
+      </Table.Td>
+    </Table.Tr>
+  );
+}
+
 export default function SalespersonMonthlyBudget({
   opened,
   onClose,
@@ -76,6 +121,11 @@ export default function SalespersonMonthlyBudget({
     totalSalesBudget: 0,
     currency: "INR",
   });
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!opened) setExpandedMonth(null);
+  }, [opened, salesperson, startMonth, endMonth]);
 
   useEffect(() => {
     const fetchMonthlyBudget = async () => {
@@ -485,45 +535,78 @@ export default function SalespersonMonthlyBudget({
                     <Table.Th ta="right">Actual</Table.Th>
                     <Table.Th ta="right">Budget</Table.Th>
                     <Table.Th ta="right">Applicable Incentive</Table.Th>
-                    <Table.Th ta="right">Trade Type</Table.Th>
-                    <Table.Th ta="right">Service Type</Table.Th>
                     <Table.Th ta="right">Achievement</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {rows.map((row) => {
-                    const actual = (row.actual_budget);
-                    const budget = (row.sales_budget);
-                    const variance = actual - budget;
+                    const actual = row.actual_budget;
+                    const budget = row.sales_budget;
                     const rowAch = budget > 0 ? (actual / budget) * 100 : 0;
+                    const monthKey = row.month;
+                    const isExpanded = expandedMonth === monthKey;
+                    const breakdown = Array.isArray(row.breakdown)
+                      ? row.breakdown
+                      : [];
+                    const hasBreakdown = breakdown.length > 0;
+
                     return (
-                      <Table.Tr key={`${row.sno}-${row.month}`}>
-                        <Table.Td>
-                          <Text fw={600} fz={13}>{dayjs(`${row.month}-01`).format("MMM YYYY")}</Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={13}>{(actual)}</Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={600} fz={13} c="#475569">{(budget)}</Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={13} c={variance >= 0 ? "#16A34A" : "#DC2626"}>
-                          {row.incentive_amount}
-                          </Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={13} c="#0F172A">{row.trade_type ?? "-"}</Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={13} c="#0F172A">{row.service_type ?? "-"}</Text>
-                        </Table.Td>
-                        <Table.Td ta="right">
-                          <Text fw={700} fz={13} c={getAchievementColor(rowAch)}>
-                            {rowAch.toFixed(1)}%
-                          </Text>
-                        </Table.Td>
-                      </Table.Tr>
+                      <Fragment key={`${row.sno}-${row.month}`}>
+                        <Table.Tr
+                          style={{
+                            background: isExpanded ? "#F8FAFC" : undefined,
+                            cursor: hasBreakdown ? "pointer" : undefined,
+                          }}
+                          onClick={() => {
+                            if (!hasBreakdown) return;
+                            setExpandedMonth((prev) =>
+                              prev === monthKey ? null : monthKey
+                            );
+                          }}
+                        >
+                          <Table.Td>
+                            <Group gap={6} wrap="nowrap">
+                              {hasBreakdown ? (
+                                isExpanded ? (
+                                  <IconChevronDown size={14} color="#64748B" />
+                                ) : (
+                                  <IconChevronRight size={14} color="#64748B" />
+                                )
+                              ) : (
+                                <Box w={14} />
+                              )}
+                              <Text fw={600} fz={13}>
+                                {dayjs(`${row.month}-01`).format("MMM YYYY")}
+                              </Text>
+                            </Group>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={700} fz={13}>{actual}</Text>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={600} fz={13} c="#475569">
+                              {budget}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={700} fz={13} c="#0F172A">
+                              {row.incentive_amount ?? 0}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={700} fz={13} c={getAchievementColor(rowAch)}>
+                              {rowAch.toFixed(1)}%
+                            </Text>
+                          </Table.Td>
+                        </Table.Tr>
+                        {isExpanded &&
+                          breakdown.map((segment, segIdx) => (
+                            <BreakdownRow
+                              key={`${row.month}-${segIdx}-${segment.trade_type}-${segment.service_type}`}
+                              segment={segment}
+                            />
+                          ))}
+                      </Fragment>
                     );
                   })}
                   {!rows.length && (

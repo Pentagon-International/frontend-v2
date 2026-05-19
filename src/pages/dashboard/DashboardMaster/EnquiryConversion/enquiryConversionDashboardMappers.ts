@@ -153,7 +153,7 @@ export function buildEnquiryConversionMetrics(
   if (!s) {
     return [
       { label: "ACTIVE", value: "—" },
-      { label: "QUOTE RATE", value: "—" },
+      { label: "QUOTE CREATED RATE", value: "—" },
       { label: "WIN RATE", value: "—" },
       { label: "AVG. DEAL SIZE", value: "—", trendLabel: "N/A" },
     ];
@@ -172,7 +172,7 @@ export function buildEnquiryConversionMetrics(
       trendLabel: a.label,
     },
     {
-      label: "QUOTE RATE",
+      label: "QUOTE CREATED RATE",
       value: s.quote_created_percentage?.trim() ?? "—",
       trend: q.trend,
       trendLabel: q.label,
