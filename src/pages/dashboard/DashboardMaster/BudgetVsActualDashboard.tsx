@@ -73,6 +73,12 @@ const MODE_BAR_NAVY = "#1E293B";
 const MODE_BAR_ORANGE = "#F59E0B";
 const MODE_BAR_GREEN = "#22C55E";
 
+/** Monthly Trend — Budget (grey plan) vs Actual (page accent teal). */
+const TREND_CHART_BUDGET = "#94A3B8";
+const TREND_CHART_BUDGET_HOVER = "#64748B";
+const TREND_CHART_ACTUAL = "#105476";
+const TREND_CHART_ACTUAL_HOVER = "#0D4560";
+
 function getModeBarColor(modeName: string): string {
   const m = modeName.toLowerCase();
   if (m.includes("custom")) return MODE_BAR_GREEN;
@@ -133,7 +139,7 @@ export default function BudgetVsActualDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<any>(null);
   const [repPageIndex, setRepPageIndex] = useState(0);
-  const [repPageLimit] = useState(6);
+  const [repPageLimit] = useState(10);
   const [selectedRepForDrawer, setSelectedRepForDrawer] = useState("");
   const [salespersonDrawerOpened, setSalespersonDrawerOpened] = useState(false);
 
@@ -277,7 +283,10 @@ export default function BudgetVsActualDashboard() {
           name: "Budget",
           type: "bar",
           data: budget,
-          itemStyle: { color: "#E5E7EB", borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: TREND_CHART_BUDGET, borderRadius: [4, 4, 0, 0] },
+          emphasis: {
+            itemStyle: { color: TREND_CHART_BUDGET_HOVER },
+          },
           barWidth: "52%",
           barGap: "-100%",
           z: 1,
@@ -286,7 +295,10 @@ export default function BudgetVsActualDashboard() {
           name: "Actual",
           type: "bar",
           data: actualBarData,
-          itemStyle: { color: "#1E293B", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: TREND_CHART_ACTUAL, borderRadius: [3, 3, 0, 0] },
+          emphasis: {
+            itemStyle: { color: TREND_CHART_ACTUAL_HOVER },
+          },
           barWidth: "34%",
           barGap: "-100%",
           z: 2,
@@ -652,12 +664,12 @@ export default function BudgetVsActualDashboard() {
                           Budget
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
+                      <Grid.Col span={3}>
                         <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Actual
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={7} />
+                      <Grid.Col span={6} />
                       <Grid.Col span={4}>
                         <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Variance
@@ -717,12 +729,12 @@ export default function BudgetVsActualDashboard() {
                                   {formatCrL(budget)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={2}>
-                                <Text fw={700} fz={12} c="#111827" ta="center">
+                              <Grid.Col span={3}>
+                                <Text fw={700} fz={12} c="#111827" ta="center" style={{ whiteSpace: "nowrap" }}>
                                   {formatCrL(actual)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={7}>
+                              <Grid.Col span={6}>
                                 <Box
                                   style={{
                                     position: "relative",
@@ -850,12 +862,12 @@ export default function BudgetVsActualDashboard() {
                           {formatCrL(teamSummary.budget)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
-                        <Text fw={700} fz={12} c="#111827" ta="center">
+                      <Grid.Col span={3}>
+                        <Text fw={700} fz={12} c="#111827" ta="center" style={{ whiteSpace: "nowrap" }}>
                           {formatCrL(teamSummary.actual)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={7}>
+                      <Grid.Col span={6}>
                         {(() => {
                           const tb = teamSummary.budget;
                           const ta = teamSummary.actual;
