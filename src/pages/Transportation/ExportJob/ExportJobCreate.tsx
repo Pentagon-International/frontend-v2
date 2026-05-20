@@ -66,6 +66,11 @@ import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
 } from "../../../utils/jobHousingEventsFromPatch";
+import {
+  calcCostLocalAmount,
+  calcSellLocalAmount,
+  resolveSellAmount,
+} from "../../../utils/houseChargeAmounts";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -341,6 +346,108 @@ const parseBoolean = (value: unknown): boolean => {
   }
   return false;
 };
+
+function parseChargeFieldNum(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value));
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Map API / payload house charge row with sell_local_amount derived when missing. */
+function mapExportJobHouseChargeRow(charge: Record<string, unknown>) {
+  const unitDetails = charge.unit_details as
+    | { unit_id?: number; unit_code?: string }
+    | undefined;
+  const currencyDetails = charge.currency_details as
+    | { currency_id?: number; currency_code?: string }
+    | undefined;
+
+  const unitCode = charge.unit_code
+    ? String(charge.unit_code)
+    : unitDetails?.unit_code
+      ? String(unitDetails.unit_code)
+      : String(charge.unit ?? "").trim();
+
+  const currencyCode = charge.currency
+    ? String(charge.currency)
+    : currencyDetails?.currency_code
+      ? String(currencyDetails.currency_code)
+      : "";
+
+  const roeValue = parseChargeFieldNum(charge.roe);
+  const amountPerUnit = parseChargeFieldNum(charge.amount_per_unit);
+  const noOfUnit =
+    charge.no_of_unit !== null && charge.no_of_unit !== undefined
+      ? parseChargeFieldNum(charge.no_of_unit)
+      : null;
+
+  const amount = resolveSellAmount(
+    parseChargeFieldNum(charge.amount),
+    noOfUnit,
+    amountPerUnit,
+  );
+
+  const existingSellLocal = parseChargeFieldNum(charge.sell_local_amount);
+  const sellLocal =
+    existingSellLocal != null && existingSellLocal > 0
+      ? existingSellLocal
+      : calcSellLocalAmount(amount, roeValue, noOfUnit, amountPerUnit);
+
+  const totalCost = parseChargeFieldNum(charge.total_cost);
+  const unitCost = parseChargeFieldNum(charge.unit_cost);
+  const existingCostLocal = parseChargeFieldNum(charge.cost_local_amount);
+  const costLocal =
+    existingCostLocal != null && existingCostLocal > 0
+      ? existingCostLocal
+      : calcCostLocalAmount(totalCost, roeValue);
+
+  const unitIdFromApi =
+    charge.unit_id != null
+      ? String(charge.unit_id)
+      : charge.unit != null
+        ? String(charge.unit)
+        : unitDetails?.unit_id != null
+          ? String(unitDetails.unit_id)
+          : "";
+  const currencyIdFromApi =
+    charge.currency_id != null
+      ? String(charge.currency_id)
+      : currencyDetails?.currency_id != null
+        ? String(currencyDetails.currency_id)
+        : "";
+
+  return {
+    id:
+      charge.id != null
+        ? typeof charge.id === "number"
+          ? charge.id
+          : Number(charge.id)
+        : undefined,
+    charge_id:
+      charge.charge_id != null
+        ? Number(charge.charge_id)
+        : charge.id != null
+          ? Number(charge.id)
+          : null,
+    charge_name: charge.charge_name ? String(charge.charge_name) : "",
+    pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
+    unit_id: unitIdFromApi,
+    unit_code: unitCode,
+    currency_id: currencyIdFromApi,
+    no_of_unit: noOfUnit,
+    currency: currencyCode,
+    roe: roeValue,
+    amount_per_unit: amountPerUnit,
+    amount,
+    sell_local_amount: sellLocal,
+    unit_cost: unitCost,
+    total_cost: totalCost,
+    cost_local_amount: costLocal,
+    supplier_code: charge.supplier_code ? String(charge.supplier_code) : "",
+    supplier_name: charge.supplier_name ? String(charge.supplier_name) : "",
+  };
+}
 
 function ExportJobCreate() {
   const [active, setActive] = useState(0);
@@ -658,7 +765,9 @@ function ExportJobCreate() {
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
-              house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
+              house_date: house.house_date
+                ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
+                : null,
               routed: house.routed
                 ? String(house.routed).toLowerCase() === "self"
                   ? "self"
@@ -692,7 +801,9 @@ function ExportJobCreate() {
                 house.agent_state_id !== undefined
                   ? String(house.agent_state_id)
                   : "",
-              shipper_code: house.shipper_code ? String(house.shipper_code) : "",
+              shipper_code: house.shipper_code
+                ? String(house.shipper_code)
+                : "",
               shipper_id:
                 house.shipper_id !== null && house.shipper_id !== undefined
                   ? String(house.shipper_id)
@@ -814,242 +925,21 @@ function ExportJobCreate() {
                       }),
                     )
                   : [],
-              charges:
-                house.charges &&
-                Array.isArray(house.charges) &&
-                house.charges.length > 0
-                  ? house.charges.map((charge: Record<string, unknown>) => ({
-                      id: charge.id
-                        ? typeof charge.id === "number"
-                          ? charge.id
-                          : Number(charge.id)
-                        : undefined,
-                      charge_id:
-                        charge.charge_id != null
-                          ? Number(charge.charge_id)
-                          : charge.id != null
-                            ? Number(charge.id)
-                            : null,
-                      charge_name: charge.charge_name
-                        ? String(charge.charge_name)
-                        : "",
-                      pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                      unit_id:
-                        charge.unit_id != null ? String(charge.unit_id) : "",
-                      unit_code: charge.unit_code
-                        ? String(charge.unit_code)
-                        : "",
-                      no_of_unit: charge.no_of_unit as number | null,
-                      currency_id:
-                        charge.currency_id != null
-                          ? String(charge.currency_id)
-                          : "",
-                      currency: charge.currency ? String(charge.currency) : "",
-                      roe:
-                        charge.roe != null
-                          ? typeof charge.roe === "string"
-                            ? parseFloat(charge.roe) || null
-                            : (charge.roe as number)
-                          : null,
-                      amount_per_unit:
-                        charge.amount_per_unit != null
-                          ? typeof charge.amount_per_unit === "string"
-                            ? parseFloat(charge.amount_per_unit) || null
-                            : (charge.amount_per_unit as number)
-                          : null,
-                      amount:
-                        charge.amount != null
-                          ? typeof charge.amount === "string"
-                            ? parseFloat(charge.amount) || null
-                            : (charge.amount as number)
-                          : null,
-                      sell_local_amount:
-                        charge.sell_local_amount != null
-                          ? typeof charge.sell_local_amount === "string"
-                            ? parseFloat(charge.sell_local_amount) || null
-                            : (charge.sell_local_amount as number)
-                          : null,
-                      unit_cost:
-                        charge.unit_cost != null
-                          ? typeof charge.unit_cost === "string"
-                            ? parseFloat(charge.unit_cost) || null
-                            : (charge.unit_cost as number)
-                          : null,
-                      total_cost:
-                        charge.total_cost != null
-                          ? typeof charge.total_cost === "string"
-                            ? parseFloat(charge.total_cost) || null
-                            : (charge.total_cost as number)
-                          : null,
-                      cost_local_amount:
-                        charge.cost_local_amount != null
-                          ? typeof charge.cost_local_amount === "string"
-                            ? parseFloat(charge.cost_local_amount) || null
-                            : (charge.cost_local_amount as number)
-                          : null,
-                    }))
-                  : house.mbl_charges &&
-                      Array.isArray(house.mbl_charges) &&
-                      house.mbl_charges.length > 0
-                    ? house.mbl_charges.map(
-                        (charge: Record<string, unknown>) => {
-                          // Handle mbl_charges structure: unit can be in charge.unit or charge.unit_details.unit_code
-                          const unitCode = charge.unit_code
-                            ? String(charge.unit_code)
-                            : (charge.unit_details as Record<string, unknown>)
-                                  ?.unit_code
-                              ? String(
-                                  (
-                                    charge.unit_details as Record<
-                                      string,
-                                      unknown
-                                    >
-                                  ).unit_code,
-                                )
-                              : "";
-
-                          // Handle currency: can be in charge.currency or charge.currency_details.currency_code
-                          const currencyCode = charge.currency
-                            ? String(charge.currency)
-                            : (
-                                  charge.currency_details as Record<
-                                    string,
-                                    unknown
-                                  >
-                                )?.currency_code
-                              ? String(
-                                  (
-                                    charge.currency_details as Record<
-                                      string,
-                                      unknown
-                                    >
-                                  ).currency_code,
-                                )
-                              : "";
-
-                          // Handle roe: can be string or number
-                          const roeValue =
-                            charge.roe !== null && charge.roe !== undefined
-                              ? typeof charge.roe === "string"
-                                ? parseFloat(charge.roe) || null
-                                : (charge.roe as number)
-                              : null;
-
-                          // Handle amount_per_unit: can be string or number
-                          const amountPerUnit =
-                            charge.amount_per_unit !== null &&
-                            charge.amount_per_unit !== undefined
-                              ? typeof charge.amount_per_unit === "string"
-                                ? parseFloat(charge.amount_per_unit) || null
-                                : (charge.amount_per_unit as number)
-                              : null;
-
-                          // Handle amount: can be string or number
-                          const amount =
-                            charge.amount !== null &&
-                            charge.amount !== undefined
-                              ? typeof charge.amount === "string"
-                                ? parseFloat(charge.amount) || null
-                                : (charge.amount as number)
-                              : null;
-
-                          const sellLocal =
-                            charge.sell_local_amount !== null &&
-                            charge.sell_local_amount !== undefined
-                              ? typeof charge.sell_local_amount === "string"
-                                ? parseFloat(charge.sell_local_amount) || null
-                                : (charge.sell_local_amount as number)
-                              : null;
-
-                          const unitCost =
-                            charge.unit_cost !== null &&
-                            charge.unit_cost !== undefined
-                              ? typeof charge.unit_cost === "string"
-                                ? parseFloat(charge.unit_cost) || null
-                                : (charge.unit_cost as number)
-                              : null;
-
-                          const totalCost =
-                            charge.total_cost !== null &&
-                            charge.total_cost !== undefined
-                              ? typeof charge.total_cost === "string"
-                                ? parseFloat(charge.total_cost) || null
-                                : (charge.total_cost as number)
-                              : null;
-
-                          const costLocal =
-                            charge.cost_local_amount !== null &&
-                            charge.cost_local_amount !== undefined
-                              ? typeof charge.cost_local_amount === "string"
-                                ? parseFloat(charge.cost_local_amount) || null
-                                : (charge.cost_local_amount as number)
-                              : null;
-
-                          const unitDetails = charge.unit_details as
-                            | { unit_id?: number; unit_code?: string }
-                            | undefined;
-                          const currencyDetails = charge.currency_details as
-                            | { currency_id?: number; currency_code?: string }
-                            | undefined;
-                          const unitIdFromApi =
-                            charge.unit_id != null
-                              ? String(charge.unit_id)
-                              : charge.unit != null
-                                ? String(charge.unit)
-                                : unitDetails?.unit_id != null
-                                  ? String(unitDetails.unit_id)
-                                  : "";
-                          const currencyIdFromApi =
-                            charge.currency_id != null
-                              ? String(charge.currency_id)
-                              : currencyDetails?.currency_id != null
-                                ? String(currencyDetails.currency_id)
-                                : "";
-
-                          return {
-                            id: charge.id
-                              ? typeof charge.id === "number"
-                                ? charge.id
-                                : Number(charge.id)
-                              : undefined,
-                            charge_id:
-                              charge.charge_id != null
-                                ? Number(charge.charge_id)
-                                : charge.id != null
-                                  ? Number(charge.id)
-                                  : null,
-                            charge_name: charge.charge_name
-                              ? String(charge.charge_name)
-                              : "",
-                            pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
-                            unit_id: unitIdFromApi,
-                            unit_code: unitCode,
-                            currency_id: currencyIdFromApi,
-                            no_of_unit:
-                              charge.no_of_unit !== null &&
-                              charge.no_of_unit !== undefined
-                                ? typeof charge.no_of_unit === "number"
-                                  ? charge.no_of_unit
-                                  : Number(charge.no_of_unit)
-                                : null,
-                            currency: currencyCode,
-                            roe: roeValue,
-                            amount_per_unit: amountPerUnit,
-                            amount: amount,
-                            sell_local_amount: sellLocal,
-                            unit_cost: unitCost,
-                            total_cost: totalCost,
-                            cost_local_amount: costLocal,
-                            supplier_code: charge.supplier_code
-                              ? String(charge.supplier_code)
-                              : "",
-                            supplier_name: charge.supplier_name
-                              ? String(charge.supplier_name)
-                              : "",
-                          };
-                        },
-                      )
-                    : [],
+              charges: (() => {
+                const src =
+                  house.charges &&
+                  Array.isArray(house.charges) &&
+                  house.charges.length > 0
+                    ? house.charges
+                    : house.mbl_charges &&
+                        Array.isArray(house.mbl_charges) &&
+                        house.mbl_charges.length > 0
+                      ? house.mbl_charges
+                      : [];
+                return (src as Record<string, unknown>[]).map((charge) =>
+                  mapExportJobHouseChargeRow(charge),
+                );
+              })(),
             }),
           );
           console.log(
@@ -1319,6 +1209,46 @@ function ExportJobCreate() {
             "estimates",
             sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
           );
+        } else {
+          const navEstimates = location.state?.estimates;
+          const navArray = Array.isArray(navEstimates)
+            ? (navEstimates as Array<Record<string, unknown>>)
+            : [];
+          if (navArray.length > 0) {
+            const toNum = (v: unknown): number | null => {
+              if (v == null) return null;
+              if (typeof v === "number" && !Number.isNaN(v)) return v;
+              const n = parseFloat(String(v));
+              return Number.isNaN(n) ? null : n;
+            };
+            const normalizePpCc = (value: unknown): string => {
+              const raw = String(value ?? "")
+                .trim()
+                .toUpperCase();
+              if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+              if (raw === "CC" || raw === "COLLECT") return "Collect";
+              return "";
+            };
+            const sanitizedEstimates = navArray.map((e) => ({
+              supplier_code: String(e.supplier_code ?? ""),
+              supplier_name: String(e.supplier_name ?? ""),
+              charge_id: e.charge_id != null ? Number(e.charge_id) : null,
+              charge_name: String(e.charge_name ?? e.charge_code ?? ""),
+              pp_cc: normalizePpCc(e.pp_cc),
+              unit_id: e.unit_id != null ? String(e.unit_id) : "",
+              unit_code: String(e.unit_code ?? ""),
+              no_of_unit: toNum(e.no_of_unit),
+              currency_id: e.currency_id != null ? String(e.currency_id) : "",
+              currency_code: String(e.currency_code ?? ""),
+              roe: toNum(e.roe),
+              cost_per_unit: toNum(e.cost_per_unit),
+              total_cost: toNum(e.total_cost),
+            }));
+            estimatesForm.setFieldValue(
+              "estimates",
+              sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
+            );
+          }
         }
       } catch (error) {
         console.error("Error loading job data:", error);
@@ -1907,9 +1837,7 @@ function ExportJobCreate() {
     eventType: string,
   ): boolean =>
     Array.isArray(events) &&
-    events.some(
-      (e: { type?: string }) => String(e?.type ?? "") === eventType,
-    );
+    events.some((e: { type?: string }) => String(e?.type ?? "") === eventType);
 
   const patchHousingPdfReleasedEvent = async (
     housingId: number | undefined,
@@ -2437,7 +2365,9 @@ function ExportJobCreate() {
           ...(house.id && { id: house.id }),
           ...(house.shipment_id && { shipment_id: house.shipment_id }),
           hbl_number: house.hbl_number,
-          house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
+          house_date: house.house_date
+            ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
+            : null,
           routed: house.routed,
           routed_by: house.routed_by || null,
           origin_code: house.origin_code,
@@ -2543,13 +2473,16 @@ function ExportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit:
-                charge.no_of_unit != null ? roundToDecimals(charge.no_of_unit) : null,
+                charge.no_of_unit != null
+                  ? roundToDecimals(charge.no_of_unit)
+                  : null,
               roe: charge.roe != null ? roundToDecimals(charge.roe) : null,
               amount_per_unit:
                 charge.amount_per_unit != null
                   ? roundToDecimals(charge.amount_per_unit)
                   : null,
-              amount: charge.amount != null ? roundToDecimals(charge.amount) : null,
+              amount:
+                charge.amount != null ? roundToDecimals(charge.amount) : null,
               sell_local_amount:
                 charge.sell_local_amount != null
                   ? roundToDecimals(charge.sell_local_amount)
@@ -2568,7 +2501,9 @@ function ExportJobCreate() {
                       )
                     : null,
               total_cost:
-                charge.total_cost != null ? roundToDecimals(charge.total_cost) : null,
+                charge.total_cost != null
+                  ? roundToDecimals(charge.total_cost)
+                  : null,
               cost_local_amount:
                 charge.cost_local_amount != null
                   ? roundToDecimals(charge.cost_local_amount)
@@ -3008,9 +2943,8 @@ function ExportJobCreate() {
                       onClick={() =>
                         navigate("/job-ledger", {
                           state: {
-                            jobId:
-                              jobData?.job_id,
-                              service_name: "Ocean Export",
+                            jobId: jobData?.job_id,
+                            service_name: "Ocean Export",
                           },
                         })
                       }
@@ -4218,12 +4152,15 @@ function ExportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.9} style={{display: 'flex', justifyContent: 'space-between'}}>  
+                  <Grid.Col
+                    span={0.9}
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button
-                        size="sm"
-                        px={12}
+                          size="sm"
+                          px={12}
                           variant="light"
                           color="red"
                           onClick={() => removeContainer(index)}
@@ -4231,17 +4168,18 @@ function ExportJobCreate() {
                           <IconTrash size={16} />
                         </Button>
                       )}
-                       {index === containerDetailsForm.values.containers.length - 1 && (
-                  <Button
-                  size="sm"
-                  px={12}
-                 variant="light"
-                 color="#105476"
-                 onClick={addContainer}
-               >
-                 <IconPlus size={16} />
-               </Button>
-                       )}
+                    {index ===
+                      containerDetailsForm.values.containers.length - 1 && (
+                      <Button
+                        size="sm"
+                        px={12}
+                        variant="light"
+                        color="#105476"
+                        onClick={addContainer}
+                      >
+                        <IconPlus size={16} />
+                      </Button>
+                    )}
                   </Grid.Col>
                 </Grid>
               </Box>
@@ -4263,103 +4201,103 @@ function ExportJobCreate() {
                     color="#105476"
                     size="sm"
                     onClick={() => {
-                    const toStr = (v: unknown) => String(v ?? "").trim();
-                    const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                    if (!jobId) {
-                      ToastNotification({
-                        type: "error",
-                        message:
-                          "Job ID not found for Supplier Invoice prefill.",
-                      });
-                      return;
-                    }
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                      if (!jobId) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Job ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
 
-                    const estimates = estimatesForm.values.estimates ?? [];
-                    const estimateCharges = estimates
-                      .map((e) => ({
-                        shipment_no: jobId,
-                        charge_id: e.charge_id ?? null,
-                        charge_name: e.charge_name ?? "",
-                        currency_id: e.currency_id ?? null,
-                        roe: e.roe ?? null,
-                        amount: e.total_cost ?? null,
-                        supplier_code: toStr(e.supplier_code),
-                        supplier_name: toStr(e.supplier_name),
-                      }))
-                      .filter(
-                        (c) =>
-                          toStr((c as any).shipment_no) &&
-                          (c as any).charge_id != null &&
-                          (c as any).amount != null &&
-                          (c as any).amount !== "" &&
-                          (toStr((c as any).supplier_code) ||
-                            toStr((c as any).supplier_name)),
-                      );
+                      const estimates = estimatesForm.values.estimates ?? [];
+                      const estimateCharges = estimates
+                        .map((e) => ({
+                          shipment_no: jobId,
+                          charge_id: e.charge_id ?? null,
+                          charge_name: e.charge_name ?? "",
+                          currency_id: e.currency_id ?? null,
+                          roe: e.roe ?? null,
+                          amount: e.total_cost ?? null,
+                          supplier_code: toStr(e.supplier_code),
+                          supplier_name: toStr(e.supplier_name),
+                        }))
+                        .filter(
+                          (c) =>
+                            toStr((c as any).shipment_no) &&
+                            (c as any).charge_id != null &&
+                            (c as any).amount != null &&
+                            (c as any).amount !== "" &&
+                            (toStr((c as any).supplier_code) ||
+                              toStr((c as any).supplier_name)),
+                        );
 
-                    const houseCharges = (housingDetails ?? [])
-                      .flatMap((h) => {
-                        const rec = h as unknown as Record<string, unknown>;
-                        const shipmentNo = toStr((rec as any).shipment_id);
-                        const chargesArr = Array.isArray((rec as any).charges)
-                          ? ((rec as any).charges as unknown[])
-                          : Array.isArray((rec as any).mbl_charges)
-                            ? ((rec as any).mbl_charges as unknown[])
-                            : [];
-                        return chargesArr
-                          .map((c) => {
-                            const cr = c as Record<string, unknown>;
-                            return {
-                              shipment_no: shipmentNo,
-                              charge_id:
-                                cr.charge_id != null
-                                  ? Number(cr.charge_id)
-                                  : null,
-                              charge_name: toStr(cr.charge_name),
-                              currency_id:
-                                (cr as any).currency_id ??
-                                (cr as any).currency ??
-                                null,
-                              roe: (cr as any).roe ?? null,
-                              amount:
-                                (cr as any).total_cost ??
-                                (cr as any).cost_local_amount ??
-                                (cr as any).amount ??
-                                null,
-                              supplier_code: toStr((cr as any).supplier_code),
-                              supplier_name: toStr((cr as any).supplier_name),
-                            };
-                          })
-                          .filter(
-                            (x) =>
-                              toStr((x as any).shipment_no) &&
-                              (x as any).charge_id != null &&
-                              (x as any).amount != null &&
-                              (x as any).amount !== "" &&
-                              (toStr((x as any).supplier_code) ||
-                                toStr((x as any).supplier_name)),
-                          );
-                      })
-                      .filter(Boolean);
+                      const houseCharges = (housingDetails ?? [])
+                        .flatMap((h) => {
+                          const rec = h as unknown as Record<string, unknown>;
+                          const shipmentNo = toStr((rec as any).shipment_id);
+                          const chargesArr = Array.isArray((rec as any).charges)
+                            ? ((rec as any).charges as unknown[])
+                            : Array.isArray((rec as any).mbl_charges)
+                              ? ((rec as any).mbl_charges as unknown[])
+                              : [];
+                          return chargesArr
+                            .map((c) => {
+                              const cr = c as Record<string, unknown>;
+                              return {
+                                shipment_no: shipmentNo,
+                                charge_id:
+                                  cr.charge_id != null
+                                    ? Number(cr.charge_id)
+                                    : null,
+                                charge_name: toStr(cr.charge_name),
+                                currency_id:
+                                  (cr as any).currency_id ??
+                                  (cr as any).currency ??
+                                  null,
+                                roe: (cr as any).roe ?? null,
+                                amount:
+                                  (cr as any).total_cost ??
+                                  (cr as any).cost_local_amount ??
+                                  (cr as any).amount ??
+                                  null,
+                                supplier_code: toStr((cr as any).supplier_code),
+                                supplier_name: toStr((cr as any).supplier_name),
+                              };
+                            })
+                            .filter(
+                              (x) =>
+                                toStr((x as any).shipment_no) &&
+                                (x as any).charge_id != null &&
+                                (x as any).amount != null &&
+                                (x as any).amount !== "" &&
+                                (toStr((x as any).supplier_code) ||
+                                  toStr((x as any).supplier_name)),
+                            );
+                        })
+                        .filter(Boolean);
 
-                    const charges = [...estimateCharges, ...houseCharges];
-                    if (charges.length === 0) {
-                      ToastNotification({
-                        type: "error",
-                        message:
-                          "No charges found in Estimates/House charges to prefill.",
-                      });
-                      return;
-                    }
+                      const charges = [...estimateCharges, ...houseCharges];
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "No charges found in Estimates/House charges to prefill.",
+                        });
+                        return;
+                      }
 
-                    navigate("/supplier-invoice/create", {
-                      state: {
-                        prefillSupplierInvoiceFromJob: {
-                          source: "air-import-job",
-                          job_id: jobId,
-                          charges,
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: jobId,
+                            charges,
+                          },
                         },
-                      },
-                    });
+                      });
                     }}
                   >
                     Create Supplier Invoice
@@ -4379,71 +4317,71 @@ function ExportJobCreate() {
                     },
                   }}
                   onClick={() => {
-                  const estimates = estimatesForm.values.estimates ?? [];
-                  const chargesFromEstimates = estimates
-                    .filter(
-                      (e) =>
-                        e.charge_id != null ||
-                        (e.charge_name && e.charge_name.trim() !== ""),
-                    )
-                    .map((e) => ({
-                      charge_id: e.charge_id,
-                      charge_name: e.charge_name ?? "",
-                      segment: "",
-                      job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                      sub_job: "",
-                      cn_r: "",
-                      currency: e.currency_code ?? "",
-                      currency_id: e.currency_id ?? "",
-                      roe: e.roe,
-                      unit_code: e.unit_code ?? "",
-                      unit_id: e.unit_id ?? "",
-                      no_of_unit: e.no_of_unit,
-                      amount_per_unit: e.cost_per_unit,
-                      amount: e.total_cost,
-                      amount_in_local:
-                        e.total_cost != null && e.roe != null
-                          ? Math.round(e.total_cost * e.roe * 100) / 100
-                          : e.total_cost,
-                      tax_code: "",
-                      tax: "false",
-                    }));
-                  const firstSupplier =
-                    estimates.find(
-                      (e) =>
-                        String(e.supplier_code ?? "").trim() !== "" ||
-                        String(e.supplier_name ?? "").trim() !== "",
-                    ) ?? null;
-                  navigate("/payment-request/create", {
-                    state: {
-                      serviceType: ["FCL", "LCL"],
-                      chargesFromEstimates:
-                        chargesFromEstimates.length > 0
-                          ? chargesFromEstimates
-                          : undefined,
-                      supplier:
-                        firstSupplier != null
-                          ? {
-                              supplier_code: String(
-                                firstSupplier.supplier_code ?? "",
-                              ),
-                              supplier_name: String(
-                                firstSupplier.supplier_name ?? "",
-                              ),
-                            }
-                          : null,
-                      job_reference_1:
-                        jobData?.job_id != null
-                          ? String(jobData.job_id)
-                          : jobData?.id != null
-                            ? String(jobData.id)
-                            : "",
-                      ...(jobWithMergedHousingDetails && {
-                        job: jobWithMergedHousingDetails,
-                      }),
-                    },
-                  });
-                }}
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: ["FCL", "LCL"],
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobWithMergedHousingDetails && {
+                          job: jobWithMergedHousingDetails,
+                        }),
+                      },
+                    });
+                  }}
                 >
                   Create PRQ
                 </Button>
