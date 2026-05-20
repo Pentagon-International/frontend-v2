@@ -753,6 +753,12 @@ function InvoiceCreate({
     return countryCode === "CN" || countryName === "CHINA";
   }, [user?.country?.country_code, user?.country?.country_name]);
 
+  const isKenyaUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "KE" || countryName.includes("KENYA");
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
   // China & Kenya: VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
   const isVatInvoiceUser = useMemo(() => {
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
@@ -1222,11 +1228,11 @@ function InvoiceCreate({
               );
             }
 
-            // Populate GSTN from consignee GST (India GST flow only)
+            // Populate GSTN / PIN from consignee tax id (India GST, Kenya PIN)
             const consigneeGstRaw = (
               firstHawb as { consignee_gst_id?: string | null }
             ).consignee_gst_id;
-            if (consigneeGstRaw && isGstInvoiceUser) {
+            if (consigneeGstRaw && (isGstInvoiceUser || isKenyaUser)) {
               form.setFieldValue("gstn", String(consigneeGstRaw));
             } else if (
               job &&
@@ -1246,7 +1252,7 @@ function InvoiceCreate({
                 }
               ).housing_details;
               const fromJobGst = jobHousing?.[0]?.consignee_gst_id;
-              if (fromJobGst && isGstInvoiceUser) {
+              if (fromJobGst && (isGstInvoiceUser || isKenyaUser)) {
                 form.setFieldValue("gstn", String(fromJobGst));
               }
             }
@@ -1275,11 +1281,11 @@ function InvoiceCreate({
               );
             }
 
-            // Populate GSTN from shipper GST (India GST flow only)
+            // Populate GSTN / PIN from shipper tax id (India GST, Kenya PIN)
             const shipperGstRaw = (
               firstHawb as { shipper_gst_id?: string | null }
             ).shipper_gst_id;
-            if (shipperGstRaw && isGstInvoiceUser) {
+            if (shipperGstRaw && (isGstInvoiceUser || isKenyaUser)) {
               form.setFieldValue("gstn", String(shipperGstRaw));
             } else if (
               job &&
@@ -1297,7 +1303,7 @@ function InvoiceCreate({
                 }
               ).housing_details;
               const fromJobGst = jobHousing?.[0]?.shipper_gst_id;
-              if (fromJobGst && isGstInvoiceUser) {
+              if (fromJobGst && (isGstInvoiceUser || isKenyaUser)) {
                 form.setFieldValue("gstn", String(fromJobGst));
               }
             }
@@ -2361,8 +2367,8 @@ function InvoiceCreate({
     if (isCleared) {
       setAddressOptions([]);
       form.setFieldValue("address", "");
-      if (isGstInvoiceUser) {
-        form.setFieldValue("state", "");
+      if (isGstInvoiceUser || isKenyaUser) {
+        if (isGstInvoiceUser) form.setFieldValue("state", "");
         form.setFieldValue("gstn", "");
       }
       return;
@@ -2394,12 +2400,14 @@ function InvoiceCreate({
         (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
       );
 
-      if (isGstInvoiceUser) {
-        const addrForState =
-          primaryAddress ||
-          (addressesData || []).find((a) => a.state_id != null);
-        if (addrForState?.state_id != null) {
-          form.setFieldValue("state", String(addrForState.state_id));
+      if (isGstInvoiceUser || isKenyaUser) {
+        if (isGstInvoiceUser) {
+          const addrForState =
+            primaryAddress ||
+            (addressesData || []).find((a) => a.state_id != null);
+          if (addrForState?.state_id != null) {
+            form.setFieldValue("state", String(addrForState.state_id));
+          }
         }
 
         const addrForGst =
@@ -2695,7 +2703,7 @@ function InvoiceCreate({
           : isVatSave
             ? null
             : stateId,
-        gstn: isVatSave ? null : values.gstn || null,
+        gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_date: values.document_date
@@ -2707,7 +2715,7 @@ function InvoiceCreate({
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: values.irn_no || null,
+        irn_no: isKenyaUser ? null : values.irn_no || null,
         fapiao_no: values.fapiao_no || null,
         ...(isUpdate ? { status: "UNPOSTED" } : {}),
         total,
@@ -3145,7 +3153,7 @@ function InvoiceCreate({
           : isVatPost
             ? null
             : stateId,
-        gstn: isVatPost ? null : values.gstn || null,
+        gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_date: values.document_date
@@ -3157,7 +3165,7 @@ function InvoiceCreate({
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: values.irn_no || null,
+        irn_no: isKenyaUser ? null : values.irn_no || null,
         fapiao_no: values.fapiao_no || null,
         status: "POSTED",
         total,
@@ -3712,6 +3720,19 @@ function InvoiceCreate({
               </>
             )}
 
+            {isKenyaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="PIN number"
+                  placeholder="Enter PIN number"
+                  value={form.values.gstn}
+                  onChange={(e) => form.setFieldValue("gstn", e.target.value)}
+                  error={form.errors.gstn}
+                  readOnly={isReadOnly}
+                />
+              </Grid.Col>
+            )}
+
             {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
               <FormTextInput
@@ -3905,18 +3926,20 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {/* IRN No */}
-            <Grid.Col span={2}>
-              <FormTextInput
-                label="IRN No"
-                placeholder="Enter IRN number"
-                value={form.values.irn_no}
-                onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                error={form.errors.irn_no}
-                // disabled={isReadOnly}
-                readOnly={isReadOnly}
-              />
-            </Grid.Col>
+            {!isKenyaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="IRN No"
+                  placeholder="Enter IRN number"
+                  value={form.values.irn_no}
+                  onChange={(e) =>
+                    form.setFieldValue("irn_no", e.target.value)
+                  }
+                  error={form.errors.irn_no}
+                  readOnly={isReadOnly}
+                />
+              </Grid.Col>
+            )}
 
             {isChinaUser && (
               <Grid.Col span={2}>
