@@ -436,14 +436,8 @@ export default function BudgetVsActualDashboard() {
                 <DashboardChartSearch
                   value={searchInput}
                   onChange={setSearchInput}
-                  onCommit={(v) => {
-                    commitSearch(v);
-                    void fetchData();
-                  }}
-                  onClear={() => {
-                    commitSearch("");
-                    void fetchData();
-                  }}
+                  onCommit={commitSearch}
+                  onClear={() => commitSearch("")}
                   placeholder="Search customer / salesperson"
                 />
               </Box>
@@ -772,7 +766,7 @@ export default function BudgetVsActualDashboard() {
                                       borderRadius: 9999,
                                     }}
                                   />
-                                  <Box
+                                  {/* <Box
                                     style={{
                                       position: "absolute",
                                       left: `calc(${markerPct}% - 1px)`,
@@ -782,7 +776,7 @@ export default function BudgetVsActualDashboard() {
                                       background: "#111827",
                                       zIndex: 2,
                                     }}
-                                  />
+                                  /> */}
                                 </Box>
                               </Grid.Col>
                               <Grid.Col span={4}>
@@ -913,7 +907,7 @@ export default function BudgetVsActualDashboard() {
                                   borderRadius: 9999,
                                 }}
                               />
-                              <Box
+                              {/* <Box
                                 style={{
                                   position: "absolute",
                                   left: `calc(${markerPct}% - 1px)`,
@@ -923,7 +917,7 @@ export default function BudgetVsActualDashboard() {
                                   background: "#111827",
                                   zIndex: 2,
                                 }}
-                              />
+                              /> */}
                             </Box>
                           );
                         })()}
@@ -967,7 +961,7 @@ export default function BudgetVsActualDashboard() {
                       Monthly Trend
                     </Text>
                     <Text fz={11} c="#9CA3AF" fw={600}>
-                      {fyLabel} · ₹ Cr
+                      {fyLabel} · ₹ 
                     </Text>
                   </Group>
                   <Box h={isCompact ? 220 : isMobile ? 240 : 280}>
@@ -1019,7 +1013,8 @@ export default function BudgetVsActualDashboard() {
                               minWidth: 48,
                               height: 18,
                               borderRadius: 9999,
-                              background: "#EEF2F7",
+                              // background: "#EEF2F7",
+                              background: MODE_BAR_ORANGE,
                               position: "relative",
                               overflow: "hidden",
                             }}
@@ -1032,7 +1027,7 @@ export default function BudgetVsActualDashboard() {
                                 borderRadius: 9999,
                               }}
                             />
-                            <Box
+                            {/* <Box
                               style={{
                                 position: "absolute",
                                 left: `calc(${markerPct}% - 1px)`,
@@ -1042,7 +1037,7 @@ export default function BudgetVsActualDashboard() {
                                 background: BY_MODE_BUDGET_MARKER,
                                 zIndex: 2,
                               }}
-                            />
+                            /> */}
                           </Box>
                           <Text
                             fz={11}
