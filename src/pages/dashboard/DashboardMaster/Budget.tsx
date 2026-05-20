@@ -96,12 +96,6 @@ const Budget = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetProps) => {
-  const normalizedBudgetEndMonth = useMemo(() => {
-    if (!selectedYear || !budgetEndMonth) return budgetEndMonth;
-    const endMonthPart = budgetEndMonth.split("-")[1];
-    return endMonthPart ? `${selectedYear}-${endMonthPart}` : budgetEndMonth;
-  }, [selectedYear, budgetEndMonth]);
-
   // Memoized chart data preparation
   const budgetChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -355,7 +349,7 @@ const Budget = ({
           <Select
             placeholder="To Month"
             data={toMonthOptions}
-            value={normalizedBudgetEndMonth}
+            value={budgetEndMonth}
             onChange={(value) => {
               if (value) {
                 handleBudgetMonthFilterChange(budgetStartMonth, value);

@@ -25,6 +25,7 @@ import { ActionIcon } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import {
   calculateFinancialYearBudgetRangeForYear,
+  getCurrentFinancialYearStart,
   getFilteredBudgetData,
 } from "../../../service/dashboard.service";
 import SalespersonMonthlyBudget from "./SalespersonMonthlyBudget";
@@ -74,15 +75,27 @@ const MODE_BAR_GREEN = "#22C55E";
 
 function getModeBarColor(modeName: string): string {
   const m = modeName.toLowerCase();
+  // Air before LCL so names like "Air LCL" use Monthly Trend actual color (navy).
+  if (m.includes("air")) return MODE_BAR_NAVY;
   if (m.includes("custom")) return MODE_BAR_GREEN;
   if (m.includes("lcl")) return MODE_BAR_ORANGE;
   if (m.includes("fcl")) return MODE_BAR_NAVY;
-  if (m.includes("air")) return MODE_BAR_NAVY;
   if (m.includes("rail")) return MODE_BAR_NAVY;
   if (m.includes("road")) return MODE_BAR_ORANGE;
   if (m.includes("warehous")) return MODE_BAR_ORANGE;
   return MODE_BAR_NAVY;
 }
+
+/** By Mode · YTD — Air uses same actual/budget colors as Monthly Trend. */
+function getByModeActualBarColor(modeName: string): string {
+  const m = modeName.toLowerCase();
+  if (m.includes("air")) return MODE_BAR_NAVY;
+  return getModeBarColor(modeName);
+}
+
+const BY_MODE_BUDGET_MARKER = MODE_BAR_ORANGE;
+const TREND_CHART_FORECAST = "#64748B";
+const TREND_CHART_FORECAST_HOVER = "#475569";
 
 const selectInputStyles = {
   input: {
@@ -95,13 +108,6 @@ const selectInputStyles = {
     background: "#FFFFFF",
   },
 } as const;
-
-function getCurrentFinancialYearStart(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 4 ? String(year) : String(year - 1);
-}
 
 export default function BudgetVsActualDashboard() {
   const location = useLocation();
@@ -118,8 +124,12 @@ export default function BudgetVsActualDashboard() {
     committed: committedSearch,
     commit: commitSearch,
   } = useDashboardChartSearch();
-  const initialYear = routeState.start_month?.split("-")[0] || getCurrentFinancialYearStart();
-  const initialRange = calculateFinancialYearBudgetRangeForYear(parseInt(initialYear, 10));
+  const initialYear =
+    routeState.start_month?.split("-")[0] ||
+    String(getCurrentFinancialYearStart());
+  const initialRange = calculateFinancialYearBudgetRangeForYear(
+    parseInt(initialYear, 10)
+  );
 
   const [type, setType] = useState<"salesperson" | "non-salesperson">(
     routeState.type || "salesperson"
@@ -135,15 +145,18 @@ export default function BudgetVsActualDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<any>(null);
   const [repPageIndex, setRepPageIndex] = useState(0);
-  const [repPageLimit] = useState(6);
+  const [repPageLimit] = useState(10);
   const [selectedRepForDrawer, setSelectedRepForDrawer] = useState("");
   const [salespersonDrawerOpened, setSalespersonDrawerOpened] = useState(false);
 
   const yearOptions = useMemo(() => {
-    const current = parseInt(getCurrentFinancialYearStart(), 10);
+    const current = getCurrentFinancialYearStart();
     return Array.from({ length: 4 }, (_, i) => {
-      const y = String(current - (3 - i));
-      return { value: y, label: `FY ${y.slice(-2)}-${String(Number(y) + 1).slice(-2)}` };
+      const y = current - (3 - i);
+      return {
+        value: String(y),
+        label: `FY ${String(y).slice(-2)}-${String(y + 1).slice(-2)}`,
+      };
     });
   }, []);
 
@@ -276,7 +289,10 @@ export default function BudgetVsActualDashboard() {
           name: "Budget",
           type: "bar",
           data: budget,
-          itemStyle: { color: "#E5E7EB", borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: MODE_BAR_ORANGE, borderRadius: [4, 4, 0, 0] },
+          emphasis: {
+            itemStyle: { color: "#D97706" },
+          },
           barWidth: "52%",
           barGap: "-100%",
           z: 1,
@@ -285,7 +301,10 @@ export default function BudgetVsActualDashboard() {
           name: "Actual",
           type: "bar",
           data: actualBarData,
-          itemStyle: { color: "#1E293B", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: MODE_BAR_NAVY, borderRadius: [3, 3, 0, 0] },
+          emphasis: {
+            itemStyle: { color: "#0F172A" },
+          },
           barWidth: "34%",
           barGap: "-100%",
           z: 2,
@@ -294,7 +313,10 @@ export default function BudgetVsActualDashboard() {
           name: "Forecast",
           type: "bar",
           data: forecastBarData,
-          itemStyle: { color: "#F59E0B", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: TREND_CHART_FORECAST, borderRadius: [3, 3, 0, 0] },
+          emphasis: {
+            itemStyle: { color: TREND_CHART_FORECAST_HOVER },
+          },
           barWidth: "34%",
           barGap: "-100%",
           z: 2,
@@ -641,29 +663,29 @@ export default function BudgetVsActualDashboard() {
                 <Box style={{ overflowX: "auto" }}>
                   <Box style={{ minWidth: isCompact ? 620 : undefined }}>
                     <Grid columns={24} mb={8}>
-                      <Grid.Col span={7} style={{ paddingLeft: 20 }}>
+                      <Grid.Col span={5} style={{ paddingLeft: 20 }}>
                         <Text fz={10} fw={700} c="#94A3B8" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Rep
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Budget
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Actual
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={7} />
-                      <Grid.Col span={2}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                      <Grid.Col span={6} />
+                      <Grid.Col span={4}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Variance
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
-                        <Text fz={10} fw={700} c="#94A3B8" ta="right" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
+                      <Grid.Col span={3}>
+                        <Text fz={10} fw={700} c="#94A3B8" ta="center" tt="uppercase" style={{ letterSpacing: "0.05em" }}>
                           Achvd.
                         </Text>
                       </Grid.Col>
@@ -703,7 +725,7 @@ export default function BudgetVsActualDashboard() {
                             }}
                           >
                             <Grid columns={24} align="center">
-                              <Grid.Col span={7} style={{ paddingLeft: 20 }}>
+                              <Grid.Col span={5} style={{ paddingLeft: 20 }}>
                                 <Text fw={700} fz={12} c="#111827" lineClamp={1}>
                                   {row.sales_person}
                                 </Text>
@@ -712,16 +734,16 @@ export default function BudgetVsActualDashboard() {
                                 </Text> */}
                               </Grid.Col>
                               <Grid.Col span={3}>
-                                <Text fw={600} fz={12} c="#64748B" ta="right">
+                                <Text fw={600} fz={12} c="#64748B" ta="center">
                                   {formatCrL(budget)}
                                 </Text>
                               </Grid.Col>
                               <Grid.Col span={3}>
-                                <Text fw={700} fz={12} c="#111827" ta="right">
+                                <Text fw={700} fz={12} c="#111827" ta="center" style={{ whiteSpace: "nowrap" }}>
                                   {formatCrL(actual)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={7}>
+                              <Grid.Col span={6}>
                                 <Box
                                   style={{
                                     position: "relative",
@@ -763,19 +785,19 @@ export default function BudgetVsActualDashboard() {
                                   />
                                 </Box>
                               </Grid.Col>
-                              <Grid.Col span={2}>
+                              <Grid.Col span={4}>
                                 <Text
                                   fw={700}
                                   fz={12}
                                   c={variance < 0 ? "#DC2626" : "#16A34A"}
-                                  ta="right"
+                                  ta="center"
                                 >
                                   {variance > 0 ? "+" : ""}
                                   {formatCrL(variance)}
                                 </Text>
                               </Grid.Col>
-                              <Grid.Col span={2}>
-                                <Text fw={700} fz={12} c="#374151" ta="right">
+                              <Grid.Col span={3}>
+                                <Text fw={700} fz={12} c="#374151" ta="center">
                                   {Math.round(achv)}%
                                 </Text>
                               </Grid.Col>
@@ -839,22 +861,22 @@ export default function BudgetVsActualDashboard() {
 
                     <Divider my={10} size="sm" style={{ borderTop: "2px solid #111827" }} />
                     <Grid columns={24} align="center" style={{ paddingLeft: 20 }}>
-                      <Grid.Col span={7} >
+                      <Grid.Col span={5}>
                         <Text fw={800} fz={12} c="#111827">
                           Team Total
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fw={700} fz={12} c="#64748B" ta="right">
+                        <Text fw={700} fz={12} c="#64748B" ta="center">
                           {formatCrL(teamSummary.budget)}
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={3}>
-                        <Text fw={700} fz={12} c="#111827" ta="right">
+                        <Text fw={700} fz={12} c="#111827" ta="center" style={{ whiteSpace: "nowrap" }}>
                           {formatCrL(teamSummary.actual)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={7}>
+                      <Grid.Col span={6}>
                         {(() => {
                           const tb = teamSummary.budget;
                           const ta = teamSummary.actual;
@@ -906,19 +928,19 @@ export default function BudgetVsActualDashboard() {
                           );
                         })()}
                       </Grid.Col>
-                      <Grid.Col span={2}>
+                      <Grid.Col span={4}>
                         <Text
                           fw={800}
                           fz={12}
                           c={teamSummary.variance < 0 ? "#DC2626" : "#16A34A"}
-                          ta="right"
+                          ta="center"
                         >
                           {teamSummary.variance > 0 ? "+" : ""}
                           {formatCrL(teamSummary.variance)}
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={2}>
-                        <Text fw={800} fz={12} c="#374151" ta="right">
+                      <Grid.Col span={3}>
+                        <Text fw={800} fz={12} c="#374151" ta="center">
                           {teamSummary.achv.toFixed(1)}%
                         </Text>
                       </Grid.Col>
@@ -979,7 +1001,7 @@ export default function BudgetVsActualDashboard() {
                       const actualPct = clamp((actual / base) * 100, 0, 100);
                       const markerPct = clamp((budget / base) * 100, 0, 100);
                       const modeName = String(row.mode || "Unknown");
-                      const color = getModeBarColor(modeName);
+                      const color = getByModeActualBarColor(modeName);
                       return (
                         <Group key={modeName} justify="space-between" wrap="nowrap" gap={10} align="center">
                           <Text
@@ -1017,7 +1039,7 @@ export default function BudgetVsActualDashboard() {
                                 top: 0,
                                 bottom: 0,
                                 width: 2,
-                                background: "#F59E0B",
+                                background: BY_MODE_BUDGET_MARKER,
                                 zIndex: 2,
                               }}
                             />

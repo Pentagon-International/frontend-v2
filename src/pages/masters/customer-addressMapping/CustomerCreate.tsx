@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Dropdown, SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
@@ -49,6 +49,15 @@ function parseYesNoBoolean(value: unknown): boolean {
   if (raw === "true" || raw === "1" || raw === "yes" || raw === "y") return true;
   if (raw === "false" || raw === "0" || raw === "no" || raw === "n") return false;
   return Boolean(value);
+}
+
+function isGstRegistrationRegistered(status: unknown): boolean {
+  return String(status ?? "").trim().toLowerCase() === "registered";
+}
+
+function isAgentCustomerType(codes?: string[]): boolean {
+  if (!codes?.length) return false;
+  return codes.some((code) => String(code).trim().toLowerCase() === "agent");
 }
 
 // Type definitions
@@ -131,6 +140,7 @@ type AddressData = {
   composite_regular?: string;
   sez?: boolean | string | number | null;
   msme?: boolean | string | number | null;
+  msme_no?: string;
   pan_aadhaar_link?: boolean;
   Itr_filed?: "Yes" | "No" | "NA" | "";
   tds_threshold_flag?: boolean;
@@ -143,6 +153,8 @@ type CustomerFormData = {
   customer_type_code: string[];
   term_code: string;
   own_office: string;
+  credit_amount: string;
+  credit_day: string;
   assigned_to: string;
   network_id: string;
   network_name: string;
@@ -215,6 +227,9 @@ type TdsSectionMasterItem = {
   status?: string;
 };
 
+const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
+const twoDecimalRequiredRegex = /^\d+(\.\d{1,2})?$/;
+
 // Separate validation schemas for each form
 const customerValidationSchema = yup.object({
   customer_name: yup
@@ -231,6 +246,29 @@ const customerValidationSchema = yup.object({
     .string()
     .required("Own office selection is required")
     .oneOf(["true", "false"], "Please select a valid option"),
+  credit_amount: yup
+    .string()
+    .optional()
+    .test(
+      "valid-credit-amount",
+      "Enter a valid credit amount",
+      (v) => !v || twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim()),
+    ),
+  credit_day: yup
+    .string()
+    .optional()
+    .test(
+      "valid-credit-day",
+      "Enter a valid number of days",
+      (v) => !v || /^\d+$/.test(v.trim()),
+    ),
+  assigned_to: yup
+    .string()
+    .test("assign-to-required", "Assign To is required", function (value) {
+      const codes = this.parent.customer_type_code as string[] | undefined;
+      if (isAgentCustomerType(codes)) return true;
+      return Boolean(String(value ?? "").trim());
+    }),
 });
 
 const addressItemSchema = yup.object({
@@ -252,6 +290,7 @@ const addressItemSchema = yup.object({
     .required("Country is required")
     .min(2, "Country must be at least 2 characters")
     .max(50, "Country must not exceed 50 characters"),
+  state: yup.string().required("State is required"),
   phone_no: yup
     .string()
     .matches(
@@ -295,27 +334,56 @@ const addressValidationSchema = yup.object({
   addresses_data: yup.array().of(addressItemSchema).min(1, "At least one address is required"),
 });
 
-const addressValidationSchemaCreate = yup.object({
-  addresses_data: yup
-    .array()
-    .of(
-      addressItemSchema.shape({
-        // PAN/GST mandatory during create for Indian app users only (same condition as GST UI block).
-        pan_no: yup
-          .string()
+function buildAddressValidationSchema(isIndiaUser: boolean) {
+  if (!isIndiaUser) {
+    return addressValidationSchema;
+  }
+
+  const indianAddressItemSchema = addressItemSchema.shape({
+    gst_registration_status: yup
+      .string()
+      .required("GST Registration Status is required")
+      .oneOf(
+        ["Registered", "Unregistered"],
+        "Select GST registration status",
+      ),
+    pan_no: yup.string().when("gst_registration_status", {
+      is: (status: string | undefined) => isGstRegistrationRegistered(status),
+      then: (schema) =>
+        schema
           .required("PAN No is required")
           .max(20, "PAN must not exceed 20 characters"),
-        gst_id: yup
-          .string()
+      otherwise: (schema) =>
+        schema.optional().max(20, "PAN must not exceed 20 characters"),
+    }),
+    gst_id: yup.string().when("gst_registration_status", {
+      is: (status: string | undefined) => isGstRegistrationRegistered(status),
+      then: (schema) =>
+        schema
           .required("GST No is required")
           .max(20, "GST No must not exceed 20 characters"),
-      }),
-    )
-    .min(1, "At least one address is required"),
-});
+      otherwise: (schema) =>
+        schema.optional().max(20, "GST No must not exceed 20 characters"),
+    }),
+    msme_no: yup.string().when("msme", {
+      is: (value: boolean | string | number | null | undefined) =>
+        parseYesNoBoolean(value),
+      then: (schema) =>
+        schema
+          .required("MSME number is required")
+          .max(50, "MSME number must not exceed 50 characters"),
+      otherwise: (schema) =>
+        schema.optional().max(50, "MSME number must not exceed 50 characters"),
+    }),
+  });
 
-const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
-const twoDecimalRequiredRegex = /^\d+(\.\d{1,2})?$/;
+  return yup.object({
+    addresses_data: yup
+      .array()
+      .of(indianAddressItemSchema)
+      .min(1, "At least one address is required"),
+  });
+}
 
 function formatDateYYYYMMDD(value: Date | null): string | null {
   if (!value) return null;
@@ -339,6 +407,13 @@ function normalizeTwoDecimalString(value: string): string {
   const n = Number(v);
   if (!isFinite(n)) return v;
   return n.toFixed(2);
+}
+
+function parseOptionalNumber(value: string | undefined): number | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeCustomerTypeCodes(source: {
@@ -370,6 +445,259 @@ function normalizeCustomerTypeCodes(source: {
   }
 
   return [];
+}
+
+type SalespersonOption = {
+  value: string;
+  label: string;
+};
+
+type CustomerDetailRecord = CustomerFormData & {
+  id?: number;
+  customer_code?: string;
+  name?: string;
+  customer_type?: string;
+  customer_types?: Array<{
+    customer_type_code?: string | null;
+    customer_type_name?: string | null;
+  }>;
+  credit_type?: string;
+  assigned_to?: string | null;
+  assigned_to_display?: string | null;
+  network_id?: number | null;
+  network_name?: string | null;
+  credit_amount?: number | string | null;
+  credit_day?: number | string | null;
+  total_credit_amount?: number | null;
+  tds_type?: string;
+  tds_section_data?: Array<{
+    id?: number;
+    section_id?: number;
+    section_code?: string;
+    section_name?: string;
+    exemption_tds?: boolean;
+    exemption_certificate_no?: string;
+    tds_percentage?: string;
+    valid_from?: string | null;
+    valid_to?: string | null;
+    tds_lower_limit?: string;
+  }>;
+};
+
+const emptyAddressDefaults = (): AddressData => ({
+  customer_location: "",
+  address_type: "Primary",
+  address: "",
+  city: "",
+  state: "",
+  country: "",
+  pincode: "",
+  phone_no: "",
+  mobile_no: "",
+  email: "",
+  trn_no: "",
+  validity_date: null,
+  pan_no: "",
+  gst_id: "",
+  tan_no: "",
+  arn_no: "",
+  uin_no: "",
+  gst_registration_status: "",
+  composite_regular: "",
+  sez: false,
+  msme: false,
+  msme_no: "",
+  pan_aadhaar_link: false,
+  Itr_filed: "",
+  tds_threshold_flag: false,
+  latitude: 0,
+  longitude: 0,
+});
+
+function unwrapCustomerDetailResponse(
+  response: unknown,
+): CustomerDetailRecord | null {
+  if (!response || typeof response !== "object") return null;
+  const root = response as Record<string, unknown>;
+  const nested = root.data;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested as CustomerDetailRecord;
+  }
+  return root as CustomerDetailRecord;
+}
+
+function resolveCustomerLocation(
+  addr: AddressData & {
+    location?: string;
+    location_name?: string;
+  },
+): string {
+  const raw =
+    addr.customer_location ??
+    addr.location ??
+    addr.location_name ??
+    "";
+  return String(raw ?? "").trim();
+}
+
+function mapAddressFromApi(
+  addr: AddressData & {
+    location?: string;
+    location_name?: string;
+    landline?: string;
+    phone?: string;
+    mobile?: string;
+    msme_flag?: unknown;
+    msme_status?: unknown;
+  },
+  cities: CityData[],
+): AddressData {
+  const originalCityValue = addr.city || "";
+  let cityName = originalCityValue;
+
+  if (cityName) {
+    const city = cities.find(
+      (c) => c.city_code === cityName || c.city_name === cityName,
+    );
+    if (city) {
+      cityName = city.city_name;
+    }
+  }
+
+  return {
+    ...(addr.id != null ? { id: addr.id } : {}),
+    customer_location: resolveCustomerLocation(addr),
+    address_type: addr.address_type || "Primary",
+    address: addr.address || "",
+    city: cityName,
+    state: addr.state || "",
+    country: addr.country || "",
+    pincode: addr.pincode || "",
+    phone_no: addr.phone_no || addr.landline || addr.phone || "",
+    mobile_no: addr.mobile_no || addr.mobile || "",
+    email: addr.email || "",
+    trn_no: addr.trn_no ?? "",
+    validity_date: addr.validity_date ?? null,
+    pan_no: addr.pan_no ?? "",
+    pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
+    Itr_filed: addr.Itr_filed ?? "",
+    tds_threshold_flag: Boolean(addr.tds_threshold_flag),
+    gst_id: addr.gst_id ?? "",
+    tan_no: addr.tan_no ?? "",
+    arn_no: addr.arn_no ?? "",
+    uin_no: addr.uin_no ?? "",
+    gst_registration_status: addr.gst_registration_status ?? "",
+    composite_regular: addr.composite_regular ?? "",
+    sez: parseYesNoBoolean(addr.sez),
+    msme: parseYesNoBoolean(
+      addr.msme ?? addr.msme_flag ?? addr.msme_status,
+    ),
+    msme_no: addr.msme_no ?? "",
+    latitude: addr.latitude || 0,
+    longitude: addr.longitude || 0,
+  };
+}
+
+function resolveAssignedToValue(
+  record: Pick<CustomerDetailRecord, "assigned_to" | "assigned_to_display">,
+  options: SalespersonOption[],
+): string {
+  const email = String(record.assigned_to ?? "").trim();
+  const display = String(record.assigned_to_display ?? "").trim();
+  if (!options.length) {
+    return email || display;
+  }
+
+  const norm = (value: string) => value.trim().toLowerCase();
+
+  const matchByValue = (candidate: string) =>
+    candidate
+      ? options.find((option) => norm(option.value) === norm(candidate))?.value
+      : undefined;
+
+  const matchByLabel = (candidate: string) =>
+    candidate
+      ? options.find((option) => norm(option.label) === norm(candidate))?.value
+      : undefined;
+
+  return (
+    matchByValue(email) ??
+    matchByValue(display) ??
+    matchByLabel(display) ??
+    matchByLabel(email) ??
+    email ??
+    display
+  );
+}
+
+function buildCustomerFormValuesFromRecord(
+  record: CustomerDetailRecord,
+  cities: CityData[],
+  salespersonOptions: SalespersonOption[] = [],
+): CustomerFormData {
+  const addressData =
+    record.addresses_data?.map((addr) => mapAddressFromApi(addr, cities)) ?? [
+      emptyAddressDefaults(),
+    ];
+
+  return {
+    customer_name: record.customer_name || record.name || "",
+    customer_type_code: normalizeCustomerTypeCodes(record),
+    term_code: record.term_code || record.credit_type || "",
+    own_office: record.own_office ? "true" : "false",
+    credit_amount:
+      record.credit_amount != null
+        ? String(record.credit_amount)
+        : record.total_credit_amount != null
+          ? String(record.total_credit_amount)
+          : "",
+    credit_day: record.credit_day != null ? String(record.credit_day) : "",
+    assigned_to: resolveAssignedToValue(record, salespersonOptions),
+    network_id: record.network_id != null ? String(record.network_id) : "",
+    network_name: record.network_name || "",
+    addresses_data: addressData,
+  };
+}
+
+function buildAddressDropdownState(
+  addressData: AddressData[],
+  countries: CountryData[],
+  cities: CityData[],
+) {
+  const newSelectedCountries: Record<number, string> = {};
+  const newSelectedStates: Record<number, string> = {};
+  const newCustomCities: Record<number, boolean> = {};
+  const newCitySearchValues: Record<number, string> = {};
+
+  addressData.forEach((addr, idx) => {
+    if (addr.country) {
+      const country = countries.find((c) => c.country_name === addr.country);
+      if (country) {
+        newSelectedCountries[idx] = country.country_code;
+      }
+    }
+    if (addr.state) {
+      newSelectedStates[idx] = addr.state;
+    }
+    if (addr.city) {
+      const city = cities.find(
+        (c) => c.city_name === addr.city || c.city_code === addr.city,
+      );
+      const cityExists = !!city;
+      newCustomCities[idx] = !cityExists;
+      newCitySearchValues[idx] = cityExists ? "" : addr.city;
+    } else {
+      newCustomCities[idx] = false;
+      newCitySearchValues[idx] = "";
+    }
+  });
+
+  return {
+    newSelectedCountries,
+    newSelectedStates,
+    newCustomCities,
+    newCitySearchValues,
+  };
 }
 
 const tdsDisplayValidationSchema = yup
@@ -455,15 +783,12 @@ const termCodeOptions = [
   { label: "Prepaid", value: "PREPAID" },
 ];
 
-// Memoized AddressCard component for better performance
-const AddressCard = memo(
-  ({
+const AddressCard = ({
     index,
     isViewMode,
     isVendorMasterRoute,
     isDubaiUser,
     isIndiaUser,
-    panGstRequired,
     addressForm,
     countryOptions,
     selectedCountries,
@@ -487,7 +812,6 @@ const AddressCard = memo(
     isVendorMasterRoute: boolean;
     isDubaiUser: boolean;
     isIndiaUser: boolean;
-    panGstRequired: boolean;
     addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
     countryOptions: { value: string; label: string }[];
     selectedCountries: Record<number, string>;
@@ -508,6 +832,16 @@ const AddressCard = memo(
     onRemove: (index: number) => void;
     canRemove: boolean;
   }) => {
+    const gstRegistrationStatus =
+      addressForm.values.addresses_data[index]?.gst_registration_status ?? "";
+    const panGstRequired =
+      isIndiaUser &&
+      !isViewMode &&
+      isGstRegistrationRegistered(gstRegistrationStatus);
+    const msmeEnabled = parseYesNoBoolean(
+      addressForm.values.addresses_data[index]?.msme,
+    );
+
     return (
       <Card key={index} shadow="xs" padding="md">
         <Stack gap="sm">
@@ -533,8 +867,8 @@ const AddressCard = memo(
               placeholder="Enter location"
               disabled={!!isViewMode}
               value={
-                addressForm.values.addresses_data[index]?.customer_location ||
-                ""
+                addressForm.values.addresses_data[index]?.customer_location ??
+                  ""
               }
               onChange={(e) => {
                 const formattedValue = toTitleCase(e.target.value);
@@ -544,11 +878,7 @@ const AddressCard = memo(
                 );
               }}
               error={
-                (
-                  addressForm.errors as unknown as {
-                    addresses_data?: Array<Partial<Record<string, string>>>;
-                  }
-                ).addresses_data?.[index]?.customer_location
+                addressForm.errors[`addresses_data.${index}.customer_location`]
               }
             />
           </Grid.Col>
@@ -610,6 +940,7 @@ const AddressCard = memo(
           <Grid.Col span={4}>
             <Select
               label="State"
+              withAsterisk
               placeholder="Select state"
               searchable
               data={
@@ -622,6 +953,7 @@ const AddressCard = memo(
               onChange={(value) => value && handleStateChange(index, value)}
               limit={50}
               maxDropdownHeight={300}
+              error={addressForm.errors[`addresses_data.${index}.state`]}
             />
           </Grid.Col>
 
@@ -783,9 +1115,33 @@ const AddressCard = memo(
             </Box>
             <Grid>
             <Grid.Col span={4}>
+              <Select
+                label="GST Registration Status"
+                withAsterisk={!isViewMode}
+                placeholder="Select status"
+                data={[
+                  { value: "Registered", label: "Registered" },
+                  { value: "Unregistered", label: "Unregistered" },
+                ]}
+                disabled={isViewMode}
+                value={gstRegistrationStatus || null}
+                onChange={(value) =>
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.gst_registration_status`,
+                    value ?? "",
+                  )
+                }
+                error={
+                  addressForm.errors[
+                    `addresses_data.${index}.gst_registration_status`
+                  ]
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={4}>
               <TextInput
                 label="PAN No"
-                withAsterisk={panGstRequired && !isViewMode}
+                withAsterisk={panGstRequired}
                 placeholder="Enter PAN number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
@@ -794,7 +1150,7 @@ const AddressCard = memo(
             <Grid.Col span={4}>
               <TextInput
                 label="GST No"
-                withAsterisk={panGstRequired && !isViewMode}
+                withAsterisk={panGstRequired}
                 placeholder="Enter GST number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
@@ -822,20 +1178,6 @@ const AddressCard = memo(
                 placeholder="Enter UIN number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Select
-                label="GST Registration Status"
-                placeholder="Select status"
-                data={[
-                  { value: "Registered", label: "Registered" },
-                  { value: "Unregistered", label: "Unregistered" },
-                ]}
-                disabled={isViewMode}
-                {...addressForm.getInputProps(
-                  `addresses_data.${index}.gst_registration_status`,
-                )}
               />
             </Grid.Col>
             <Grid.Col span={4}>
@@ -902,14 +1244,34 @@ const AddressCard = memo(
                 value={
                   addressForm.values.addresses_data[index]?.msme ? "Yes" : "No"
                 }
-                onChange={(value) =>
+                onChange={(value) => {
                   addressForm.setFieldValue(
                     `addresses_data.${index}.msme`,
                     value === "Yes",
-                  )
-                }
+                  );
+                  if (value !== "Yes") {
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.msme_no`,
+                      "",
+                    );
+                  }
+                }}
               />
             </Grid.Col>
+
+            {msmeEnabled && (
+              <Grid.Col span={4}>
+                <TextInput
+                  label="MSME No"
+                  withAsterisk={!isViewMode}
+                  placeholder="Enter MSME number"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.msme_no`,
+                  )}
+                />
+              </Grid.Col>
+            )}
 
             {isVendorMasterRoute && (
               <>
@@ -985,10 +1347,7 @@ const AddressCard = memo(
         </Stack>
       </Card>
     );
-  },
-);
-
-AddressCard.displayName = "AddressCard";
+};
 
 const fetchSalespersons = async (customerId: string = "") => {
   const payload = {
@@ -1040,8 +1399,9 @@ function CustomerCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
-  const customerData = location.state?.customerData;
-
+  const customerData = location.state?.customerData as
+    | CustomerDetailRecord
+    | undefined;
   const isVendorMasterRoute = location.pathname.includes("/master/vendor");
   const baseMasterPath = isVendorMasterRoute ? "/master/vendor" : "/master/customer";
 
@@ -1062,16 +1422,14 @@ function CustomerCreate() {
 
   // Customer ID from route parameters
   const customerId = params.id;
+  const customerCodeForSalespersons = customerData?.customer_code
+    ? String(customerData.customer_code)
+    : "";
 
-  // Salespersons data query - initially with empty customer_id
+  // Salespersons for Assign To dropdown (scoped to customer code in edit mode)
   const { data: rawSalespersonsData = [] } = useQuery({
-    queryKey: ["salespersons", ""],
-    queryFn: () => {
-      console.log(
-        "🚀 React Query calling fetchSalespersons with empty customer_code",
-      );
-      return fetchSalespersons("");
-    },
+    queryKey: ["salespersons", customerCodeForSalespersons],
+    queryFn: () => fetchSalespersons(customerCodeForSalespersons),
     staleTime: 10 * 60 * 1000, // 10 minutes - longer cache
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
     refetchOnWindowFocus: false,
@@ -1286,6 +1644,8 @@ function CustomerCreate() {
       customer_type_code: [],
       term_code: "",
       own_office: "",
+      credit_amount: "",
+      credit_day: "",
       assigned_to: "",
       network_id: "",
       network_name: "",
@@ -1312,6 +1672,7 @@ function CustomerCreate() {
           composite_regular: "",
           sez: false,
           msme: false,
+          msme_no: "",
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1353,6 +1714,7 @@ function CustomerCreate() {
           composite_regular: "",
           sez: false,
           msme: false,
+          msme_no: "",
           pan_aadhaar_link: false,
           Itr_filed: "",
           tds_threshold_flag: false,
@@ -1361,18 +1723,121 @@ function CustomerCreate() {
         },
       ],
     },
-    // Create: PAN/GST mandatory only for Indian app users (GST section visible). Foreign users omit these fields.
     validate: isViewMode
       ? undefined
-      : yupResolver(
-          isCreateMode && isIndiaUser
-            ? addressValidationSchemaCreate
-            : addressValidationSchema,
-        ),
+      : yupResolver(buildAddressValidationSchema(isIndiaUser)),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,
   });
+
+  const applyCustomerRecordToForms = useCallback(
+    (record: CustomerDetailRecord) => {
+      const formData = buildCustomerFormValuesFromRecord(
+        record,
+        cities,
+        salespersonsData,
+      );
+
+      customerForm.setValues({
+        customer_name: formData.customer_name,
+        customer_type_code: formData.customer_type_code,
+        term_code: formData.term_code,
+        own_office: formData.own_office,
+        credit_amount: formData.credit_amount,
+        credit_day: formData.credit_day,
+        assigned_to: formData.assigned_to,
+        network_id: formData.network_id,
+        network_name: formData.network_name,
+        addresses_data: formData.addresses_data,
+      });
+
+      addressForm.setValues({
+        addresses_data: formData.addresses_data,
+      });
+
+      if (isVendorMasterRoute && typeof record.tds_type === "string") {
+        setTdsType(
+          (record.tds_type as "Company" | "Individual" | "Partnership" | "") ??
+            "",
+        );
+      }
+
+      if (isVendorMasterRoute && Array.isArray(record.tds_section_data)) {
+        const rows: TdsSectionRow[] =
+          record.tds_section_data.length > 0
+            ? record.tds_section_data.map((r) => ({
+                id: r.id ?? null,
+                section_id: r.section_id ?? null,
+                section_code: r.section_code ?? "",
+                section_name: r.section_name ?? "",
+                exemption_tds: Boolean(r.exemption_tds),
+                exemption_certificate_no: r.exemption_certificate_no ?? "",
+                tds_percent:
+                  r.tds_percentage != null ? String(r.tds_percentage) : "",
+                valid_from: parseDateYYYYMMDD(r.valid_from),
+                valid_to: parseDateYYYYMMDD(r.valid_to),
+                tds_lower_limit:
+                  r.tds_lower_limit != null ? String(r.tds_lower_limit) : "",
+              }))
+            : [emptyTdsSectionRow()];
+
+        const idMap: Record<number, number> = {};
+        record.tds_section_data.forEach((r) => {
+          if (r.section_id != null && r.id != null) {
+            idMap[r.section_id] = r.id;
+          }
+        });
+        setTdsIdBySectionId(idMap);
+        tdsDisplayForm.setValues({ tds_sections: rows });
+      }
+
+      const {
+        newSelectedCountries,
+        newSelectedStates,
+        newCustomCities,
+        newCitySearchValues,
+      } = buildAddressDropdownState(formData.addresses_data, countries, cities);
+
+      setSelectedCountries(newSelectedCountries);
+      setSelectedStates(newSelectedStates);
+      setCustomCities(newCustomCities);
+      setCitySearchValues(newCitySearchValues);
+      setIsFormInitialized(true);
+    },
+    [
+      cities,
+      countries,
+      customerForm,
+      addressForm,
+      isVendorMasterRoute,
+      tdsDisplayForm,
+      salespersonsData,
+    ],
+  );
+
+  // Re-resolve Assign To once salesperson options load (dropdown matches by option value)
+  useEffect(() => {
+    if (
+      !isFormInitialized ||
+      !customerData ||
+      location.state?.customerFormData ||
+      !salespersonsData.length
+    ) {
+      return;
+    }
+
+    const resolved = resolveAssignedToValue(customerData, salespersonsData);
+    if (resolved && customerForm.values.assigned_to !== resolved) {
+      customerForm.setFieldValue("assigned_to", resolved);
+    }
+  }, [
+    isFormInitialized,
+    customerData,
+    salespersonsData,
+    location.state?.customerFormData,
+    customerForm,
+  ]);
 
   // Restore form data when coming back from relationship mapping (both create and edit mode)
   useEffect(() => {
@@ -1386,20 +1851,10 @@ function CustomerCreate() {
         restoredCustomerData?.addresses_data ||
         [];
 
-      // Normalize city values if cities are already loaded (for immediate display)
       if (cities.length > 0 && addressDataToRestore.length > 0) {
-        addressDataToRestore = addressDataToRestore.map((addr: AddressData) => {
-          if (addr.city) {
-            const city = cities.find(
-              (c) => c.city_name === addr.city || c.city_code === addr.city,
-            );
-            if (city) {
-              // Normalize to city_name for consistency
-              return { ...addr, city: city.city_name };
-            }
-          }
-          return addr;
-        });
+        addressDataToRestore = addressDataToRestore.map((addr: AddressData) =>
+          mapAddressFromApi(addr, cities),
+        );
       }
 
       // Restore customer form
@@ -1418,6 +1873,14 @@ function CustomerCreate() {
           ),
           term_code: restoredCustomerData.term_code || "",
           own_office: restoredCustomerData.own_office || "",
+          credit_amount:
+            restoredCustomerData.credit_amount != null
+              ? String(restoredCustomerData.credit_amount)
+              : "",
+          credit_day:
+            restoredCustomerData.credit_day != null
+              ? String(restoredCustomerData.credit_day)
+              : "",
           assigned_to: restoredCustomerData.assigned_to || "",
           network_id: restoredCustomerData.network_id != null ? String(restoredCustomerData.network_id) : "",
           network_name: restoredCustomerData.network_name || "",
@@ -1549,236 +2012,10 @@ function CustomerCreate() {
       try {
         setIsLoading(true);
         const response = await getAPICall(`${URL.customer}/${id}`, API_HEADER);
-        if (response) {
-          const fetchedCustomerData = response as CustomerFormData & {
-            id: number;
-            name?: string;
-            customer_type?: string;
-            customer_types?: Array<{
-              customer_type_code?: string;
-              customer_type_name?: string;
-            }>;
-            credit_type?: string;
-            assigned_to_display?: string;
-            tds_type?: string;
-            tds_section_data?: Array<{
-              id?: number;
-              section_id?: number;
-              section_code?: string;
-              section_name?: string;
-              exemption_tds?: boolean;
-              exemption_certificate_no?: string;
-              tds_percentage?: string;
-              valid_from?: string | null;
-              valid_to?: string | null;
-              tds_lower_limit?: string;
-            }>;
-          };
+        const record = unwrapCustomerDetailResponse(response);
+        if (!record) return;
 
-          // Process the fetched data
-          const addressData = fetchedCustomerData.addresses_data?.map(
-            (
-              addr: AddressData & {
-                location?: string;
-                landline?: string;
-                phone?: string;
-                mobile?: string;
-              },
-            ) => {
-              // Preserve original city value from API
-              const originalCityValue = addr.city || "";
-              let cityName = originalCityValue;
-
-              // Try to convert city_code to city_name if it exists in dropdown
-              if (cityName) {
-                const city = cities.find(
-                  (c) => c.city_code === cityName || c.city_name === cityName,
-                );
-                if (city) {
-                  // City exists in dropdown - use city_name for consistency
-                  cityName = city.city_name;
-                }
-                // If city not found, keep original value (could be city_code or custom city name)
-              }
-              return {
-                ...(addr.id != null && { id: addr.id }),
-                customer_location:
-                  addr.customer_location || addr.location || "",
-                address_type: addr.address_type || "Primary",
-                address: addr.address || "",
-                city: cityName, // Store the city value (name if found, original if not)
-                state: addr.state || "",
-                country: addr.country || "",
-                pincode: addr.pincode || "",
-                phone_no: addr.phone_no || addr.landline || addr.phone || "",
-                mobile_no: addr.mobile_no || addr.mobile || "",
-                email: addr.email || "",
-                trn_no: (addr as AddressData).trn_no ?? "",
-                validity_date: (addr as AddressData).validity_date ?? null,
-                pan_no: addr.pan_no ?? "",
-                pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
-                Itr_filed: (addr as AddressData).Itr_filed ?? "",
-                tds_threshold_flag: Boolean(
-                  (addr as AddressData).tds_threshold_flag,
-                ),
-                gst_id: addr.gst_id ?? "",
-                tan_no: addr.tan_no ?? "",
-                arn_no: addr.arn_no ?? "",
-                uin_no: addr.uin_no ?? "",
-                gst_registration_status: addr.gst_registration_status ?? "",
-                composite_regular: addr.composite_regular ?? "",
-                sez: parseYesNoBoolean(addr.sez),
-                msme: parseYesNoBoolean(
-                  addr.msme ??
-                    (addr as unknown as { msme_flag?: unknown }).msme_flag ??
-                    (addr as unknown as { msme_status?: unknown }).msme_status,
-                ),
-                latitude: addr.latitude || 0,
-                longitude: addr.longitude || 0,
-              };
-            },
-          ) || [
-            {
-              customer_location: "",
-              address_type: "Primary",
-              address: "",
-              city: "",
-              state: "",
-              country: "",
-              pincode: "",
-              phone_no: "",
-              mobile_no: "",
-              email: "",
-              pan_no: "",
-              gst_id: "",
-              tan_no: "",
-              arn_no: "",
-              uin_no: "",
-              gst_registration_status: "",
-              composite_regular: "",
-              sez: false,
-              msme: false,
-              latitude: 0,
-              longitude: 0,
-            },
-          ];
-
-          const fetched = fetchedCustomerData as typeof fetchedCustomerData & { network_id?: number | null; network_name?: string | null };
-          const formData = {
-            customer_name:
-              fetchedCustomerData.customer_name ||
-              fetchedCustomerData.name ||
-              "",
-            customer_type_code: normalizeCustomerTypeCodes(fetchedCustomerData),
-            term_code:
-              fetchedCustomerData.term_code ||
-              fetchedCustomerData.credit_type ||
-              "",
-            own_office: fetchedCustomerData.own_office ? "true" : "false",
-            assigned_to: fetchedCustomerData.assigned_to_display || "",
-            network_id: fetched.network_id != null ? String(fetched.network_id) : "",
-            network_name: fetched.network_name || "",
-            addresses_data: addressData,
-          };
-
-          // Set customer form data
-          customerForm.setValues({
-            customer_name: formData.customer_name,
-            customer_type_code: formData.customer_type_code,
-            term_code: formData.term_code,
-            own_office: formData.own_office,
-            assigned_to: formData.assigned_to,
-            network_id: formData.network_id,
-            network_name: formData.network_name,
-            addresses_data: formData.addresses_data,
-          });
-
-          // Set address form data
-          addressForm.setValues({
-            addresses_data: formData.addresses_data,
-          });
-
-          if (isVendorMasterRoute && typeof fetchedCustomerData.tds_type === "string") {
-            setTdsType(
-              (fetchedCustomerData.tds_type as
-                | "Company"
-                | "Individual"
-                | "Partnership"
-                | "") ?? "",
-            );
-          }
-
-          // Vendor-only: restore TDS section rows
-          if (isVendorMasterRoute && Array.isArray(fetchedCustomerData.tds_section_data)) {
-            const rows: TdsSectionRow[] =
-              fetchedCustomerData.tds_section_data.length > 0
-                ? fetchedCustomerData.tds_section_data.map((r) => ({
-                    id: r.id ?? null,
-                    section_id: r.section_id ?? null,
-                    section_code: r.section_code ?? "",
-                    section_name: r.section_name ?? "",
-                    exemption_tds: Boolean(r.exemption_tds),
-                    exemption_certificate_no: r.exemption_certificate_no ?? "",
-                    tds_percent:
-                      r.tds_percentage != null ? String(r.tds_percentage) : "",
-                    valid_from: parseDateYYYYMMDD(r.valid_from),
-                    valid_to: parseDateYYYYMMDD(r.valid_to),
-                    tds_lower_limit:
-                      r.tds_lower_limit != null ? String(r.tds_lower_limit) : "",
-                  }))
-                : [emptyTdsSectionRow()];
-
-            const idMap: Record<number, number> = {};
-            fetchedCustomerData.tds_section_data.forEach((r) => {
-              if (r.section_id != null && r.id != null) {
-                idMap[r.section_id] = r.id;
-              }
-            });
-            setTdsIdBySectionId(idMap);
-            tdsDisplayForm.setValues({ tds_sections: rows });
-          }
-
-          // Initialize selected countries and states for cascading dropdowns
-          const newSelectedCountries: Record<number, string> = {};
-          const newSelectedStates: Record<number, string> = {};
-          const newCustomCities: Record<number, boolean> = {};
-          const newCitySearchValues: Record<number, string> = {};
-
-          addressData.forEach((addr, idx) => {
-            if (addr.country) {
-              const country = countries.find(
-                (c) => c.country_name === addr.country,
-              );
-              if (country) {
-                newSelectedCountries[idx] = country.country_code;
-              }
-            }
-            if (addr.state) {
-              newSelectedStates[idx] = addr.state;
-            }
-            // Check if city exists in dropdown
-            if (addr.city) {
-              // Check if the city value (could be name or code) exists in dropdown
-              const city = cities.find(
-                (c) => c.city_name === addr.city || c.city_code === addr.city,
-              );
-              const cityExists = !!city;
-              newCustomCities[idx] = !cityExists;
-              // If city doesn't exist in dropdown, store the original value from API to display in text input
-              // If city exists, clear search value (will use dropdown)
-              newCitySearchValues[idx] = cityExists ? "" : addr.city;
-            } else {
-              // No city value - default to dropdown mode
-              newCustomCities[idx] = false;
-              newCitySearchValues[idx] = "";
-            }
-          });
-
-          setSelectedCountries(newSelectedCountries);
-          setSelectedStates(newSelectedStates);
-          setCustomCities(newCustomCities);
-          setCitySearchValues(newCitySearchValues);
-        }
+        applyCustomerRecordToForms(record);
       } catch (error) {
         console.error("Error fetching customer data:", error);
         ToastNotification({
@@ -1789,18 +2026,42 @@ function CustomerCreate() {
         setIsLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [countries, customerTypes, cities, isVendorMasterRoute, tdsDisplayForm], // Added countries and cities dependency (forms excluded to prevent infinite loops)
+    [applyCustomerRecordToForms, customerTypes],
   );
 
-  // Fetch customer data when in edit or view mode (only if not coming back from relationship mapping)
+  // Edit/view from list: populate forms from navigation state (no extra API call)
+  useEffect(() => {
+    if (
+      customerData &&
+      (isEditMode || isViewMode) &&
+      !isFormInitialized &&
+      !location.state?.customerFormData &&
+      countries.length > 0 &&
+      cities.length > 0
+    ) {
+      applyCustomerRecordToForms(customerData);
+    }
+  }, [
+    customerData,
+    isEditMode,
+    isViewMode,
+    isFormInitialized,
+    location.state?.customerFormData,
+    countries.length,
+    cities.length,
+    applyCustomerRecordToForms,
+  ]);
+
+  // Fetch only when list row data is not available (e.g. direct URL / refresh)
   useEffect(() => {
     if (
       (isEditMode || isViewMode) &&
       customerId &&
       !customerData &&
-      !location.state?.customerFormData && // Don't fetch if we have form data from relationship mapping
-      countries.length > 0
+      !location.state?.customerFormData &&
+      !isFormInitialized &&
+      countries.length > 0 &&
+      customerTypes.length > 0
     ) {
       fetchCustomerData(customerId);
     }
@@ -1810,256 +2071,16 @@ function CustomerCreate() {
     customerId,
     customerData,
     fetchCustomerData,
-    countries,
-    location.state,
-  ]); // Added location.state dependency
+    countries.length,
+    customerTypes.length,
+    location.state?.customerFormData,
+    isFormInitialized,
+  ]);
 
   // Reset form initialization flag when route changes
   useEffect(() => {
     setIsFormInitialized(false);
   }, [params.id, location.pathname]);
-
-  // Populate form with existing data if editing - only run once when customerData changes (skip if data from location.state)
-  useEffect(() => {
-    if (
-      customerData &&
-      !isLoading &&
-      !isFormInitialized &&
-      !location.state?.customerFormData && // Skip if we have form data from relationship mapping
-      countries.length > 0
-    ) {
-      const addressData = customerData.addresses_data?.map(
-        (
-          addr: AddressData & {
-            location?: string;
-            landline?: string;
-            phone?: string;
-            mobile?: string;
-          },
-        ) => {
-          // Preserve original city value from API
-          const originalCityValue = addr.city || "";
-          let cityName = originalCityValue;
-
-          // Try to convert city_code to city_name if it exists in dropdown
-          if (cityName) {
-            const city = cities.find(
-              (c) => c.city_code === cityName || c.city_name === cityName,
-            );
-            if (city) {
-              // City exists in dropdown - use city_name for consistency
-              cityName = city.city_name;
-            }
-            // If city not found, keep original value (could be city_code or custom city name)
-          }
-          return {
-            id: addr.id, // Include id if it exists (for edit mode)
-            customer_location: addr.customer_location || addr.location || "",
-            address_type: addr.address_type || "Primary",
-            address: addr.address || "",
-            city: cityName, // Store the city value (name if found, original if not)
-            state: addr.state || "",
-            country: addr.country || "",
-            pincode: addr.pincode || "",
-            phone_no: addr.phone_no || addr.landline || addr.phone || "",
-            mobile_no: addr.mobile_no || addr.mobile || "",
-            email: addr.email || "",
-            trn_no: (addr as AddressData).trn_no ?? "",
-            validity_date: (addr as AddressData).validity_date ?? null,
-            pan_no: addr.pan_no ?? "",
-            pan_aadhaar_link: Boolean((addr as AddressData).pan_aadhaar_link),
-            Itr_filed: (addr as AddressData).Itr_filed ?? "",
-            tds_threshold_flag: Boolean(
-              (addr as AddressData).tds_threshold_flag,
-            ),
-            gst_id: addr.gst_id ?? "",
-            tan_no: addr.tan_no ?? "",
-            arn_no: addr.arn_no ?? "",
-            uin_no: addr.uin_no ?? "",
-            gst_registration_status: addr.gst_registration_status ?? "",
-            composite_regular: addr.composite_regular ?? "",
-            sez: parseYesNoBoolean(addr.sez),
-            msme: parseYesNoBoolean(addr.msme),
-            latitude: addr.latitude || 0,
-            longitude: addr.longitude || 0,
-          };
-        },
-      ) || [
-        {
-          customer_location: "",
-          address_type: "Primary",
-          address: "",
-          city: "",
-          state: "",
-          country: "",
-          pincode: "",
-          phone_no: "",
-          mobile_no: "",
-          email: "",
-          pan_no: "",
-          gst_id: "",
-          tan_no: "",
-          arn_no: "",
-          uin_no: "",
-          gst_registration_status: "",
-          composite_regular: "",
-          sez: false,
-          msme: false,
-          latitude: 0,
-          longitude: 0,
-        },
-      ];
-
-      const customerDataWithNetwork = customerData as typeof customerData & { network_id?: number | null; network_name?: string | null };
-      const formData = {
-        customer_name: customerData.customer_name || customerData.name || "",
-        customer_type_code: normalizeCustomerTypeCodes(
-          customerData as {
-            customer_type_code?: string | string[] | null;
-            customer_type?: string | null;
-            customer_types?: Array<{
-              customer_type_code?: string | null;
-              customer_type_name?: string | null;
-            }> | null;
-          },
-        ),
-        term_code: customerData.term_code || customerData.credit_type || "",
-        own_office: customerData.own_office ? "true" : "false",
-        assigned_to: customerData.assigned_to_display || "",
-        network_id: customerDataWithNetwork.network_id != null ? String(customerDataWithNetwork.network_id) : "",
-        network_name: customerDataWithNetwork.network_name || "",
-        addresses_data: addressData,
-      };
-
-      // Set customer form data
-      customerForm.setValues({
-        customer_name: formData.customer_name,
-        customer_type_code: formData.customer_type_code,
-        term_code: formData.term_code,
-        own_office: formData.own_office,
-        assigned_to: formData.assigned_to,
-        network_id: formData.network_id,
-        network_name: formData.network_name,
-        addresses_data: formData.addresses_data,
-      });
-
-      // Set address form data
-      addressForm.setValues({
-        addresses_data: formData.addresses_data,
-      });
-
-      // Vendor-only: when coming from list page, restore TDS rows from location.state.
-      if (
-        isVendorMasterRoute &&
-        Array.isArray(
-          (customerData as unknown as { tds_section_data?: unknown[] } | undefined)
-            ?.tds_section_data,
-        )
-      ) {
-        const incoming = (
-          customerData as unknown as { tds_section_data?: Array<{
-          id?: number;
-          section_id?: number;
-          section_code?: string;
-          section_name?: string;
-          exemption_tds?: boolean;
-          exemption_certificate_no?: string;
-          tds_percentage?: string;
-          valid_from?: string | null;
-          valid_to?: string | null;
-          tds_lower_limit?: string;
-        }> } | undefined
-        )?.tds_section_data;
-
-        const incomingRows = incoming ?? [];
-
-        const rows: TdsSectionRow[] =
-          incomingRows.length > 0
-            ? incomingRows.map((r) => ({
-                id: r.id ?? null,
-                section_id: r.section_id ?? null,
-                section_code: r.section_code ?? "",
-                section_name: r.section_name ?? "",
-                exemption_tds: Boolean(r.exemption_tds),
-                exemption_certificate_no: r.exemption_certificate_no ?? "",
-                tds_percent:
-                  r.tds_percentage != null ? String(r.tds_percentage) : "",
-                valid_from: parseDateYYYYMMDD(r.valid_from),
-                valid_to: parseDateYYYYMMDD(r.valid_to),
-                tds_lower_limit:
-                  r.tds_lower_limit != null ? String(r.tds_lower_limit) : "",
-              }))
-            : [emptyTdsSectionRow()];
-
-        const idMap: Record<number, number> = {};
-        incomingRows.forEach((r) => {
-          if (r.section_id != null && r.id != null) {
-            idMap[r.section_id] = r.id;
-          }
-        });
-        setTdsIdBySectionId(idMap);
-        tdsDisplayForm.setValues({ tds_sections: rows });
-      }
-
-      if (
-        isVendorMasterRoute &&
-        typeof (customerData as unknown as { tds_type?: unknown } | undefined)?.tds_type ===
-          "string"
-      ) {
-        setTdsType(
-          ((customerData as unknown as { tds_type?: string } | undefined)?.tds_type as
-            | "Company"
-            | "Individual"
-            | "Partnership"
-            | "") ?? "",
-        );
-      }
-
-      // Initialize selected countries and states for cascading dropdowns
-      const newSelectedCountries: Record<number, string> = {};
-      const newSelectedStates: Record<number, string> = {};
-      const newCustomCities: Record<number, boolean> = {};
-      const newCitySearchValues: Record<number, string> = {};
-
-      addressData.forEach((addr: AddressData, idx: number) => {
-        if (addr.country) {
-          const country = countries.find(
-            (c) => c.country_name === addr.country,
-          );
-          if (country) {
-            newSelectedCountries[idx] = country.country_code;
-          }
-        }
-        if (addr.state) {
-          newSelectedStates[idx] = addr.state;
-        }
-        // Check if city exists in dropdown
-        if (addr.city) {
-          // Check if the city value (could be name or code) exists in dropdown
-          const city = cities.find(
-            (c) => c.city_name === addr.city || c.city_code === addr.city,
-          );
-          const cityExists = !!city;
-          newCustomCities[idx] = !cityExists;
-          // If city doesn't exist, store the original value to display in text input
-          // If city exists, clear search value (will use dropdown)
-          newCitySearchValues[idx] = cityExists ? "" : addr.city;
-        } else {
-          // No city value - default to dropdown mode
-          newCustomCities[idx] = false;
-          newCitySearchValues[idx] = "";
-        }
-      });
-
-      setSelectedCountries(newSelectedCountries);
-      setSelectedStates(newSelectedStates);
-      setCustomCities(newCustomCities);
-      setCitySearchValues(newCitySearchValues);
-
-      setIsFormInitialized(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerData, isLoading, isFormInitialized, countries, cities]); // Added countries and cities dependency (forms excluded to prevent infinite loops)
 
   // Tabs navigation handled via setActive.
 
@@ -2086,6 +2107,7 @@ function CustomerCreate() {
       composite_regular: "",
       sez: false,
       msme: false,
+      msme_no: "",
       latitude: 0,
       longitude: 0,
     };
@@ -2344,10 +2366,13 @@ function CustomerCreate() {
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
+        credit_amount: parseOptionalNumber(values.credit_amount),
+        credit_day: parseOptionalNumber(values.credit_day),
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => ({
           ...addr,
+          customer_location: addr.customer_location ?? "",
           address_type:
             addr.address_type === "Primary" ? "Primary" : addr.address_type,
           trn_no: addr.trn_no ?? "",
@@ -2361,6 +2386,7 @@ function CustomerCreate() {
           composite_regular: addr.composite_regular ?? "",
           sez: parseYesNoBoolean(addr.sez),
           msme: parseYesNoBoolean(addr.msme),
+          msme_no: addr.msme_no ?? "",
           ...(isVendorMasterRoute
             ? {
                 pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2422,17 +2448,20 @@ function CustomerCreate() {
     try {
       setIsSubmitting(true);
       const payload = {
-        id: customerData.id,
+        id: Number(customerData?.id ?? customerId),
         customer_name: values.customer_name,
         customer_type_code: values.customer_type_code,
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
+        credit_amount: parseOptionalNumber(values.credit_amount),
+        credit_day: parseOptionalNumber(values.credit_day),
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => {
           const addressPayload: AddressData & { id?: number } = {
             ...addr,
+            customer_location: addr.customer_location ?? "",
             address_type:
               addr.address_type === "Primary" ? "Primary" : addr.address_type,
             trn_no: addr.trn_no ?? "",
@@ -2446,6 +2475,7 @@ function CustomerCreate() {
             composite_regular: addr.composite_regular ?? "",
           sez: parseYesNoBoolean(addr.sez),
           msme: parseYesNoBoolean(addr.msme),
+          msme_no: addr.msme_no ?? "",
             ...(isVendorMasterRoute
               ? {
                   pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2879,6 +2909,36 @@ function CustomerCreate() {
                   />
                 </Grid.Col>
 
+                <Grid.Col span={4}>
+                  <TextInput
+                    label="Credit Amount"
+                    placeholder="Enter credit amount"
+                    disabled={isViewMode}
+                    value={customerForm.values.credit_amount}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === "" || twoDecimalInputRegex.test(next)) {
+                        customerForm.setFieldValue("credit_amount", next);
+                      }
+                    }}
+                    error={customerForm.errors.credit_amount}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={4}>
+                  <TextInput
+                    label="Credit Day"
+                    placeholder="Enter credit days"
+                    disabled={isViewMode}
+                    value={customerForm.values.credit_day}
+                    onChange={(e) => {
+                      const next = e.target.value.replace(/\D/g, "");
+                      customerForm.setFieldValue("credit_day", next);
+                    }}
+                    error={customerForm.errors.credit_day}
+                  />
+                </Grid.Col>
+
                 {(!customerForm.values.customer_type_code?.length ||
                   customerForm.values.customer_type_code.find((value) => {
                     const option = customerTypeOptions.find(
@@ -2892,16 +2952,18 @@ function CustomerCreate() {
                   <Grid.Col span={4}>
                     <Dropdown
                       label="Assign To"
-                      key={customerForm.key("assigned_to")}
+                      withAsterisk
+                      key={`assign-to-${customerForm.values.assigned_to}-${salespersonsData.length}`}
                       placeholder="Select Salesperson"
                       searchable
                       data={salespersonsData}
                       disabled={isViewMode}
                       nothingFoundMessage="No salespersons found"
-                      {...customerForm.getInputProps("assigned_to")}
+                      value={customerForm.values.assigned_to || null}
                       onChange={(value) => {
                         customerForm.setFieldValue("assigned_to", value || "");
                       }}
+                      error={customerForm.errors.assigned_to}
                     />
                   </Grid.Col>
                 )}
@@ -2936,7 +2998,6 @@ function CustomerCreate() {
                     isVendorMasterRoute={isVendorMasterRoute}
                     isDubaiUser={isDubaiUser}
                     isIndiaUser={isIndiaUser}
-                    panGstRequired={isCreateMode && isIndiaUser}
                     addressForm={addressForm}
                     countryOptions={countryOptions}
                     selectedCountries={selectedCountries}

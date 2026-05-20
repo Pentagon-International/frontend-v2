@@ -42,7 +42,9 @@ import {
   getFilteredBudgetData,
   calculateBudgetAggregatedData,
   calculateFinancialYearBudgetRangeForYear,
-  calculateStartMonthFromEndMonth,
+  getCurrentFinancialYearStart,
+  getFinancialYearMonthOptions,
+  getFinancialYearToMonthOptions,
   getFinancialYearOptions,
   getCustomerNotVisitedData,
   getLostCustomerData,
@@ -476,48 +478,21 @@ const Dashboard = () => {
     setSearchInputValue(v);
   }, [persistedChartSearch, globalSearch, searchInputValue]);
 
-  // Calculate current financial year start year for default selection
-  const getCurrentFinancialYearStart = () => {
-    const today = dayjs();
-    const currentMonth = today.month() + 1;
-    const currentYear = today.year();
-    if (currentMonth >= 1 && currentMonth <= 3) {
-      return (currentYear - 1).toString();
-    }
-    return currentYear.toString();
-  };
-
-  const [selectedYear, setSelectedYear] = useState<string | null>(
-    getCurrentFinancialYearStart()
+  const initialFinancialYearStart = getCurrentFinancialYearStart();
+  const initialBudgetRange = calculateFinancialYearBudgetRangeForYear(
+    initialFinancialYearStart
   );
 
-  // Budget month filters - Calculate based on end month logic
-  // Get previous month (end month)
-  const today = dayjs();
-  const currentMonth = today.month() + 1;
-  const currentYear = today.year();
+  const [selectedYear, setSelectedYear] = useState<string | null>(
+    String(initialFinancialYearStart)
+  );
 
-  let endMonth: number;
-  let endYear: number;
-
-  if (currentMonth === 1) {
-    endMonth = 12;
-    endYear = currentYear - 1;
-  } else {
-    endMonth = currentMonth - 1;
-    endYear = currentYear;
-  }
-
-  const initialEndMonth = `${endYear}-${String(endMonth).padStart(2, "0")}`;
-
-  // Calculate start month based on end month
-  // If end month is Jan-Mar, start year = end year - 1
-  // If end month is Apr-Dec, start year = end year
-  const initialStartMonth = calculateStartMonthFromEndMonth(initialEndMonth);
-
-  const [budgetStartMonth, setBudgetStartMonth] =
-    useState<string>(initialStartMonth);
-  const [budgetEndMonth, setBudgetEndMonth] = useState<string>(initialEndMonth);
+  const [budgetStartMonth, setBudgetStartMonth] = useState<string>(
+    initialBudgetRange.start_month
+  );
+  const [budgetEndMonth, setBudgetEndMonth] = useState<string>(
+    initialBudgetRange.end_month
+  );
 
   // Call entry states
   const [callEntryAggregatedData, setCallEntryAggregatedData] =
@@ -1994,7 +1969,7 @@ const Dashboard = () => {
       // Keep API payload month range aligned with selected financial year in UI
       const budgetYear = selectedYear
         ? parseInt(selectedYear, 10)
-        : parseInt(getCurrentFinancialYearStart(), 10);
+        : getCurrentFinancialYearStart();
       const { start_month: startMonth, end_month: endMonthStr } =
         calculateFinancialYearBudgetRangeForYear(budgetYear);
 
@@ -7371,7 +7346,6 @@ const Dashboard = () => {
 
         const filterData: DashboardFilters = addSearchToFilters({
           ...(companyName && { company: companyName }),
-          ...(selectedYear && { year: parseInt(selectedYear) }),
           start_month: startMonth,
           end_month: endMonth,
           type: budgetType,
@@ -7388,13 +7362,7 @@ const Dashboard = () => {
         setIsLoadingBudget(false);
       }
     },
-    [
-      selectedYear,
-      budgetType,
-      user?.company?.company_name,
-      selectedCompany,
-      addSearchToFilters,
-    ]
+    [budgetType, user?.company?.company_name, selectedCompany, addSearchToFilters]
   );
 
   const handleBudgetBarClick = useCallback(
@@ -7537,107 +7505,23 @@ const Dashboard = () => {
   // Dynamic year options for financial year dropdown
   const yearOptions = getFinancialYearOptions();
 
-  const getFromMonthOptions = (year: string | null) => {
-    // Use year from budgetStartMonth if available, otherwise use selectedYear or current year
-    let selectedYearValue: string;
-    if (budgetStartMonth) {
-      selectedYearValue = budgetStartMonth.split("-")[0];
-    } else {
-      selectedYearValue = year || getCurrentFinancialYearStart();
-    }
+  const financialYearStartForOptions = selectedYear
+    ? parseInt(selectedYear, 10)
+    : getCurrentFinancialYearStart();
 
-    const months = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
+  const fromMonthOptions = useMemo(
+    () => getFinancialYearMonthOptions(financialYearStartForOptions),
+    [financialYearStartForOptions]
+  );
 
-    const options: { value: string; label: string }[] = [];
-
-    // Start from April (index 3)
-    for (let i = 0; i < 12; i++) {
-      const monthNumber = String(i + 1).padStart(2, "0");
-      const monthValue = `${selectedYearValue}-${monthNumber}`;
-
-      options.push({
-        value: monthValue,
-        label: months[i],
-      });
-    }
-
-    return options;
-  };
-
-  const getToMonthOptions = (year: string | null) => {
-    // Always derive options from selected year to keep dropdown editable.
-    // end_month year mapping (same/next year) is handled at payload layer.
-    const selectedYearValue = year || getCurrentFinancialYearStart();
-
-    const currentYear = dayjs().year();
-    const currentMonth = dayjs().month() + 1;
-
-    // Calculate previous month (end_month should be previous month)
-    let maxMonth: number;
-    let maxYear: number;
-    if (currentMonth === 1) {
-      maxMonth = 12;
-      maxYear = currentYear - 1;
-    } else {
-      maxMonth = currentMonth - 1;
-      maxYear = currentYear;
-    }
-
-    const months = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
-
-    const options: { value: string; label: string }[] = [];
-    const selectedYearNum = parseInt(selectedYearValue);
-
-    // Show all months from January to December, but cap at previous month of current date
-    for (let index = 0; index < 12; index++) {
-      const monthNumber = String(index + 1).padStart(2, "0");
-      const monthValue = `${selectedYearNum}-${monthNumber}`;
-
-      // Check if this month exceeds the max allowed (previous month)
-      if (
-        selectedYearNum > maxYear ||
-        (selectedYearNum === maxYear && index + 1 > maxMonth)
-      ) {
-        break;
-      }
-
-      options.push({
-        value: monthValue,
-        label: months[index],
-      });
-    }
-
-    return options;
-  };
-
-  const fromMonthOptions = getFromMonthOptions(selectedYear);
-  const toMonthOptions = getToMonthOptions(selectedYear);
+  const toMonthOptions = useMemo(
+    () =>
+      getFinancialYearToMonthOptions(
+        financialYearStartForOptions,
+        budgetStartMonth
+      ),
+    [financialYearStartForOptions, budgetStartMonth]
+  );
 
   const salesLeadershipPeriodLabel = useMemo(() => {
     if (customerInteractionFromDate && customerInteractionToDate) {
