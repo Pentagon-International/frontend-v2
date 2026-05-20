@@ -31,6 +31,8 @@ export type BreakdownRow = {
   marginPct: number;
   marginTone?: "good" | "warn" | "bad" | "neutral";
   yoyPct: number;
+  /** False when API returns null/omitted YoY (show em dash). */
+  yoyHasData?: boolean;
   yoyDirection?: TrendDirection;
   /** When set, shows e.g. "▼ New" instead of a percentage. */
   yoyLabel?: string;
@@ -65,6 +67,7 @@ export type AccountsDashboardData = {
     periodLabel: string;
     updatedAgo: string;
     fyLabel?: string;
+    breakdownSubtitle?: string;
   };
   kpis: AccountsKpi[];
   breakdown: {

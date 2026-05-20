@@ -8,7 +8,7 @@ import type {
   MarginBySegmentItem,
   TrendDirection,
 } from "./accountsDashboardTypes";
-import { ACCOUNTS_DASHBOARD_MOCK } from "./accountsDashboardMock";
+import { ALL_BREAKDOWN_DIMENSIONS } from "./accountsDashboardEmpty";
 
 function safeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -25,10 +25,34 @@ function firstString(...values: unknown[]): string {
 
 function trendDirection(value: unknown): TrendDirection {
   const v = firstString(value).toLowerCase();
-  if (v === "up" || v === "down" || v === "flat") return v;
+  if (v === "up" || v === "increase") return "up";
+  if (v === "down" || v === "decrease") return "down";
+  if (v === "flat" || v === "unchanged" || v === "neutral") return "flat";
   if (safeNumber(value) < 0) return "down";
   if (safeNumber(value) > 0) return "up";
   return "flat";
+}
+
+function formatChangeWithDirection(
+  pct: unknown,
+  directionValue?: unknown,
+): { direction: TrendDirection; text: string } {
+  const formatted = formatChangePct(pct);
+  if (directionValue != null && firstString(directionValue)) {
+    return { ...formatted, direction: trendDirection(directionValue) };
+  }
+  return formatted;
+}
+
+function formatChangePpWithDirection(
+  pp: unknown,
+  directionValue?: unknown,
+): { direction: TrendDirection; text: string } {
+  const formatted = formatChangePp(pp);
+  if (directionValue != null && firstString(directionValue)) {
+    return { ...formatted, direction: trendDirection(directionValue) };
+  }
+  return formatted;
 }
 
 function marginTone(value: unknown): BreakdownRow["marginTone"] {
@@ -71,19 +95,85 @@ function normalizeKpi(raw: unknown, index: number): AccountsKpi {
   };
 }
 
-function normalizeBreakdownRow(raw: unknown): BreakdownRow {
+/** Raw API amounts are INR; UI stores values in crores. */
+function toCr(value: unknown): number {
+  const n = safeNumber(value);
+  if (!n) return 0;
+  return Math.abs(n) >= 10000 ? n / 1e7 : n;
+}
+
+function formatChangePct(pct: unknown): { direction: TrendDirection; text: string } {
+  if (pct == null || pct === "") return { direction: "flat", text: "—" };
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return { direction: "flat", text: "—" };
+  const sign = n >= 0 ? "+" : "";
+  return {
+    direction: n > 0 ? "up" : n < 0 ? "down" : "flat",
+    text: `${sign}${n.toFixed(1)}%`,
+  };
+}
+
+function formatChangePp(pp: unknown): { direction: TrendDirection; text: string } {
+  if (pp == null || pp === "") return { direction: "flat", text: "—" };
+  const n = Number(pp);
+  if (!Number.isFinite(n)) return { direction: "flat", text: "—" };
+  const sign = n >= 0 ? "+" : "";
+  return {
+    direction: n > 0 ? "up" : n < 0 ? "down" : "flat",
+    text: `${sign}${n.toFixed(1)}pp`,
+  };
+}
+
+const REVENUE_MIX_COLORS = ["#0f2744", "#1e3a5f", "#3b5f8f", "#0ea5e9", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899"];
+
+/** Reference dashboard segment palette (Pentagon Finance standalone). */
+const SEGMENT_COLOR_MAP: Record<string, string> = {
+  "ocean fcl": "#38bdf8",
+  "air freight": "#f59e0b",
+  "air": "#f59e0b",
+  "ocean lcl": "#1e3a5f",
+  customs: "#ec4899",
+  road: "#94a3b8",
+  warehousing: "#8b5cf6",
+};
+
+function segmentChartColor(name: string, index: number): string {
+  const lower = name.toLowerCase();
+  for (const [key, color] of Object.entries(SEGMENT_COLOR_MAP)) {
+    if (lower.includes(key)) return color;
+  }
+  return REVENUE_MIX_COLORS[index % REVENUE_MIX_COLORS.length];
+}
+
+function marginBarColor(marginPct: number): string {
+  if (marginPct >= 25) return "#22c55e";
+  if (marginPct >= 18) return "#1e3a5f";
+  if (marginPct >= 14) return "#f59e0b";
+  return "#f59e0b";
+}
+
+function normalizeBreakdownRow(raw: unknown, options?: { amountsInCr?: boolean }): BreakdownRow {
   const row = (raw ?? {}) as Record<string, unknown>;
-  const revenue = safeNumber(row.revenue ?? row.revenue_cr);
-  const cost = safeNumber(row.cost ?? row.cost_cr);
-  const grossProfit = safeNumber(
-    row.gross_profit ?? row.grossProfit ?? row.profit ?? revenue - cost,
+  const amountsInCr = options?.amountsInCr ?? false;
+  const revenueRaw = safeNumber(row.revenue ?? row.revenue_cr ?? row.gross_revenue);
+  const costRaw = safeNumber(row.cost ?? row.cost_cr ?? row.direct_cost);
+  const grossProfitRaw = safeNumber(
+    row.gross_profit ?? row.grossProfit ?? row.profit ?? revenueRaw - costRaw,
   );
-  const marginPct = safeNumber(row.margin_pct ?? row.marginPct ?? row.margin, revenue > 0 ? (grossProfit / revenue) * 100 : 0);
-  const yoyPct = safeNumber(row.yoy_pct ?? row.yoyPct ?? row.yoy);
+  const revenue = amountsInCr ? revenueRaw : toCr(revenueRaw);
+  const cost = amountsInCr ? costRaw : toCr(costRaw);
+  const grossProfit = amountsInCr ? grossProfitRaw : toCr(grossProfitRaw);
+  const marginPct = safeNumber(
+    row.margin_pct ?? row.marginPct ?? row.margin ?? row.gp_margin_pct,
+    revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+  );
+  const yoyRaw = row.yoy_change_pct ?? row.yoy_pct ?? row.yoyPct ?? row.yoy;
+  const yoyHasData = yoyRaw != null && yoyRaw !== "";
+  const yoyPct = yoyHasData ? safeNumber(yoyRaw) : 0;
   return {
     id: firstString(row.id, row.code) || undefined,
-    name: firstString(row.name, row.dimension, row.segment, row.label),
-    subtitle: firstString(row.subtitle, row.sub, row.meta),
+    name: firstString(row.label, row.name, row.dimension, row.segment),
+    subtitle: firstString(row.mix_label, row.subtitle, row.sub, row.meta),
     code: firstString(row.code, row.branch_code, row.branchCode) || undefined,
     branchVariant:
       firstString(row.branch_variant, row.branchVariant).toLowerCase() || undefined,
@@ -94,8 +184,141 @@ function normalizeBreakdownRow(raw: unknown): BreakdownRow {
     marginPct,
     marginTone: marginTone(row.margin_tone ?? row.marginTone ?? marginPct),
     yoyPct,
-    yoyDirection: trendDirection(row.yoy_direction ?? row.yoyDirection ?? yoyPct),
+    yoyHasData,
+    yoyDirection: trendDirection(
+      row.direction ?? row.yoy_direction ?? row.yoyDirection ?? (yoyHasData ? yoyPct : undefined),
+    ),
     yoyLabel: firstString(row.yoy_label, row.yoyLabel) || undefined,
+  };
+}
+
+function attachKpiSparklines(kpis: AccountsKpi[], monthlyPoints: MonthlyTrendPoint[]): AccountsKpi[] {
+  if (monthlyPoints.length < 2) return kpis;
+  const revenueSpark = monthlyPoints.map((p) => p.revenue);
+  const costSpark = monthlyPoints.map((p) => Math.max(0, p.revenue - p.grossProfit));
+  const profitSpark = monthlyPoints.map((p) => p.grossProfit);
+  const marginSpark = monthlyPoints.map((p) => p.marginPct);
+
+  return kpis.map((kpi) => {
+    if (kpi.key === "gross_revenue") {
+      return { ...kpi, sparkline: revenueSpark, sparklineColor: "#16a34a" };
+    }
+    if (kpi.key === "direct_costs") {
+      return { ...kpi, sparkline: costSpark, sparklineColor: "#94a3b8" };
+    }
+    if (kpi.key === "gross_profit" || kpi.key === "net_profit") {
+      return { ...kpi, sparkline: profitSpark, sparklineColor: "#16a34a" };
+    }
+    if (kpi.key === "gp_margin") {
+      return { ...kpi, sparkline: marginSpark, sparklineColor: "#0ea5e9" };
+    }
+    return kpi;
+  });
+}
+
+function normalizeProfitabilityKpis(
+  kpisRaw: Record<string, unknown>,
+  changeRaw: Record<string, unknown>,
+): AccountsKpi[] {
+  const directionRaw = (changeRaw.direction ?? {}) as Record<string, unknown>;
+  const revenueTrend = formatChangeWithDirection(
+    changeRaw.gross_revenue_pct,
+    directionRaw.gross_revenue,
+  );
+  const costTrend = formatChangeWithDirection(
+    changeRaw.direct_cost_pct,
+    directionRaw.direct_cost,
+  );
+  const profitTrend = formatChangeWithDirection(
+    changeRaw.gross_profit_pct,
+    directionRaw.gross_profit,
+  );
+  const marginTrend = formatChangePpWithDirection(
+    changeRaw.gp_margin_pp,
+    directionRaw.gp_margin,
+  );
+
+  return [
+    {
+      key: "gross_revenue",
+      label: "Gross Revenue",
+      value: toCr(kpisRaw.gross_revenue),
+      unit: "Cr",
+      showCurrency: true,
+      trend: { ...revenueTrend, context: "vs. last period" },
+    },
+    {
+      key: "direct_costs",
+      label: "Direct Costs",
+      value: toCr(kpisRaw.direct_cost),
+      unit: "Cr",
+      showCurrency: true,
+      trend: { ...costTrend, context: "vs. last period" },
+    },
+    {
+      key: "gross_profit",
+      label: "Gross Profit",
+      value: toCr(kpisRaw.gross_profit),
+      unit: "Cr",
+      showCurrency: true,
+      trend: { ...profitTrend, context: "vs. last period" },
+    },
+    {
+      key: "gp_margin",
+      label: "GP Margin",
+      value: safeNumber(kpisRaw.gp_margin_pct),
+      unit: "%",
+      isPercent: true,
+      trend: { ...marginTrend, context: "vs. last period" },
+    },
+    {
+      key: "net_profit",
+      label: "Net Profit",
+      value: toCr(kpisRaw.net_profit),
+      unit: "Cr",
+      showCurrency: true,
+      trend: { ...profitTrend, context: "vs. last period" },
+    },
+  ];
+}
+
+function profitBreakdownToMixAndMargin(
+  rows: BreakdownRow[],
+  rowsRaw?: unknown[],
+): {
+  revenueMix: { total: number; totalUnit: string; items: RevenueMixItem[] };
+  marginBySegment: { benchmarkPct: number; items: MarginBySegmentItem[] };
+} {
+  const total = rows.reduce((s, r) => s + r.revenue, 0);
+  const items: RevenueMixItem[] = rows.map((row, i) => {
+    const raw = (rowsRaw?.[i] ?? {}) as Record<string, unknown>;
+    const pctFromApi = raw.mix_pct ?? raw.pct ?? raw.percent;
+    return {
+      name: row.name,
+      value: row.revenue,
+      pct:
+        pctFromApi != null && pctFromApi !== ""
+          ? safeNumber(pctFromApi)
+          : total > 0
+            ? Math.round((row.revenue / total) * 1000) / 10
+            : 0,
+      color: segmentChartColor(row.name, i),
+    };
+  });
+  const marginItems: MarginBySegmentItem[] = rows.map((row, i) => ({
+    name: row.name,
+    marginPct: row.marginPct,
+    color: marginBarColor(row.marginPct) || segmentChartColor(row.name, i),
+  }));
+  const margins = marginItems.map((m) => m.marginPct).filter((m) => m > 0);
+  const benchmarkPct =
+    margins.length > 0
+      ? margins.reduce((a, b) => a + b, 0) / margins.length
+      : 21.5;
+
+  return {
+    revenueMix: { total, totalUnit: "Cr", items },
+    marginBySegment: { benchmarkPct, items: marginItems },
   };
 }
 
@@ -107,11 +330,39 @@ function normalizeDimensionKey(value: unknown): BreakdownDimension | null {
   return null;
 }
 
-export function normalizeAccountsDashboard(raw: unknown): AccountsDashboardData {
+function unwrapProfitabilityPayload(raw: unknown): Record<string, unknown> {
   const root = (raw ?? {}) as Record<string, unknown>;
-  const data = ((root.data ?? root.result ?? root) ?? {}) as Record<string, unknown>;
+  if (
+    root.kpis != null ||
+    root.profit_breakdown != null ||
+    root.profitBreakdown != null ||
+    root.monthly_trend != null ||
+    root.monthlyTrend != null
+  ) {
+    return root;
+  }
+  const nested = (root.data ?? root.result) as Record<string, unknown> | undefined;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested;
+  }
+  return root;
+}
 
+export function normalizeAccountsDashboard(
+  raw: unknown,
+  activeDimension: BreakdownDimension = "segment",
+): AccountsDashboardData {
+  const data = unwrapProfitabilityPayload(raw);
+
+  const filtersRaw = (data.filters ?? {}) as Record<string, unknown>;
   const metaRaw = (data.meta ?? data.header ?? {}) as Record<string, unknown>;
+  const previousPeriod = (data.previous_period ?? {}) as Record<string, unknown>;
+  const changeRaw = (previousPeriod.change ?? {}) as Record<string, unknown>;
+
+  const kpisObject =
+    data.kpis && typeof data.kpis === "object" && !Array.isArray(data.kpis)
+      ? (data.kpis as Record<string, unknown>)
+      : null;
   const kpisRaw = Array.isArray(data.kpis)
     ? data.kpis
     : Array.isArray(data.summary)
@@ -125,18 +376,21 @@ export function normalizeAccountsDashboard(raw: unknown): AccountsDashboardData 
       | undefined;
 
   const byDimension: AccountsDashboardData["breakdown"]["byDimension"] = {};
-  if (byDimensionRaw && typeof byDimensionRaw === "object") {
+  if (byDimensionRaw && typeof byDimensionRaw === "object" && !Array.isArray(byDimensionRaw)) {
     for (const [key, value] of Object.entries(byDimensionRaw)) {
       const dim = normalizeDimensionKey(key);
       if (!dim) continue;
       const block = (value ?? {}) as Record<string, unknown>;
       const rowsRaw = Array.isArray(block.rows) ? block.rows : Array.isArray(value) ? (value as unknown[]) : [];
-      const rows = rowsRaw.map(normalizeBreakdownRow).filter((r) => r.name);
+      const rows = rowsRaw.map((r) => normalizeBreakdownRow(r)).filter((r) => r.name);
       const totalRaw = block.total ?? block.totals;
       byDimension[dim] = {
         rows,
         total: totalRaw
-          ? normalizeBreakdownRow({ ...((totalRaw as Record<string, unknown>) ?? {}), name: firstString((totalRaw as Record<string, unknown>).name, "Total") })
+          ? normalizeBreakdownRow({
+              ...((totalRaw as Record<string, unknown>) ?? {}),
+              name: firstString((totalRaw as Record<string, unknown>).name, "Total"),
+            })
           : rows.length
             ? normalizeBreakdownRow({
                 name: `Total · all ${dim}s`,
@@ -145,7 +399,9 @@ export function normalizeAccountsDashboard(raw: unknown): AccountsDashboardData 
                 grossProfit: rows.reduce((s, r) => s + r.grossProfit, 0),
                 marginPct:
                   rows.reduce((s, r) => s + r.revenue, 0) > 0
-                    ? (rows.reduce((s, r) => s + r.grossProfit, 0) / rows.reduce((s, r) => s + r.revenue, 0)) * 100
+                    ? (rows.reduce((s, r) => s + r.grossProfit, 0) /
+                        rows.reduce((s, r) => s + r.revenue, 0)) *
+                      100
                     : 0,
                 yoyPct: 0,
               })
@@ -154,14 +410,33 @@ export function normalizeAccountsDashboard(raw: unknown): AccountsDashboardData 
     }
   }
 
+  const profitRowsRaw = Array.isArray(breakdownRoot.rows) ? breakdownRoot.rows : [];
+  if (profitRowsRaw.length) {
+    const rows = profitRowsRaw.map((r) => normalizeBreakdownRow(r)).filter((r) => r.name);
+    const totalsRaw = (breakdownRoot.totals ?? breakdownRoot.total ?? {}) as Record<string, unknown>;
+    const total = normalizeBreakdownRow({
+      ...totalsRaw,
+      label: firstString(totalsRaw.label, `Total · all ${activeDimension}s`),
+      name: firstString(totalsRaw.label, totalsRaw.name, `Total · all ${activeDimension}s`),
+      subtitle: firstString(totalsRaw.summary, totalsRaw.subtitle),
+      revenue: totalsRaw.gross_revenue ?? totalsRaw.revenue,
+      cost: totalsRaw.direct_cost ?? totalsRaw.cost,
+      gross_profit: totalsRaw.gross_profit,
+      margin_pct: totalsRaw.gp_margin_pct ?? totalsRaw.margin_pct,
+    });
+    byDimension[activeDimension] = { rows, total };
+  }
+
   const monthlyRaw = (data.monthly_trend ?? data.monthlyTrend ?? {}) as Record<string, unknown>;
-  const monthlyPointsRaw = Array.isArray(monthlyRaw.points)
-    ? monthlyRaw.points
-    : Array.isArray(monthlyRaw.months)
-      ? monthlyRaw.months
-      : Array.isArray(data.monthly)
-        ? data.monthly
-        : [];
+  const monthlyPointsRaw = Array.isArray(monthlyRaw.rows)
+    ? monthlyRaw.rows
+    : Array.isArray(monthlyRaw.points)
+      ? monthlyRaw.points
+      : Array.isArray(monthlyRaw.months)
+        ? monthlyRaw.months
+        : Array.isArray(data.monthly)
+          ? data.monthly
+          : [];
 
   const revenueMixRaw = (data.revenue_mix ?? data.revenueMix ?? {}) as Record<string, unknown>;
   const mixItemsRaw = Array.isArray(revenueMixRaw.items)
@@ -177,73 +452,130 @@ export function normalizeAccountsDashboard(raw: unknown): AccountsDashboardData 
       ? marginRaw.segments
       : [];
 
-  const dimensions =
-    (Array.isArray(breakdownRoot.dimensions)
-      ? breakdownRoot.dimensions.map(normalizeDimensionKey).filter(Boolean)
-      : Object.keys(byDimension)) as BreakdownDimension[];
+  const profitBreakdownRows = byDimension[activeDimension]?.rows ?? [];
+  const mixFromProfitRows =
+    profitRowsRaw.length > 0
+      ? profitBreakdownToMixAndMargin(
+          profitRowsRaw.map((r) => normalizeBreakdownRow(r)).filter((r) => r.name),
+          profitRowsRaw,
+        )
+      : profitBreakdownRows.length > 0
+        ? profitBreakdownToMixAndMargin(profitBreakdownRows)
+        : null;
+
+  const dateFrom = firstString(filtersRaw.date_from, metaRaw.date_from);
+  const dateTo = firstString(filtersRaw.date_to, metaRaw.date_to);
+  const periodLabel =
+    dateFrom && dateTo
+      ? `${dateFrom} – ${dateTo}`
+      : firstString(metaRaw.period_label, metaRaw.periodLabel, data.period_label);
+
+  const monthlyPoints: MonthlyTrendPoint[] = monthlyPointsRaw.length
+    ? monthlyPointsRaw.map((point) => {
+        const row = (point ?? {}) as Record<string, unknown>;
+        return {
+          month: firstString(row.label, row.month),
+          revenue: toCr(row.gross_revenue ?? row.revenue ?? row.revenue_cr),
+          grossProfit: toCr(row.gross_profit ?? row.grossProfit ?? row.profit),
+          marginPct: safeNumber(row.margin_pct ?? row.marginPct ?? row.margin),
+        } satisfies MonthlyTrendPoint;
+      })
+    : [];
+
+  const baseKpis = kpisObject
+    ? normalizeProfitabilityKpis(kpisObject, changeRaw)
+    : kpisRaw.length
+      ? kpisRaw.map(normalizeKpi)
+      : [];
 
   const normalized: AccountsDashboardData = {
     meta: {
-      title: firstString(metaRaw.title, data.title, "Profitability"),
-      subtitle: firstString(metaRaw.subtitle, metaRaw.sub, data.subtitle),
-      periodLabel: firstString(metaRaw.period_label, metaRaw.periodLabel, data.period_label),
+      title: firstString(metaRaw.title, data.title, breakdownRoot.title, "Profitability"),
+      subtitle: firstString(
+        metaRaw.subtitle,
+        metaRaw.sub,
+        data.subtitle,
+        filtersRaw.company,
+        "CFO view · All branches",
+      ),
+      periodLabel,
       updatedAgo: firstString(metaRaw.updated_ago, metaRaw.updatedAgo, data.updated_ago),
       fyLabel: firstString(metaRaw.fy_label, metaRaw.fyLabel, data.fy_label),
+      breakdownSubtitle: firstString(
+        breakdownRoot.subtitle,
+        "Revenue · Cost · Gross Profit · Margin %",
+      ),
     },
-    kpis: kpisRaw.length ? kpisRaw.map(normalizeKpi) : ACCOUNTS_DASHBOARD_MOCK.kpis,
+    kpis: attachKpiSparklines(baseKpis, monthlyPoints),
     breakdown: {
-      dimensions: dimensions.length ? dimensions : ACCOUNTS_DASHBOARD_MOCK.breakdown.dimensions,
-      activeDimension:
-        normalizeDimensionKey(breakdownRoot.active_dimension ?? breakdownRoot.activeDimension) ??
-        "segment",
-      byDimension: Object.keys(byDimension).length ? byDimension : ACCOUNTS_DASHBOARD_MOCK.breakdown.byDimension,
+      dimensions: ALL_BREAKDOWN_DIMENSIONS,
+      activeDimension,
+      byDimension: Object.keys(byDimension).length ? byDimension : {},
     },
     monthlyTrend: {
-      fyLabel: firstString(monthlyRaw.fy_label, monthlyRaw.fyLabel, "FY · ₹ Cr"),
-      points: monthlyPointsRaw.length
-        ? monthlyPointsRaw.map((point) => {
-            const row = (point ?? {}) as Record<string, unknown>;
-            return {
-              month: firstString(row.month, row.label),
-              revenue: safeNumber(row.revenue ?? row.revenue_cr),
-              grossProfit: safeNumber(row.gross_profit ?? row.grossProfit ?? row.profit),
-              marginPct: safeNumber(row.margin_pct ?? row.marginPct ?? row.margin),
-            } satisfies MonthlyTrendPoint;
-          })
-        : ACCOUNTS_DASHBOARD_MOCK.monthlyTrend.points,
+      fyLabel: firstString(
+        monthlyRaw.subtitle,
+        monthlyRaw.fy_label,
+        monthlyRaw.fyLabel,
+        monthlyRaw.title,
+        "FY · ₹ Cr",
+      ),
+      points: monthlyPoints,
     },
-    revenueMix: {
-      total: safeNumber(revenueMixRaw.total, revenueMixRaw.total_cr),
-      totalUnit: firstString(revenueMixRaw.total_unit, revenueMixRaw.totalUnit, "Cr"),
-      items: mixItemsRaw.length
-        ? mixItemsRaw.map((item) => {
-            const row = (item ?? {}) as Record<string, unknown>;
-            return {
-              name: firstString(row.name, row.segment),
-              value: safeNumber(row.value ?? row.revenue ?? row.amount),
-              pct: safeNumber(row.pct ?? row.percent ?? row.share),
-              color: firstString(row.color, "#0ea5e9"),
-            } satisfies RevenueMixItem;
-          })
-        : ACCOUNTS_DASHBOARD_MOCK.revenueMix.items,
-    },
-    marginBySegment: {
-      benchmarkPct: safeNumber(marginRaw.benchmark_pct ?? marginRaw.benchmarkPct, 21.5),
-      items: marginItemsRaw.length
-        ? marginItemsRaw.map((item) => {
-            const row = (item ?? {}) as Record<string, unknown>;
-            return {
-              name: firstString(row.name, row.segment),
-              marginPct: safeNumber(row.margin_pct ?? row.marginPct ?? row.margin),
-              color: firstString(row.color) || undefined,
-            } satisfies MarginBySegmentItem;
-          })
-        : ACCOUNTS_DASHBOARD_MOCK.marginBySegment.items,
-    },
+    revenueMix: mixFromProfitRows
+      ? mixFromProfitRows.revenueMix
+      : mixItemsRaw.length
+          ? {
+              total: safeNumber(revenueMixRaw.total ?? revenueMixRaw.total_cr),
+              totalUnit: firstString(revenueMixRaw.total_unit, revenueMixRaw.totalUnit, "Cr"),
+              items: mixItemsRaw.map((item, i) => {
+                const row = (item ?? {}) as Record<string, unknown>;
+                return {
+                  name: firstString(row.name, row.segment, row.label),
+                  value: toCr(row.value ?? row.revenue ?? row.amount),
+                  pct: safeNumber(row.pct ?? row.percent ?? row.share ?? row.mix_pct),
+                  color: firstString(row.color, REVENUE_MIX_COLORS[i % REVENUE_MIX_COLORS.length]),
+                } satisfies RevenueMixItem;
+              }),
+            }
+          : { total: 0, totalUnit: "Cr", items: [] },
+    marginBySegment: mixFromProfitRows
+      ? mixFromProfitRows.marginBySegment
+      : marginItemsRaw.length
+          ? {
+              benchmarkPct: safeNumber(marginRaw.benchmark_pct ?? marginRaw.benchmarkPct, 21.5),
+              items: marginItemsRaw.map((item, i) => {
+                const row = (item ?? {}) as Record<string, unknown>;
+                return {
+                  name: firstString(row.name, row.segment, row.label),
+                  marginPct: safeNumber(row.margin_pct ?? row.marginPct ?? row.margin),
+                  color: firstString(row.color, REVENUE_MIX_COLORS[i % REVENUE_MIX_COLORS.length]) || undefined,
+                } satisfies MarginBySegmentItem;
+              }),
+            }
+          : { benchmarkPct: 0, items: [] },
     filterOptions: data.filter_options as AccountsDashboardData["filterOptions"],
   };
 
   return normalized;
+}
+
+/** Request flags for profitability breakdown dimension (segment uses default view). */
+export function profitabilityDimensionFlags(
+  dimension: BreakdownDimension,
+): Partial<Record<"branch" | "tradelane" | "salesperson" | "customer", boolean>> {
+  switch (dimension) {
+    case "branch":
+      return { branch: true };
+    case "tradelane":
+      return { tradelane: true };
+    case "salesperson":
+      return { salesperson: true };
+    case "customer":
+      return { customer: true };
+    default:
+      return {};
+  }
 }
 
 export function formatCrLAmount(value: number): string {

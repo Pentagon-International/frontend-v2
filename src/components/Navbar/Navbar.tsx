@@ -370,6 +370,21 @@ const Navbar = ({
                     setIsDashboardOpen,
                   }}
                 />
+                <SubNavLink
+                  parent="Finance Dashboard"
+                  label="Pending Activities"
+                  icon={IconChecklist}
+                  path="/finance-dashboard/pending-activities"
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                    setIsAirOpen,
+                    setIsSeaExportOpen,
+                    setIsAccountsOpen,
+                    setIsDashboardOpen,
+                  }}
+                />
               </CollapsibleNav>
               <Box>
                 <CollapsibleNav

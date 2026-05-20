@@ -26,11 +26,16 @@ import {
   ERP_LIST_FONT_SANS,
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components/ERPListPage/erpListGeistShell";
-import { ACCOUNTS_DASHBOARD_MOCK } from "./accountsDashboardMock";
+import useAuthStore from "../../../store/authStore";
+import {
+  ALL_BREAKDOWN_DIMENSIONS,
+  EMPTY_BREAKDOWN_TOTAL,
+} from "./accountsDashboardEmpty";
 import {
   branchDotColor,
   formatAmountInCr,
   normalizeAccountsDashboard,
+  profitabilityDimensionFlags,
 } from "./accountsDashboardNormalize";
 import type {
   AccountsDashboardData,
@@ -59,6 +64,15 @@ const DIMENSION_LABELS: Record<BreakdownDimension, string> = {
   customer: "Customer",
   tradelane: "Tradelane",
   salesperson: "Salesperson",
+};
+
+/** Shape-only prop for KPI loading skeletons (no displayed values). */
+const KPI_LOADING_SHAPE: AccountsKpi = {
+  key: "_loading",
+  label: "",
+  value: 0,
+  unit: "",
+  trend: { direction: "flat", text: "" },
 };
 
 type AccountsDashboardProps = {
@@ -182,6 +196,13 @@ function YoyCell({ row }: { row: BreakdownRow }) {
     return (
       <Text fz={11} fw={600} c={BAD} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         ▼ {row.yoyLabel}
+      </Text>
+    );
+  }
+  if (row.yoyHasData === false) {
+    return (
+      <Text fz={11} c={INK_4} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        —
       </Text>
     );
   }
@@ -472,9 +493,11 @@ function KpiCard({ kpi, loading }: { kpi: AccountsKpi; loading?: boolean }) {
 const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
   fromDate,
   toDate,
-  globalSearch,
+  globalSearch: _globalSearch,
 }) => {
-  const [data, setData] = useState<AccountsDashboardData>(ACCOUNTS_DASHBOARD_MOCK);
+  const user = useAuthStore((state) => state.user);
+  const company = user?.company?.company_name?.trim() || "Pentagon India";
+  const [data, setData] = useState<AccountsDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiNotice, setApiNotice] = useState<string | null>(null);
   const [activeDimension, setActiveDimension] = useState<BreakdownDimension>("segment");
@@ -484,51 +507,54 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
+    setApiNotice(null);
     try {
-      const response = await apiCallProtected.post(URL.dashboard.accountsProfitability, {
-        date_from: fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : undefined,
-        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : undefined,
-        period: periodGranularity,
-        branch: branchFilter === "all" ? undefined : branchFilter,
-        mode: modeFilter === "all" ? undefined : modeFilter,
-        search: globalSearch?.trim() || undefined,
-      });
-      const normalized = normalizeAccountsDashboard(response.data);
-      setData(normalized);
-      if (normalized.breakdown.activeDimension) {
-        setActiveDimension(normalized.breakdown.activeDimension);
-      }
-      setApiNotice(null);
+      const payload = {
+        company,
+        date_from: fromDate
+          ? dayjs(fromDate).format("YYYY-MM-DD")
+          : dayjs().startOf("month").format("YYYY-MM-DD"),
+        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+        compare_previous_period: true,
+        ...profitabilityDimensionFlags(activeDimension),
+      };
+
+      // Interceptor already returns axios `response.data` (not the full AxiosResponse).
+      const body = await apiCallProtected.post(URL.dashboard.accountsProfitability, payload);
+      const normalized = normalizeAccountsDashboard(body, activeDimension);
+
+      setData((prev) => ({
+        ...normalized,
+        breakdown: {
+          ...normalized.breakdown,
+          byDimension: {
+            ...(prev?.breakdown.byDimension ?? {}),
+            ...normalized.breakdown.byDimension,
+          },
+        },
+      }));
     } catch {
-      setData(ACCOUNTS_DASHBOARD_MOCK);
-      setApiNotice(
-        "Live profitability data is not available yet. Showing reference layout with demo figures until the accounts dashboard API responds.",
-      );
+      setApiNotice("Unable to load profitability data. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, fromDate, globalSearch, modeFilter, periodGranularity, toDate]);
+  }, [activeDimension, company, fromDate, toDate]);
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const breakdownBlock =
-    data.breakdown.byDimension[activeDimension] ??
-    (apiNotice ? ACCOUNTS_DASHBOARD_MOCK.breakdown.byDimension[activeDimension] : undefined);
+  const breakdownBlock = data?.breakdown.byDimension[activeDimension];
   const breakdownRows = breakdownBlock?.rows ?? [];
   const breakdownTotal =
     breakdownBlock?.total ??
     ({
+      ...EMPTY_BREAKDOWN_TOTAL,
       name: `Total · all ${activeDimension}s`,
-      revenue: 0,
-      cost: 0,
-      grossProfit: 0,
-      marginPct: 0,
-      yoyPct: 0,
     } satisfies BreakdownRow);
 
   const monthlyChartOption = useMemo(() => {
+    if (!data) return {};
     const points = data.monthlyTrend.points;
     if (!points.length) return {};
     const labels = points.map((p) => p.month);
@@ -537,6 +563,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     const revenueRemainder = revenue.map((r, i) => Math.max(0, r - grossProfit[i]));
     const margin = points.map((p) => p.marginPct);
     const maxVal = Math.max(...revenue, 1);
+    const marginMax = Math.max(...margin, 10);
 
     return {
       textStyle: { fontFamily: ERP_LIST_FONT_SANS },
@@ -574,7 +601,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         {
           type: "value",
           min: 0,
-          max: 35,
+          max: Math.ceil((marginMax * 1.08) / 5) * 5,
           show: false,
         },
       ],
@@ -594,7 +621,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
           stack: "total",
           data: revenueRemainder,
           barWidth: 24,
-          itemStyle: { color: "#cbd5e1", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#bae6fd", borderRadius: [3, 3, 0, 0] },
           z: 1,
         },
         {
@@ -611,9 +638,10 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         },
       ],
     };
-  }, [data.monthlyTrend.points]);
+  }, [data]);
 
   const donutOption = useMemo(() => {
+    if (!data) return {};
     const items = data.revenueMix.items;
     return {
       textStyle: { fontFamily: ERP_LIST_FONT_SANS },
@@ -661,21 +689,23 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         },
       ],
     };
-  }, [data.revenueMix]);
+  }, [data]);
 
   const marginBarOption = useMemo(() => {
+    if (!data) return {};
     const items = [...data.marginBySegment.items].sort((a, b) => b.marginPct - a.marginPct);
     const names = items.map((i) => i.name);
     const values = items.map((i) => i.marginPct);
     const colors = items.map((i) => i.color || (i.marginPct >= 25 ? GOOD : i.marginPct >= 18 ? NAVY_800 : WARN));
     const benchmark = data.marginBySegment.benchmarkPct ?? 21.5;
+    const axisMax = Math.max(...values, benchmark, 1);
 
     return {
       textStyle: { fontFamily: ERP_LIST_FONT_SANS },
       grid: { top: 8, left: 8, right: 48, bottom: 8, containLabel: true },
       xAxis: {
         type: "value",
-        max: Math.max(...values, benchmark) + 6,
+        max: Math.ceil(axisMax * 1.12),
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { show: false },
@@ -718,7 +748,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         },
       ],
     };
-  }, [data.marginBySegment]);
+  }, [data]);
 
   const periodPills: { value: PeriodGranularity; label: string }[] = [
     { value: "month", label: "Month" },
@@ -726,6 +756,53 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     { value: "h1h2", label: "H1/H2" },
     { value: "fy", label: "FY" },
   ];
+
+  if (loading && data === null) {
+    return (
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={{
+          background: PAGE_BG,
+          fontFamily: ERP_LIST_FONT_SANS,
+          borderRadius: 12,
+          minHeight: 400,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Loader size="lg" color={NAVY_800} />
+      </Box>
+    );
+  }
+
+  if (data === null) {
+    return (
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={{
+          background: PAGE_BG,
+          fontFamily: ERP_LIST_FONT_SANS,
+          borderRadius: 12,
+          minHeight: 400,
+        }}
+      >
+        <Box px={{ base: 12, sm: 16 }} py="md">
+          <Alert color="red" variant="light" mb="md" radius="md" title="Data unavailable">
+            {apiNotice ?? "Something went wrong."}
+          </Alert>
+          <Button
+            size="sm"
+            variant="filled"
+            onClick={() => void loadDashboard()}
+            styles={{ root: { background: NAVY_800 } }}
+          >
+            Try again
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -739,7 +816,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     >
       <Box px={{ base: 12, sm: 16 }} py="md">
         {apiNotice ? (
-          <Alert color="yellow" variant="light" mb="md" radius="md" title="Demo data">
+          <Alert color="red" variant="light" mb="md" radius="md" title="Data unavailable">
             {apiNotice}
           </Alert>
         ) : null}
@@ -890,7 +967,9 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
 
         <SimpleGrid cols={{ base: 1, xs: 2, md: 3, lg: 5 }} spacing={14} mb={22}>
           {loading
-            ? Array.from({ length: 5 }).map((_, i) => <KpiCard key={i} kpi={data.kpis[0]} loading />)
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <KpiCard key={i} kpi={KPI_LOADING_SHAPE} loading />
+              ))
             : data.kpis.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} />)}
         </SimpleGrid>
 
@@ -912,10 +991,10 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             pb={12}
           >
             <Text fz={13} fw={600} c={INK} style={{ letterSpacing: "-0.005em" }}>
-              Profit Breakdown
+              Profitability
             </Text>
             <Text fz={11} c={INK_4}>
-              Revenue · Cost · Gross Profit · Margin %
+              {data.meta.breakdownSubtitle ?? "Revenue · Cost · Gross Profit · Margin %"}
             </Text>
             <Box style={{ flex: 1, minWidth: 8 }} />
             <Box
@@ -930,10 +1009,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                 flexWrap: "wrap",
               }}
             >
-              {(data.breakdown.dimensions.length
-                ? data.breakdown.dimensions
-                : (Object.keys(DIMENSION_LABELS) as BreakdownDimension[])
-              ).map((dim) => (
+              {ALL_BREAKDOWN_DIMENSIONS.map((dim) => (
                 <Button
                   key={dim}
                   size="compact-xs"
