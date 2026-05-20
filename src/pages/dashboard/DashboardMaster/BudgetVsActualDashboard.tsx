@@ -436,14 +436,8 @@ export default function BudgetVsActualDashboard() {
                 <DashboardChartSearch
                   value={searchInput}
                   onChange={setSearchInput}
-                  onCommit={(v) => {
-                    commitSearch(v);
-                    void fetchData();
-                  }}
-                  onClear={() => {
-                    commitSearch("");
-                    void fetchData();
-                  }}
+                  onCommit={commitSearch}
+                  onClear={() => commitSearch("")}
                   placeholder="Search customer / salesperson"
                 />
               </Box>
