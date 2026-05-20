@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, Drawer, Flex, Text } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import type { BreakdownDimension, BreakdownRow } from "./accountsDashboardTypes";
+import ProfitabilityTrillTwo from "./ProfitabilityTrillTwo";
 import { DIMENSION_CRUMB, INK, INK_3, INK_4, LINE, NAVY_600, PAGE_BG } from "./profitabilityTrillOne/constants";
 import {
   buildDrillSummary,
@@ -10,6 +11,7 @@ import {
 } from "./profitabilityTrillOne/data";
 import { ProfitabilityDrillKpiCards } from "./profitabilityTrillOne/ProfitabilityDrillKpiCards";
 import { ProfitabilityJobTable } from "./profitabilityTrillOne/ProfitabilityJobTable";
+import type { ProfitabilityJob } from "./profitabilityTrillOne/types";
 import { profitabilityTrillFonts } from "./profitabilityTrillOne/utils";
 
 export type ProfitabilityTrillOneProps = {
@@ -19,6 +21,9 @@ export type ProfitabilityTrillOneProps = {
   row: BreakdownRow | null;
   periodLabel?: string;
   categoryBenchmarkPct?: number;
+  company: string;
+  fromDate?: Date | null;
+  toDate?: Date | null;
 };
 
 export default function ProfitabilityTrillOne({
@@ -28,7 +33,12 @@ export default function ProfitabilityTrillOne({
   row,
   periodLabel = "YTD",
   categoryBenchmarkPct,
+  company,
+  fromDate,
+  toDate,
 }: ProfitabilityTrillOneProps) {
+  const [selectedJob, setSelectedJob] = useState<ProfitabilityJob | null>(null);
+  const [trillTwoOpened, setTrillTwoOpened] = useState(false);
   const jobs = useMemo(
     () => (row ? sortJobsByGrossProfit(filterJobsForRow(dimension, row)) : []),
     [dimension, row],
@@ -38,6 +48,13 @@ export default function ProfitabilityTrillOne({
     if (!row) return null;
     return buildDrillSummary({ dimension, row, periodLabel, categoryBenchmarkPct }, jobs);
   }, [categoryBenchmarkPct, dimension, jobs, periodLabel, row]);
+
+  useEffect(() => {
+    if (!opened) {
+      setTrillTwoOpened(false);
+      setSelectedJob(null);
+    }
+  }, [opened]);
 
   if (!row || !summary) return null;
 
@@ -135,9 +152,33 @@ export default function ProfitabilityTrillOne({
             categoryBenchmarkPct={categoryBenchmarkPct}
           />
 
-          <ProfitabilityJobTable jobs={jobs} />
+          <ProfitabilityJobTable
+            jobs={jobs}
+            onJobClick={(job) => {
+              setSelectedJob(job);
+              setTrillTwoOpened(true);
+            }}
+          />
         </Box>
       </Box>
+
+      <ProfitabilityTrillTwo
+        opened={trillTwoOpened}
+        onClose={() => {
+          setTrillTwoOpened(false);
+          setSelectedJob(null);
+        }}
+        onBack={() => {
+          setTrillTwoOpened(false);
+          setSelectedJob(null);
+        }}
+        job={selectedJob}
+        dimension={dimension}
+        parentName={row.name}
+        company={company}
+        fromDate={fromDate}
+        toDate={toDate}
+      />
     </Drawer>
   );
 }

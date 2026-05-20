@@ -214,6 +214,8 @@ export const URL = {
       "customer-service-shipment/dashboard-shipments/",
     /** Accounts / finance profitability dashboard (POST: company, dates, compare_previous_period, dimension flags). */
     accountsProfitability: "profitability/",
+    /** Job-level P&L drill-down for profitability (POST: company, job_id, date_from, date_to). */
+    accountsProfitabilityJob: "profitability/job/",
     branchBudgetVsActual: "dashboard/branch-budget-vs-actual/",
     collectionTargetVsPerformance: "dashboard/collection-target-vs-performance/",
     collectionBranchInvoices: "dashboard/collection-branch-invoices/",

@@ -1163,6 +1163,9 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         row={drillRow}
         periodLabel={data.meta.periodLabel?.split(" ")[0] ?? "YTD"}
         categoryBenchmarkPct={data.marginBySegment.benchmarkPct}
+        company={company}
+        fromDate={fromDate}
+        toDate={toDate}
       />
     </Box>
   );
