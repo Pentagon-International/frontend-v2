@@ -5,6 +5,10 @@ import { URL } from "../api/serverUrls";
 import { getAPICall } from "../service/getApiCall";
 import { API_HEADER } from "../store/storeKeys";
 import { ToastNotification } from "../components";
+import {
+  costLocalAmountForPayload,
+  sellLocalAmountForPayload,
+} from "./houseChargeAmounts";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -65,48 +69,181 @@ function mapCargoDetails(booking: Record<string, unknown>) {
   });
 }
 
-function mapMawbCharges(booking: Record<string, unknown>) {
+function normalizePpCc(value: unknown): string {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return String(value ?? "").trim();
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const n = parseFloat(String(value));
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Map booking quotation/rate lines to job master-level estimates (FCL Export). */
+function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
   return rates.map((c) => {
     const row = c as Record<string, unknown>;
+    const chargeId = row.charge_id != null ? Number(row.charge_id) : null;
+    return {
+      supplier_code: null,
+      charge_id: chargeId != null && !Number.isNaN(chargeId) ? chargeId : null,
+      pp_cc: normalizePpCc(row.pp_cc) || "Prepaid",
+      unit_id: row.unit != null ? Number(row.unit) : row.unit_id != null ? Number(row.unit_id) : null,
+      no_of_unit:
+        toNumberOrNull(row.no_of_units) ?? toNumberOrNull(row.no_of_unit),
+      currency_id:
+        row.currency_id != null
+          ? Number(row.currency_id)
+          : row.currency_country_code != null
+            ? Number(row.currency_country_code)
+            : null,
+      roe: toNumberOrNull(row.roe) ?? 1,
+      cost_per_unit:
+        toNumberOrNull(row.cost_per_unit) ??
+        toNumberOrNull(row.sell_per_unit),
+      total_cost:
+        toNumberOrNull(row.total_cost) ??
+        toNumberOrNull(row.min_sell) ??
+        toNumberOrNull(row.total_sell) ??
+        toNumberOrNull(row.sell_amount_total),
+    };
+  });
+}
+
+function getOceanExportService(booking: Record<string, unknown>): string {
+  return String(booking.service ?? "FCL").trim().toUpperCase();
+}
+
+/** Job create API expects "Export" / "Import", not "EXPORT" / "IMPORT". */
+function normalizeJobServiceType(
+  value: unknown,
+  fallback: "Export" | "Import",
+): "Export" | "Import" {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const upper = raw.toUpperCase();
+  if (upper === "IMPORT") return "Import";
+  if (upper === "EXPORT") return "Export";
+  if (raw === "Import" || raw === "Export") return raw;
+  return fallback;
+}
+
+type OceanBookingChargeProfile = "fcl-export" | "lcl-export" | "other";
+
+function getOceanBookingChargeProfile(
+  mode: BookingCreateJobMode,
+  booking: Record<string, unknown>,
+): OceanBookingChargeProfile | null {
+  if (mode !== "ocean-export" && mode !== "ocean-import") return null;
+  const service = getOceanExportService(booking);
+  if (mode === "ocean-export" && service === "FCL") return "fcl-export";
+  if (mode === "ocean-export" && service === "LCL") return "lcl-export";
+  return "other";
+}
+
+/** FCL export only: master-level estimates from booking rate_details. */
+function shouldMapBookingChargesToEstimates(
+  mode: BookingCreateJobMode,
+  booking: Record<string, unknown>,
+): boolean {
+  return getOceanBookingChargeProfile(mode, booking) === "fcl-export";
+}
+
+function hasBookingRateDetails(booking: Record<string, unknown>): boolean {
+  const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
+  return rates.length > 0;
+}
+
+/**
+ * House charge lines for job create (mawb_charges / mbl_charges payload shape).
+ * @param includeCost LCL export: true (sell + cost). FCL/other/air house: false (sell only).
+ */
+function mapHouseChargesFromBooking(
+  booking: Record<string, unknown>,
+  includeCost: boolean,
+) {
+  const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
+  return rates.map((c) => {
+    const row = c as Record<string, unknown>;
+    const noOfUnit = row.no_of_units || row.no_of_unit || "";
+    const amountPerUnit = row.sell_per_unit || "";
+    const amount =
+      row.min_sell || row.total_sell || row.sell_amount_total || "";
+    const roe = row.roe ?? "";
+    const totalCost = includeCost ? row.total_cost || "" : "";
     return {
       charge_id: row.charge_id || "",
       supplier_code: "",
       pp_cc: row.pp_cc || "",
-      unit_id: row.unit_id || "",
-      no_of_unit: row.no_of_units || row.no_of_unit || "",
-      amount: row.min_sell || row.sell_amount_total || "",
-      amount_per_unit: row.sell_per_unit || "",
-      cost_local_amount: "",
-      currency_id: row.currency_id || "",
-      roe: row.roe || "",
-      sell_local_amount: "",
-      total_cost: row.total_cost || "",
-      unit_cost: row.cost_per_unit || "",
+      unit_id: row.unit_id || row.unit || "",
+      no_of_unit: noOfUnit,
+      amount,
+      amount_per_unit: amountPerUnit,
+      currency_id: row.currency_id || row.currency_country_code || "",
+      roe,
+      sell_local_amount: sellLocalAmountForPayload(
+        amount,
+        roe,
+        noOfUnit,
+        amountPerUnit,
+      ),
+      total_cost: totalCost,
+      unit_cost: includeCost ? row.cost_per_unit || "" : "",
+      cost_local_amount: includeCost
+        ? costLocalAmountForPayload(totalCost, roe)
+        : "",
     };
   });
 }
 
-function mapEvents(booking: Record<string, unknown>) {
-  const events = Array.isArray(booking.events) ? booking.events : [];
-  return events.map((e) => {
-    const row = e as Record<string, unknown>;
-    return {
-      event_id: row.event_id || "",
-      event_name: row.event_name || "",
-      event_date: row.event_date || "",
-      event_status: row.event_status || "",
-      event_description: row.event_description || "",
-      event_type: row.event_type || "",
-      event_priority: row.event_priority || "",
-      event_location: row.event_location || "",
-    };
-  });
+/** Job housing events use `{ type, date }`; send `[]` when booking has none. */
+function mapBookingEventsForJob(booking: Record<string, unknown>) {
+  const raw = Array.isArray(booking.events) ? booking.events : [];
+  if (raw.length === 0) return [];
+
+  const mapped = raw
+    .map((e) => {
+      const row = e as Record<string, unknown>;
+      const type = String(row.type ?? row.event_type ?? "").trim();
+      const dateRaw = row.date ?? row.event_date ?? "";
+      const date =
+        dateRaw instanceof Date
+          ? dayjs(dateRaw).isValid()
+            ? dayjs(dateRaw).format("YYYY-MM-DD")
+            : ""
+          : String(dateRaw ?? "").trim();
+      if (!type && !date) return null;
+      const id =
+        row.id != null && row.id !== ""
+          ? typeof row.id === "number"
+            ? row.id
+            : Number(row.id)
+          : null;
+      return {
+        ...(id != null && !Number.isNaN(id) ? { id } : {}),
+        type,
+        date,
+      };
+    })
+    .filter((row): row is { type: string; date: string; id?: number } => row != null);
+
+  return mapped;
+}
+
+function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
+  const id = booking.id;
+  if (id == null || id === "") return [];
+  const n = typeof id === "number" ? id : Number(String(id).trim());
+  return Number.isFinite(n) && n > 0 ? [n] : [];
 }
 
 function buildAirHousing(booking: Record<string, unknown>, trade: string) {
   return {
-    booking_id: booking.id,
     hawb_no: booking.mawb_no || booking.houseno || "",
     origin_code: booking.origin_code || booking.origin_code_read || "",
     destination_code:
@@ -140,14 +277,19 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
     shipment_terms_code:
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
     cargo_details: mapCargoDetails(booking),
-    mawb_charges: mapMawbCharges(booking),
-    events: mapEvents(booking),
+    mawb_charges: hasBookingRateDetails(booking)
+      ? mapHouseChargesFromBooking(booking, true)
+      : [],
+    events: mapBookingEventsForJob(booking),
   };
 }
 
-function buildOceanHousing(booking: Record<string, unknown>, trade: string) {
-  return {
-    booking_id: booking.id,
+function buildOceanHousing(
+  booking: Record<string, unknown>,
+  trade: string,
+  mode: BookingCreateJobMode,
+) {
+  const housing: Record<string, unknown> = {
     hbl_number: booking.houseno || booking.house_no || booking.mawb_no || "",
     origin_code: booking.origin_code || booking.origin_code_read || "",
     destination_code:
@@ -182,8 +324,16 @@ function buildOceanHousing(booking: Record<string, unknown>, trade: string) {
     shipment_terms_code:
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
     cargo_details: mapCargoDetails(booking),
-    events: mapEvents(booking),
+    events: mapBookingEventsForJob(booking),
   };
+
+  const profile = getOceanBookingChargeProfile(mode, booking);
+  if (profile && hasBookingRateDetails(booking)) {
+    const includeCost = profile === "lcl-export";
+    housing.mbl_charges = mapHouseChargesFromBooking(booking, includeCost);
+  }
+
+  return housing;
 }
 
 export function buildJobCreatePayloadFromBooking(
@@ -198,7 +348,7 @@ export function buildJobCreatePayloadFromBooking(
 
   const base: Record<string, unknown> = {
     service,
-    service_type: booking.service_type || serviceType,
+    service_type: normalizeJobServiceType(booking.service_type, serviceType),
     agent:
       booking.destination_agent_code ||
       booking.origin_agent ||
@@ -214,7 +364,10 @@ export function buildJobCreatePayloadFromBooking(
     carrier_code: booking.carrier_code || booking.carrier_code_read || "",
     carrier_booking_no: booking.carrier_booking_no || "",
     voyage_number: booking.voyage_no || booking.voyage_number || "",
-    estimates: [],
+    booking_ids: getBookingIdsFromBooking(booking),
+    estimates: shouldMapBookingChargesToEstimates(mode, booking)
+      ? mapBookingRateDetailsToEstimates(booking)
+      : [],
     ocean_routings: mapOceanRoutings(booking, routingTransport),
     housing_details: [
       isAir
@@ -225,6 +378,7 @@ export function buildJobCreatePayloadFromBooking(
         : buildOceanHousing(
             booking,
             mode === "ocean-export" ? "Export" : "Import",
+            mode,
           ),
     ],
   };
@@ -338,10 +492,29 @@ export async function createJobFromBooking(
       console.error("Error fetching job after create:", fetchErr);
     }
 
+    const payloadEstimates = Array.isArray(payload.estimates)
+      ? payload.estimates
+      : [];
+
     if (job) {
-      navigate(jobEditPath, { state: { job } });
+      const jobEstimates = Array.isArray(job.estimates) ? job.estimates : [];
+      const estimates =
+        jobEstimates.length > 0 ? jobEstimates : payloadEstimates;
+      navigate(jobEditPath, {
+        state: {
+          job: { ...job, estimates },
+          ...(estimates.length > 0 ? { estimates } : {}),
+        },
+      });
     } else {
-      navigate(jobEditPath, { state: { jobId: jobDetailsId } });
+      navigate(jobEditPath, {
+        state: {
+          jobId: jobDetailsId,
+          ...(payloadEstimates.length > 0
+            ? { estimates: payloadEstimates }
+            : {}),
+        },
+      });
     }
     return true;
   } catch (err: unknown) {
