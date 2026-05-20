@@ -44,6 +44,7 @@ import type {
   BreakdownRow,
   TrendDirection,
 } from "./accountsDashboardTypes";
+import ProfitabilityTrillOne from "./ProfitabilityTrillOne";
 
 const PAGE_BG = "#f1f5f9";
 const CARD_BG = "#ffffff";
@@ -284,11 +285,13 @@ function BreakdownTable({
   total,
   dimension,
   loading,
+  onRowClick,
 }: {
   rows: BreakdownRow[];
   total: BreakdownRow;
   dimension: BreakdownDimension;
   loading?: boolean;
+  onRowClick?: (row: BreakdownRow) => void;
 }) {
   const maxMargin = Math.max(...rows.map((r) => r.marginPct), total.marginPct, 1);
 
@@ -338,6 +341,7 @@ function BreakdownTable({
             cursor: "pointer",
             transition: "background 120ms",
           }}
+          onClick={() => onRowClick?.(row)}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "#f8fafc";
           }}
@@ -504,6 +508,8 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
   const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("month");
   const [branchFilter, setBranchFilter] = useState<string | null>("all");
   const [modeFilter, setModeFilter] = useState<string | null>("all");
+  const [drillRow, setDrillRow] = useState<BreakdownRow | null>(null);
+  const [drillOpened, setDrillOpened] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -1041,6 +1047,10 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             total={breakdownTotal}
             dimension={activeDimension}
             loading={loading}
+            onRowClick={(row) => {
+              setDrillRow(row);
+              setDrillOpened(true);
+            }}
           />
         </Box>
 
@@ -1145,6 +1155,15 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
           </Box>
         </SimpleGrid>
       </Box>
+
+      <ProfitabilityTrillOne
+        opened={drillOpened}
+        onClose={() => setDrillOpened(false)}
+        dimension={activeDimension}
+        row={drillRow}
+        periodLabel={data.meta.periodLabel?.split(" ")[0] ?? "YTD"}
+        categoryBenchmarkPct={data.marginBySegment.benchmarkPct}
+      />
     </Box>
   );
 };
