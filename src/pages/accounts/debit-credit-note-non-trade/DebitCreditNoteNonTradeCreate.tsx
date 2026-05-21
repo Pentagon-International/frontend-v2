@@ -1104,16 +1104,6 @@ export function DebitCreditNoteCreateBase({
           </Group>
           {isEditMode && (
             <Group gap="sm" wrap="nowrap" justify="flex-end">
-              <Text size="sm" fw={600} c="#105476">
-                Status:
-              </Text>
-              <Badge
-                size="sm"
-                variant="light"
-                color={isPosted ? "green" : "gray"}
-              >
-                {isPosted ? "POSTED" : "UNPOSTED"}
-              </Badge>
               {form.values.documentNo ? (
                 <>
                   <Text size="sm" fw={600} c="#105476">
@@ -1124,6 +1114,16 @@ export function DebitCreditNoteCreateBase({
                   </Text>
                 </>
               ) : null}
+              <Text size="sm" fw={600} c="#105476">
+                Status:
+              </Text>
+              <Badge
+                size="sm"
+                variant="light"
+                color={isPosted ? "green" : "gray"}
+              >
+                {isPosted ? "POSTED" : "UNPOSTED"}
+              </Badge>
             </Group>
           )}
         </Group>
@@ -1279,17 +1279,6 @@ export function DebitCreditNoteCreateBase({
 
         {/* Header section (Grid 2) */}
         <Grid gutter="sm" mt="xs" columns={13}>
-          <Grid.Col span={2}>
-            <FormTextInput
-              label="Document No"
-              placeholder="Document no"
-              value={form.values.documentNo}
-              onChange={(e) =>
-                form.setFieldValue("documentNo", e.currentTarget.value)
-              }
-              disabled={isReadOnly}
-            />
-          </Grid.Col>
           <Grid.Col span={2}>
             <FormTextInput
               label="GST ID"
