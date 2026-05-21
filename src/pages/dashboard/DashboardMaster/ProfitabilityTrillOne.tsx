@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Box, Drawer, Flex, Text } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { Alert, Box, Drawer, Flex, Loader, Text } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import type { BreakdownDimension, BreakdownRow } from "./accountsDashboardTypes";
 import ProfitabilityTrillTwo from "./ProfitabilityTrillTwo";
 import { DIMENSION_CRUMB, INK, INK_3, INK_4, LINE, NAVY_600, PAGE_BG } from "./profitabilityTrillOne/constants";
-import {
-  buildDrillSummary,
-  filterJobsForRow,
-  sortJobsByGrossProfit,
-} from "./profitabilityTrillOne/data";
 import { ProfitabilityDrillKpiCards } from "./profitabilityTrillOne/ProfitabilityDrillKpiCards";
 import { ProfitabilityJobTable } from "./profitabilityTrillOne/ProfitabilityJobTable";
+import {
+  fetchBranchDrillData,
+  fetchCustomerDrillData,
+  fetchSegmentDrillData,
+  fetchTradelaneDrillData,
+  type ProfitabilityDrillData,
+} from "./profitabilityTrillOne/profitabilityTrillOneApi";
 import type { ProfitabilityJob } from "./profitabilityTrillOne/types";
 import { profitabilityTrillFonts } from "./profitabilityTrillOne/utils";
 
@@ -39,15 +41,112 @@ export default function ProfitabilityTrillOne({
 }: ProfitabilityTrillOneProps) {
   const [selectedJob, setSelectedJob] = useState<ProfitabilityJob | null>(null);
   const [trillTwoOpened, setTrillTwoOpened] = useState(false);
-  const jobs = useMemo(
-    () => (row ? sortJobsByGrossProfit(filterJobsForRow(dimension, row)) : []),
-    [dimension, row],
-  );
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [drillError, setDrillError] = useState<string | null>(null);
+  const [drillData, setDrillData] = useState<ProfitabilityDrillData | null>(null);
 
-  const summary = useMemo(() => {
-    if (!row) return null;
-    return buildDrillSummary({ dimension, row, periodLabel, categoryBenchmarkPct }, jobs);
-  }, [categoryBenchmarkPct, dimension, jobs, periodLabel, row]);
+  const branchCode = row?.code?.trim() || "";
+  const customerCode = row?.id?.trim() || row?.code?.trim() || "";
+  const originCode = row?.originCode?.trim() || "";
+  const destinationCode = row?.destinationCode?.trim() || "";
+
+  useEffect(() => {
+    if (!opened) {
+      setTrillTwoOpened(false);
+      setSelectedJob(null);
+      setDrillData(null);
+      setDrillError(null);
+      setDrillLoading(false);
+      return;
+    }
+
+    const isSegmentDrill = dimension === "segment" && Boolean(row?.name);
+    const isBranchDrill = dimension === "branch" && Boolean(branchCode);
+    const isCustomerDrill = dimension === "customer" && Boolean(customerCode);
+    const isTradelaneDrill =
+      dimension === "tradelane" && Boolean(originCode && destinationCode);
+
+    if (!isSegmentDrill && !isBranchDrill && !isCustomerDrill && !isTradelaneDrill) {
+      setDrillData(null);
+      setDrillError(null);
+      setDrillLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDrillLoading(true);
+    setDrillError(null);
+    setDrillData(null);
+
+    const fetchPromise = isTradelaneDrill
+      ? fetchTradelaneDrillData({
+          company,
+          originCode,
+          destinationCode,
+          fromDate,
+          toDate,
+        })
+      : isCustomerDrill
+        ? fetchCustomerDrillData({
+            company,
+            customerCode,
+            fromDate,
+            toDate,
+          })
+        : isBranchDrill
+          ? fetchBranchDrillData({
+              company,
+              branchCode,
+              fromDate,
+              toDate,
+            })
+          : fetchSegmentDrillData({
+              company,
+              service: row!.name,
+              fromDate,
+              toDate,
+            });
+
+    void fetchPromise
+      .then((data) => {
+        if (!cancelled) setDrillData(data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDrillData(null);
+          setDrillError(
+            isTradelaneDrill
+              ? "Unable to load tradelane drill-down. Check your connection and try again."
+              : isCustomerDrill
+                ? "Unable to load customer drill-down. Check your connection and try again."
+                : isBranchDrill
+                  ? "Unable to load branch drill-down. Check your connection and try again."
+                  : "Unable to load segment drill-down. Check your connection and try again.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDrillLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    opened,
+    dimension,
+    row?.name,
+    branchCode,
+    customerCode,
+    originCode,
+    destinationCode,
+    company,
+    fromDate,
+    toDate,
+  ]);
+
+  const jobs = drillData?.jobs ?? [];
+  const summary = drillData?.summary ?? null;
 
   useEffect(() => {
     if (!opened) {
@@ -56,7 +155,7 @@ export default function ProfitabilityTrillOne({
     }
   }, [opened]);
 
-  if (!row || !summary) return null;
+  if (!row) return null;
 
   return (
     <Drawer
@@ -147,18 +246,30 @@ export default function ProfitabilityTrillOne({
             </Text>
           </Flex>
 
-          <ProfitabilityDrillKpiCards
-            summary={summary}
-            categoryBenchmarkPct={categoryBenchmarkPct}
-          />
+          {drillLoading ? (
+            <Flex justify="center" align="center" py={48}>
+              <Loader color={NAVY_600} />
+            </Flex>
+          ) : drillError ? (
+            <Alert color="red" variant="light" radius="md" title="Could not load data">
+              {drillError}
+            </Alert>
+          ) : summary ? (
+            <>
+              <ProfitabilityDrillKpiCards
+                summary={summary}
+                categoryBenchmarkPct={categoryBenchmarkPct}
+              />
 
-          <ProfitabilityJobTable
-            jobs={jobs}
-            onJobClick={(job) => {
-              setSelectedJob(job);
-              setTrillTwoOpened(true);
-            }}
-          />
+              <ProfitabilityJobTable
+                jobs={jobs}
+                onJobClick={(job) => {
+                  setSelectedJob(job);
+                  setTrillTwoOpened(true);
+                }}
+              />
+            </>
+          ) : null}
         </Box>
       </Box>
 

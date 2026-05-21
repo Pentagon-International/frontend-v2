@@ -260,10 +260,15 @@ export function buildJobDetailFromRow(job: ProfitabilityJob): JobProfitabilityDe
     job.segment === "road" ? "4 trips" :
     job.segment === "warehousing" ? "180 sqm" :
     "8 entries";
-  const revenueInr = job.revenueL * 100000;
-  const costInr = job.costL * 100000;
-  const gpInr = revenueInr - costInr;
-  const marginPct = job.revenueL > 0 ? (gpInr / revenueInr) * 100 : 0;
+  const revenueInr = job.revenue;
+  const costInr = job.cost;
+  const gpInr = job.grossProfit;
+  const marginPct =
+    job.marginPct !== null && Number.isFinite(job.marginPct)
+      ? job.marginPct
+      : revenueInr > 0
+        ? (gpInr / revenueInr) * 100
+        : 0;
   const revenueLines = scaleLines(revenueLinesForSegment(job.segment, job.customer, volume), revenueInr);
   const costLines = scaleLines(costLinesForSegment(job.segment, volume), costInr);
 
@@ -282,11 +287,11 @@ export function buildJobDetailFromRow(job: ProfitabilityJob): JobProfitabilityDe
     salesperson: REP_LABELS[job.rep] ?? job.rep,
     delivered: job.delivered,
     volume,
-    revenueL: job.revenueL,
-    costL: job.costL,
-    grossProfitL: job.revenueL - job.costL,
+    revenueL: revenueInr / 100_000,
+    costL: costInr / 100_000,
+    grossProfitL: gpInr / 100_000,
     marginPct,
-    perUnitLabel: perUnitLabel(job.segment, volume, job.revenueL - job.costL),
+    perUnitLabel: perUnitLabel(job.segment, volume, gpInr / 100_000),
     revenueLines,
     costLines,
     linkedDocuments: defaultLinkedDocuments(job),

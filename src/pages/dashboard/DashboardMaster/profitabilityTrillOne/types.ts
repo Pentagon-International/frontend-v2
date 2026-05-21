@@ -15,8 +15,11 @@ export type ProfitabilityJob = {
   branch: string;
   lane: string;
   rep: string;
-  revenueL: number;
-  costL: number;
+  revenue: number;
+  cost: number;
+  grossProfit: number;
+  marginPct: number | null;
+  currencyCode: string;
   delivered: string;
 };
 
@@ -28,12 +31,13 @@ export type ProfitabilityDrillContext = {
 };
 
 export type ProfitabilityDrillSummary = {
-  revenueL: number;
-  costL: number;
-  grossProfitL: number;
+  revenue: number;
+  cost: number;
+  grossProfit: number;
   marginPct: number;
   avgMarginPct: number;
   jobCount: number;
+  currencyCode: string;
   gpTrendText?: string;
   gpTrendUp?: boolean;
 };

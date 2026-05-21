@@ -36,6 +36,10 @@ export type BreakdownRow = {
   yoyDirection?: TrendDirection;
   /** When set, shows e.g. "▼ New" instead of a percentage. */
   yoyLabel?: string;
+  /** Tradelane drill (e.g. INMAA). */
+  originCode?: string;
+  /** Tradelane drill (e.g. JPNAH). */
+  destinationCode?: string;
 };
 
 export type BreakdownDimension = "segment" | "branch" | "customer" | "tradelane" | "salesperson";

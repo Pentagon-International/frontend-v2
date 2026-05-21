@@ -1,7 +1,7 @@
 import { Box, SimpleGrid, Text } from "@mantine/core";
 import { BAD, CARD_BG, GOOD, INK, INK_3, INK_4, LINE } from "./constants";
 import type { ProfitabilityDrillSummary } from "./types";
-import { formatLakhs } from "./utils";
+import { formatProfitabilityAmount } from "./utils";
 
 type ProfitabilityDrillKpiCardsProps = {
   summary: ProfitabilityDrillSummary;
@@ -62,9 +62,10 @@ export function ProfitabilityDrillKpiCards({
   summary,
   categoryBenchmarkPct,
 }: ProfitabilityDrillKpiCardsProps) {
+  const { currencyCode } = summary;
   const costPct =
-    summary.revenueL > 0
-      ? ((summary.costL / summary.revenueL) * 100).toFixed(1)
+    summary.revenue > 0
+      ? ((summary.cost / summary.revenue) * 100).toFixed(1)
       : "0.0";
   const benchmark = categoryBenchmarkPct ?? summary.marginPct;
 
@@ -72,29 +73,31 @@ export function ProfitabilityDrillKpiCards({
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={10} mb={16}>
       <MiniKpi
         label="Revenue"
-        value={`₹${formatLakhs(summary.revenueL)}`}
+        value={formatProfitabilityAmount(summary.revenue, currencyCode)}
         detail={`${summary.jobCount} jobs`}
       />
       <MiniKpi
         label="Direct Cost"
-        value={`₹${formatLakhs(summary.costL)}`}
-        detail={`${costPct}% of revenue`}
+        value={formatProfitabilityAmount(summary.cost, currencyCode)}
+        // detail={`${costPct}% of revenue`}
+        detail={``}
       />
       <MiniKpi
         label="Gross Profit"
-        value={`₹${formatLakhs(summary.grossProfitL)}`}
+        value={formatProfitabilityAmount(summary.grossProfit, currencyCode)}
         detail={
           summary.gpTrendText
             ? `${summary.gpTrendUp ? "▲" : "▼"} ${summary.gpTrendText}`
             : "—"
         }
-        valueColor={GOOD}
+        valueColor={summary.grossProfit >= 0 ? GOOD : BAD}
         detailColor={summary.gpTrendUp ? GOOD : BAD}
       />
       <MiniKpi
         label="Avg Margin"
         value={`${summary.avgMarginPct.toFixed(1)}%`}
-        detail={`Cat. avg ${benchmark.toFixed(1)}%`}
+        // detail={`Cat. avg ${benchmark.toFixed(1)}%`}
+        detail={``}
       />
     </SimpleGrid>
   );

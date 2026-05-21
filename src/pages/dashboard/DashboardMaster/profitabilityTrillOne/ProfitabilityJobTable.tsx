@@ -12,7 +12,12 @@ import {
   PAGE_BG,
 } from "./constants";
 import type { ProfitabilityJob } from "./types";
-import { formatLakhs, jobMarginPct, marginTone, profitabilityTrillFonts } from "./utils";
+import {
+  formatProfitabilityAmount,
+  jobMarginPct,
+  marginTone,
+  profitabilityTrillFonts,
+} from "./utils";
 
 const JL_GRID: React.CSSProperties = {
   display: "grid",
@@ -30,7 +35,14 @@ const MARGIN_STYLES = {
   bad: { background: "#fee2e2", color: "#b91c1c" },
 } as const;
 
-function MarginBadge({ marginPct }: { marginPct: number }) {
+function MarginBadge({ marginPct }: { marginPct: number | null }) {
+  if (marginPct === null || !Number.isFinite(marginPct)) {
+    return (
+      <Text fz={11} c={INK_4} style={{ textAlign: "right" }}>
+        —
+      </Text>
+    );
+  }
   const tone = marginTone(marginPct);
   const style = MARGIN_STYLES[tone];
   return (
@@ -54,11 +66,13 @@ function MarginBadge({ marginPct }: { marginPct: number }) {
 }
 
 function CurrencyCell({
-  valueL,
+  value,
+  currencyCode,
   bold = false,
   muted = false,
 }: {
-  valueL: number;
+  value: number;
+  currencyCode: string;
   bold?: boolean;
   muted?: boolean;
 }) {
@@ -72,10 +86,7 @@ function CurrencyCell({
         fontFamily: profitabilityTrillFonts.sans,
       }}
     >
-      <Text span c={INK_4} fz={10} mr={1}>
-        ₹
-      </Text>
-      {formatLakhs(valueL)}
+      {formatProfitabilityAmount(value, currencyCode)}
     </Text>
   );
 }
@@ -86,6 +97,8 @@ type ProfitabilityJobTableProps = {
 };
 
 export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTableProps) {
+  const currencyCode = jobs[0]?.currencyCode ?? "INR";
+
   return (
     <Box>
       <Flex align="baseline" justify="space-between" gap={12} mb={10} wrap="wrap">
@@ -93,7 +106,7 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
           Job-wise Profitability
         </Text>
         <Text fz={11} c={INK_4}>
-          {jobs.length} jobs · sorted by GP · click for P&amp;L
+          {jobs.length} rows · {currencyCode} · sorted by GP · click for P&amp;L
         </Text>
       </Flex>
 
@@ -136,8 +149,12 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
           </Box>
         ) : (
           jobs.map((job) => {
-            const gp = job.revenueL - job.costL;
-            const marginPct = jobMarginPct(job);
+            const displayMargin: number | null =
+              job.marginPct !== null && Number.isFinite(job.marginPct)
+                ? job.marginPct
+                : job.revenue > 0
+                  ? jobMarginPct(job)
+                  : null;
             return (
               <Box
                 key={job.id}
@@ -179,11 +196,11 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
                     {getLaneLabel(job.lane)}
                   </Text>
                 </Box>
-                <CurrencyCell valueL={job.revenueL} />
-                <CurrencyCell valueL={job.costL} muted />
-                <CurrencyCell valueL={gp} bold />
+                <CurrencyCell value={job.revenue} currencyCode={job.currencyCode} />
+                <CurrencyCell value={job.cost} currencyCode={job.currencyCode} muted />
+                <CurrencyCell value={job.grossProfit} currencyCode={job.currencyCode} bold />
                 <Flex justify="flex-end">
-                  <MarginBadge marginPct={marginPct} />
+                  <MarginBadge marginPct={displayMargin} />
                 </Flex>
                 <Flex justify="flex-end" align="center" c={INK_4}>
                   <IconChevronRight size={16} stroke={1.75} />

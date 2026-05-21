@@ -171,10 +171,12 @@ function normalizeBreakdownRow(raw: unknown, options?: { amountsInCr?: boolean }
   const yoyHasData = yoyRaw != null && yoyRaw !== "";
   const yoyPct = yoyHasData ? safeNumber(yoyRaw) : 0;
   return {
-    id: firstString(row.id, row.code) || undefined,
-    name: firstString(row.label, row.name, row.dimension, row.segment),
+    id: firstString(row.id, row.code, row.customer_code, row.customerCode) || undefined,
+    name: firstString(row.label, row.name, row.dimension, row.segment, row.customer_name),
     subtitle: firstString(row.mix_label, row.subtitle, row.sub, row.meta),
-    code: firstString(row.code, row.branch_code, row.branchCode) || undefined,
+    code:
+      firstString(row.code, row.customer_code, row.customerCode, row.branch_code, row.branchCode) ||
+      undefined,
     branchVariant:
       firstString(row.branch_variant, row.branchVariant).toLowerCase() || undefined,
     dotColor: firstString(row.dot_color, row.dotColor) || undefined,
@@ -189,6 +191,8 @@ function normalizeBreakdownRow(raw: unknown, options?: { amountsInCr?: boolean }
       row.direction ?? row.yoy_direction ?? row.yoyDirection ?? (yoyHasData ? yoyPct : undefined),
     ),
     yoyLabel: firstString(row.yoy_label, row.yoyLabel) || undefined,
+    originCode: firstString(row.origin_code, row.originCode) || undefined,
+    destinationCode: firstString(row.destination_code, row.destinationCode) || undefined,
   };
 }
 
@@ -330,7 +334,7 @@ function normalizeDimensionKey(value: unknown): BreakdownDimension | null {
   return null;
 }
 
-function unwrapProfitabilityPayload(raw: unknown): Record<string, unknown> {
+export function unwrapProfitabilityPayload(raw: unknown): Record<string, unknown> {
   const root = (raw ?? {}) as Record<string, unknown>;
   if (
     root.kpis != null ||

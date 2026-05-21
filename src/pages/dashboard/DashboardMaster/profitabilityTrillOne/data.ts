@@ -56,8 +56,11 @@ export const PROFITABILITY_JOBS: ProfitabilityJob[] = RAW_JOBS.map((job) => ({
   branch: job.branch,
   lane: job.lane,
   rep: job.rep,
-  revenueL: job.rev,
-  costL: job.cost,
+  revenue: job.rev,
+  cost: job.cost,
+  grossProfit: job.rev - job.cost,
+  marginPct: job.rev > 0 ? ((job.rev - job.cost) / job.rev) * 100 : null,
+  currencyCode: "INR",
   delivered: job.delivered,
 }));
 
@@ -114,16 +117,10 @@ export function buildDrillSummary(
   jobs: ProfitabilityJob[],
 ): ProfitabilityDrillSummary {
   const { row } = context;
-  const revenueL = row.revenue * 100;
-  const costL = row.cost * 100;
-  const grossProfitL = row.grossProfit * 100;
   const marginPct = row.marginPct;
   const avgMarginPct =
     jobs.length > 0
-      ? jobs.reduce((sum, job) => {
-          const gp = job.revenueL - job.costL;
-          return sum + (job.revenueL > 0 ? (gp / job.revenueL) * 100 : 0);
-        }, 0) / jobs.length
+      ? jobs.reduce((sum, job) => sum + (job.marginPct ?? jobMarginPct(job)), 0) / jobs.length
       : marginPct;
 
   const gpTrendUp =
@@ -135,21 +132,25 @@ export function buildDrillSummary(
       : `${row.yoyPct >= 0 ? "+" : ""}${row.yoyPct.toFixed(1)}%`);
 
   return {
-    revenueL,
-    costL,
-    grossProfitL,
+    revenue: row.revenue,
+    cost: row.cost,
+    grossProfit: row.grossProfit,
     marginPct,
     avgMarginPct,
     jobCount: jobs.length,
+    currencyCode: "INR",
     gpTrendText,
     gpTrendUp,
   };
 }
 
+function jobMarginPct(job: ProfitabilityJob): number {
+  if (job.marginPct !== null && Number.isFinite(job.marginPct)) return job.marginPct;
+  return job.revenue > 0 ? (job.grossProfit / job.revenue) * 100 : 0;
+}
+
 export function sortJobsByGrossProfit(jobs: ProfitabilityJob[]): ProfitabilityJob[] {
-  return [...jobs].sort(
-    (a, b) => b.revenueL - b.costL - (a.revenueL - a.costL),
-  );
+  return [...jobs].sort((a, b) => b.grossProfit - a.grossProfit);
 }
 
 export function getSegmentLabel(segment: ProfitabilityJob["segment"]): string {
