@@ -34,6 +34,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type CustomerType = {
   id: number;
@@ -42,6 +43,7 @@ type CustomerType = {
 };
 
 export default function CustomerTypeMaster() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const [data, setData] = useState<CustomerType[]>([]);
 
@@ -223,7 +225,8 @@ export default function CustomerTypeMaster() {
           >
             Bulk Upload
           </Button>
-          <Button
+          {isAdmin && (
+<Button
             size="xs"
             color="#105476"
             leftSection={<IconPlus size={16} />}
@@ -231,6 +234,7 @@ export default function CustomerTypeMaster() {
           >
             Create New
           </Button>
+            )}
         </Group>
       </Group>
       <MantineReactTable table={table} />

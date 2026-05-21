@@ -29,6 +29,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "NETWORK_MASTER";
 
@@ -54,6 +55,7 @@ type NetworkApiResponse = {
 };
 
 export default function NetworkMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState("");
@@ -409,7 +411,8 @@ export default function NetworkMasterList() {
                 },
               }}
             />
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -433,6 +436,7 @@ export default function NetworkMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>

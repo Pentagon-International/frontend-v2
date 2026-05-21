@@ -35,6 +35,7 @@ import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useForm } from "@mantine/form";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type CustomerRelationshipMappingData = {
   sno: number;
@@ -71,6 +72,7 @@ type FilterState = {
 };
 
 function CustomerRelationshipMappingMaster() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -617,7 +619,8 @@ function CustomerRelationshipMappingMaster() {
             >
               Filters
             </Button>
-            <Button
+            {isAdmin && (
+<Button
               variant="filled"
               leftSection={<IconPlus size={14} />}
               size="xs"
@@ -626,6 +629,7 @@ function CustomerRelationshipMappingMaster() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
 

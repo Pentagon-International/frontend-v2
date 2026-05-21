@@ -37,6 +37,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "GST_SAC_MASTER";
 
@@ -57,6 +58,7 @@ type GSTSACFilters = {
 };
 
 export default function GSTSACMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -478,7 +480,8 @@ export default function GSTSACMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -503,6 +506,7 @@ export default function GSTSACMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>

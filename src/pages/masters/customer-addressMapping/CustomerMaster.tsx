@@ -49,6 +49,9 @@ import { useForm } from "@mantine/form";
 import { SearchableSelect } from "../../../components";
 import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import useAuthStore from "../../../store/authStore";
+import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 type AddressData = {
   id?: number;
@@ -260,6 +263,15 @@ type CustomerDataResponse = {
 };
 
 function CustomerMaster() {
+  const isAdmin = useIsAdminUser();
+  const userCountry = useAuthStore((s) => s.user?.country);
+  const isIndiaUser =
+    isIndianUserCountry(userCountry?.country_code) ||
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
+  // India: create only for admins; foreign branches: all users may create
+  const showCreateButton = isIndiaUser ? isAdmin : true;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -1292,15 +1304,17 @@ function CustomerMaster() {
               Filters
             </Button>
 
-            <Button
-              variant="filled"
-              leftSection={<IconPlus size={14} />}
-              size="xs"
-              color="#105476"
-              onClick={() => navigate("./create")}
-            >
-              Create New
-            </Button>
+            {showCreateButton && (
+              <Button
+                variant="filled"
+                leftSection={<IconPlus size={14} />}
+                size="xs"
+                color="#105476"
+                onClick={() => navigate("./create")}
+              >
+                Create New
+              </Button>
+            )}
           </Group>
         </Group>
 

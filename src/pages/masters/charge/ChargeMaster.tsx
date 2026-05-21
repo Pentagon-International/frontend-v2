@@ -41,6 +41,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "CHARGE_MASTER";
 
@@ -60,6 +61,7 @@ type ChargeFilters = {
 };
 
 export default function ChargeMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -512,7 +514,8 @@ export default function ChargeMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -537,6 +540,7 @@ export default function ChargeMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>

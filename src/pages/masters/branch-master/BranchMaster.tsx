@@ -37,6 +37,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type Branch = {
   id: number;
@@ -63,6 +64,7 @@ type BranchApiResponse = {
 };
 
 export default function BranchMaster() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -372,14 +374,16 @@ export default function BranchMaster() {
         <Text size="md" fw={600}>
           Branch Master List
         </Text>
-        <Button
-          color="#105476"
-          leftSection={<IconPlus size={16} />}
-          size="xs"
-          onClick={() => navigate("/master/branch-master-new")}
-        >
-          Create New
-        </Button>
+        {isAdmin && (
+          <Button
+            color="#105476"
+            leftSection={<IconPlus size={16} />}
+            size="xs"
+            onClick={() => navigate("/master/branch-master-new")}
+          >
+            Create New
+          </Button>
+        )}
       </Group>
 
       {branches.length === 0 ? (

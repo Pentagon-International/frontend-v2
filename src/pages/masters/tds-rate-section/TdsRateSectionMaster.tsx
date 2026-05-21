@@ -36,6 +36,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "TDS_SECTION_MASTER";
 
@@ -54,6 +55,7 @@ type TdsSectionFilters = {
 };
 
 export default function TdsRateSectionMaster() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -488,7 +490,8 @@ export default function TdsRateSectionMaster() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -513,6 +516,7 @@ export default function TdsRateSectionMaster() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>
