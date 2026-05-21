@@ -66,6 +66,14 @@ function isGstRegistrationRegistered(status: unknown): boolean {
   );
 }
 
+/** True when address country is India (code IN or name contains "india"). */
+function isIndiaAddressCountry(country: string | null | undefined): boolean {
+  const raw = String(country ?? "").trim();
+  if (!raw) return false;
+  if (raw.toUpperCase() === "IN") return true;
+  return raw.toLowerCase().includes("india");
+}
+
 function isAgentCustomerType(
   codes?: string[],
   options?: Array<{ value: string; label: string }>,
@@ -333,7 +341,11 @@ const addressItemSchema = yup.object({
     .required("Country is required")
     .min(2, "Country must be at least 2 characters")
     .max(50, "Country must not exceed 50 characters"),
-  state: yup.string().required("State is required"),
+  state: yup.string().when("country", {
+    is: (country: string | undefined) => isIndiaAddressCountry(country),
+    then: (schema) => schema.required("State is required"),
+    otherwise: (schema) => schema.optional(),
+  }),
   phone_no: yup
     .string()
     .matches(
@@ -882,6 +894,11 @@ const AddressCard = ({
   const msmeEnabled = parseYesNoBoolean(
     addressForm.values.addresses_data[index]?.msme,
   );
+  const addressCountryValue =
+    selectedCountries[index] ??
+    addressForm.values.addresses_data[index]?.country ??
+    "";
+  const isStateRequired = isIndiaAddressCountry(addressCountryValue);
 
   return (
     <Card key={index} shadow="xs" padding="md">
@@ -985,7 +1002,7 @@ const AddressCard = ({
             <Grid.Col span={4}>
               <Select
                 label="State"
-                withAsterisk
+                withAsterisk={isStateRequired}
                 placeholder="Select state"
                 searchable
                 data={
