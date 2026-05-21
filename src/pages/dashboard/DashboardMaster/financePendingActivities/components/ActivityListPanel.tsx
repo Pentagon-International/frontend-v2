@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Flex,
+  Group,
   Skeleton,
   Text,
 } from "@mantine/core";
@@ -48,6 +49,7 @@ type ActivityListPanelProps = {
   loading?: boolean;
   showTypeColumn?: boolean;
   compact?: boolean;
+  onPageChange?: (pageIndex: number) => void;
 };
 
 export function ActivityListPanel({
@@ -55,11 +57,21 @@ export function ActivityListPanel({
   loading,
   showTypeColumn,
   compact,
+  onPageChange,
 }: ActivityListPanelProps) {
   const [activeTab, setActiveTab] = useState(panel.filterTabs?.[0]?.value ?? "all");
   const rowGrid = showTypeColumn ? PA_VOUCHER_ROW_GRID : PA_ACTIVITY_ROW_GRID;
   const tone: PendingActivityCategory = panel.id;
   const Icon = ICONS[tone];
+  const pagination = panel.pagination;
+  const pageCount =
+    pagination && pagination.limit > 0
+      ? Math.max(1, Math.ceil(pagination.total / pagination.limit))
+      : 0;
+  const currentPage =
+    pagination && pagination.limit > 0
+      ? Math.floor(pagination.index / pagination.limit) + 1
+      : 1;
 
   const headerStyle = {
     fontSize: 10,
@@ -163,11 +175,17 @@ export function ActivityListPanel({
         </Box>
 
         {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
+          Array.from({ length: pagination?.limit ?? 4 }).map((_, i) => (
             <Box key={i} px={16} py={8}>
               <Skeleton height={36} />
             </Box>
           ))
+        ) : panel.items.length === 0 ? (
+          <Box px={16} py={24} style={{ textAlign: "center" }}>
+            <Text fz={12} c={PA_INK_4}>
+              No items in this period.
+            </Text>
+          </Box>
         ) : (
           panel.items.map((item) => (
             <Box
@@ -295,7 +313,62 @@ export function ActivityListPanel({
         )}
       </Box>
 
-      {panel.moreCount ? (
+      {pagination && pageCount > 1 && onPageChange ? (
+        <Flex
+          px={16}
+          py={10}
+          align="center"
+          justify="space-between"
+          gap={8}
+          wrap="wrap"
+          style={{
+            borderTop: `1px solid ${PA_LINE}`,
+            background: "#f8fafc",
+          }}
+        >
+          <Text fz={11} c={PA_INK_4}>
+            {pagination.total} {panel.moreLabel ?? "items"}
+            {panel.moreCount ? ` · ${panel.moreCount} not shown` : ""}
+          </Text>
+          <Group gap={6}>
+            <Button
+              size="compact-xs"
+              variant="default"
+              disabled={loading || currentPage <= 1}
+              onClick={() => onPageChange(Math.max(0, pagination.index - pagination.limit))}
+              styles={{
+                root: {
+                  height: 28,
+                  borderColor: PA_LINE,
+                  fontSize: 11,
+                  fontWeight: 500,
+                },
+              }}
+            >
+              Previous
+            </Button>
+            <Text fz={11} c={PA_INK_3} style={{ fontVariantNumeric: "tabular-nums" }}>
+              Page {currentPage} of {pageCount}
+            </Text>
+            <Button
+              size="compact-xs"
+              variant="default"
+              disabled={loading || currentPage >= pageCount}
+              onClick={() => onPageChange(pagination.index + pagination.limit)}
+              styles={{
+                root: {
+                  height: 28,
+                  borderColor: PA_LINE,
+                  fontSize: 11,
+                  fontWeight: 500,
+                },
+              }}
+            >
+              Next
+            </Button>
+          </Group>
+        </Flex>
+      ) : panel.moreCount ? (
         <Box
           px={16}
           py={10}
@@ -306,10 +379,7 @@ export function ActivityListPanel({
           }}
         >
           <Text fz={11.5} c={PA_INK_3}>
-            + {panel.moreCount} more {panel.moreLabel ?? "items"} ·{" "}
-            <Text component="span" c={PA_NAVY_800} fw={600} style={{ cursor: "pointer" }}>
-              View all
-            </Text>
+            + {panel.moreCount} more {panel.moreLabel ?? "items"}
           </Text>
         </Box>
       ) : null}

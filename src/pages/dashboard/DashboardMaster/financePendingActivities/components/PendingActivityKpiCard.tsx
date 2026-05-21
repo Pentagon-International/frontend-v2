@@ -24,9 +24,16 @@ const ICONS = {
 type PendingActivityKpiCardProps = {
   kpi: PendingActivityKpi;
   loading?: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
 };
 
-export function PendingActivityKpiCard({ kpi, loading }: PendingActivityKpiCardProps) {
+export function PendingActivityKpiCard({
+  kpi,
+  loading,
+  selected,
+  onSelect,
+}: PendingActivityKpiCardProps) {
   const Icon = ICONS[kpi.id];
 
   if (loading) {
@@ -52,12 +59,20 @@ export function PendingActivityKpiCard({ kpi, loading }: PendingActivityKpiCardP
 
   return (
     <Box
+      component={onSelect ? "button" : "div"}
+      type={onSelect ? "button" : undefined}
+      onClick={onSelect}
       style={{
-        background: PA_CARD_BG,
-        border: `1px solid ${PA_LINE}`,
+        background: selected ? "#f8fafc" : PA_CARD_BG,
+        border: selected ? `2px solid ${PA_KPI_STRIPE[kpi.id]}` : `1px solid ${PA_LINE}`,
         borderRadius: 10,
         overflow: "hidden",
         position: "relative",
+        cursor: onSelect ? "pointer" : "default",
+        textAlign: "left",
+        width: "100%",
+        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        boxShadow: selected ? "0 4px 14px rgba(15, 39, 68, 0.08)" : "none",
       }}
     >
       <Box

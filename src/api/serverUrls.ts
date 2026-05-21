@@ -222,7 +222,7 @@ export const URL = {
     collectionTargetVsPerformance: "dashboard/collection-target-vs-performance/",
     collectionBranchInvoices: "dashboard/collection-branch-invoices/",
     financeOutstandingAgeing: "dashboard/finance-outstanding-ageing/",
-    financePendingActivities: "dashboard/finance-pending-activities/",
+    financePendingActivities: "dashboard/pending-activities/",
     gainedQuotationsWithoutBooking:
       "pipeline/gained-quotations-without-booking/",
     gainedBookingsPendingJobs: "pipeline/gained-bookings-pending-jobs/",

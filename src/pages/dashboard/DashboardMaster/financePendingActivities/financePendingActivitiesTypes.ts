@@ -57,6 +57,12 @@ export type ActivityListItem = {
   statusNote?: string;
 };
 
+export type ActivityListPagination = {
+  index: number;
+  limit: number;
+  total: number;
+};
+
 export type ActivityListPanel = {
   id: PendingActivityCategory;
   title: string;
@@ -66,6 +72,7 @@ export type ActivityListPanel = {
   items: ActivityListItem[];
   moreCount?: number;
   moreLabel?: string;
+  pagination?: ActivityListPagination;
 };
 
 export type FinancePendingActivitiesData = {
@@ -84,4 +91,46 @@ export type FinancePendingActivitiesData = {
     branches?: { value: string; label: string }[];
     owners?: { value: string; label: string }[];
   };
+};
+
+export const EMPTY_BRANCH_TOTAL: BranchOpenItemRow = {
+  branchName: "All Branches",
+  invoiceCount: 0,
+  invoiceAmountCr: 0,
+  costCount: 0,
+  costAmountCr: 0,
+  distribution: [],
+  totalExposureCr: 0,
+  owner: "",
+};
+
+export const EMPTY_FINANCE_PENDING_ACTIVITIES: FinancePendingActivitiesData = {
+  meta: {
+    title: "Pending Activities",
+    subtitle: "",
+    asOfLabel: "Open as of today",
+  },
+  kpis: [],
+  byBranch: { rows: [], total: EMPTY_BRANCH_TOTAL },
+  invoicesPanel: {
+    id: "invoices",
+    title: "Invoices to Raise",
+    subtitle: "",
+    totalCount: 0,
+    items: [],
+  },
+  costsPanel: {
+    id: "costs",
+    title: "Costs to Book",
+    subtitle: "",
+    totalCount: 0,
+    items: [],
+  },
+  vouchersPanel: {
+    id: "vouchers",
+    title: "Vouchers Awaiting Approval",
+    subtitle: "",
+    totalCount: 0,
+    items: [],
+  },
 };

@@ -188,6 +188,12 @@ export function BranchOpenItemsTable({ section, loading }: BranchOpenItemsTableP
               <Skeleton height={40} />
             </Box>
           ))
+        ) : section.rows.length === 0 ? (
+          <Box px={18} py={28} style={{ textAlign: "center" }}>
+            <Text fz={12} c={PA_INK_4}>
+              No branch breakdown for the selected filters.
+            </Text>
+          </Box>
         ) : (
           <>
             {section.rows.map((row) => (

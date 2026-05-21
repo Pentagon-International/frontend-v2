@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+import { formatAmountInCr } from "../accountsDashboardNormalize";
 import type {
   ActivityListItem,
   ActivityListPanel,
@@ -7,11 +9,22 @@ import type {
   PendingActivityCategory,
   PendingActivityKpi,
 } from "./financePendingActivitiesTypes";
-import { FINANCE_PENDING_ACTIVITIES_MOCK } from "./financePendingActivitiesMock";
+import {
+  EMPTY_BRANCH_TOTAL,
+  EMPTY_FINANCE_PENDING_ACTIVITIES,
+} from "./financePendingActivitiesTypes";
+import type { PendingActivitiesTopLists } from "./financePendingActivitiesApi";
+
+const CRORE = 10_000_000;
 
 function safeNumber(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined) return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function inrToCr(inr: number): number {
+  return inr / CRORE;
 }
 
 function firstString(...values: unknown[]): string {
@@ -30,156 +43,363 @@ function categoryId(value: unknown): PendingActivityCategory {
   return "invoices";
 }
 
-function normalizeKpi(raw: unknown, index: number): PendingActivityKpi {
+const PANEL_DEFAULTS: Record<
+  PendingActivityCategory,
+  Pick<ActivityListPanel, "id" | "title" | "moreLabel">
+> = {
+  invoices: { id: "invoices", title: "Invoices to Raise", moreLabel: "invoices" },
+  costs: { id: "costs", title: "Costs to Book", moreLabel: "entries" },
+  vouchers: { id: "vouchers", title: "Vouchers Awaiting Approval", moreLabel: "vouchers" },
+  credit_notes: { id: "credit_notes", title: "Credit Notes Pending", moreLabel: "credit notes" },
+};
+
+const KPI_ORDER: PendingActivityCategory[] = [
+  "invoices",
+  "costs",
+  "vouchers",
+  "credit_notes",
+];
+
+const SUMMARY_KEY: Record<PendingActivityCategory, string> = {
+  invoices: "invoices_to_raise",
+  costs: "costs_to_book",
+  vouchers: "vouchers_pending",
+  credit_notes: "credit_notes_pending",
+};
+
+function formatCountExposure(count: number, exposureInr: number): string {
+  return `${count} · ₹${formatAmountInCr(inrToCr(exposureInr))}`;
+}
+
+function kpiHighlight(
+  category: PendingActivityCategory,
+  row: Record<string, unknown>,
+): Pick<PendingActivityKpi, "highlightLabel" | "highlightValue" | "highlightTone"> {
+  switch (category) {
+    case "invoices": {
+      const over30 = safeNumber(row.over_30d);
+      return over30 > 0
+        ? { highlightLabel: "Over 30d", highlightValue: over30, highlightTone: "warn" }
+        : {};
+    }
+    case "costs": {
+      const preMec = safeNumber(row.pre_mec);
+      return preMec > 0
+        ? { highlightLabel: "Pre-MEC", highlightValue: preMec, highlightTone: "warn" }
+        : {};
+    }
+    case "vouchers": {
+      const over7 = safeNumber(row.over_7d);
+      return over7 > 0
+        ? { highlightLabel: "Over 7d", highlightValue: over7, highlightTone: "bad" }
+        : {};
+    }
+    case "credit_notes": {
+      const disputes = safeNumber(row.disputes);
+      return disputes > 0
+        ? { highlightLabel: "Disputes", highlightValue: disputes, highlightTone: "bad" }
+        : {};
+    }
+    default:
+      return {};
+  }
+}
+
+function normalizeKpiFromSummary(
+  category: PendingActivityCategory,
+  raw: unknown,
+): PendingActivityKpi {
   const row = (raw ?? {}) as Record<string, unknown>;
-  const id = categoryId(row.id ?? row.category ?? index);
-  const highlightToneRaw = firstString(row.highlight_tone, row.highlightTone).toLowerCase();
+  const exposure = safeNumber(row.total_exposure ?? row.exposure ?? row.amount);
   return {
-    id,
-    label: firstString(row.label, row.title, `KPI ${index + 1}`),
-    subtitle: firstString(row.subtitle, row.sub),
-    amountCr: safeNumber(row.amount_cr ?? row.amountCr ?? row.amount),
-    amountDisplay: firstString(row.amount_display, row.amountDisplay) || undefined,
+    id: category,
+    label: firstString(row.title, PANEL_DEFAULTS[category].title),
+    subtitle: firstString(row.description, row.subtitle),
+    amountCr: inrToCr(exposure),
     count: safeNumber(row.count),
-    avgAgeDays: safeNumber(row.avg_age_days ?? row.avgAgeDays ?? row.avg_age),
-    highlightLabel: firstString(row.highlight_label, row.highlightLabel) || undefined,
-    highlightValue: safeNumber(row.highlight_value ?? row.highlightValue) || undefined,
-    highlightTone:
-      highlightToneRaw === "bad" ? "bad" : highlightToneRaw === "warn" ? "warn" : undefined,
+    avgAgeDays: safeNumber(row.avg_age_days ?? row.avgAgeDays),
+    ...kpiHighlight(category, row),
   };
 }
 
-function normalizeDistribution(raw: unknown): BranchOpenItemRow["distribution"] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((seg) => {
-    const s = (seg ?? {}) as Record<string, unknown>;
-    return {
-      category: categoryId(s.category ?? s.type),
-      flex: safeNumber(s.flex ?? s.weight, 1),
-    };
+function normalizeKpis(summary: unknown): PendingActivityKpi[] {
+  if (!summary || typeof summary !== "object") return [];
+  const record = summary as Record<string, unknown>;
+  return KPI_ORDER.map((category) => {
+    const key = SUMMARY_KEY[category];
+    const block = record[key];
+    if (!block || typeof block !== "object") {
+      return {
+        id: category,
+        label: PANEL_DEFAULTS[category].title,
+        subtitle: "",
+        amountCr: 0,
+        count: 0,
+        avgAgeDays: 0,
+      };
+    }
+    return normalizeKpiFromSummary(category, block);
   });
+}
+
+function normalizeDistributionFromPct(
+  pct: Record<string, unknown> | undefined,
+): BranchOpenItemRow["distribution"] {
+  if (!pct) return [];
+  return Object.entries(pct)
+    .map(([key, value]) => ({
+      category: categoryId(key),
+      flex: safeNumber(value, 0),
+    }))
+    .filter((seg) => seg.flex > 0);
+}
+
+function normalizeDistributionFromAmounts(
+  amounts: Record<string, unknown> | undefined,
+): BranchOpenItemRow["distribution"] {
+  if (!amounts) return [];
+  return Object.entries(amounts)
+    .map(([key, value]) => ({
+      category: categoryId(key),
+      flex: safeNumber(value, 0),
+    }))
+    .filter((seg) => seg.flex > 0);
 }
 
 function normalizeBranchRow(raw: unknown): BranchOpenItemRow {
   const row = (raw ?? {}) as Record<string, unknown>;
+  const invoices = (row.invoices ?? {}) as Record<string, unknown>;
+  const costs = (row.costs ?? {}) as Record<string, unknown>;
+  const branchCode = firstString(row.branch_code, row.branchCode);
+  const invoiceExposure = safeNumber(invoices.exposure ?? invoices.amount);
+  const costExposure = safeNumber(costs.exposure ?? costs.amount);
+  const totalExposure = safeNumber(row.total_exposure ?? row.totalExposureCr);
+
   return {
-    id: firstString(row.id, row.code) || undefined,
-    branchName: firstString(row.branch_name, row.branchName, row.name),
-    branchVariant: firstString(row.branch_variant, row.branchVariant).toLowerCase() || undefined,
-    subtitle: firstString(row.subtitle, row.sub),
-    watchLabel: firstString(row.watch_label, row.watchLabel) || undefined,
-    watchTone:
-      firstString(row.watch_tone, row.watchTone).toLowerCase() === "bad"
-        ? "bad"
-        : firstString(row.watch_tone, row.watchTone).toLowerCase() === "warn"
-          ? "warn"
-          : undefined,
-    invoiceCount: safeNumber(row.invoice_count ?? row.invoiceCount),
-    invoiceAmountCr: safeNumber(row.invoice_amount_cr ?? row.invoiceAmountCr),
-    invoiceDisplay: firstString(row.invoice_display, row.invoiceDisplay) || undefined,
-    costCount: safeNumber(row.cost_count ?? row.costCount),
-    costAmountCr: safeNumber(row.cost_amount_cr ?? row.costAmountCr),
-    costDisplay: firstString(row.cost_display, row.costDisplay) || undefined,
-    distribution: normalizeDistribution(row.distribution ?? row.distribution_segments),
-    totalExposureCr: safeNumber(row.total_exposure_cr ?? row.totalExposureCr),
-    totalExposureDisplay:
-      firstString(row.total_exposure_display, row.totalExposureDisplay) || undefined,
-    owner: firstString(row.owner, row.owner_name),
+    id: branchCode || undefined,
+    branchName: firstString(row.branch_name, row.branchName, branchCode),
+    branchVariant: branchCode.toLowerCase() || undefined,
+    invoiceCount: safeNumber(invoices.count),
+    invoiceAmountCr: inrToCr(invoiceExposure),
+    invoiceDisplay: formatCountExposure(safeNumber(invoices.count), invoiceExposure),
+    costCount: safeNumber(costs.count),
+    costAmountCr: inrToCr(costExposure),
+    costDisplay: formatCountExposure(safeNumber(costs.count), costExposure),
+    distribution:
+      normalizeDistributionFromPct(row.distribution_pct as Record<string, unknown>) ||
+      normalizeDistributionFromAmounts(row.distribution as Record<string, unknown>),
+    totalExposureCr: inrToCr(totalExposure),
+    totalExposureDisplay: `₹${formatAmountInCr(inrToCr(totalExposure))}`,
+    owner: firstString(row.owner, row.owner_name) || "—",
+  };
+}
+
+function sumBranchRows(rows: BranchOpenItemRow[]): BranchOpenItemRow {
+  const total = rows.reduce(
+    (acc, row) => ({
+      invoiceCount: acc.invoiceCount + row.invoiceCount,
+      invoiceAmountCr: acc.invoiceAmountCr + row.invoiceAmountCr,
+      costCount: acc.costCount + row.costCount,
+      costAmountCr: acc.costAmountCr + row.costAmountCr,
+      totalExposureCr: acc.totalExposureCr + row.totalExposureCr,
+      distribution: [] as BranchOpenItemRow["distribution"],
+    }),
+    {
+      invoiceCount: 0,
+      invoiceAmountCr: 0,
+      costCount: 0,
+      costAmountCr: 0,
+      totalExposureCr: 0,
+      distribution: [] as BranchOpenItemRow["distribution"],
+    },
+  );
+
+  const invoiceInr = total.invoiceAmountCr * CRORE;
+  const costInr = total.costAmountCr * CRORE;
+  const totalInr = total.totalExposureCr * CRORE;
+
+  return {
+    branchName: "All Branches",
+    invoiceCount: total.invoiceCount,
+    invoiceAmountCr: total.invoiceAmountCr,
+    invoiceDisplay: formatCountExposure(total.invoiceCount, invoiceInr),
+    costCount: total.costCount,
+    costAmountCr: total.costAmountCr,
+    costDisplay: formatCountExposure(total.costCount, costInr),
+    distribution: [],
+    totalExposureCr: total.totalExposureCr,
+    totalExposureDisplay: `₹${formatAmountInCr(inrToCr(totalInr))}`,
+    owner: "",
   };
 }
 
 function normalizeBranchSection(raw: unknown): BranchOpenItemsSection {
-  const section = (raw ?? {}) as Record<string, unknown>;
-  const rowsRaw = Array.isArray(section.rows) ? section.rows : [];
+  const rowsRaw = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as Record<string, unknown>)?.rows)
+      ? ((raw as Record<string, unknown>).rows as unknown[])
+      : [];
   const rows = rowsRaw.map(normalizeBranchRow);
-  const totalRaw = section.total ?? {};
   return {
-    rows: rows.length ? rows : FINANCE_PENDING_ACTIVITIES_MOCK.byBranch.rows,
-    total: rows.length
-      ? normalizeBranchRow(totalRaw)
-      : FINANCE_PENDING_ACTIVITIES_MOCK.byBranch.total,
+    rows,
+    total: rows.length ? sumBranchRows(rows) : EMPTY_BRANCH_TOTAL,
   };
 }
 
-function normalizeActivityItem(raw: unknown): ActivityListItem {
+function normalizeActivityItem(
+  raw: unknown,
+  category: PendingActivityCategory,
+  index: number,
+): ActivityListItem {
   const row = (raw ?? {}) as Record<string, unknown>;
+  const amountInr = safeNumber(row.amount ?? row.exposure);
+  const amounts = Array.isArray(row.amounts) ? row.amounts : [];
+  const firstShipment = (amounts[0] ?? {}) as Record<string, unknown>;
+  const isVoucher = category === "vouchers";
+
+  const title = isVoucher
+    ? firstString(row.beneficiary, row.title)
+    : firstString(row.customer_name, row.customer, row.beneficiary, row.title);
+
+  const reference = isVoucher
+    ? firstString(row.voucher_no, row.reference)
+    : firstString(row.job_ref, firstShipment.shipment_id, row.reference);
+
+  const rowId = firstString(row.id);
+  const uniqueId = rowId ? `${rowId}-${index}` : `row-${index}`;
+
   return {
-    id: firstString(row.id) || undefined,
-    iconTone: categoryId(row.icon_tone ?? row.iconTone ?? row.category),
-    title: firstString(row.title, row.name, row.customer, row.vendor),
-    subtitle: firstString(row.subtitle, row.sub),
-    reference: firstString(row.reference, row.job_ref, row.jobRef),
-    amountCr: safeNumber(row.amount_cr ?? row.amountCr ?? row.amount),
-    amountDisplay: firstString(row.amount_display, row.amountDisplay) || undefined,
-    ageDays: safeNumber(row.age_days ?? row.ageDays ?? row.age),
+    id: uniqueId,
+    iconTone: category,
+    title: title || "—",
+    subtitle: firstString(row.subtitle, row.description),
+    reference: reference || "—",
+    amountCr: inrToCr(amountInr),
+    ageDays: safeNumber(row.age_days ?? row.ageDays),
     branchCode: firstString(row.branch_code, row.branchCode) || undefined,
-    branchVariant: firstString(row.branch_variant, row.branchVariant).toLowerCase() || undefined,
-    typeTag: firstString(row.type_tag, row.typeTag, row.type) || undefined,
-    statusNote: firstString(row.status_note, row.statusNote) || undefined,
+    branchVariant: firstString(row.branch_code, row.branchVariant).toLowerCase() || undefined,
+    typeTag: isVoucher ? firstString(row.type, row.type_tag) || undefined : undefined,
+    statusNote: firstString(row.status_note, row.subtitle) || undefined,
   };
 }
 
-function normalizePanel(raw: unknown, fallback: ActivityListPanel): ActivityListPanel {
+function normalizePanel(
+  raw: unknown,
+  category: PendingActivityCategory,
+  topList?: { index: number; limit: number },
+): ActivityListPanel {
   const panel = (raw ?? {}) as Record<string, unknown>;
-  const itemsRaw = Array.isArray(panel.items) ? panel.items : [];
-  const tabsRaw = panel.filter_tabs ?? panel.filterTabs;
+  const defaults = PANEL_DEFAULTS[category];
+  const itemsRaw = Array.isArray(panel.rows)
+    ? panel.rows
+    : Array.isArray(panel.items)
+      ? panel.items
+      : Array.isArray(panel.results)
+        ? panel.results
+        : [];
+  const totalCount = safeNumber(panel.total ?? panel.count ?? panel.total_count);
+  const index = safeNumber(panel.index, topList?.index ?? 0);
+  const limit = safeNumber(panel.limit, topList?.limit ?? itemsRaw.length);
+  const items = itemsRaw.map((item, i) => normalizeActivityItem(item, category, index + i));
+  const remaining = Math.max(0, totalCount - index - items.length);
+
   return {
-    id: categoryId(panel.id ?? fallback.id),
-    title: firstString(panel.title, fallback.title),
-    subtitle: firstString(panel.subtitle, fallback.subtitle),
-    totalCount: safeNumber(panel.total_count ?? panel.totalCount, fallback.totalCount),
-    filterTabs: Array.isArray(tabsRaw)
-      ? tabsRaw.map((t) => {
-          const tab = (t ?? {}) as Record<string, unknown>;
-          return {
-            value: firstString(tab.value, tab.id),
-            label: firstString(tab.label, tab.name),
-          };
-        })
-      : fallback.filterTabs,
-    items: itemsRaw.length ? itemsRaw.map(normalizeActivityItem) : fallback.items,
-    moreCount: safeNumber(panel.more_count ?? panel.moreCount) || fallback.moreCount,
-    moreLabel: firstString(panel.more_label, panel.moreLabel) || fallback.moreLabel,
+    id: category,
+    title: firstString(panel.title, defaults.title),
+    subtitle: firstString(panel.subtitle, panel.description),
+    totalCount,
+    items,
+    moreCount: remaining > 0 ? remaining : undefined,
+    moreLabel: defaults.moreLabel,
+    pagination:
+      totalCount > 0
+        ? { index, limit, total: totalCount }
+        : undefined,
   };
 }
 
-export function normalizeFinancePendingActivities(raw: unknown): FinancePendingActivitiesData {
-  const root = (raw ?? {}) as Record<string, unknown>;
-  const data = ((root.data ?? root.result ?? root) ?? {}) as Record<string, unknown>;
-  const metaRaw = (data.meta ?? data.header ?? {}) as Record<string, unknown>;
-  const kpisRaw = Array.isArray(data.kpis) ? data.kpis : [];
+function branchFilterOptions(
+  branches: BranchOpenItemRow[],
+): FinancePendingActivitiesData["filterOptions"] {
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+  for (const row of branches) {
+    const code = row.id ?? row.branchVariant?.toUpperCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    options.push({ value: code, label: row.branchName || code });
+  }
+  return { branches: options.length ? options : undefined };
+}
+
+function buildMeta(
+  root: Record<string, unknown>,
+  data: Record<string, unknown>,
+  filters: Record<string, unknown>,
+): FinancePendingActivitiesData["meta"] {
+  const dateFrom = firstString(filters.date_from, data.date_from);
+  const dateTo = firstString(filters.date_to, data.date_to, filters.as_of, data.as_of);
+  const asOf = firstString(filters.as_of, data.as_of, dateTo);
+  const company = firstString(filters.company_name, filters.company);
+
+  let subtitle = firstString(data.subtitle);
+  if (!subtitle && dateFrom && dateTo) {
+    const from = dayjs(dateFrom);
+    const to = dayjs(dateTo);
+    if (from.isValid() && to.isValid()) {
+      subtitle =
+        from.year() === to.year()
+          ? `${from.format("D MMM")} – ${to.format("D MMM YYYY")}`
+          : `${from.format("D MMM YYYY")} – ${to.format("D MMM YYYY")}`;
+    }
+  }
+  if (company) {
+    subtitle = subtitle ? `${company} · ${subtitle}` : company;
+  }
+
+  const asOfLabel = asOf && dayjs(asOf).isValid()
+    ? `Open · ${dayjs(asOf).format("D MMM YYYY")}`
+    : "Open as of today";
 
   return {
-    meta: {
-      title: firstString(metaRaw.title, data.title, "Pending Activities"),
-      subtitle: firstString(metaRaw.subtitle, data.subtitle, FINANCE_PENDING_ACTIVITIES_MOCK.meta.subtitle),
-      asOfLabel: firstString(metaRaw.as_of_label, metaRaw.asOfLabel, "Open as of today"),
-    },
-    kpis: kpisRaw.length ? kpisRaw.map(normalizeKpi) : FINANCE_PENDING_ACTIVITIES_MOCK.kpis,
-    byBranch: normalizeBranchSection(data.by_branch ?? data.byBranch),
-    invoicesPanel: normalizePanel(
-      data.invoices_panel ?? data.invoicesPanel,
-      FINANCE_PENDING_ACTIVITIES_MOCK.invoicesPanel,
-    ),
-    costsPanel: normalizePanel(
-      data.costs_panel ?? data.costsPanel,
-      FINANCE_PENDING_ACTIVITIES_MOCK.costsPanel,
-    ),
-    vouchersPanel: normalizePanel(
-      data.vouchers_panel ?? data.vouchersPanel,
-      FINANCE_PENDING_ACTIVITIES_MOCK.vouchersPanel,
-    ),
-    creditNotesPanel: data.credit_notes_panel
-      ? normalizePanel(data.credit_notes_panel, {
-          id: "credit_notes",
-          title: "Credit Notes Pending",
-          subtitle: "",
-          totalCount: 0,
-          items: [],
-        })
-      : undefined,
-    filterOptions:
-      (data.filter_options as FinancePendingActivitiesData["filterOptions"]) ??
-      FINANCE_PENDING_ACTIVITIES_MOCK.filterOptions,
+    title: firstString(data.title, root.message, "Pending Activities"),
+    subtitle,
+    asOfLabel,
   };
+}
+
+export function normalizeFinancePendingActivities(
+  raw: unknown,
+  topLists?: PendingActivitiesTopLists,
+): FinancePendingActivitiesData {
+  const root = (raw ?? {}) as Record<string, unknown>;
+  const filters = (root.filters ?? {}) as Record<string, unknown>;
+  const data = (root.data ?? {}) as Record<string, unknown>;
+  const topListsData = (data.top_lists ?? {}) as Record<string, unknown>;
+
+  const kpis = normalizeKpis(data.summary);
+  const byBranch = normalizeBranchSection(data.by_branch);
+  const filterOptions = branchFilterOptions(byBranch.rows);
+
+  const invoicesRaw = topListsData.invoices_to_raise ?? data.invoices_to_raise;
+  const costsRaw = topListsData.costs_to_book ?? data.costs_to_book;
+  const vouchersRaw = topListsData.vouchers_pending ?? data.vouchers_pending;
+  const creditRaw = topListsData.credit_notes_pending ?? data.credit_notes_pending;
+
+  return {
+    meta: buildMeta(root, data, filters),
+    kpis,
+    byBranch,
+    invoicesPanel: normalizePanel(invoicesRaw, "invoices", topLists?.invoices_to_raise),
+    costsPanel: normalizePanel(costsRaw, "costs", topLists?.costs_to_book),
+    vouchersPanel: normalizePanel(vouchersRaw, "vouchers", topLists?.vouchers_pending),
+    creditNotesPanel: creditRaw
+      ? normalizePanel(creditRaw, "credit_notes")
+      : undefined,
+    filterOptions,
+  };
+}
+
+export function emptyFinancePendingActivities(): FinancePendingActivitiesData {
+  return { ...EMPTY_FINANCE_PENDING_ACTIVITIES };
 }

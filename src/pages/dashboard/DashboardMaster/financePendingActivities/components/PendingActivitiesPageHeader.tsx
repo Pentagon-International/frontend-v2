@@ -1,13 +1,18 @@
 import { Box, Button, Flex, Select, Text } from "@mantine/core";
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
+import { SingleDateInput } from "../../../../../components";
 import type { FinancePendingActivitiesData } from "../financePendingActivitiesTypes";
-import { PA_INK, PA_INK_3, PA_LINE, PA_NAVY_800 } from "../theme";
+import { PA_INK, PA_INK_3, PA_INK_4, PA_LINE } from "../theme";
 import { PeriodPillGroup, type PeriodGranularity } from "../../collectionTargetVsPerformance/components/PeriodPillGroup";
 
 type PendingActivitiesPageHeaderProps = {
   meta: FinancePendingActivitiesData["meta"];
   periodGranularity: PeriodGranularity;
   onPeriodGranularityChange: (value: PeriodGranularity) => void;
+  fromDate: Date | null;
+  toDate: Date | null;
+  onFromDateChange: (value: Date | null) => void;
+  onToDateChange: (value: Date | null) => void;
   branchFilter: string | null;
   onBranchFilterChange: (value: string | null) => void;
   ownerFilter: string | null;
@@ -26,10 +31,25 @@ const selectStyles = {
   },
 } as const;
 
+const dateFieldStyles = {
+  input: {
+    height: 32,
+    minHeight: 32,
+    borderColor: PA_LINE,
+    fontSize: 12,
+    fontWeight: 500,
+    width: 132,
+  },
+} as const;
+
 export function PendingActivitiesPageHeader({
   meta,
   periodGranularity,
   onPeriodGranularityChange,
+  fromDate,
+  toDate,
+  onFromDateChange,
+  onToDateChange,
   branchFilter,
   onBranchFilterChange,
   ownerFilter,
@@ -56,22 +76,37 @@ export function PendingActivitiesPageHeader({
         </Text>
       </Box>
 
-      <Flex gap={8} wrap="wrap" justify="flex-end" align="center">
+      <Flex gap={8} wrap="wrap" justify="flex-end" align="flex-end">
         <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} />
-        <Button
-          size="compact-xs"
-          variant="filled"
-          styles={{
-            root: {
-              background: PA_NAVY_800,
-              height: 32,
-              fontSize: 12,
-              fontWeight: 500,
-            },
-          }}
-        >
-          {meta.asOfLabel}
-        </Button>
+        <Box>
+          <Text fz={10} fw={600} c={PA_INK_4} mb={4} style={{ letterSpacing: "0.04em" }}>
+            FROM
+          </Text>
+          <SingleDateInput
+            size="xs"
+            placeholder="From date"
+            value={fromDate}
+            onChange={onFromDateChange}
+            allowDeselection={false}
+            maxDate={toDate ?? new Date()}
+            styles={dateFieldStyles}
+          />
+        </Box>
+        <Box>
+          <Text fz={10} fw={600} c={PA_INK_4} mb={4} style={{ letterSpacing: "0.04em" }}>
+            TO
+          </Text>
+          <SingleDateInput
+            size="xs"
+            placeholder="To date"
+            value={toDate}
+            onChange={onToDateChange}
+            allowDeselection={false}
+            minDate={fromDate ?? undefined}
+            maxDate={new Date()}
+            styles={dateFieldStyles}
+          />
+        </Box>
         <Select
           size="xs"
           value={branchFilter}
