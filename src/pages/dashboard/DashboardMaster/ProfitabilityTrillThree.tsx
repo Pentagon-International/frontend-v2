@@ -3,7 +3,6 @@ import { Alert, Box, Drawer, Flex, Loader, SimpleGrid, Text } from "@mantine/cor
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import type { BreakdownDimension } from "./accountsDashboardTypes";
-import type { ProfitabilityJob } from "./profitabilityTrillOne/types";
 import {
   DIMENSION_CRUMB,
   INK,
@@ -14,20 +13,21 @@ import {
   PAGE_BG,
 } from "./profitabilityTrillOne/constants";
 import { profitabilityTrillFonts } from "./profitabilityTrillOne/utils";
-import { JobDetailHeader } from "./profitabilityTrillTwo/JobDetailHeader";
-import { JobDetailKpiCards } from "./profitabilityTrillTwo/JobDetailKpiCards";
-import { JobPlTable } from "./profitabilityTrillTwo/JobPlTable";
-import { MarginBridgeCard } from "./profitabilityTrillTwo/MarginBridgeCard";
-import { fetchJobProfitabilityDetail } from "./profitabilityTrillTwo/service";
-import type { JobLinkedDocument, JobProfitabilityDetail } from "./profitabilityTrillTwo/types";
-import ProfitabilityTrillThree from "./ProfitabilityTrillThree";
-import { LinkedDocumentsCardWithOpen } from "./profitabilityTrillThree/LinkedDocumentsCardWithOpen";
+import type { JobLinkedDocument } from "./profitabilityTrillTwo/types";
+import type { JobProfitabilityDetail } from "./profitabilityTrillTwo/types";
+import { ChargeLinesTable } from "./profitabilityTrillThree/ChargeLinesTable";
+import { InvoiceDetailHeader } from "./profitabilityTrillThree/InvoiceDetailHeader";
+import { PaymentTimelineCard } from "./profitabilityTrillThree/PaymentTimelineCard";
+import { fetchInvoiceProfitabilityDetail } from "./profitabilityTrillThree/service";
+import type { InvoiceProfitabilityDetail } from "./profitabilityTrillThree/types";
 
-export type ProfitabilityTrillTwoProps = {
+export type ProfitabilityTrillThreeProps = {
   opened: boolean;
   onClose: () => void;
   onBack: () => void;
-  job: ProfitabilityJob | null;
+  document: JobLinkedDocument | null;
+  jobDetail: JobProfitabilityDetail | null;
+  jobId: string;
   dimension: BreakdownDimension;
   parentName: string;
   company: string;
@@ -35,32 +35,25 @@ export type ProfitabilityTrillTwoProps = {
   toDate?: Date | null;
 };
 
-export default function ProfitabilityTrillTwo({
+export default function ProfitabilityTrillThree({
   opened,
   onClose,
   onBack,
-  job,
+  document,
+  jobDetail,
+  jobId,
   dimension,
   parentName,
   company,
   fromDate,
   toDate,
-}: ProfitabilityTrillTwoProps) {
-  const [detail, setDetail] = useState<JobProfitabilityDetail | null>(null);
+}: ProfitabilityTrillThreeProps) {
+  const [detail, setDetail] = useState<InvoiceProfitabilityDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDocument, setSelectedDocument] = useState<JobLinkedDocument | null>(null);
-  const [trillThreeOpened, setTrillThreeOpened] = useState(false);
 
   useEffect(() => {
-    if (!opened) {
-      setTrillThreeOpened(false);
-      setSelectedDocument(null);
-    }
-  }, [opened]);
-
-  useEffect(() => {
-    if (!opened || !job) {
+    if (!opened || !document?.invoiceId) {
       setDetail(null);
       setError(null);
       return;
@@ -70,21 +63,30 @@ export default function ProfitabilityTrillTwo({
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchJobProfitabilityDetail(
+        const context = {
+          invoiceId: document.invoiceId ?? document.id,
+          jobId,
+          customer: jobDetail?.customer ?? "—",
+          documentLabel: document.label,
+        };
+        const data = await fetchInvoiceProfitabilityDetail(
           {
             company,
-            job_id: job.id,
+            invoice_id: context.invoiceId,
+            job_id: jobId,
             date_from: fromDate
               ? dayjs(fromDate).format("YYYY-MM-DD")
               : dayjs().startOf("month").format("YYYY-MM-DD"),
             date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
           },
-          job,
+          context,
+          jobDetail,
+          document,
         );
         setDetail(data);
       } catch (err) {
-        console.error("Error loading job profitability detail:", err);
-        setError("Unable to load job P&L detail.");
+        console.error("Error loading invoice detail:", err);
+        setError("Unable to load invoice detail.");
         setDetail(null);
       } finally {
         setLoading(false);
@@ -92,7 +94,9 @@ export default function ProfitabilityTrillTwo({
     };
 
     void load();
-  }, [opened, job, company, fromDate, toDate]);
+  }, [opened, document, jobDetail, jobId, company, fromDate, toDate]);
+
+  const invoiceLabel = document?.invoiceId ?? document?.id ?? "Invoice";
 
   return (
     <Drawer
@@ -102,7 +106,7 @@ export default function ProfitabilityTrillTwo({
       size={920}
       withCloseButton={false}
       padding={0}
-      zIndex={400}
+      zIndex={500}
       overlayProps={{ opacity: 0.35, blur: 0 }}
       transitionProps={{ transition: "slide-left", duration: 220 }}
       styles={{
@@ -161,8 +165,14 @@ export default function ProfitabilityTrillTwo({
             <Text span c={INK_4} mx={4}>
               ›
             </Text>
+            <Text span c={NAVY_600} fw={500}>
+              {jobId}
+            </Text>
+            <Text span c={INK_4} mx={4}>
+              ›
+            </Text>
             <Text span c={INK} fw={600}>
-              {job?.id ?? "Job"}
+              {invoiceLabel}
             </Text>
           </Text>
 
@@ -198,46 +208,15 @@ export default function ProfitabilityTrillTwo({
             </Alert>
           ) : detail ? (
             <>
-              <JobDetailHeader detail={detail} />
-              <JobDetailKpiCards detail={detail} />
-              <JobPlTable detail={detail} />
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing={14} mt={14}>
-                <LinkedDocumentsCardWithOpen
-                  documents={detail.linkedDocuments}
-                  onOpenDocument={(doc) => {
-                    setSelectedDocument(doc);
-                    setTrillThreeOpened(true);
-                  }}
-                />
-                <MarginBridgeCard
-                  items={detail.marginBridge}
-                  commentary={detail.marginCommentary}
-                />
+              <InvoiceDetailHeader detail={detail} />
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing={14}>
+                <ChargeLinesTable detail={detail} />
+                <PaymentTimelineCard detail={detail} />
               </SimpleGrid>
             </>
           ) : null}
         </Box>
       </Box>
-
-      <ProfitabilityTrillThree
-        opened={trillThreeOpened}
-        onClose={() => {
-          setTrillThreeOpened(false);
-          setSelectedDocument(null);
-        }}
-        onBack={() => {
-          setTrillThreeOpened(false);
-          setSelectedDocument(null);
-        }}
-        document={selectedDocument}
-        jobDetail={detail}
-        jobId={job?.id ?? ""}
-        dimension={dimension}
-        parentName={parentName}
-        company={company}
-        fromDate={fromDate}
-        toDate={toDate}
-      />
     </Drawer>
   );
 }

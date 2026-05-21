@@ -216,6 +216,8 @@ export const URL = {
     accountsProfitability: "profitability/",
     /** Job-level P&L drill-down for profitability (POST: company, job_id, date_from, date_to). */
     accountsProfitabilityJob: "profitability/job/",
+    /** Invoice drill-down for profitability linked documents (POST: company, invoice_id, job_id, dates). */
+    accountsProfitabilityInvoice: "profitability/invoice/",
     branchBudgetVsActual: "dashboard/branch-budget-vs-actual/",
     collectionTargetVsPerformance: "dashboard/collection-target-vs-performance/",
     collectionBranchInvoices: "dashboard/collection-branch-invoices/",
