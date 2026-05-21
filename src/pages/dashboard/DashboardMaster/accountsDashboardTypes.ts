@@ -40,6 +40,14 @@ export type BreakdownRow = {
   originCode?: string;
   /** Tradelane drill (e.g. JPNAH). */
   destinationCode?: string;
+  /** Segment drill service (e.g. Ocean FCL). */
+  service?: string;
+  /** Customer drill code (e.g. CUST27699). */
+  customerCode?: string;
+  /** Branch drill code (e.g. MUM), including from next_drill_down. */
+  drillBranchCode?: string;
+  /** Salesperson drill name (e.g. Padmesh), including from next_drill_down. */
+  salespersonName?: string;
 };
 
 export type BreakdownDimension = "segment" | "branch" | "customer" | "tradelane" | "salesperson";

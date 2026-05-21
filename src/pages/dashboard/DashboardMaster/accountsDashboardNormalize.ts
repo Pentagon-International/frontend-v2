@@ -170,6 +170,7 @@ function normalizeBreakdownRow(raw: unknown, options?: { amountsInCr?: boolean }
   const yoyRaw = row.yoy_change_pct ?? row.yoy_pct ?? row.yoyPct ?? row.yoy;
   const yoyHasData = yoyRaw != null && yoyRaw !== "";
   const yoyPct = yoyHasData ? safeNumber(yoyRaw) : 0;
+  const nextDrill = (row.next_drill_down ?? row.nextDrillDown ?? {}) as Record<string, unknown>;
   return {
     id: firstString(row.id, row.code, row.customer_code, row.customerCode) || undefined,
     name: firstString(row.label, row.name, row.dimension, row.segment, row.customer_name),
@@ -193,6 +194,15 @@ function normalizeBreakdownRow(raw: unknown, options?: { amountsInCr?: boolean }
     yoyLabel: firstString(row.yoy_label, row.yoyLabel) || undefined,
     originCode: firstString(row.origin_code, row.originCode) || undefined,
     destinationCode: firstString(row.destination_code, row.destinationCode) || undefined,
+    service:
+      firstString(row.service, nextDrill.service, row.mode_label, row.modeLabel) || undefined,
+    customerCode:
+      firstString(row.customer_code, row.customerCode, nextDrill.customer_code) || undefined,
+    drillBranchCode:
+      firstString(row.branch_code, row.branchCode, nextDrill.branch_code) || undefined,
+    salespersonName:
+      firstString(row.salesperson_name, row.salespersonName, nextDrill.salesperson_name) ||
+      undefined,
   };
 }
 

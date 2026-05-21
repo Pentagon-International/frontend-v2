@@ -67,6 +67,7 @@ function normalizeJobRowToJob(
   raw: unknown,
   index: number,
   defaultCurrency: string,
+  defaultCustomerName = "",
 ): ProfitabilityJob {
   const row = (raw ?? {}) as Record<string, unknown>;
   const modeLabel = firstString(row.mode_label, row.modeLabel);
@@ -85,7 +86,9 @@ function normalizeJobRowToJob(
 
   return {
     id: jobId || `job-${safeNumber(row.sno, index + 1)}`,
-    customer: firstString(row.label, row.job_id) || "—",
+    customer:
+      firstString(row.customer_name, row.customerName, defaultCustomerName, row.label, row.job_id) ||
+      "—",
     segment,
     branch: branchCode || "mum",
     lane: firstString(row.lane, row.mix_label, row.subtitle) || "—",
@@ -145,9 +148,13 @@ function normalizeDrillJobs(
   const breakdown = (data.profit_breakdown ?? {}) as Record<string, unknown>;
   const dimension = firstString(breakdown.dimension).toLowerCase();
   const isJobRows = rowKind === "job" || dimension === "job";
+  const filters = (data.filters ?? {}) as Record<string, unknown>;
+  const defaultCustomerName = firstString(filters.customer_name, filters.customerName);
   const rowsRaw = Array.isArray(breakdown.rows) ? breakdown.rows : [];
   if (isJobRows) {
-    return rowsRaw.map((row, i) => normalizeJobRowToJob(row, i, currencyCode));
+    return rowsRaw.map((row, i) =>
+      normalizeJobRowToJob(row, i, currencyCode, defaultCustomerName),
+    );
   }
   return rowsRaw.map((row, i) =>
     normalizeCustomerRowToJob(row, segmentLabel, i, currencyCode),
@@ -174,27 +181,35 @@ function buildDrillDatePayload(options: {
 export function buildSegmentDrillPayload(options: {
   company: string;
   service: string;
+  customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }) {
-  return {
+  const payload: Record<string, unknown> = {
     ...buildDrillDatePayload(options),
     segment: true,
     service: options.service,
   };
+  const customerCode = options.customerCode?.trim();
+  if (customerCode) payload.customer_code = customerCode;
+  return payload;
 }
 
 export function buildBranchDrillPayload(options: {
   company: string;
   branchCode: string;
+  customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }) {
-  return {
+  const payload: Record<string, unknown> = {
     ...buildDrillDatePayload(options),
     branch: true,
     branch_code: options.branchCode,
   };
+  const customerCode = options.customerCode?.trim();
+  if (customerCode) payload.customer_code = customerCode;
+  return payload;
 }
 
 export function buildCustomerDrillPayload(options: {
@@ -225,10 +240,32 @@ export function buildTradelaneDrillPayload(options: {
   };
 }
 
+export function buildSalespersonDrillPayload(options: {
+  company: string;
+  salespersonName: string;
+  customerCode?: string;
+  fromDate?: Date | null;
+  toDate?: Date | null;
+}) {
+  const payload: Record<string, unknown> = {
+    ...buildDrillDatePayload(options),
+    salesperson: true,
+    salesperson_name: options.salespersonName,
+  };
+  const customerCode = options.customerCode?.trim();
+  if (customerCode) payload.customer_code = customerCode;
+  return payload;
+}
+
+export type ProfitabilityDrillRowKind = "customer" | "job";
+
 export type ProfitabilityDrillData = {
   summary: ProfitabilityDrillSummary;
   jobs: ProfitabilityJob[];
   currencyCode: string;
+  rowKind: ProfitabilityDrillRowKind;
+  /** True when the drill request included salesperson_name. */
+  showSalesperson: boolean;
 };
 
 /** @deprecated Use ProfitabilityDrillData */
@@ -243,27 +280,37 @@ async function fetchProfitabilityDrillData(
   const summary = normalizeDrillSummary(body);
   const jobs = normalizeDrillJobs(body, segmentLabel, rowKind);
   jobs.sort((a, b) => b.grossProfit - a.grossProfit);
-  return { summary, jobs, currencyCode: summary.currencyCode };
+  const showSalesperson = Boolean(firstString(payload.salesperson_name));
+  return { summary, jobs, currencyCode: summary.currencyCode, rowKind, showSalesperson };
 }
 
 export async function fetchSegmentDrillData(options: {
   company: string;
   service: string;
+  customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }): Promise<ProfitabilityDrillData> {
-  return fetchProfitabilityDrillData(buildSegmentDrillPayload(options), options.service);
+  const customerCode = options.customerCode?.trim();
+  return fetchProfitabilityDrillData(
+    buildSegmentDrillPayload(options),
+    options.service,
+    customerCode ? "job" : "customer",
+  );
 }
 
 export async function fetchBranchDrillData(options: {
   company: string;
   branchCode: string;
+  customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
 }): Promise<ProfitabilityDrillData> {
+  const customerCode = options.customerCode?.trim();
   return fetchProfitabilityDrillData(
     buildBranchDrillPayload(options),
     options.branchCode,
+    customerCode ? "job" : "customer",
   );
 }
 
@@ -290,5 +337,20 @@ export async function fetchTradelaneDrillData(options: {
   return fetchProfitabilityDrillData(
     buildTradelaneDrillPayload(options),
     `${options.originCode} → ${options.destinationCode}`,
+  );
+}
+
+export async function fetchSalespersonDrillData(options: {
+  company: string;
+  salespersonName: string;
+  customerCode?: string;
+  fromDate?: Date | null;
+  toDate?: Date | null;
+}): Promise<ProfitabilityDrillData> {
+  const customerCode = options.customerCode?.trim();
+  return fetchProfitabilityDrillData(
+    buildSalespersonDrillPayload(options),
+    options.salespersonName,
+    customerCode ? "job" : "customer",
   );
 }

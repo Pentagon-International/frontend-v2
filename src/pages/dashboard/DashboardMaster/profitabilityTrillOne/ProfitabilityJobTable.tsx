@@ -11,6 +11,7 @@ import {
   LINE,
   PAGE_BG,
 } from "./constants";
+import type { ProfitabilityDrillRowKind } from "./profitabilityTrillOneApi";
 import type { ProfitabilityJob } from "./types";
 import {
   formatProfitabilityAmount,
@@ -19,14 +20,18 @@ import {
   profitabilityTrillFonts,
 } from "./utils";
 
-const JL_GRID: React.CSSProperties = {
+const JL_GRID_BASE: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1.6fr 1.2fr 90px 90px 80px 80px 30px",
   gap: 12,
   alignItems: "center",
   padding: "11px 14px",
   fontSize: 12,
 };
+
+const JL_GRID_COLUMNS = {
+  default: "1.6fr 1.2fr 90px 90px 80px 80px 30px",
+  withSalesperson: "1.4fr 100px 1fr 90px 90px 80px 80px 30px",
+} as const;
 
 const MARGIN_STYLES = {
   good: { background: "#dcfce7", color: "#166534" },
@@ -93,11 +98,27 @@ function CurrencyCell({
 
 type ProfitabilityJobTableProps = {
   jobs: ProfitabilityJob[];
+  /** Job rows when drill request includes customer_code (or other job-level drill). */
+  rowKind?: ProfitabilityDrillRowKind;
+  /** Show salesperson column when drill request included salesperson_name. */
+  showSalesperson?: boolean;
   onJobClick?: (job: ProfitabilityJob) => void;
 };
 
-export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTableProps) {
+export function ProfitabilityJobTable({
+  jobs,
+  rowKind = "customer",
+  showSalesperson = false,
+  onJobClick,
+}: ProfitabilityJobTableProps) {
   const currencyCode = jobs[0]?.currencyCode ?? "INR";
+  const showJobIdPrimary = rowKind === "job";
+  const gridStyle: React.CSSProperties = {
+    ...JL_GRID_BASE,
+    gridTemplateColumns: showSalesperson
+      ? JL_GRID_COLUMNS.withSalesperson
+      : JL_GRID_COLUMNS.default,
+  };
 
   return (
     <Box>
@@ -106,7 +127,8 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
           Job-wise Profitability
         </Text>
         <Text fz={11} c={INK_4}>
-          {jobs.length} rows · {currencyCode} · sorted by GP · click for P&amp;L
+          {jobs.length} rows · {currencyCode} · sorted by GP
+          {showJobIdPrimary ? " · click for P&L" : " · click to drill"}
         </Text>
       </Flex>
 
@@ -120,7 +142,7 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
       >
         <Box
           style={{
-            ...JL_GRID,
+            ...gridStyle,
             background: PAGE_BG,
             color: INK_3,
             fontSize: 10.5,
@@ -132,7 +154,8 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
             borderBottom: `1px solid ${LINE}`,
           }}
         >
-          <div>Customer / Job</div>
+          <div>{showJobIdPrimary ? "Job" : "Customer"}</div>
+          {showSalesperson ? <div>Salesperson</div> : null}
           <div>Mode / Lane</div>
           <div style={{ textAlign: "right" }}>Revenue</div>
           <div style={{ textAlign: "right" }}>Cost</div>
@@ -159,7 +182,7 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
               <Box
                 key={job.id}
                 style={{
-                  ...JL_GRID,
+                  ...gridStyle,
                   borderBottom: `1px solid ${LINE}`,
                   cursor: onJobClick ? "pointer" : "default",
                   transition: "background 120ms",
@@ -173,8 +196,17 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
                 }}
               >
                 <Box>
-                  <Text fw={600} c={INK} lh={1.3}>
-                    {job.customer}
+                  <Text
+                    fw={600}
+                    c={INK}
+                    lh={1.3}
+                    style={
+                      showJobIdPrimary
+                        ? { fontFamily: profitabilityTrillFonts.mono }
+                        : undefined
+                    }
+                  >
+                    {showJobIdPrimary ? job.id : job.customer}
                   </Text>
                   <Text
                     fz={11}
@@ -182,9 +214,17 @@ export function ProfitabilityJobTable({ jobs, onJobClick }: ProfitabilityJobTabl
                     mt={2}
                     style={{ fontFamily: profitabilityTrillFonts.mono }}
                   >
-                    {job.id} · {job.delivered}
+                    {showJobIdPrimary
+                      ? [job.delivered, getLaneLabel(job.lane)].filter((s) => s && s !== "—").join(" · ") ||
+                        "—"
+                      : `${job.id} · ${job.delivered}`}
                   </Text>
                 </Box>
+                {showSalesperson ? (
+                  <Text fz={12} c={INK_2} lh={1.3}>
+                    {job.rep}
+                  </Text>
+                ) : null}
                 <Box>
                   <ModeChip segment={job.segment} />
                   <Text

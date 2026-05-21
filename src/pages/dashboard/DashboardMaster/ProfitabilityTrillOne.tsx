@@ -9,6 +9,7 @@ import { ProfitabilityJobTable } from "./profitabilityTrillOne/ProfitabilityJobT
 import {
   fetchBranchDrillData,
   fetchCustomerDrillData,
+  fetchSalespersonDrillData,
   fetchSegmentDrillData,
   fetchTradelaneDrillData,
   type ProfitabilityDrillData,
@@ -44,11 +45,29 @@ export default function ProfitabilityTrillOne({
   const [drillLoading, setDrillLoading] = useState(false);
   const [drillError, setDrillError] = useState<string | null>(null);
   const [drillData, setDrillData] = useState<ProfitabilityDrillData | null>(null);
+  const [segmentDrillCustomerCode, setSegmentDrillCustomerCode] = useState("");
+  const [branchDrillCustomerCode, setBranchDrillCustomerCode] = useState("");
+  const [salespersonDrillCustomerCode, setSalespersonDrillCustomerCode] = useState("");
 
-  const branchCode = row?.code?.trim() || "";
-  const customerCode = row?.id?.trim() || row?.code?.trim() || "";
+  const branchDrillBranchCode =
+    row?.drillBranchCode?.trim() ||
+    (dimension === "branch" && !row?.customerCode ? row?.code?.trim() || "" : "");
+  const branchCustomerCode =
+    row?.customerCode?.trim() || branchDrillCustomerCode.trim();
+  const customerCode =
+    row?.customerCode?.trim() || row?.id?.trim() || row?.code?.trim() || "";
+  const segmentService =
+    row?.service?.trim() ||
+    (dimension === "segment" ? row?.name?.trim() || "" : "");
+  const segmentCustomerCode =
+    row?.customerCode?.trim() || segmentDrillCustomerCode.trim();
   const originCode = row?.originCode?.trim() || "";
   const destinationCode = row?.destinationCode?.trim() || "";
+  const salespersonName =
+    row?.salespersonName?.trim() ||
+    (dimension === "salesperson" ? row?.name?.trim() || "" : "");
+  const salespersonCustomerCode =
+    row?.customerCode?.trim() || salespersonDrillCustomerCode.trim();
 
   useEffect(() => {
     if (!opened) {
@@ -57,16 +76,39 @@ export default function ProfitabilityTrillOne({
       setDrillData(null);
       setDrillError(null);
       setDrillLoading(false);
+      setSegmentDrillCustomerCode("");
+      setBranchDrillCustomerCode("");
+      setSalespersonDrillCustomerCode("");
       return;
     }
 
-    const isSegmentDrill = dimension === "segment" && Boolean(row?.name);
-    const isBranchDrill = dimension === "branch" && Boolean(branchCode);
+    const isSegmentCustomerDrill =
+      dimension === "segment" && Boolean(segmentCustomerCode && segmentService);
+    const isSegmentServiceDrill =
+      dimension === "segment" && Boolean(row?.name) && !segmentCustomerCode;
+    const isBranchCustomerDrill =
+      dimension === "branch" && Boolean(branchDrillBranchCode && branchCustomerCode);
+    const isBranchOnlyDrill =
+      dimension === "branch" && Boolean(branchDrillBranchCode) && !branchCustomerCode;
     const isCustomerDrill = dimension === "customer" && Boolean(customerCode);
     const isTradelaneDrill =
       dimension === "tradelane" && Boolean(originCode && destinationCode);
+    const isSalespersonCustomerDrill =
+      dimension === "salesperson" &&
+      Boolean(salespersonName && salespersonCustomerCode);
+    const isSalespersonOnlyDrill =
+      dimension === "salesperson" && Boolean(salespersonName) && !salespersonCustomerCode;
 
-    if (!isSegmentDrill && !isBranchDrill && !isCustomerDrill && !isTradelaneDrill) {
+    if (
+      !isSegmentCustomerDrill &&
+      !isSegmentServiceDrill &&
+      !isBranchCustomerDrill &&
+      !isBranchOnlyDrill &&
+      !isCustomerDrill &&
+      !isTradelaneDrill &&
+      !isSalespersonCustomerDrill &&
+      !isSalespersonOnlyDrill
+    ) {
       setDrillData(null);
       setDrillError(null);
       setDrillLoading(false);
@@ -93,19 +135,31 @@ export default function ProfitabilityTrillOne({
             fromDate,
             toDate,
           })
-        : isBranchDrill
+        : isBranchCustomerDrill || isBranchOnlyDrill
           ? fetchBranchDrillData({
               company,
-              branchCode,
+              branchCode: branchDrillBranchCode,
+              customerCode: isBranchCustomerDrill ? branchCustomerCode : undefined,
               fromDate,
               toDate,
             })
-          : fetchSegmentDrillData({
-              company,
-              service: row!.name,
-              fromDate,
-              toDate,
-            });
+          : isSalespersonCustomerDrill || isSalespersonOnlyDrill
+            ? fetchSalespersonDrillData({
+                company,
+                salespersonName,
+                customerCode: isSalespersonCustomerDrill
+                  ? salespersonCustomerCode
+                  : undefined,
+                fromDate,
+                toDate,
+              })
+            : fetchSegmentDrillData({
+                company,
+                service: isSegmentCustomerDrill ? segmentService : row!.name,
+                customerCode: isSegmentCustomerDrill ? segmentCustomerCode : undefined,
+                fromDate,
+                toDate,
+              });
 
     void fetchPromise
       .then((data) => {
@@ -119,9 +173,17 @@ export default function ProfitabilityTrillOne({
               ? "Unable to load tradelane drill-down. Check your connection and try again."
               : isCustomerDrill
                 ? "Unable to load customer drill-down. Check your connection and try again."
-                : isBranchDrill
-                  ? "Unable to load branch drill-down. Check your connection and try again."
-                  : "Unable to load segment drill-down. Check your connection and try again.",
+                : isBranchCustomerDrill
+                  ? "Unable to load branch customer drill-down. Check your connection and try again."
+                  : isBranchOnlyDrill
+                    ? "Unable to load branch drill-down. Check your connection and try again."
+                    : isSegmentCustomerDrill
+                      ? "Unable to load segment customer drill-down. Check your connection and try again."
+                      : isSalespersonCustomerDrill
+                        ? "Unable to load salesperson customer drill-down. Check your connection and try again."
+                        : isSalespersonOnlyDrill
+                          ? "Unable to load salesperson drill-down. Check your connection and try again."
+                          : "Unable to load segment drill-down. Check your connection and try again.",
           );
         }
       })
@@ -136,10 +198,18 @@ export default function ProfitabilityTrillOne({
     opened,
     dimension,
     row?.name,
-    branchCode,
+    segmentCustomerCode,
+    segmentDrillCustomerCode,
+    segmentService,
+    branchDrillBranchCode,
+    branchCustomerCode,
+    branchDrillCustomerCode,
     customerCode,
     originCode,
     destinationCode,
+    salespersonName,
+    salespersonCustomerCode,
+    salespersonDrillCustomerCode,
     company,
     fromDate,
     toDate,
@@ -147,15 +217,33 @@ export default function ProfitabilityTrillOne({
 
   const jobs = drillData?.jobs ?? [];
   const summary = drillData?.summary ?? null;
+  const isSegmentCustomerJobList = dimension === "segment" && drillData?.rowKind === "customer";
+  const isBranchCustomerJobList = dimension === "branch" && drillData?.rowKind === "customer";
+  const isSalespersonCustomerJobList =
+    dimension === "salesperson" && drillData?.rowKind === "customer";
 
   useEffect(() => {
     if (!opened) {
       setTrillTwoOpened(false);
       setSelectedJob(null);
+      setSegmentDrillCustomerCode("");
+      setBranchDrillCustomerCode("");
+      setSalespersonDrillCustomerCode("");
     }
   }, [opened]);
 
+  useEffect(() => {
+    setSegmentDrillCustomerCode("");
+    setBranchDrillCustomerCode("");
+    setSalespersonDrillCustomerCode("");
+  }, [row?.name, row?.customerCode, row?.service, row?.drillBranchCode, row?.salespersonName]);
+
   if (!row) return null;
+
+  const displayName =
+    (segmentCustomerCode || branchCustomerCode || salespersonCustomerCode) && jobs[0]?.customer
+      ? jobs[0].customer
+      : row.name;
 
   return (
     <Drawer
@@ -195,7 +283,7 @@ export default function ProfitabilityTrillOne({
               ·
             </Text>
             <Text span c={INK} fw={600}>
-              {row.name}
+              {displayName}
             </Text>
           </Text>
           <Box
@@ -238,10 +326,18 @@ export default function ProfitabilityTrillOne({
                 lineHeight: 1.2,
               }}
             >
-              {row.name}
+              {displayName}
             </Text>
             <Text fz={12} c={INK_3}>
-              {row.subtitle ? `${row.subtitle} · ` : ""}
+              {segmentCustomerCode && segmentService
+                ? `${segmentService} · `
+                : branchCustomerCode && branchDrillBranchCode
+                  ? `${branchDrillBranchCode} · `
+                  : salespersonCustomerCode && salespersonName
+                    ? `${salespersonName} · `
+                    : row.subtitle
+                      ? `${row.subtitle} · `
+                      : ""}
               {periodLabel}
             </Text>
           </Flex>
@@ -263,7 +359,21 @@ export default function ProfitabilityTrillOne({
 
               <ProfitabilityJobTable
                 jobs={jobs}
+                rowKind={drillData?.rowKind}
+                showSalesperson={drillData?.showSalesperson}
                 onJobClick={(job) => {
+                  if (isSegmentCustomerJobList && segmentService) {
+                    setSegmentDrillCustomerCode(job.id);
+                    return;
+                  }
+                  if (isBranchCustomerJobList && branchDrillBranchCode) {
+                    setBranchDrillCustomerCode(job.id);
+                    return;
+                  }
+                  if (isSalespersonCustomerJobList && salespersonName) {
+                    setSalespersonDrillCustomerCode(job.id);
+                    return;
+                  }
                   setSelectedJob(job);
                   setTrillTwoOpened(true);
                 }}
