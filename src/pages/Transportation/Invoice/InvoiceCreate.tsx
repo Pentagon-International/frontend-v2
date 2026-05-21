@@ -81,11 +81,10 @@ type VatRates = {
   vat_percent: number | null;
 };
 
-const fetchGstRatesByStateSac = async (
-  payload:
-    | { state_id: number; sac_code: string }
-    | { vat: true; charge_id: number },
-) => {
+const fetchGstRatesByStateSac = async (payload: {
+  state_id: number;
+  sac_code: string;
+}) => {
   return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
 };
 
@@ -108,25 +107,39 @@ const parseGstRatesPayload = (res: unknown): GstRates | null => {
   };
 };
 
-const parseVatRatesPayload = (res: unknown): VatRates | null => {
-  const resObj = res as {
-    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
-    [k: string]: unknown;
-  };
-  const payload = resObj?.data?.data ?? resObj?.data ?? res;
-  const data = payload as GstRatesBySacResponse | null | undefined;
-  const vatRaw = data?.vat_percent;
-  if (vatRaw == null || vatRaw === "") return { vat_percent: null };
-  const parsed = Number(vatRaw);
-  return { vat_percent: Number.isFinite(parsed) ? parsed : null };
-};
-
 const calcTaxAmountFromRate = (
   base: number | null | undefined,
   rate: number | null | undefined,
 ): number => {
   if (base == null || rate == null || rate <= 0) return 0;
   return clampAmount(base * (rate / 100)) ?? 0;
+};
+
+const getVatBreakupRows = (breakup: InvoiceTaxBreakup | null) => [
+  ...(breakup?.charges ?? []),
+  ...(breakup?.percentage_wise_totals ?? []),
+];
+
+const getVatRateFromBreakup = (
+  breakup: InvoiceTaxBreakup | null,
+  chargeId: number | null | undefined,
+): number | null => {
+  if (chargeId == null) return null;
+  const match = getVatBreakupRows(breakup).find((r) => r.charge_id === chargeId);
+  if (!match) return null;
+  const rate = match.tax_rate ?? match.rate;
+  if (rate == null) return null;
+  const parsed = Number(rate);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveVatTaxRate = (
+  breakup: InvoiceTaxBreakup | null,
+  chargeId: number | null | undefined,
+  chargeTaxRate: number | null | undefined,
+): number => {
+  if (chargeTaxRate != null && chargeTaxRate > 0) return chargeTaxRate;
+  return getVatRateFromBreakup(breakup, chargeId) ?? 0;
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -247,6 +260,7 @@ type InvoiceTaxBreakup = {
     tax_rate?: number;
     rate_type?: string;
     taxable_total?: number;
+    total_amount?: number;
     amount_in_local?: number;
     source_charge_names?: string[];
     source_charge_count?: number;
@@ -415,6 +429,44 @@ function calcChargeHeaderAmount(
     return clampAmount(local / billingRoe);
   }
   return clampAmount(local);
+}
+
+/** Tax row from calculate-gst-breakup: local = total_amount; header = local ÷ billing ROE; currency amount = local (roe 1). */
+function calcTaxRowAmountsFromBreakupTotal(
+  totalAmount: number,
+  billingRoe: number,
+): {
+  amountInLocal: number;
+  amountInHeader: number;
+  currencyAmount: number;
+} {
+  const amountInLocal = clampAmount(totalAmount) ?? 0;
+  const roe = billingRoe > 0 ? billingRoe : 1;
+  const amountInHeader = clampAmount(amountInLocal / roe) ?? amountInLocal;
+  return {
+    amountInLocal,
+    amountInHeader,
+    currencyAmount: amountInLocal,
+  };
+}
+
+function resolveCurrencyIdByCode(
+  currencyDataArr: {
+    id?: number;
+    code?: string;
+    currency_code?: string;
+  }[],
+  currencyCode: string,
+  fallbackCurrencyId: number | null,
+): number | null {
+  const code = currencyCode.trim().toUpperCase();
+  if (!code) return fallbackCurrencyId;
+  const item = currencyDataArr?.find(
+    (c) =>
+      (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+      code,
+  );
+  return item?.id != null ? Number(item.id) : fallbackCurrencyId;
 }
 
 /** Charges on a housing row may be `charges` (air/sea) or `mawb_charges` (air import). */
@@ -1920,107 +1972,20 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
-  // Fetch VAT rates by charge (China / Kenya — customer and agent invoice)
+  // Sync VAT % on charge rows from calculate-gst-breakup (no gst-rates-by-state-sac for VAT)
   useEffect(() => {
-    if (!isVatInvoiceUser) {
-      setVatRatesLoadingByIndex({});
-      return;
-    }
-
-    const chargesToFetch = (form.values.charges || [])
-      .map((c, idx) => ({
-        idx,
-        chargeId: c.charge_id,
-        headerAmount: c.header_amount,
-        isTaxRow: c.is_tax_row === true,
-      }))
-      .filter((x) => x.chargeId != null && !x.isTaxRow);
-
-    if (chargesToFetch.length === 0) {
-      setVatRatesLoadingByIndex({});
-      return;
-    }
-
-    const fetchKey = JSON.stringify({
-      charges: chargesToFetch.map((c) => ({
-        chargeId: c.chargeId,
-        headerAmount: c.headerAmount,
-      })),
-    });
-    if (fetchKey === lastVatRatesFetchKeyRef.current) return;
-    lastVatRatesFetchKeyRef.current = fetchKey;
-
-    let cancelled = false;
-
-    const indicesToFetch: number[] = [];
-    chargesToFetch.forEach(({ idx, chargeId }) => {
-      const id = chargeId!;
-      const hasCache = vatRatesCacheRef.current.has(id);
-      const hasRates = vatRatesByChargeIndex[idx] != null;
-      if (!hasCache && !hasRates) indicesToFetch.push(idx);
-    });
-
-    if (indicesToFetch.length > 0) {
-      setVatRatesLoadingByIndex((prev) => {
-        const next = { ...prev };
-        indicesToFetch.forEach((idx) => {
-          next[idx] = true;
-        });
-        return next;
-      });
-    }
-
-    Promise.all(
-      chargesToFetch.map(async ({ idx, chargeId }) => {
-        const id = chargeId!;
-        const cached = vatRatesCacheRef.current.get(id);
-        if (cached) return { idx, rates: cached, fromCache: true };
-
-        try {
-          const res = await fetchGstRatesByStateSac({
-            vat: true,
-            charge_id: id,
-          });
-          const rates = parseVatRatesPayload(res);
-          if (rates) vatRatesCacheRef.current.set(id, rates);
-          return { idx, rates, fromCache: false };
-        } catch {
-          return { idx, rates: null, fromCache: false };
-        }
-      }),
-    ).then((results) => {
-      if (cancelled) return;
-      setVatRatesByChargeIndex((prev) => {
-        const next = { ...prev };
-        results.forEach(({ idx, rates }) => {
-          next[idx] = rates;
-        });
-        return next;
-      });
-      results.forEach(({ idx, rates }) => {
-        if (rates?.vat_percent != null) {
-          form.setFieldValue(`charges.${idx}.tax_rate`, rates.vat_percent);
-        }
-      });
-      const indicesToClear = results
-        .filter((r) => !r.fromCache)
-        .map((r) => r.idx);
-      if (indicesToClear.length > 0) {
-        setVatRatesLoadingByIndex((prev) => {
-          const next = { ...prev };
-          indicesToClear.forEach((idx) => {
-            next[idx] = false;
-          });
-          return next;
-        });
+    if (!isVatInvoiceUser || !gstBreakup) return;
+    const rows = getVatBreakupRows(gstBreakup);
+    if (rows.length === 0) return;
+    form.values.charges.forEach((charge, idx) => {
+      if (charge.is_tax_row === true || charge.charge_id == null) return;
+      const rate = getVatRateFromBreakup(gstBreakup, charge.charge_id);
+      if (rate != null && rate !== charge.tax_rate) {
+        form.setFieldValue(`charges.${idx}.tax_rate`, rate);
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.charges, isVatInvoiceUser]);
+  }, [gstBreakup, isVatInvoiceUser]);
 
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
@@ -2544,27 +2509,6 @@ function InvoiceCreate({
             }),
           );
 
-      const vatRatesForCharges: (VatRates | null)[] = !isVatSave
-        ? values.charges.map(() => null)
-        : await Promise.all(
-            values.charges.map(async (charge, idx) => {
-              if (charge.is_tax_row === true) return null;
-              const cached = vatRatesByChargeIndex[idx];
-              if (cached) return cached;
-              const chargeId = charge.charge_id;
-              if (chargeId == null) return null;
-              try {
-                const res = await fetchGstRatesByStateSac({
-                  vat: true,
-                  charge_id: chargeId,
-                });
-                return parseVatRatesPayload(res);
-              } catch {
-                return null;
-              }
-            }),
-          );
-
       const chargesPayload = values.charges
         .filter((c) => c.is_tax_row !== true)
         .map((charge, idx) => {
@@ -2606,8 +2550,11 @@ function InvoiceCreate({
           const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
 
           if (isVatSave) {
-            const vatRates = vatRatesForCharges[rateIdx];
-            const taxRate = vatRates?.vat_percent ?? charge.tax_rate ?? 0;
+            const taxRate = resolveVatTaxRate(
+              gstBreakup,
+              charge.charge_id,
+              charge.tax_rate,
+            );
             const taxBase = charge.amount_in_local ?? headerAmount;
             const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
             return {
@@ -2881,15 +2828,15 @@ function InvoiceCreate({
       let percentageWiseTotals: NonNullable<
         InvoiceTaxBreakup["percentage_wise_totals"]
       > = [];
+      let vatBreakupData: InvoiceTaxBreakup | null = gstBreakup;
       if (isVatPost) {
-        let breakupData = gstBreakup;
-        if (!breakupData?.percentage_wise_totals?.length) {
-          breakupData = await fetchInvoiceCalculateGstBreakup({
+        if (!vatBreakupData?.percentage_wise_totals?.length) {
+          vatBreakupData = await fetchInvoiceCalculateGstBreakup({
             invoice_id: saveResponse.id as number,
             vat: true,
           });
         }
-        percentageWiseTotals = breakupData?.percentage_wise_totals ?? [];
+        percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
       } else if (!isAgentPost) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
@@ -2907,6 +2854,18 @@ function InvoiceCreate({
         code?: string;
         currency_code?: string;
       }[];
+      const localCurrencyCode = (
+        defaultBranchCurrency ||
+        userLocalCurrency ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+      const taxRowCurrencyId = resolveCurrencyIdByCode(
+        currencyDataArr,
+        localCurrencyCode,
+        currencyId,
+      );
       const unitDataArr = unitData as {
         id?: number;
         unit_code?: string;
@@ -2928,27 +2887,6 @@ function InvoiceCreate({
                   sac_code: sacCode,
                 });
                 return parseGstRatesPayload(res);
-              } catch {
-                return null;
-              }
-            }),
-          );
-
-      const vatRatesForPostCharges: (VatRates | null)[] = !isVatPost
-        ? values.charges.map(() => null)
-        : await Promise.all(
-            values.charges.map(async (charge, idx) => {
-              if (charge.is_tax_row === true) return null;
-              const cached = vatRatesByChargeIndex[idx];
-              if (cached) return cached;
-              const chargeId = charge.charge_id;
-              if (chargeId == null) return null;
-              try {
-                const res = await fetchGstRatesByStateSac({
-                  vat: true,
-                  charge_id: chargeId,
-                });
-                return parseVatRatesPayload(res);
               } catch {
                 return null;
               }
@@ -2986,8 +2924,11 @@ function InvoiceCreate({
           const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
 
           if (isVatPost) {
-            const vatRates = vatRatesForPostCharges[rateIdx];
-            const taxRate = vatRates?.vat_percent ?? charge.tax_rate ?? 0;
+            const taxRate = resolveVatTaxRate(
+              vatBreakupData,
+              charge.charge_id,
+              charge.tax_rate,
+            );
             const taxBase = charge.amount_in_local ?? headerAmount;
             const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
             return {
@@ -3062,22 +3003,20 @@ function InvoiceCreate({
         ? percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const amountInLocal = clampAmount(row.amount_in_local ?? 0) ?? 0;
-              const headerAmt =
-                topRoe > 0
-                  ? (clampAmount(amountInLocal / topRoe) ?? amountInLocal)
-                  : amountInLocal;
+              const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+              const { amountInLocal, amountInHeader, currencyAmount } =
+                calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
               return {
                 shipment_no: values.shipment_no,
                 charge_id: row.vat_charge_id ?? null,
                 unit_id: null,
                 no_of_unit: 0,
-                currency_id: currencyId,
-                roe: topRoe,
+                currency_id: taxRowCurrencyId,
+                roe: 1,
                 amount_per_unit: 0,
-                amount: headerAmt,
+                amount: currencyAmount,
                 amount_in_local: amountInLocal,
-                amount_in_header: headerAmt,
+                amount_in_header: amountInHeader,
                 Dr_Cr: "Cr",
               };
             })
@@ -3097,19 +3036,20 @@ function InvoiceCreate({
                 return true;
               })
               .map((row) => {
-                const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-                const amountInLocal = clampAmount(amt * topRoe) ?? 0;
+                const totalAmount = clampAmount(row.total_amount ?? 0) ?? 0;
+                const { amountInLocal, amountInHeader, currencyAmount } =
+                  calcTaxRowAmountsFromBreakupTotal(totalAmount, topRoe);
                 return {
                   shipment_no: values.shipment_no,
                   charge_id: row.charge_id ?? null,
                   unit_id: null,
                   no_of_unit: 0,
-                  currency_id: currencyId,
-                  roe: topRoe,
+                  currency_id: taxRowCurrencyId,
+                  roe: 1,
                   amount_per_unit: 0,
-                  amount: amt,
+                  amount: currencyAmount,
                   amount_in_local: amountInLocal,
-                  amount_in_header: amountInLocal,
+                  amount_in_header: amountInHeader,
                   tax_code: row.sac_code ?? "",
                   is_tax_row: true,
                   igst_rate: null,
@@ -3365,12 +3305,9 @@ function InvoiceCreate({
           const vatTaxRows: ChargeItem[] = percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const amountInLocal =
-                clampAmount(row.amount_in_local ?? 0) ?? 0;
-              const headerAmt =
-                topRoe > 0
-                  ? (clampAmount(amountInLocal / topRoe) ?? amountInLocal)
-                  : amountInLocal;
+              const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+              const { amountInLocal, amountInHeader, currencyAmount } =
+                calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
               return {
                 charge_id: row.vat_charge_id ?? null,
                 charge_code: row.vat_charge_code ?? "VAT",
@@ -3378,13 +3315,15 @@ function InvoiceCreate({
                   row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
                 unit_code: "",
                 no_of_unit: 0,
-                currency: form.values.currency ?? "",
-                currency_id: currencyId != null ? String(currencyId) : "",
-                roe: topRoe,
+                currency: localCurrencyCode || form.values.currency || "",
+                currency_id:
+                  taxRowCurrencyId != null ? String(taxRowCurrencyId) : "",
+                roe: 1,
                 amount_per_unit: 0,
-                amount: headerAmt,
-                header_amount: headerAmt,
+                amount: currencyAmount,
+                header_amount: amountInHeader,
                 amount_in_local: amountInLocal,
+                tax_code: "",
                 dr_cr: "Cr",
                 is_tax_row: true,
                 tax_rate: null,
@@ -4200,35 +4139,7 @@ function InvoiceCreate({
                             }
                             setChargeErrors(newErrors);
                           }
-                          if (isVatInvoiceUser && chargeId != null) {
-                            lastVatRatesFetchKeyRef.current = "";
-                            fetchGstRatesByStateSac({
-                              vat: true,
-                              charge_id: chargeId,
-                            })
-                              .then((res) => {
-                                const rates = parseVatRatesPayload(res);
-                                if (rates) {
-                                  vatRatesCacheRef.current.set(chargeId, rates);
-                                  setVatRatesByChargeIndex((prev) => ({
-                                    ...prev,
-                                    [index]: rates,
-                                  }));
-                                  if (rates.vat_percent != null) {
-                                    form.setFieldValue(
-                                      `charges.${index}.tax_rate`,
-                                      rates.vat_percent,
-                                    );
-                                  }
-                                }
-                              })
-                              .catch(() => {
-                                setVatRatesByChargeIndex((prev) => ({
-                                  ...prev,
-                                  [index]: null,
-                                }));
-                              });
-                          } else if (
+                          if (
                             chargeId != null &&
                             jobServiceId != null &&
                             isGstInvoiceUser
@@ -4804,10 +4715,12 @@ function InvoiceCreate({
                           readOnly={isReadOnly || charge.is_tax_row === true}
                           value={(() => {
                             if (charge.is_tax_row === true) return undefined;
-                            const rate =
-                              charge.tax_rate ??
-                              vatRatesByChargeIndex[index]?.vat_percent;
-                            return rate != null ? rate : undefined;
+                            const rate = resolveVatTaxRate(
+                              gstBreakup,
+                              charge.charge_id,
+                              charge.tax_rate,
+                            );
+                            return rate > 0 ? rate : undefined;
                           })()}
                           onChange={(value) => {
                             const parsed = clampAmount(value as number | null);
@@ -4815,16 +4728,7 @@ function InvoiceCreate({
                               `charges.${index}.tax_rate`,
                               parsed,
                             );
-                            setVatRatesByChargeIndex((prev) => ({
-                              ...prev,
-                              [index]: { vat_percent: parsed },
-                            }));
                           }}
-                          rightSection={
-                            vatRatesLoadingByIndex[index] ? (
-                              <Loader size="xs" color="#105476" />
-                            ) : undefined
-                          }
                           styles={{
                             input: {
                               fontSize: "13px",
@@ -4844,13 +4748,14 @@ function InvoiceCreate({
                           readOnly
                           value={(() => {
                             if (charge.is_tax_row === true) return undefined;
-                            const rate =
-                              charge.tax_rate ??
-                              vatRatesByChargeIndex[index]?.vat_percent;
+                            const rate = resolveVatTaxRate(
+                              gstBreakup,
+                              charge.charge_id,
+                              charge.tax_rate,
+                            );
                             const taxBase =
                               charge.amount_in_local ?? charge.header_amount;
-                            if (rate == null || taxBase == null)
-                              return undefined;
+                            if (rate <= 0 || taxBase == null) return undefined;
                             const amount = calcTaxAmountFromRate(taxBase, rate);
                             return amount > 0 ? amount : undefined;
                           })()}
@@ -5186,19 +5091,24 @@ function InvoiceCreate({
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {form.values.charges
-                                .reduce((sum, c, idx) => {
-                                  if (c.is_tax_row === true) return sum;
-                                  const rate =
-                                    vatRatesByChargeIndex[idx]?.vat_percent ??
-                                    c.tax_rate;
-                                  const taxBase =
-                                    c.amount_in_local ?? c.header_amount;
-                                  return (
-                                    sum + calcTaxAmountFromRate(taxBase, rate)
-                                  );
-                                }, 0)
-                                .toFixed(2)}
+                              {gstBreakup?.vat_total != null
+                                ? Number(gstBreakup.vat_total).toFixed(2)
+                                : form.values.charges
+                                    .reduce((sum, c) => {
+                                      if (c.is_tax_row === true) return sum;
+                                      const rate = resolveVatTaxRate(
+                                        gstBreakup,
+                                        c.charge_id,
+                                        c.tax_rate,
+                                      );
+                                      const taxBase =
+                                        c.amount_in_local ?? c.header_amount;
+                                      return (
+                                        sum +
+                                        calcTaxAmountFromRate(taxBase, rate)
+                                      );
+                                    }, 0)
+                                    .toFixed(2)}
                             </Text>
                           </Box>
                         </Grid.Col>
