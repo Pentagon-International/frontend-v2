@@ -1,13 +1,9 @@
 import { Box, Flex, Table, Text } from "@mantine/core";
 import { CARD_BG, GOOD, INK, INK_2, INK_3, INK_4, LINE, PAGE_BG } from "../profitabilityTrillOne/constants";
 import type { JobPlLine, JobProfitabilityDetail } from "./types";
-import { profitabilityTrillFonts } from "../profitabilityTrillOne/utils";
+import { formatProfitabilityAmount, profitabilityTrillFonts } from "../profitabilityTrillOne/utils";
 
-function formatInrFull(value: number): string {
-  return `₹${Math.round(value).toLocaleString("en-IN")}`;
-}
-
-function PlRows({ lines }: { lines: JobPlLine[] }) {
+function PlRows({ lines, currencyCode }: { lines: JobPlLine[]; currencyCode: string }) {
   return (
     <>
       {lines.map((line) => (
@@ -29,7 +25,7 @@ function PlRows({ lines }: { lines: JobPlLine[] }) {
             </Text>
           </Table.Td>
           <Table.Td ta="right" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {formatInrFull(line.amountInr)}
+            {formatProfitabilityAmount(line.amountInr, currencyCode)}
           </Table.Td>
         </Table.Tr>
       ))}
@@ -42,9 +38,10 @@ type JobPlTableProps = {
 };
 
 export function JobPlTable({ detail }: JobPlTableProps) {
-  const revenueTotal = detail.revenueL * 100000;
-  const costTotal = detail.costL * 100000;
-  const gpTotal = detail.grossProfitL * 100000;
+  const { currencyCode } = detail;
+  const revenueTotal = detail.revenueL * 100_000;
+  const costTotal = detail.costL * 100_000;
+  const gpTotal = detail.grossProfitL * 100_000;
 
   return (
     <Box>
@@ -53,7 +50,7 @@ export function JobPlTable({ detail }: JobPlTableProps) {
           Job P&amp;L
         </Text>
         <Text fz={11} c={INK_4}>
-          All amounts in INR (₹)
+          All amounts in {currencyCode}
         </Text>
       </Flex>
 
@@ -107,13 +104,13 @@ export function JobPlTable({ detail }: JobPlTableProps) {
                 Revenue
               </Table.Td>
             </Table.Tr>
-            <PlRows lines={detail.revenueLines} />
+            <PlRows lines={detail.revenueLines} currencyCode={currencyCode} />
             <Table.Tr>
               <Table.Td colSpan={4} fw={600} c={INK}>
                 Total Revenue
               </Table.Td>
               <Table.Td ta="right" fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatInrFull(revenueTotal)}
+                {formatProfitabilityAmount(revenueTotal, currencyCode)}
               </Table.Td>
             </Table.Tr>
 
@@ -129,16 +126,16 @@ export function JobPlTable({ detail }: JobPlTableProps) {
                   color: INK_2,
                 }}
               >
-                Direct Cost
+                {detail.directCostSubtitle ?? "Direct Cost"}
               </Table.Td>
             </Table.Tr>
-            <PlRows lines={detail.costLines} />
+            <PlRows lines={detail.costLines} currencyCode={currencyCode} />
             <Table.Tr>
               <Table.Td colSpan={4} fw={600} c={INK}>
                 Total Direct Cost
               </Table.Td>
               <Table.Td ta="right" fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatInrFull(costTotal)}
+                {formatProfitabilityAmount(costTotal, currencyCode)}
               </Table.Td>
             </Table.Tr>
 
@@ -147,7 +144,7 @@ export function JobPlTable({ detail }: JobPlTableProps) {
                 Gross Profit · {detail.marginPct.toFixed(1)}% margin
               </Table.Td>
               <Table.Td ta="right" fw={700} c={GOOD} fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatInrFull(gpTotal)}
+                {formatProfitabilityAmount(gpTotal, currencyCode)}
               </Table.Td>
             </Table.Tr>
           </Table.Tbody>

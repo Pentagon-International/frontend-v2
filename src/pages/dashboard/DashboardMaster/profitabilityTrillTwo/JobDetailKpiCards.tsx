@@ -1,7 +1,7 @@
 import { Box, SimpleGrid, Text } from "@mantine/core";
 import { BAD, CARD_BG, GOOD, INK, INK_3, INK_4, LINE } from "../profitabilityTrillOne/constants";
 import type { JobProfitabilityDetail } from "./types";
-import { formatLakhs } from "../profitabilityTrillOne/utils";
+import { formatProfitabilityAmount } from "../profitabilityTrillOne/utils";
 
 type JobDetailKpiCardsProps = {
   detail: JobProfitabilityDetail;
@@ -53,22 +53,23 @@ function MiniKpi({
 
 export function JobDetailKpiCards({ detail }: JobDetailKpiCardsProps) {
   const marginUp = detail.marginPct >= 20;
+  const { currencyCode } = detail;
 
   return (
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={10} mb={16}>
       <MiniKpi
         label="Revenue"
-        value={`₹${formatLakhs(detail.revenueL)}`}
+        value={formatProfitabilityAmount(detail.revenueL * 100_000, currencyCode)}
         detailText={`${detail.revenueLines.length} charge lines`}
       />
       <MiniKpi
         label="Direct Cost"
-        value={`₹${formatLakhs(detail.costL)}`}
+        value={formatProfitabilityAmount(detail.costL * 100_000, currencyCode)}
         detailText={`${detail.costLines.length} cost lines`}
       />
       <MiniKpi
         label="Gross Profit"
-        value={`₹${formatLakhs(detail.grossProfitL)}`}
+        value={formatProfitabilityAmount(detail.grossProfitL * 100_000, currencyCode)}
         detailText={`${marginUp ? "▲" : "▼"} ${detail.marginPct.toFixed(1)}% margin`}
         valueColor={GOOD}
         detailColor={marginUp ? GOOD : BAD}
@@ -76,7 +77,7 @@ export function JobDetailKpiCards({ detail }: JobDetailKpiCardsProps) {
       <MiniKpi
         label="Per Unit"
         value={detail.perUnitLabel}
-        detailText="GP / unit"
+        detailText=""
       />
     </SimpleGrid>
   );

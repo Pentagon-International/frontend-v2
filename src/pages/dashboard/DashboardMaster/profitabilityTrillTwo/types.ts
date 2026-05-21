@@ -34,6 +34,7 @@ export type JobProfitabilityDetail = {
   salesperson: string;
   delivered: string;
   volume: string;
+  currencyCode: string;
   revenueL: number;
   costL: number;
   grossProfitL: number;
@@ -41,6 +42,7 @@ export type JobProfitabilityDetail = {
   perUnitLabel: string;
   revenueLines: JobPlLine[];
   costLines: JobPlLine[];
+  directCostSubtitle?: string;
   linkedDocuments: JobLinkedDocument[];
   marginBridge: JobMarginBridgeItem[];
   marginCommentary: string;

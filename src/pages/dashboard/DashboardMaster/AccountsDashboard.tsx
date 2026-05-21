@@ -26,6 +26,7 @@ import {
   ERP_LIST_FONT_SANS,
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components/ERPListPage/erpListGeistShell";
+import { SingleDateInput } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import {
   ALL_BREAKDOWN_DIMENSIONS,
@@ -83,6 +84,25 @@ type AccountsDashboardProps = {
 };
 
 type PeriodGranularity = "month" | "quarter" | "h1h2" | "fy";
+
+function defaultFromDate(): Date {
+  return dayjs().startOf("month").toDate();
+}
+
+function defaultToDate(): Date {
+  return new Date();
+}
+
+const dateFieldStyles = {
+  input: {
+    height: 32,
+    minHeight: 32,
+    borderColor: LINE,
+    fontSize: 12,
+    fontWeight: 500,
+    width: 132,
+  },
+} as const;
 
 function sparklinePoints(values: number[]): string {
   if (!values.length) return "";
@@ -495,12 +515,16 @@ function KpiCard({ kpi, loading }: { kpi: AccountsKpi; loading?: boolean }) {
 
 
 const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
-  fromDate,
-  toDate,
+  fromDate: fromDateProp,
+  toDate: toDateProp,
   globalSearch: _globalSearch,
 }) => {
   const user = useAuthStore((state) => state.user);
   const company = user?.company?.company_name?.trim() || "Pentagon India";
+  const [rangeFrom, setRangeFrom] = useState<Date | null>(
+    () => fromDateProp ?? defaultFromDate(),
+  );
+  const [rangeTo, setRangeTo] = useState<Date | null>(() => toDateProp ?? defaultToDate());
   const [data, setData] = useState<AccountsDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiNotice, setApiNotice] = useState<string | null>(null);
@@ -511,16 +535,24 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
   const [drillRow, setDrillRow] = useState<BreakdownRow | null>(null);
   const [drillOpened, setDrillOpened] = useState(false);
 
+  useEffect(() => {
+    if (fromDateProp != null) setRangeFrom(fromDateProp);
+  }, [fromDateProp]);
+
+  useEffect(() => {
+    if (toDateProp != null) setRangeTo(toDateProp);
+  }, [toDateProp]);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setApiNotice(null);
     try {
       const payload = {
         company,
-        date_from: fromDate
-          ? dayjs(fromDate).format("YYYY-MM-DD")
+        date_from: rangeFrom
+          ? dayjs(rangeFrom).format("YYYY-MM-DD")
           : dayjs().startOf("month").format("YYYY-MM-DD"),
-        date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+        date_to: rangeTo ? dayjs(rangeTo).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
         compare_previous_period: true,
         ...profitabilityDimensionFlags(activeDimension),
       };
@@ -544,7 +576,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [activeDimension, company, fromDate, toDate]);
+  }, [activeDimension, company, rangeFrom, rangeTo]);
 
   useEffect(() => {
     void loadDashboard();
@@ -853,10 +885,11 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             </Text>
           </Box>
 
-          <Group gap={8} wrap="wrap" justify="flex-end">
+          <Group gap={8} wrap="wrap" justify="flex-end" align="flex-end">
             <Box
               style={{
                 display: "inline-flex",
+                alignSelf: "flex-end",
                 background: "#f8fafc",
                 border: `1px solid ${LINE}`,
                 borderRadius: 6,
@@ -890,6 +923,52 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                 </Button>
               ))}
             </Box>
+
+            <Flex gap={8} align="flex-end" wrap="nowrap">
+              <Box>
+                <Text
+                  fz={10}
+                  fw={600}
+                  c={INK_4}
+                  mb={4}
+                  lh={1}
+                  style={{ letterSpacing: "0.04em" }}
+                >
+                  FROM
+                </Text>
+                <SingleDateInput
+                  size="xs"
+                  placeholder="From date"
+                  value={rangeFrom}
+                  onChange={setRangeFrom}
+                  allowDeselection={false}
+                  maxDate={rangeTo ?? new Date()}
+                  styles={dateFieldStyles}
+                />
+              </Box>
+              <Box>
+                <Text
+                  fz={10}
+                  fw={600}
+                  c={INK_4}
+                  mb={4}
+                  lh={1}
+                  style={{ letterSpacing: "0.04em" }}
+                >
+                  TO
+                </Text>
+                <SingleDateInput
+                  size="xs"
+                  placeholder="To date"
+                  value={rangeTo}
+                  onChange={setRangeTo}
+                  allowDeselection={false}
+                  minDate={rangeFrom ?? undefined}
+                  maxDate={new Date()}
+                  styles={dateFieldStyles}
+                />
+              </Box>
+            </Flex>
 
             <Button
               size="compact-xs"
@@ -943,7 +1022,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                 },
               }}
             />
-            <Button
+            {/* <Button
               size="compact-xs"
               variant="default"
               leftSection={<IconDownload size={14} />}
@@ -958,7 +1037,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
               }}
             >
               Export
-            </Button>
+            </Button> */}
             <Button
               size="compact-xs"
               variant="subtle"
@@ -1164,8 +1243,8 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         periodLabel={data.meta.periodLabel?.split(" ")[0] ?? "YTD"}
         categoryBenchmarkPct={data.marginBySegment.benchmarkPct}
         company={company}
-        fromDate={fromDate}
-        toDate={toDate}
+        fromDate={rangeFrom}
+        toDate={rangeTo}
       />
     </Box>
   );

@@ -111,7 +111,7 @@ export function JobDetailHeader({ detail }: JobDetailHeaderProps) {
             ),
           },
           { label: "Salesperson", value: detail.salesperson },
-          { label: "Delivered", value: detail.delivered, mono: true },
+          { label: "Job Date", value: detail.delivered, mono: true },
           { label: "Volume", value: detail.volume },
         ].map((cell) => (
           <Box key={cell.label}>

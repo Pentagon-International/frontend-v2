@@ -201,7 +201,7 @@ export default function ProfitabilityTrillTwo({
               <JobDetailHeader detail={detail} />
               <JobDetailKpiCards detail={detail} />
               <JobPlTable detail={detail} />
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing={14} mt={14}>
+              {/* <SimpleGrid cols={{ base: 1, md: 2 }} spacing={14} mt={14}>
                 <LinkedDocumentsCardWithOpen
                   documents={detail.linkedDocuments}
                   onOpenDocument={(doc) => {
@@ -213,7 +213,7 @@ export default function ProfitabilityTrillTwo({
                   items={detail.marginBridge}
                   commentary={detail.marginCommentary}
                 />
-              </SimpleGrid>
+              </SimpleGrid> */}
             </>
           ) : null}
         </Box>
