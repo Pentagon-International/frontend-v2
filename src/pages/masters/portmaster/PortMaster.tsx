@@ -38,6 +38,7 @@ import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type PortMaster = {
   port_code: string;
@@ -48,6 +49,7 @@ type PortMaster = {
 };
 
 export default function PortMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -324,7 +326,8 @@ export default function PortMasterList() {
           >
             Bulk Upload
           </Button>
-          <Button
+          {isAdmin && (
+<Button
             color="#105476"
             leftSection={<IconPlus size={16} />}
             size="xs"
@@ -332,6 +335,7 @@ export default function PortMasterList() {
           >
             Create New
           </Button>
+            )}
         </Group>
       </Group>
       <MantineReactTable table={table} />

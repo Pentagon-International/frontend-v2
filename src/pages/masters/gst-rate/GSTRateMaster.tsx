@@ -32,6 +32,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type GSTRateMaster = {
   id?: string;
@@ -43,6 +44,7 @@ type GSTRateMaster = {
 };
 
 export default function GSTRateMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -373,7 +375,8 @@ export default function GSTRateMasterList() {
           </Text>
 
           <Group gap="xs" wrap="nowrap">
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -393,6 +396,7 @@ export default function GSTRateMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>

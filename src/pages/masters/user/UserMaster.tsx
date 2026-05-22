@@ -35,6 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type GroupCompany = {
   groupCode: string;
@@ -43,6 +44,7 @@ type GroupCompany = {
 };
 
 export default function UserMaster() {
+  const isAdmin = useIsAdminUser();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
 
@@ -492,7 +494,8 @@ export default function UserMaster() {
               Bulk Upload
             </Button>
 
-            <Button
+            {isAdmin && (
+<Button
               //   variant="filled"
               color={"#105476"}
               leftSection={<IconPlus size={16} />}
@@ -501,6 +504,7 @@ export default function UserMaster() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
         <MantineReactTable table={table} />

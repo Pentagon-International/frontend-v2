@@ -45,6 +45,7 @@ import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "VENDOR_MASTER";
 
@@ -310,6 +311,7 @@ function buildVendorFilterPayload(
 }
 
 export default function VendorMaster() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -1101,7 +1103,8 @@ export default function VendorMaster() {
               >
                 <IconFilter size={18} />
               </ActionIcon>
-              <Button
+              {isAdmin && (
+<Button
                 leftSection={<IconPlus size={16} />}
                 size="sm"
                 styles={{
@@ -1126,6 +1129,7 @@ export default function VendorMaster() {
               >
                 Create New
               </Button>
+            )}
             </Group>
           </Group>
         </Box>
