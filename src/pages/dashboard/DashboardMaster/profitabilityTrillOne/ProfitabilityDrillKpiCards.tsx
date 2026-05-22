@@ -1,5 +1,6 @@
 import { Box, SimpleGrid, Text } from "@mantine/core";
 import { BAD, CARD_BG, GOOD, INK, INK_3, INK_4, LINE } from "./constants";
+import { TruncatedFormattedAmount } from "./TruncatedAmountText";
 import type { ProfitabilityDrillSummary } from "./types";
 import { formatProfitabilityAmount } from "./utils";
 
@@ -14,12 +15,14 @@ function MiniKpi({
   detail,
   valueColor,
   detailColor,
+  truncateValue = false,
 }: {
   label: string;
   value: string;
   detail: string;
   valueColor?: string;
   detailColor?: string;
+  truncateValue?: boolean;
 }) {
   return (
     <Box
@@ -28,6 +31,7 @@ function MiniKpi({
         border: `1px solid ${LINE}`,
         borderRadius: 8,
         padding: "10px 12px",
+        minWidth: 0,
       }}
     >
       <Text
@@ -39,18 +43,23 @@ function MiniKpi({
       >
         {label}
       </Text>
-      <Text
-        mt={2}
-        style={{
-          fontSize: 18,
-          fontWeight: 600,
-          letterSpacing: "-0.01em",
-          color: valueColor ?? INK,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {value}
-      </Text>
+      <Box mt={2} style={{ minWidth: 0 }}>
+        {truncateValue ? (
+          <TruncatedFormattedAmount text={value} fz={18} fw={600} color={valueColor ?? INK} />
+        ) : (
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              color: valueColor ?? INK,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {value}
+          </Text>
+        )}
+      </Box>
       <Text fz={10} mt={1} c={detailColor ?? INK_4}>
         {detail}
       </Text>
@@ -60,14 +69,9 @@ function MiniKpi({
 
 export function ProfitabilityDrillKpiCards({
   summary,
-  categoryBenchmarkPct,
+  categoryBenchmarkPct: _categoryBenchmarkPct,
 }: ProfitabilityDrillKpiCardsProps) {
   const { currencyCode } = summary;
-  const costPct =
-    summary.revenue > 0
-      ? ((summary.cost / summary.revenue) * 100).toFixed(1)
-      : "0.0";
-  const benchmark = categoryBenchmarkPct ?? summary.marginPct;
 
   return (
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={10} mb={16}>
@@ -75,12 +79,13 @@ export function ProfitabilityDrillKpiCards({
         label="Revenue"
         value={formatProfitabilityAmount(summary.revenue, currencyCode)}
         detail={`${summary.jobCount} jobs`}
+        truncateValue
       />
       <MiniKpi
         label="Direct Cost"
         value={formatProfitabilityAmount(summary.cost, currencyCode)}
-        // detail={`${costPct}% of revenue`}
         detail={``}
+        truncateValue
       />
       <MiniKpi
         label="Gross Profit"
@@ -92,6 +97,7 @@ export function ProfitabilityDrillKpiCards({
         }
         valueColor={summary.grossProfit >= 0 ? GOOD : BAD}
         detailColor={summary.gpTrendUp ? GOOD : BAD}
+        truncateValue
       />
       <MiniKpi
         label="Avg Margin"

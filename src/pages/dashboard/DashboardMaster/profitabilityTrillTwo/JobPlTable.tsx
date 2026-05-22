@@ -1,7 +1,8 @@
 import { Box, Flex, Table, Text } from "@mantine/core";
 import { CARD_BG, GOOD, INK, INK_2, INK_3, INK_4, LINE, PAGE_BG } from "../profitabilityTrillOne/constants";
 import type { JobPlLine, JobProfitabilityDetail } from "./types";
-import { formatProfitabilityAmount, profitabilityTrillFonts } from "../profitabilityTrillOne/utils";
+import { TruncatedAmountText } from "../profitabilityTrillOne/TruncatedAmountText";
+import { profitabilityTrillFonts } from "../profitabilityTrillOne/utils";
 
 function PlRows({ lines, currencyCode }: { lines: JobPlLine[]; currencyCode: string }) {
   return (
@@ -24,8 +25,8 @@ function PlRows({ lines, currencyCode }: { lines: JobPlLine[]; currencyCode: str
               {line.rate}
             </Text>
           </Table.Td>
-          <Table.Td ta="right" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {formatProfitabilityAmount(line.amountInr, currencyCode)}
+          <Table.Td ta="right" style={{ maxWidth: 120 }}>
+            <TruncatedAmountText value={line.amountInr} currencyCode={currencyCode} />
           </Table.Td>
         </Table.Tr>
       ))}
@@ -109,8 +110,8 @@ export function JobPlTable({ detail }: JobPlTableProps) {
               <Table.Td colSpan={4} fw={600} c={INK}>
                 Total Revenue
               </Table.Td>
-              <Table.Td ta="right" fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatProfitabilityAmount(revenueTotal, currencyCode)}
+              <Table.Td ta="right" fw={600} style={{ maxWidth: 120 }}>
+                <TruncatedAmountText value={revenueTotal} currencyCode={currencyCode} bold />
               </Table.Td>
             </Table.Tr>
 
@@ -134,8 +135,8 @@ export function JobPlTable({ detail }: JobPlTableProps) {
               <Table.Td colSpan={4} fw={600} c={INK}>
                 Total Direct Cost
               </Table.Td>
-              <Table.Td ta="right" fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatProfitabilityAmount(costTotal, currencyCode)}
+              <Table.Td ta="right" fw={600} style={{ maxWidth: 120 }}>
+                <TruncatedAmountText value={costTotal} currencyCode={currencyCode} bold />
               </Table.Td>
             </Table.Tr>
 
@@ -143,8 +144,8 @@ export function JobPlTable({ detail }: JobPlTableProps) {
               <Table.Td colSpan={4} fw={700} c={GOOD} fz={13}>
                 Gross Profit · {detail.marginPct.toFixed(1)}% margin
               </Table.Td>
-              <Table.Td ta="right" fw={700} c={GOOD} fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatProfitabilityAmount(gpTotal, currencyCode)}
+              <Table.Td ta="right" fw={700} fz={13} style={{ maxWidth: 120 }}>
+                <TruncatedAmountText value={gpTotal} currencyCode={currencyCode} bold fz={13} fw={700} />
               </Table.Td>
             </Table.Tr>
           </Table.Tbody>

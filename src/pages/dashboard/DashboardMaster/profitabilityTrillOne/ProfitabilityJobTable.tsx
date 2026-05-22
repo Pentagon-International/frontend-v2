@@ -13,12 +13,8 @@ import {
 } from "./constants";
 import type { ProfitabilityDrillRowKind } from "./profitabilityTrillOneApi";
 import type { ProfitabilityJob } from "./types";
-import {
-  formatProfitabilityAmount,
-  jobMarginPct,
-  marginTone,
-  profitabilityTrillFonts,
-} from "./utils";
+import { TruncatedAmountText } from "./TruncatedAmountText";
+import { jobMarginPct, marginTone, profitabilityTrillFonts } from "./utils";
 
 const JL_GRID_BASE: React.CSSProperties = {
   display: "grid",
@@ -67,32 +63,6 @@ function MarginBadge({ marginPct }: { marginPct: number | null }) {
     >
       {marginPct.toFixed(1)}%
     </Box>
-  );
-}
-
-function CurrencyCell({
-  value,
-  currencyCode,
-  bold = false,
-  muted = false,
-}: {
-  value: number;
-  currencyCode: string;
-  bold?: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <Text
-      style={{
-        textAlign: "right",
-        fontVariantNumeric: "tabular-nums",
-        fontWeight: bold ? 600 : 400,
-        color: muted ? INK_3 : bold ? INK : INK_2,
-        fontFamily: profitabilityTrillFonts.sans,
-      }}
-    >
-      {formatProfitabilityAmount(value, currencyCode)}
-    </Text>
   );
 }
 
@@ -236,9 +206,17 @@ export function ProfitabilityJobTable({
                     {getLaneLabel(job.lane)}
                   </Text>
                 </Box>
-                <CurrencyCell value={job.revenue} currencyCode={job.currencyCode} />
-                <CurrencyCell value={job.cost} currencyCode={job.currencyCode} muted />
-                <CurrencyCell value={job.grossProfit} currencyCode={job.currencyCode} bold />
+                <TruncatedAmountText value={job.revenue} currencyCode={job.currencyCode} />
+                <TruncatedAmountText
+                  value={job.cost}
+                  currencyCode={job.currencyCode}
+                  muted
+                />
+                <TruncatedAmountText
+                  value={job.grossProfit}
+                  currencyCode={job.currencyCode}
+                  bold
+                />
                 <Flex justify="flex-end">
                   <MarginBadge marginPct={displayMargin} />
                 </Flex>
