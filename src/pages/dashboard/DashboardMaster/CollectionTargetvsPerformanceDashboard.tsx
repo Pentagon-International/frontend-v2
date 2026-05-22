@@ -1,18 +1,29 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Box, SimpleGrid } from "@mantine/core";
-import { apiCallProtected } from "../../../api/axios";
-import { URL } from "../../../api/serverUrls";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
-import BranchCollectionInvoiceDrawer from "./BranchCollectionInvoiceDrawer";
+import CollectionDashboardFirstTrill from "./CollectionDashboardFirstTrill";
 import { BranchCollectionTable } from "./collectionTargetVsPerformance/components/BranchCollectionTable";
 import { CollectionKpiRow } from "./collectionTargetVsPerformance/components/CollectionKpiRow";
 import { CollectionPageHeader } from "./collectionTargetVsPerformance/components/CollectionPageHeader";
 import { DailyCollectionChart } from "./collectionTargetVsPerformance/components/DailyCollectionChart";
 import { MonthlyTargetCard } from "./collectionTargetVsPerformance/components/MonthlyTargetCard";
 import type { PeriodGranularity } from "./collectionTargetVsPerformance/components/PeriodPillGroup";
-import { COLLECTION_TARGET_VS_PERFORMANCE_MOCK } from "./collectionTargetVsPerformance/collectionTargetVsPerformanceMock";
-import { normalizeCollectionTargetVsPerformance } from "./collectionTargetVsPerformance/collectionTargetVsPerformanceNormalize";
+import {
+  buildCollectionPerformanceRequest,
+  fetchCollectionPerformance,
+} from "./collectionTargetVsPerformance/collectionTargetVsPerformanceApi";
+import {
+  normalizeDateRange,
+  parseApiDate,
+  periodToDateRange,
+  type PendingActivitiesDateRange,
+} from "./financePendingActivities/financePendingActivitiesApi";
+import { filterCollectionByBranch } from "./collectionTargetVsPerformance/filterCollectionByBranch";
+import {
+  emptyCollectionTargetVsPerformance,
+  normalizeCollectionTargetVsPerformance,
+} from "./collectionTargetVsPerformance/collectionTargetVsPerformanceNormalize";
 import type {
   BranchCollectionRow,
   CollectionTargetVsPerformanceData,
@@ -24,42 +35,68 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
   const company = user?.company?.company_name || "PENTAGON INDIA";
 
   const [data, setData] = useState<CollectionTargetVsPerformanceData>(
-    COLLECTION_TARGET_VS_PERFORMANCE_MOCK,
+    emptyCollectionTargetVsPerformance(),
   );
   const [loading, setLoading] = useState(true);
-  const [apiNotice, setApiNotice] = useState<string | null>(null);
-  const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("month");
-  const [periodFilter, setPeriodFilter] = useState<string | null>("fy_ytd");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("fy");
+  const [dateRange, setDateRange] = useState<PendingActivitiesDateRange>(() =>
+    periodToDateRange("fy"),
+  );
   const [branchFilter, setBranchFilter] = useState<string | null>("all");
   const [currencyFilter, setCurrencyFilter] = useState<string | null>("all");
   const [selectedBranchForDrawer, setSelectedBranchForDrawer] =
     useState<BranchCollectionRow | null>(null);
   const [branchDrawerOpened, setBranchDrawerOpened] = useState(false);
 
+  const handlePeriodGranularityChange = useCallback((period: PeriodGranularity) => {
+    setPeriodGranularity(period);
+    setDateRange(periodToDateRange(period));
+  }, []);
+
+  const fromDate = parseApiDate(dateRange.date_from);
+  const toDate = parseApiDate(dateRange.date_to);
+
+  const handleFromDateChange = useCallback(
+    (date: Date | null) => {
+      const next = normalizeDateRange(date, toDate ?? date);
+      if (next) setDateRange(next);
+    },
+    [toDate],
+  );
+
+  const handleToDateChange = useCallback(
+    (date: Date | null) => {
+      const next = normalizeDateRange(fromDate ?? date, date);
+      if (next) setDateRange(next);
+    },
+    [fromDate],
+  );
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const response = await apiCallProtected.post(URL.dashboard.collectionTargetVsPerformance, {
-        period: periodGranularity,
-        period_filter: periodFilter,
-        branch: branchFilter === "all" ? null : branchFilter,
-        currency: currencyFilter === "all" ? null : currencyFilter,
-      });
-      setData(normalizeCollectionTargetVsPerformance(response.data));
-      setApiNotice(null);
-    } catch {
-      setData(COLLECTION_TARGET_VS_PERFORMANCE_MOCK);
-      setApiNotice(
-        "Live collection data is not available yet. Showing reference layout with demo figures until the API responds.",
+      const body = await fetchCollectionPerformance(
+        buildCollectionPerformanceRequest(company, dateRange),
       );
+      setData(normalizeCollectionTargetVsPerformance(body));
+    } catch {
+      setData(emptyCollectionTargetVsPerformance());
+      setLoadError("Unable to load collection performance. Please refresh or try again later.");
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, currencyFilter, periodFilter, periodGranularity]);
+  }, [company, dateRange]);
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  const displayData = useMemo(
+    () => filterCollectionByBranch(data, branchFilter),
+    [branchFilter, data],
+  );
 
   const handleRowClick = (row: BranchCollectionRow) => {
     const branchKey = row.id ?? row.branchCode ?? row.branchName;
@@ -79,48 +116,49 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
       }}
     >
       <Box px={{ base: 12, sm: 16 }} py="md">
-        {apiNotice ? (
-          <Alert color="yellow" variant="light" mb="md" radius="md" title="Demo data">
-            {apiNotice}
+        {loadError ? (
+          <Alert color="red" variant="light" mb="md" radius="md" title="Could not load data">
+            {loadError}
           </Alert>
         ) : null}
 
         <CollectionPageHeader
-          meta={data.meta}
+          meta={displayData.meta}
           periodGranularity={periodGranularity}
-          onPeriodGranularityChange={setPeriodGranularity}
+          onPeriodGranularityChange={handlePeriodGranularityChange}
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDateChange={handleFromDateChange}
+          onToDateChange={handleToDateChange}
           branchFilter={branchFilter}
           onBranchFilterChange={setBranchFilter}
           currencyFilter={currencyFilter}
           onCurrencyFilterChange={setCurrencyFilter}
-          filterOptions={data.filterOptions}
+          filterOptions={displayData.filterOptions}
           onRefresh={() => void loadDashboard()}
         />
 
-        <CollectionKpiRow kpis={data.kpis} loading={loading} />
+        <CollectionKpiRow kpis={displayData.kpis} loading={loading} />
 
         <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={14} mb={14}>
-          <MonthlyTargetCard data={data.thisMonth} />
-          <DailyCollectionChart data={data.dailyCollection} loading={loading} />
+          <MonthlyTargetCard data={displayData.thisMonth} loading={loading} />
+          <DailyCollectionChart data={displayData.dailyCollection} loading={loading} />
         </SimpleGrid>
 
         <BranchCollectionTable
-          rows={data.branchPerformance.rows}
-          total={data.branchPerformance.total}
+          rows={displayData.branchPerformance.rows}
+          total={displayData.branchPerformance.total}
           loading={loading}
           onRowClick={handleRowClick}
         />
       </Box>
 
-      <BranchCollectionInvoiceDrawer
+      <CollectionDashboardFirstTrill
         opened={branchDrawerOpened}
         onClose={() => setBranchDrawerOpened(false)}
         branch={selectedBranchForDrawer}
         company={company}
-        periodGranularity={periodGranularity}
-        periodFilter={periodFilter}
-        currencyFilter={currencyFilter}
-        periodLabel={data.meta.periodLabel}
+        dateRange={dateRange}
       />
     </Box>
   );

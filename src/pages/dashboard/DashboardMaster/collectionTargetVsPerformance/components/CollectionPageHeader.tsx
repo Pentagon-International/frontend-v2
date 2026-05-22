@@ -1,13 +1,18 @@
 import { Box, Button, Flex, Select, Text } from "@mantine/core";
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
+import { SingleDateInput } from "../../../../../components";
 import type { CollectionTargetVsPerformanceData } from "../collectionTargetVsPerformanceTypes";
-import { COL_INK, COL_INK_3, COL_LINE, COL_NAVY_800 } from "../theme";
+import { COL_INK, COL_INK_3, COL_INK_4, COL_LINE } from "../theme";
 import { PeriodPillGroup, type PeriodGranularity } from "./PeriodPillGroup";
 
 type CollectionPageHeaderProps = {
   meta: CollectionTargetVsPerformanceData["meta"];
   periodGranularity: PeriodGranularity;
   onPeriodGranularityChange: (value: PeriodGranularity) => void;
+  fromDate: Date | null;
+  toDate: Date | null;
+  onFromDateChange: (value: Date | null) => void;
+  onToDateChange: (value: Date | null) => void;
   branchFilter: string | null;
   onBranchFilterChange: (value: string | null) => void;
   currencyFilter: string | null;
@@ -26,10 +31,25 @@ const selectStyles = {
   },
 } as const;
 
+const dateFieldStyles = {
+  input: {
+    height: 32,
+    minHeight: 32,
+    borderColor: COL_LINE,
+    fontSize: 12,
+    fontWeight: 500,
+    width: 132,
+  },
+} as const;
+
 export function CollectionPageHeader({
   meta,
   periodGranularity,
   onPeriodGranularityChange,
+  fromDate,
+  toDate,
+  onFromDateChange,
+  onToDateChange,
   branchFilter,
   onBranchFilterChange,
   currencyFilter,
@@ -56,22 +76,37 @@ export function CollectionPageHeader({
         </Text>
       </Box>
 
-      <Flex gap={8} wrap="wrap" justify="flex-end" align="center">
-        <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} />
-        <Button
-          size="compact-xs"
-          variant="filled"
-          styles={{
-            root: {
-              background: COL_NAVY_800,
-              height: 32,
-              fontSize: 12,
-              fontWeight: 500,
-            },
-          }}
-        >
-          {meta.periodLabel}
-        </Button>
+      <Flex gap={8} wrap="wrap" justify="flex-end" align="flex-end">
+        {/* <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} /> */}
+        <Box>
+          <Text fz={10} fw={600} c={COL_INK_4} mb={4} style={{ letterSpacing: "0.04em" }}>
+            FROM
+          </Text>
+          <SingleDateInput
+            size="xs"
+            placeholder="From date"
+            value={fromDate}
+            onChange={onFromDateChange}
+            allowDeselection={false}
+            maxDate={toDate ?? new Date()}
+            styles={dateFieldStyles}
+          />
+        </Box>
+        <Box>
+          <Text fz={10} fw={600} c={COL_INK_4} mb={4} style={{ letterSpacing: "0.04em" }}>
+            TO
+          </Text>
+          <SingleDateInput
+            size="xs"
+            placeholder="To date"
+            value={toDate}
+            onChange={onToDateChange}
+            allowDeselection={false}
+            minDate={fromDate ?? undefined}
+            maxDate={new Date()}
+            styles={dateFieldStyles}
+          />
+        </Box>
         <Select
           size="xs"
           value={branchFilter}

@@ -4,7 +4,10 @@ export type CollectionBarTone = "over" | "under" | "neutral";
 
 export type CollectionKpi = {
   label: string;
+  /** Numeric value for % / days KPIs */
   value: number;
+  /** Pre-formatted amount from API `summary` (rupees → Cr/L) */
+  formattedValue?: string;
   unit?: string;
   showCurrency?: boolean;
   context?: string;

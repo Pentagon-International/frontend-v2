@@ -3,7 +3,7 @@ import {
   ERP_LIST_FONT_MONO,
   ERP_LIST_FONT_SANS,
 } from "../../../../../components/ERPListPage/erpListGeistShell";
-import { branchDotColor, formatAmountInCr } from "../../accountsDashboardNormalize";
+import { branchDotColor, formatCrLAmount } from "../../accountsDashboardNormalize";
 import type { BranchCollectionRow } from "../collectionTargetVsPerformanceTypes";
 import {
   BRANCH_CHIP_CITY,
@@ -132,10 +132,7 @@ function BranchCollectionRowView({
         </Box>
       </Flex>
       <Text fz={12} c={COL_INK_2} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        <Text span c={COL_INK_4} fz={10} mr={2}>
-          ₹
-        </Text>
-        {formatAmountInCr(row.target)}
+        {formatCrLAmount(row.target)}
       </Text>
       <Text
         fz={12}
@@ -143,10 +140,7 @@ function BranchCollectionRowView({
         c={COL_INK}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        <Text span c={COL_INK_4} fz={10} mr={2}>
-          ₹
-        </Text>
-        {formatAmountInCr(row.collected)}
+        {formatCrLAmount(row.collected)}
       </Text>
       <CollectionPerformanceBar
         collectedWidthPct={row.barCollectedWidthPct}
@@ -159,7 +153,7 @@ function BranchCollectionRowView({
         c={row.gapDirection === "pos" ? COL_GOOD : COL_BAD}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        {row.gapDisplay ?? formatAmountInCr(row.gap)}
+        {row.gapDisplay ?? formatCrLAmount(row.gap)}
       </Text>
       <Text
         fz={11}

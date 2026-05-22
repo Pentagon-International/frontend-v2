@@ -50,7 +50,7 @@ export function CollectionPerformanceBar({
           borderRadius: 4,
         }}
       />
-      <Box
+      {/* <Box
         style={{
           position: "absolute",
           top: -3,
@@ -60,7 +60,7 @@ export function CollectionPerformanceBar({
           background: COL_NAVY_900,
           transform: "translateX(-1px)",
         }}
-      />
+      /> */}
     </Box>
   );
 }

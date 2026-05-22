@@ -62,17 +62,25 @@ export function CollectionKpiCard({ kpi, loading, invertTrend }: CollectionKpiCa
           fontVariantNumeric: "tabular-nums",
         }}
       >
-        {kpi.showCurrency && kpi.unit !== "%" ? (
-          <Text span c={COL_INK_3} fz={14} fw={500} mr={2}>
-            ₹
-          </Text>
-        ) : null}
-        {kpi.unit === "%" || kpi.unit === "days" ? kpi.value.toFixed(1) : kpi.value.toFixed(2)}
-        {kpi.unit ? (
-          <Text span c={COL_INK_3} fz={14} fw={500} ml={2}>
-            {kpi.unit}
-          </Text>
-        ) : null}
+        {kpi.formattedValue ? (
+          kpi.formattedValue
+        ) : (
+          <>
+            {kpi.showCurrency && kpi.unit !== "%" ? (
+              <Text span c={COL_INK_3} fz={14} fw={500} mr={2}>
+                ₹
+              </Text>
+            ) : null}
+            {kpi.unit === "%" || kpi.unit === "days"
+              ? kpi.value.toFixed(1)
+              : kpi.value.toFixed(2)}
+            {kpi.unit ? (
+              <Text span c={COL_INK_3} fz={14} fw={500} ml={2}>
+                {kpi.unit}
+              </Text>
+            ) : null}
+          </>
+        )}
       </Text>
       {kpi.context ? (
         <Text fz={12} c={COL_INK_4} mt={6}>
