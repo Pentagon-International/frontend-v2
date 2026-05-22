@@ -13,17 +13,23 @@ export type AgeingBucket = {
   footnoteTone?: "bad" | "neutral";
 };
 
+export type OutstandingAmountCells = {
+  outstanding: string;
+  overdue: string;
+  days1_30: string;
+  days31_60: string;
+  days60Plus: string;
+};
+
 export type OutstandingTableRow = {
   id?: string;
   primaryLabel: string;
+  /** Branch label from API `location` (falls back in normalizer when absent). */
+  branchName?: string;
   branchVariant?: string;
   showBranchChip?: boolean;
   subtitle: string;
-  outstanding: number;
-  current: number;
-  days1_30: number;
-  days31_60: number;
-  days60Plus: number;
+  amounts: OutstandingAmountCells;
   risk: OutstandingRiskLevel;
   watchLabel?: string;
   watchTone?: "warn" | "bad";
@@ -52,10 +58,18 @@ export type FinanceOutstandingAgeingData = {
     subtitle: string;
     asOfLabel: string;
   };
+  /** From API `summary.currency` (e.g. INR). */
+  currency: string;
   customer: OutstandingPartySlice;
   agent: OutstandingPartySlice;
   filterOptions?: {
     branches?: { value: string; label: string }[];
     risks?: { value: string; label: string }[];
+  };
+  pagination?: {
+    index: number;
+    limit: number;
+    total: number;
+    hasNext: boolean;
   };
 };

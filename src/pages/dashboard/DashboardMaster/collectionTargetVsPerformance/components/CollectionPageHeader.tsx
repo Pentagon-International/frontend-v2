@@ -117,7 +117,7 @@ export function CollectionPageHeader({
           ]}
           styles={{ input: { ...selectStyles.input, width: 120 } }}
         />
-        <Select
+        {/* <Select
           size="xs"
           value={currencyFilter}
           onChange={onCurrencyFilterChange}
@@ -126,8 +126,8 @@ export function CollectionPageHeader({
             ...(filterOptions?.currencies ?? []),
           ]}
           styles={{ input: { ...selectStyles.input, width: 120 } }}
-        />
-        <Button
+        /> */}
+        {/* <Button
           size="compact-xs"
           variant="default"
           leftSection={<IconDownload size={14} />}
@@ -151,7 +151,7 @@ export function CollectionPageHeader({
           aria-label="Refresh"
         >
           <IconRefresh size={16} />
-        </Button>
+        </Button> */}
       </Flex>
     </Flex>
   );

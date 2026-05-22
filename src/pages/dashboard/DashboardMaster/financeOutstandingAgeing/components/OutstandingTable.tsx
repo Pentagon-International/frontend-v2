@@ -1,6 +1,6 @@
 import { Box, Skeleton, Text } from "@mantine/core";
 import { ERP_LIST_FONT_SANS } from "../../../../../components/ERPListPage/erpListGeistShell";
-import { branchDotColor, formatAmountInCr } from "../../accountsDashboardNormalize";
+import { branchDotColor } from "../../accountsDashboardNormalize";
 import type {
   OutstandingTableRow,
   OutstandingTableSection,
@@ -32,19 +32,22 @@ function watchTagStyle(tone?: "warn" | "bad") {
   return { bg: OST_WARN_BG, fg: "#92400e" };
 }
 
-function formatCell(value: number): string {
-  if (value <= 0) return "—";
-  return `₹${formatAmountInCr(value)}`;
+function formatCell(value: string, currency: string): string {
+  if (!value || value === "—") return "—";
+  if (!currency) return value;
+  return `${currency} ${value}`;
 }
 
 function OutstandingTableRowView({
   row,
   isTotal,
   firstColumnLabel,
+  currency,
 }: {
   row: OutstandingTableRow;
   isTotal?: boolean;
   firstColumnLabel: string;
+  currency: string;
 }) {
   if (row.isMoreFooter) {
     return (
@@ -71,10 +74,11 @@ function OutstandingTableRowView({
   }
 
   const risk = riskPillStyle(row.risk);
-  const chipCity =
-    row.showBranchChip && row.branchVariant
-      ? BRANCH_CHIP_CITY[row.branchVariant] ?? row.primaryLabel
-      : null;
+  const branchLabel =
+    row.branchName?.trim() ||
+    (row.branchVariant ? BRANCH_CHIP_CITY[row.branchVariant] : undefined) ||
+    row.primaryLabel;
+  const chipCity = row.showBranchChip && branchLabel ? branchLabel : null;
 
   return (
     <Box
@@ -92,33 +96,41 @@ function OutstandingTableRowView({
     >
       <Box style={{ minWidth: 0 }}>
         {chipCity ? (
-          <Box
-            component="span"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              fontSize: 10.5,
-              fontWeight: 600,
-              padding: "2px 7px",
-              borderRadius: 3,
-              background: "#f8fafc",
-              color: OST_INK,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              border: `1px solid ${OST_LINE}`,
-              marginRight: 6,
-            }}
-          >
+          <Box>
             <Box
+              component="span"
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: branchDotColor(row.branchVariant),
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 10.5,
+                fontWeight: 600,
+                padding: "2px 7px",
+                borderRadius: 3,
+                background: "#f8fafc",
+                color: OST_INK,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                border: `1px solid ${OST_LINE}`,
               }}
-            />
-            {chipCity}
+            >
+              {row.branchVariant ? (
+                <Box
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: branchDotColor(row.branchVariant),
+                  }}
+                />
+              ) : null}
+              {chipCity}
+            </Box>
+            {row.primaryLabel && row.primaryLabel !== chipCity ? (
+              <Text fz={12} fw={isTotal ? 600 : 500} c={OST_INK} mt={4}>
+                {row.primaryLabel}
+              </Text>
+            ) : null}
           </Box>
         ) : (
           <Text fz={12} fw={isTotal ? 600 : 500} c={OST_INK}>
@@ -153,16 +165,16 @@ function OutstandingTableRowView({
         ) : null}
       </Box>
       <Text fz={12} fw={isTotal ? 600 : 600} c={OST_INK} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.outstanding)}
+        {formatCell(row.amounts.outstanding, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.current)}
+        {formatCell(row.amounts.overdue, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.days1_30)}
+        {formatCell(row.amounts.days1_30, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.days31_60)}
+        {formatCell(row.amounts.days31_60, currency)}
       </Text>
       <Text
         fz={12}
@@ -170,7 +182,7 @@ function OutstandingTableRowView({
         c={row.highlight60Plus ? OST_BAD : OST_INK_3}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        {formatCell(row.days60Plus)}
+        {formatCell(row.amounts.days60Plus, currency)}
       </Text>
       <Box style={{ textAlign: "right" }}>
         {isTotal ? (
@@ -203,6 +215,8 @@ type OutstandingTableProps = {
   section: OutstandingTableSection;
   viewMode: OutstandingViewMode;
   partyLabel: string;
+  /** From API `summary.currency` (e.g. INR). */
+  currency?: string;
   loading?: boolean;
   /** When true, table sits inside a parent card (no extra outer border). */
   embedded?: boolean;
@@ -212,6 +226,7 @@ export function OutstandingTable({
   section,
   viewMode,
   partyLabel,
+  currency = "",
   loading,
   embedded,
 }: OutstandingTableProps) {
@@ -245,7 +260,7 @@ export function OutstandingTable({
         >
           <Text style={headerStyle}>{firstCol}</Text>
           <Text style={{ ...headerStyle, textAlign: "right" }}>Outstanding</Text>
-          <Text style={{ ...headerStyle, textAlign: "right" }}>Current</Text>
+          <Text style={{ ...headerStyle, textAlign: "right" }}>Overdue</Text>
           <Text style={{ ...headerStyle, textAlign: "right" }}>1–30</Text>
           <Text style={{ ...headerStyle, textAlign: "right" }}>31–60</Text>
           <Text style={{ ...headerStyle, textAlign: "right" }}>60+</Text>
@@ -265,15 +280,22 @@ export function OutstandingTable({
                 key={row.id ?? row.primaryLabel}
                 row={row}
                 firstColumnLabel={partyLabel}
+                currency={currency}
               />
             ))}
             {section.moreFooter ? (
               <OutstandingTableRowView
                 row={section.moreFooter}
                 firstColumnLabel={partyLabel}
+                currency={currency}
               />
             ) : null}
-            <OutstandingTableRowView row={section.total} isTotal firstColumnLabel={partyLabel} />
+            <OutstandingTableRowView
+              row={section.total}
+              isTotal
+              firstColumnLabel={partyLabel}
+              currency={currency}
+            />
           </>
         )}
       </Box>

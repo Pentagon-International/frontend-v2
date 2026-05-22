@@ -57,7 +57,6 @@ export function OutstandingPageHeader({
       </Box>
 
       <Flex gap={8} wrap="wrap" justify="flex-end" align="center">
-        <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} />
         <Button
           size="compact-xs"
           variant="filled"
@@ -92,7 +91,7 @@ export function OutstandingPageHeader({
           ]}
           styles={{ input: { ...selectStyles.input, width: 110 } }}
         />
-        <Button
+        {/* <Button
           size="compact-xs"
           variant="default"
           leftSection={<IconDownload size={14} />}
@@ -116,7 +115,7 @@ export function OutstandingPageHeader({
           aria-label="Refresh"
         >
           <IconRefresh size={16} />
-        </Button>
+        </Button> */}
       </Flex>
     </Flex>
   );

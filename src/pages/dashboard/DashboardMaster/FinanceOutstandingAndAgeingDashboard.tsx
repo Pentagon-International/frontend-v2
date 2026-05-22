@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Box, Flex } from "@mantine/core";
-import { apiCallProtected } from "../../../api/axios";
-import { URL } from "../../../api/serverUrls";
+import { Alert, Box, Flex, Skeleton } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
+import useAuthStore from "../../../store/authStore";
 import type { PeriodGranularity } from "./collectionTargetVsPerformance/components/PeriodPillGroup";
 import { AgeingSummaryBar } from "./financeOutstandingAgeing/components/AgeingSummaryBar";
 import { OutstandingPageHeader } from "./financeOutstandingAgeing/components/OutstandingPageHeader";
 import { OutstandingTable } from "./financeOutstandingAgeing/components/OutstandingTable";
-import { PartyTabs, ViewToggle } from "./financeOutstandingAgeing/components/PartyTabs";
-import { FINANCE_OUTSTANDING_AGEING_MOCK } from "./financeOutstandingAgeing/financeOutstandingAgeingMock";
-import { getPartySlice, normalizeFinanceOutstandingAgeing } from "./financeOutstandingAgeing/financeOutstandingAgeingNormalize";
+import { ViewToggle } from "./financeOutstandingAgeing/components/PartyTabs";
+import { fetchOutstandingAgeing } from "./financeOutstandingAgeing/financeOutstandingAgeingApi";
+import {
+  emptyFinanceOutstandingAgeing,
+  getPartySlice,
+  normalizeFinanceOutstandingAgeing,
+} from "./financeOutstandingAgeing/financeOutstandingAgeingNormalize";
 import type {
   FinanceOutstandingAgeingData,
   OutstandingPartyType,
@@ -17,37 +20,50 @@ import type {
 } from "./financeOutstandingAgeing/financeOutstandingAgeingTypes";
 import { OST_PAGE_BG } from "./financeOutstandingAgeing/theme";
 
+const PAGE_LIMIT = 15;
+
 const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
-  const [data, setData] = useState<FinanceOutstandingAgeingData>(FINANCE_OUTSTANDING_AGEING_MOCK);
+  const user = useAuthStore((state) => state.user);
+  const company = user?.company?.company_name || "PENTAGON INDIA";
+
+  const [data, setData] = useState<FinanceOutstandingAgeingData>(
+    emptyFinanceOutstandingAgeing(),
+  );
   const [loading, setLoading] = useState(true);
-  const [apiNotice, setApiNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("month");
   const [branchFilter, setBranchFilter] = useState<string | null>("all");
   const [riskFilter, setRiskFilter] = useState<string | null>("all");
-  const [partyType, setPartyType] = useState<OutstandingPartyType>("customer");
+  const [partyType] = useState<OutstandingPartyType>("customer");
   const [viewMode, setViewMode] = useState<OutstandingViewMode>("branch");
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [viewMode, branchFilter, riskFilter]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const response = await apiCallProtected.post(URL.dashboard.financeOutstandingAgeing, {
-        period: periodGranularity,
-        branch: branchFilter === "all" ? null : branchFilter,
+      const body = await fetchOutstandingAgeing({
+        company,
+        branch: viewMode === "branch",
+        index: pageIndex,
+        limit: PAGE_LIMIT,
         risk: riskFilter === "all" ? null : riskFilter,
-        party_type: partyType,
-        view: viewMode,
+        location: branchFilter === "all" ? null : branchFilter,
       });
-      setData(normalizeFinanceOutstandingAgeing(response.data));
-      setApiNotice(null);
+      setData(normalizeFinanceOutstandingAgeing(body, viewMode));
     } catch {
-      setData(FINANCE_OUTSTANDING_AGEING_MOCK);
-      setApiNotice(
-        "Live outstanding & ageing data is not available yet. Showing reference layout with demo figures until the API responds.",
+      setData(emptyFinanceOutstandingAgeing());
+      setLoadError(
+        "Unable to load outstanding & ageing data. Please refresh or try again later.",
       );
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, periodGranularity, partyType, riskFilter, viewMode]);
+  }, [branchFilter, company, pageIndex, riskFilter, viewMode]);
 
   useEffect(() => {
     void loadDashboard();
@@ -68,9 +84,9 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
       }}
     >
       <Box px={{ base: 12, sm: 16 }} py="md">
-        {apiNotice ? (
-          <Alert color="yellow" variant="light" mb="md" radius="md" title="Demo data">
-            {apiNotice}
+        {loadError ? (
+          <Alert color="red" variant="light" mb="md" radius="md" title="Could not load data">
+            {loadError}
           </Alert>
         ) : null}
 
@@ -87,7 +103,7 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
         />
 
         <Flex align="center" gap={12} wrap="wrap" mb={14}>
-          <PartyTabs data={data} value={partyType} onChange={setPartyType} />
+          {/* <PartyTabs data={data} value={partyType} onChange={setPartyType} /> */}
           <Box style={{ flex: 1, minWidth: 8 }} />
           <ViewToggle
             value={viewMode}
@@ -104,11 +120,16 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
             padding: "16px 18px 8px",
           }}
         >
-          <AgeingSummaryBar buckets={partySlice.ageingBuckets} />
+          {loading ? (
+            <Skeleton height={88} mb={16} radius="md" />
+          ) : (
+            <AgeingSummaryBar buckets={partySlice.ageingBuckets} currency={data.currency} />
+          )}
           <OutstandingTable
             section={tableSection}
             viewMode={viewMode}
             partyLabel={partyColumnLabel}
+            currency={data.currency}
             loading={loading}
             embedded
           />

@@ -1,13 +1,14 @@
 import { Box, SimpleGrid, Text } from "@mantine/core";
 import type { AgeingBucket } from "../financeOutstandingAgeingTypes";
-import { formatAmountInCr } from "../../accountsDashboardNormalize";
 import { AGEING_BUCKET_STRIPES, OST_BAD, OST_INK, OST_INK_3, OST_INK_4, OST_LINE } from "../theme";
 
 type AgeingSummaryBarProps = {
   buckets: AgeingBucket[];
+  /** From API `summary.currency` (e.g. INR). */
+  currency?: string;
 };
 
-export function AgeingSummaryBar({ buckets }: AgeingSummaryBarProps) {
+export function AgeingSummaryBar({ buckets, currency = "" }: AgeingSummaryBarProps) {
   return (
     <SimpleGrid
       cols={{ base: 1, xs: 2, md: 3, lg: 5 }}
@@ -58,7 +59,7 @@ export function AgeingSummaryBar({ buckets }: AgeingSummaryBarProps) {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {bucket.amountDisplay ?? `₹${formatAmountInCr(bucket.amountCr)}`}
+            {bucket.amountDisplay ?? (currency ? `${currency} —` : "—")}
           </Text>
           <Text fz={10.5} c={OST_INK_4} mt={2}>
             {bucket.pct.toFixed(1)}% · {bucket.invoiceCount} invoices
