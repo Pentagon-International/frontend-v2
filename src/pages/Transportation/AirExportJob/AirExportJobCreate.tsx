@@ -145,6 +145,9 @@ type HAWBDetail = {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  item_no?: string;
+  sub_item_no?: string;
+  ref_no?: string;
   shipment_terms_code?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
@@ -778,6 +781,9 @@ function AirExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              item_no: house.item_no ? String(house.item_no) : "",
+              sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
+              ref_no: house.ref_no ? String(house.ref_no) : "",
               shipment_terms_code: house.shipment_terms_code
                 ? String(house.shipment_terms_code)
                 : house.shipment_terms_name
@@ -2149,6 +2155,7 @@ function AirExportJobCreate() {
           marks_no: hawb.marks_no || null,
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
+          ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
           ...(hawb.shipment_terms_code != null &&
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,

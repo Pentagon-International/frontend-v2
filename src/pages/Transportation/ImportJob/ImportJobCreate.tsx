@@ -286,6 +286,7 @@ type HousingDetail = {
   marks_no: string;
   item_no?: string;
   sub_item_no?: string;
+  ref_no?: string;
   shipment_terms_code?: string;
   cargo_details?: Array<{
     id?: number | string;
@@ -932,6 +933,7 @@ function ImportJobCreate() {
           marks_no: house.marks_no ? String(house.marks_no) : "",
           item_no: house.item_no ? String(house.item_no) : "",
           sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
+          ref_no: house.ref_no ? String(house.ref_no) : "",
           shipment_terms_code: house.shipment_terms_code
             ? String(house.shipment_terms_code)
             : house.shipment_terms_name
@@ -3005,6 +3007,7 @@ function ImportJobCreate() {
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
+          ref_no: house.ref_no || "",
           ...(house.shipment_terms_code != null &&
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
