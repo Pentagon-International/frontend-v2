@@ -63,6 +63,7 @@ export type QuotationTableRow = {
   reject_remark?: string;
   status?: string;
   quotation?: Array<{
+    quotation_id?: string;
     created_at?: string;
     revision?: number;
     quotation_service_id?: number;
@@ -72,6 +73,7 @@ export type QuotationTableRow = {
 export type QuotationVisibleColumns = {
   sno: boolean;
   enquiry_id: boolean;
+  quotation_id: boolean;
   customer_name: boolean;
   sales_person: boolean;
   created_at: boolean;
@@ -604,6 +606,7 @@ export function QuotationListNativeTable({
     [
       visible.sno,
       visible.enquiry_id,
+      visible.quotation_id,
       visible.customer_name,
       visible.sales_person,
       visible.created_at,
@@ -709,6 +712,11 @@ export function QuotationListNativeTable({
           {visible.enquiry_id && (
             <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>
               {renderFilterableHeader("enquiry_id", "Enquiry ID", "Filter ID")}
+            </th>
+          )}
+          {visible.quotation_id && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 120 }}>
+              Quotation ID
             </th>
           )}
           {visible.customer_name && (
@@ -920,6 +928,29 @@ export function QuotationListNativeTable({
                     <Text fw={600} size="sm" c={fg} style={{ fontFamily: fontSans }}>
                       {row.enquiry_id ?? "—"}
                     </Text>
+                  </td>
+                )}
+                {visible.quotation_id && (
+                  <td style={erpListTdPaddingStyle()}>
+                    {!row.quotation?.length ? (
+                      <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+                        —
+                      </Text>
+                    ) : (
+                      <Stack gap={4}>
+                        {row.quotation.map((quote, quoteIndex) => (
+                          <Text
+                            key={`${row.id}-qid-${quoteIndex}`}
+                            size="sm"
+                            fw={500}
+                            c={primary}
+                            style={{ fontFamily: fontSans }}
+                          >
+                            {quote.quotation_id?.trim() || "—"}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
                   </td>
                 )}
                 {visible.customer_name && (
