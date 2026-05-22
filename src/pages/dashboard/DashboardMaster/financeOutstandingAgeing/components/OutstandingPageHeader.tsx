@@ -1,42 +1,58 @@
+import { type Dispatch, type SetStateAction } from "react";
 import { Box, Button, Flex, Select, Text } from "@mantine/core";
-import { IconDownload, IconRefresh } from "@tabler/icons-react";
+import { useMediaQuery } from "@mantine/hooks";
+import { DashboardChartSearch } from "../../../../../components/DashboardChartSearch";
 import type { FinanceOutstandingAgeingData } from "../financeOutstandingAgeingTypes";
-import { OST_INK, OST_INK_3, OST_LINE, OST_NAVY_800 } from "../theme";
-import { PeriodPillGroup, type PeriodGranularity } from "../../collectionTargetVsPerformance/components/PeriodPillGroup";
+import { OST_INK, OST_INK_3 } from "../theme";
+import type { PeriodGranularity } from "../../collectionTargetVsPerformance/components/PeriodPillGroup";
+
+export type OutstandingListFilters = {
+  location: string;
+  customer_name: string;
+  risk: string;
+};
 
 type OutstandingPageHeaderProps = {
   meta: FinanceOutstandingAgeingData["meta"];
   periodGranularity: PeriodGranularity;
   onPeriodGranularityChange: (value: PeriodGranularity) => void;
-  branchFilter: string | null;
-  onBranchFilterChange: (value: string | null) => void;
-  riskFilter: string | null;
-  onRiskFilterChange: (value: string | null) => void;
+  customerOptions: { value: string; label: string }[];
+  locationOptions: { value: string; label: string }[];
+  filters: OutstandingListFilters;
+  onFiltersChange: Dispatch<SetStateAction<OutstandingListFilters>>;
+  searchInput: string;
+  onSearchInputChange: (value: string) => void;
+  onSearchCommit: (value: string) => void;
+  onSearchClear: () => void;
   filterOptions?: FinanceOutstandingAgeingData["filterOptions"];
   onRefresh: () => void;
 };
 
-const selectStyles = {
+const selectInputStyles = {
   input: {
-    height: 32,
-    minHeight: 32,
-    borderColor: OST_LINE,
-    fontSize: 12,
+    height: 30,
+    minHeight: 30,
+    fontSize: 11,
+    borderColor: "#E2E8F0",
+    color: "#4A607A",
     fontWeight: 500,
+    background: "#FFFFFF",
   },
 } as const;
 
 export function OutstandingPageHeader({
   meta,
-  periodGranularity,
-  onPeriodGranularityChange,
-  branchFilter,
-  onBranchFilterChange,
-  riskFilter,
-  onRiskFilterChange,
-  filterOptions,
-  onRefresh,
+  filters,
+  onFiltersChange,
+  customerOptions,
+  locationOptions,
+  searchInput,
+  onSearchInputChange,
+  onSearchCommit,
+  onSearchClear,
 }: OutstandingPageHeaderProps) {
+  const isMobile = useMediaQuery("(max-width: 48em)");
+
   return (
     <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap" mb="lg">
       <Box style={{ minWidth: 0 }}>
@@ -58,64 +74,84 @@ export function OutstandingPageHeader({
 
       <Flex gap={8} wrap="wrap" justify="flex-end" align="center">
         <Button
-          size="compact-xs"
+          size="xs"
+          radius={6}
           variant="filled"
+          style={{
+            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 120px",
+            minWidth: isMobile ? 0 : undefined,
+          }}
           styles={{
             root: {
-              background: OST_NAVY_800,
-              height: 32,
-              fontSize: 12,
-              fontWeight: 500,
+              backgroundColor: "#101C2E",
+              color: "#FFFFFF",
+              height: 30,
+              fontSize: 11,
+              border: "none",
             },
+            label: { fontWeight: 700 },
           }}
         >
           {meta.asOfLabel}
         </Button>
+        {/* <Select
+          size="xs"
+          radius={6}
+          data={customerOptions}
+          value={filters.customer_name}
+          onChange={(value) =>
+            onFiltersChange((prev) => ({ ...prev, customer_name: value || "" }))
+          }
+          style={{
+            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 170px",
+            minWidth: isMobile ? 0 : 120,
+          }}
+          styles={selectInputStyles}
+        /> */}
         <Select
           size="xs"
-          value={branchFilter}
-          onChange={onBranchFilterChange}
+          radius={6}
           data={[
-            { value: "all", label: "All branches" },
-            ...(filterOptions?.branches ?? []),
+            { value: "", label: "Risk: All" },
+            { value: "HIGH", label: "Risk: HIGH" },
+            { value: "MEDIUM", label: "Risk: MEDIUM" },
+            { value: "LOW", label: "Risk: LOW" },
           ]}
-          styles={{ input: { ...selectStyles.input, width: 120 } }}
+          value={filters.risk}
+          onChange={(value) => onFiltersChange((prev) => ({ ...prev, risk: value || "" }))}
+          style={{
+            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
+            minWidth: isMobile ? 0 : 120,
+          }}
+          styles={selectInputStyles}
         />
         <Select
           size="xs"
-          value={riskFilter}
-          onChange={onRiskFilterChange}
-          data={[
-            { value: "all", label: "Risk: All" },
-            ...(filterOptions?.risks ?? []),
-          ]}
-          styles={{ input: { ...selectStyles.input, width: 110 } }}
+          radius={6}
+          data={locationOptions}
+          value={filters.location}
+          onChange={(value) => onFiltersChange((prev) => ({ ...prev, location: value || "" }))}
+          style={{
+            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 160px",
+            minWidth: isMobile ? 0 : 120,
+          }}
+          styles={selectInputStyles}
         />
-        {/* <Button
-          size="compact-xs"
-          variant="default"
-          leftSection={<IconDownload size={14} />}
-          styles={{
-            root: {
-              height: 32,
-              borderColor: OST_LINE,
-              color: OST_INK_3,
-              fontSize: 12,
-              fontWeight: 500,
-            },
+        <Box
+          style={{
+            width: "clamp(200px, 20vw, 280px)",
+            minWidth: 200,
+            flexShrink: 0,
           }}
         >
-          Export
-        </Button>
-        <Button
-          size="compact-xs"
-          variant="subtle"
-          color="gray"
-          onClick={onRefresh}
-          aria-label="Refresh"
-        >
-          <IconRefresh size={16} />
-        </Button> */}
+          <DashboardChartSearch
+            value={searchInput}
+            onChange={onSearchInputChange}
+            onCommit={onSearchCommit}
+            onClear={onSearchClear}
+            placeholder="Search customer / salesperson"
+          />
+        </Box>
       </Flex>
     </Flex>
   );

@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Box, Flex, Skeleton } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
+import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import type { PeriodGranularity } from "./collectionTargetVsPerformance/components/PeriodPillGroup";
+import type { OutstandingListFilters } from "./financeOutstandingAgeing/components/OutstandingPageHeader";
 import { AgeingSummaryBar } from "./financeOutstandingAgeing/components/AgeingSummaryBar";
 import { OutstandingPageHeader } from "./financeOutstandingAgeing/components/OutstandingPageHeader";
 import { OutstandingTable } from "./financeOutstandingAgeing/components/OutstandingTable";
@@ -32,29 +34,50 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("month");
-  const [branchFilter, setBranchFilter] = useState<string | null>("all");
-  const [riskFilter, setRiskFilter] = useState<string | null>("all");
+  const [filters, setFilters] = useState<OutstandingListFilters>({
+    location: "",
+    customer_name: "",
+    risk: "",
+  });
   const [partyType] = useState<OutstandingPartyType>("customer");
   const [viewMode, setViewMode] = useState<OutstandingViewMode>("branch");
   const [pageIndex, setPageIndex] = useState(0);
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    committed: committedSearch,
+    commit: commitSearch,
+  } = useDashboardChartSearch();
 
   useEffect(() => {
     setPageIndex(0);
-  }, [viewMode, branchFilter, riskFilter]);
+  }, [viewMode, filters.location, filters.customer_name, filters.risk, committedSearch]);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (searchOverride?: string) => {
     setLoading(true);
     setLoadError(null);
+    const searchTerm = (searchOverride ?? committedSearch).trim();
     try {
       const body = await fetchOutstandingAgeing({
         company,
         branch: viewMode === "branch",
         index: pageIndex,
         limit: PAGE_LIMIT,
-        risk: riskFilter === "all" ? null : riskFilter,
-        location: branchFilter === "all" ? null : branchFilter,
+        ...(filters.location && { location: filters.location }),
+        ...(filters.customer_name && { customer_name: filters.customer_name }),
+        ...(filters.risk && { risk: filters.risk }),
+        ...(searchTerm && { search: searchTerm }),
       });
-      setData(normalizeFinanceOutstandingAgeing(body, viewMode));
+      setData((prev) => {
+        const next = normalizeFinanceOutstandingAgeing(body, viewMode);
+        const hasListOptions =
+          (next.filterOptions?.customers?.length ?? 0) > 1 ||
+          (next.filterOptions?.locations?.length ?? 0) > 1;
+        return {
+          ...next,
+          filterOptions: hasListOptions ? next.filterOptions : prev.filterOptions,
+        };
+      });
     } catch {
       setData(emptyFinanceOutstandingAgeing());
       setLoadError(
@@ -63,7 +86,15 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, company, pageIndex, riskFilter, viewMode]);
+  }, [
+    company,
+    committedSearch,
+    filters.customer_name,
+    filters.location,
+    filters.risk,
+    pageIndex,
+    viewMode,
+  ]);
 
   useEffect(() => {
     void loadDashboard();
@@ -72,6 +103,25 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
   const partySlice = useMemo(() => getPartySlice(data, partyType), [data, partyType]);
   const tableSection = viewMode === "branch" ? partySlice.byBranch : partySlice.byParty;
   const partyColumnLabel = partyType === "agent" ? "Agent" : "Customer";
+
+  const customerOptions = data.filterOptions?.customers ?? [
+    { value: "", label: "All customers" },
+  ];
+  const locationOptions = data.filterOptions?.locations ?? [
+    { value: "", label: "All locations" },
+  ];
+
+  const tablePagination =
+    viewMode === "party" && data.pagination
+      ? {
+          index: pageIndex,
+          limit: PAGE_LIMIT,
+          total: data.pagination.total,
+          loading,
+          onPrev: () => setPageIndex((prev) => Math.max(0, prev - PAGE_LIMIT)),
+          onNext: () => setPageIndex((prev) => prev + PAGE_LIMIT),
+        }
+      : undefined;
 
   return (
     <Box
@@ -94,10 +144,22 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
           meta={data.meta}
           periodGranularity={periodGranularity}
           onPeriodGranularityChange={setPeriodGranularity}
-          branchFilter={branchFilter}
-          onBranchFilterChange={setBranchFilter}
-          riskFilter={riskFilter}
-          onRiskFilterChange={setRiskFilter}
+          customerOptions={customerOptions}
+          locationOptions={locationOptions}
+          filters={filters}
+          onFiltersChange={setFilters}
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+          onSearchCommit={(v) => {
+            commitSearch(v);
+            setPageIndex(0);
+            void loadDashboard(v);
+          }}
+          onSearchClear={() => {
+            commitSearch("");
+            setPageIndex(0);
+            void loadDashboard("");
+          }}
           filterOptions={data.filterOptions}
           onRefresh={() => void loadDashboard()}
         />
@@ -131,6 +193,7 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
             partyLabel={partyColumnLabel}
             currency={data.currency}
             loading={loading}
+            pagination={tablePagination}
             embedded
           />
         </Box>

@@ -8,6 +8,8 @@ export type OutstandingAgeingRequest = {
   limit?: number;
   risk?: string | null;
   location?: string | null;
+  customer_name?: string | null;
+  search?: string | null;
 };
 
 export async function fetchOutstandingAgeing(
@@ -27,6 +29,8 @@ export async function fetchOutstandingAgeing(
 
   if (params.risk?.trim()) payload.risk = params.risk.trim();
   if (params.location?.trim()) payload.location = params.location.trim();
+  if (params.customer_name?.trim()) payload.customer_name = params.customer_name.trim();
+  if (params.search?.trim()) payload.search = params.search.trim();
 
   const url = `${URL.dashboard.customerOutstandingVsOverdue}?${query.toString()}`;
   return apiCallProtected.post(url, payload);

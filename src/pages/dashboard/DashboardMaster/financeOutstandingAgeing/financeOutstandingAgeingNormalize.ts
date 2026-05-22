@@ -157,9 +157,11 @@ function mapCustomerRow(raw: unknown): OutstandingTableRow {
     days60Plus: row.days_90_plus ?? row.days_61_90 ?? row.days_61_plus ?? row.days_60_plus,
   });
 
+  const customerName = firstString(row.customer_name, row.customerName, row.name);
   return {
     id: firstString(row.customer_code, row.customerCode, row.id) || undefined,
-    primaryLabel: firstString(row.customer_name, row.customerName, row.name, "—"),
+    primaryLabel: customerName || "—",
+    customerName: customerName || undefined,
     branchName: branchName || undefined,
     showBranchChip: Boolean(branchName),
     subtitle: [
@@ -262,6 +264,39 @@ function buildMetaSubtitle(summary: Record<string, unknown>, currency: string): 
   return parts.join(" · ");
 }
 
+function buildListFilterOptions(dataRaw: unknown[]) {
+  const customerNames = Array.from(
+    new Set(
+      dataRaw
+        .map((raw) => {
+          const row = (raw ?? {}) as Record<string, unknown>;
+          return firstString(row.customer_name, row.customerName, row.name);
+        })
+        .filter(Boolean),
+    ),
+  );
+  const locations = Array.from(
+    new Set(
+      dataRaw
+        .map((raw) => {
+          const row = (raw ?? {}) as Record<string, unknown>;
+          return firstString(row.location);
+        })
+        .filter(Boolean),
+    ),
+  );
+  return {
+    customers: [
+      { value: "", label: "All customers" },
+      ...customerNames.map((v) => ({ value: v, label: v })),
+    ],
+    locations: [
+      { value: "", label: "All locations" },
+      ...locations.map((v) => ({ value: v, label: v })),
+    ],
+  };
+}
+
 function buildBranchMetaSubtitle(
   summary: Record<string, unknown>,
   branchCount: number,
@@ -342,13 +377,7 @@ export function normalizeFinanceOutstandingAgeing(
     );
     byParty = { rows: [], total: emptyTotalRow("Total") };
   } else {
-    byParty = buildTableSection(
-      dataRaw,
-      mapCustomerRow,
-      "Total",
-      summary,
-      hasNext ? Math.max(0, total - dataRaw.length) : 0,
-    );
+    byParty = buildTableSection(dataRaw, mapCustomerRow, "Total", summary);
     byBranch = { rows: [], total: emptyTotalRow("Total") };
   }
 
@@ -386,7 +415,8 @@ export function normalizeFinanceOutstandingAgeing(
     },
     currency,
     customer: customerSlice,
-    agent: { ...emptyPartySlice(), tabLabel: "Agent Outstanding" },
+    agent: { ...emptyPartySlice(currency), tabLabel: "Agent Outstanding" },
+    filterOptions: buildListFilterOptions(dataRaw),
     pagination: { index, limit, total, hasNext },
   };
 }

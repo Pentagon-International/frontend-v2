@@ -1,4 +1,5 @@
-import { Box, Skeleton, Text } from "@mantine/core";
+import { Box, Button, Flex, Group, Skeleton, Text } from "@mantine/core";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { ERP_LIST_FONT_SANS } from "../../../../../components/ERPListPage/erpListGeistShell";
 import { branchDotColor } from "../../accountsDashboardNormalize";
 import type {
@@ -211,6 +212,15 @@ function OutstandingTableRowView({
   );
 }
 
+export type OutstandingTablePagination = {
+  index: number;
+  limit: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  loading?: boolean;
+};
+
 type OutstandingTableProps = {
   section: OutstandingTableSection;
   viewMode: OutstandingViewMode;
@@ -218,9 +228,68 @@ type OutstandingTableProps = {
   /** From API `summary.currency` (e.g. INR). */
   currency?: string;
   loading?: boolean;
+  /** Customer list pagination (`index` / `limit` query params). */
+  pagination?: OutstandingTablePagination;
   /** When true, table sits inside a parent card (no extra outer border). */
   embedded?: boolean;
 };
+
+function OutstandingTablePaginationBar({
+  pagination,
+}: {
+  pagination: OutstandingTablePagination;
+}) {
+  const { index, limit, total, onPrev, onNext, loading } = pagination;
+  const currentPage = Math.floor(index / limit) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const rangeStart = total > 0 ? index + 1 : 0;
+  const rangeEnd = total > 0 ? Math.min(total, index + limit) : 0;
+
+  return (
+    <Flex
+      justify="space-between"
+      align="center"
+      wrap="wrap"
+      gap={8}
+      mt={12}
+      pt={12}
+      style={{ borderTop: `1px solid ${OST_LINE}` }}
+    >
+      <Text fz={11} fw={600} c={OST_INK_3}>
+        Showing {rangeStart}-{rangeEnd} of {total}
+      </Text>
+      <Group gap={6}>
+        <Button
+          size="compact-sm"
+          variant="default"
+          leftSection={<IconChevronLeft size={14} />}
+          disabled={index <= 0 || loading}
+          onClick={onPrev}
+          styles={{
+            root: { height: 28, fontSize: 11, borderColor: OST_LINE, color: OST_INK_3 },
+          }}
+        >
+          Prev
+        </Button>
+        <Text fz={11} fw={500} c={OST_INK_3} style={{ minWidth: 72, textAlign: "center" }}>
+          Page {currentPage}/{totalPages}
+        </Text>
+        <Button
+          size="compact-sm"
+          variant="default"
+          rightSection={<IconChevronRight size={14} />}
+          disabled={index + limit >= total || loading}
+          onClick={onNext}
+          styles={{
+            root: { height: 28, fontSize: 11, borderColor: OST_LINE, color: OST_INK_3 },
+          }}
+        >
+          Next
+        </Button>
+      </Group>
+    </Flex>
+  );
+}
 
 export function OutstandingTable({
   section,
@@ -228,9 +297,11 @@ export function OutstandingTable({
   partyLabel,
   currency = "",
   loading,
+  pagination,
   embedded,
 }: OutstandingTableProps) {
   const firstCol = viewMode === "branch" ? "Branch" : partyLabel;
+  const showPagination = viewMode === "party" && pagination && pagination.total > 0;
 
   const headerStyle = {
     fontSize: 10,
@@ -298,6 +369,9 @@ export function OutstandingTable({
             />
           </>
         )}
+        {showPagination && pagination ? (
+          <OutstandingTablePaginationBar pagination={pagination} />
+        ) : null}
       </Box>
     </Box>
   );

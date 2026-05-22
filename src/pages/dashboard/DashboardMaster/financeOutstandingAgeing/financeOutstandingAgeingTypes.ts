@@ -24,6 +24,8 @@ export type OutstandingAmountCells = {
 export type OutstandingTableRow = {
   id?: string;
   primaryLabel: string;
+  /** API `customer_name` for filter dropdown values. */
+  customerName?: string;
   /** Branch label from API `location` (falls back in normalizer when absent). */
   branchName?: string;
   branchVariant?: string;
@@ -63,6 +65,8 @@ export type FinanceOutstandingAgeingData = {
   customer: OutstandingPartySlice;
   agent: OutstandingPartySlice;
   filterOptions?: {
+    customers?: { value: string; label: string }[];
+    locations?: { value: string; label: string }[];
     branches?: { value: string; label: string }[];
     risks?: { value: string; label: string }[];
   };
