@@ -1,8 +1,9 @@
-import { Box, Button, Flex, Select, Text } from "@mantine/core";
+import { Box, Button, Flex, Text } from "@mantine/core";
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
 import { SingleDateInput } from "../../../../../components";
 import type { CollectionTargetVsPerformanceData } from "../collectionTargetVsPerformanceTypes";
 import { COL_INK, COL_INK_3, COL_INK_4, COL_LINE } from "../theme";
+import { CollectionBranchFilterSelect } from "./CollectionBranchFilterSelect";
 import { PeriodPillGroup, type PeriodGranularity } from "./PeriodPillGroup";
 
 type CollectionPageHeaderProps = {
@@ -107,15 +108,9 @@ export function CollectionPageHeader({
             styles={dateFieldStyles}
           />
         </Box>
-        <Select
-          size="xs"
+        <CollectionBranchFilterSelect
           value={branchFilter}
           onChange={onBranchFilterChange}
-          data={[
-            { value: "all", label: "All branches" },
-            ...(filterOptions?.branches ?? []),
-          ]}
-          styles={{ input: { ...selectStyles.input, width: 120 } }}
         />
         {/* <Select
           size="xs"

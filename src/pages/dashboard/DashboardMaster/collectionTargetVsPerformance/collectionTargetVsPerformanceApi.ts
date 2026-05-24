@@ -10,6 +10,8 @@ export type CollectionPerformanceRequest = {
   company: string;
   date_from: string;
   date_to: string;
+  /** Main dashboard branch filter (branch master code). */
+  header?: string;
   branch_code?: string;
   invoice_id?: number;
 };
@@ -23,13 +25,19 @@ export function getLastCollectionPerformanceRequest(): CollectionPerformanceRequ
 export function buildCollectionPerformanceRequest(
   company: string,
   dateRange: PendingActivitiesDateRange,
-  options?: { branchCode?: string | null; invoiceId?: number | null },
+  options?: {
+    branchCode?: string | null;
+    header?: string | null;
+    invoiceId?: number | null;
+  },
 ): CollectionPerformanceRequest {
   const payload: CollectionPerformanceRequest = {
     company,
     date_from: dateRange.date_from,
     date_to: dateRange.date_to,
   };
+  const header = options?.header?.trim();
+  if (header) payload.header = header;
   const code = options?.branchCode?.trim();
   if (code) payload.branch_code = code;
   const invoiceId = options?.invoiceId;

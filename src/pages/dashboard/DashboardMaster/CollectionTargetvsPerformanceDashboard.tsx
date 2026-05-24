@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, SimpleGrid } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
@@ -19,7 +19,6 @@ import {
   periodToDateRange,
   type PendingActivitiesDateRange,
 } from "./financePendingActivities/financePendingActivitiesApi";
-import { filterCollectionByBranch } from "./collectionTargetVsPerformance/filterCollectionByBranch";
 import {
   emptyCollectionTargetVsPerformance,
   normalizeCollectionTargetVsPerformance,
@@ -43,7 +42,7 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
   const [dateRange, setDateRange] = useState<PendingActivitiesDateRange>(() =>
     periodToDateRange("fy"),
   );
-  const [branchFilter, setBranchFilter] = useState<string | null>("all");
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [currencyFilter, setCurrencyFilter] = useState<string | null>("all");
   const [selectedBranchForDrawer, setSelectedBranchForDrawer] =
     useState<BranchCollectionRow | null>(null);
@@ -78,7 +77,9 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
     setLoadError(null);
     try {
       const body = await fetchCollectionPerformance(
-        buildCollectionPerformanceRequest(company, dateRange),
+        buildCollectionPerformanceRequest(company, dateRange, {
+          header: branchFilter,
+        }),
       );
       setData(normalizeCollectionTargetVsPerformance(body));
     } catch {
@@ -87,16 +88,13 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [company, dateRange]);
+  }, [branchFilter, company, dateRange]);
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const displayData = useMemo(
-    () => filterCollectionByBranch(data, branchFilter),
-    [branchFilter, data],
-  );
+  const displayData = data;
 
   const handleRowClick = (row: BranchCollectionRow) => {
     const branchKey = row.id ?? row.branchCode ?? row.branchName;
