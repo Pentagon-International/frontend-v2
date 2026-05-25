@@ -2530,11 +2530,29 @@ export default function ReceiptCreate({
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          {/* <TextInput
                             value={form.values.details[idx].currency}
                             readOnly
                             styles={partyFieldStyles}
-                          />
+                          /> */}
+                          <Dropdown
+                // label="Currency"
+                placeholder="Select currency"
+                data={currencyOptions}
+                // value={form.values.currency}
+                value={form.values.details[idx].currency}
+                onChange={(v) => {
+                  form.setFieldValue(`details.${idx}.currency`, v ?? "");
+                  if (v?.toUpperCase() === localCurrency.toUpperCase()) {
+                    form.setFieldValue(`details.${idx}.roe`, 1);
+                  }
+                }}
+                searchable
+                withAsterisk
+                error={form.errors.currency}
+                styles={headerFieldStyles}
+                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+              />
                         </Grid.Col>
                         <Grid.Col span={1}>
                           <NumberInput
