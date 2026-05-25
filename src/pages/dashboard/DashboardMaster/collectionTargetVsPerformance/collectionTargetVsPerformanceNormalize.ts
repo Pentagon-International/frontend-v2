@@ -124,7 +124,7 @@ function buildSummaryKpis(summary: Record<string, unknown>, currencyCode: string
       ? null
       : safeNumber(achievementRaw);
   const dso = safeNumber(summary.dso_days);
-  const cei = safeNumber(summary.acp_days);
+  const acp = safeNumber(summary.acp_days);
 
   return [
     {
@@ -154,7 +154,7 @@ function buildSummaryKpis(summary: Record<string, unknown>, currencyCode: string
     },
     {
       label: "ACP",
-      value: cei,
+      value: acp,
       unit: "days",
     },
   ];

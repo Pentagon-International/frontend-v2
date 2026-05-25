@@ -285,14 +285,14 @@ function normalizeProfitabilityKpis(
       isPercent: true,
       trend: { ...marginTrend, context: "vs. last period" },
     },
-    {
-      key: "net_profit",
-      label: "Net Profit",
-      value: toCr(kpisRaw.net_profit),
-      unit: "Cr",
-      showCurrency: true,
-      trend: { ...profitTrend, context: "vs. last period" },
-    },
+    // {
+    //   key: "net_profit",
+    //   label: "Net Profit",
+    //   value: toCr(kpisRaw.net_profit),
+    //   unit: "Cr",
+    //   showCurrency: true,
+    //   trend: { ...profitTrend, context: "vs. last period" },
+    // },
   ];
 }
 
