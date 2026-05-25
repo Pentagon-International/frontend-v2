@@ -157,14 +157,19 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
               onRefresh={() => void loadDashboard()}
             />
 
-            <PendingActivityKpiRow kpis={view.kpis} loading={loading} />
+            <PendingActivityKpiRow kpis={view.kpis} loading={loading} currencyCode={view.currencyCode} />
 
-            <BranchOpenItemsTable section={view.byBranch} loading={loading} />
+            <BranchOpenItemsTable
+              section={view.byBranch}
+              loading={loading}
+              currencyCode={view.currencyCode}
+            />
 
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={14} mb={14}>
               <ActivityListPanel
                 panel={view.invoicesPanel}
                 loading={loading}
+                currencyCode={view.currencyCode}
                 onPageChange={handleInvoicesPageChange}
               />
               <Box style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -172,6 +177,7 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
                   panel={view.costsPanel}
                   loading={loading}
                   compact
+                  currencyCode={view.currencyCode}
                   onPageChange={handleCostsPageChange}
                 />
                 <ActivityListPanel
@@ -179,6 +185,7 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
                   loading={loading}
                   showTypeColumn
                   compact
+                  currencyCode={view.currencyCode}
                   onPageChange={handleVouchersPageChange}
                 />
               </Box>

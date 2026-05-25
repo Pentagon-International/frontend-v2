@@ -6,7 +6,7 @@ import { normalizeJobProfitabilityDetail } from "./normalize";
 import type { JobProfitabilityApiPayload, JobProfitabilityDetail } from "./types";
 
 export function buildJobProfitabilityPayload(payload: JobProfitabilityApiPayload) {
-  return {
+  const request: Record<string, unknown> = {
     company: payload.company,
     date_from:
       payload.date_from ?? dayjs().startOf("month").format("YYYY-MM-DD"),
@@ -14,6 +14,9 @@ export function buildJobProfitabilityPayload(payload: JobProfitabilityApiPayload
     compare_previous_period: true,
     job_id: payload.job_id,
   };
+  const branchCode = payload.branch_code?.trim();
+  if (branchCode) request.branch_code = branchCode;
+  return request;
 }
 
 export async function fetchJobProfitabilityDetail(

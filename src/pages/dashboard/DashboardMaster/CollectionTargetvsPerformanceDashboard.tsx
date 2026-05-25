@@ -136,17 +136,22 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
           onRefresh={() => void loadDashboard()}
         />
 
-        <CollectionKpiRow kpis={displayData.kpis} loading={loading} />
+        <CollectionKpiRow kpis={displayData.kpis} loading={loading} currencyCode={displayData.currencyCode} />
 
         <SimpleGrid cols={{ base: 1, lg: 2 }} spacing={14} mb={14}>
           <MonthlyTargetCard data={displayData.thisMonth} loading={loading} />
-          <DailyCollectionChart data={displayData.dailyCollection} loading={loading} />
+          <DailyCollectionChart
+            data={displayData.dailyCollection}
+            currencyCode={displayData.currencyCode}
+            loading={loading}
+          />
         </SimpleGrid>
 
         <BranchCollectionTable
           rows={displayData.branchPerformance.rows}
           total={displayData.branchPerformance.total}
           loading={loading}
+          currencyCode={displayData.currencyCode}
           onRowClick={handleRowClick}
         />
       </Box>

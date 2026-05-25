@@ -1,23 +1,14 @@
 import { ERP_LIST_FONT_MONO, ERP_LIST_FONT_SANS } from "../../../../components/ERPListPage/erpListGeistShell";
 
-const CURRENCY_SYMBOL: Record<string, string> = {
-  INR: "₹",
-  USD: "$",
-  EUR: "€",
-  GBP: "£",
-  AED: "AED ",
-};
-
 /** Formats API monetary values as-is (no Cr/L conversion). */
 export function formatProfitabilityAmount(value: number, currencyCode = "INR"): string {
   const code = currencyCode.trim().toUpperCase() || "INR";
-  const symbol = CURRENCY_SYMBOL[code] ?? `${code} `;
   const abs = Math.abs(value);
   const hasFraction = abs % 1 !== 0;
   const formatted = hasFraction
     ? abs.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
     : abs.toLocaleString("en-IN", { maximumFractionDigits: 0 });
-  return `${value < 0 ? "-" : ""}${symbol}${formatted}`;
+  return `${value < 0 ? "-" : ""}${code} ${formatted}`;
 }
 
 export function formatLakhs(valueL: number): string {

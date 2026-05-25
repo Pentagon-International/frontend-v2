@@ -49,6 +49,7 @@ export type BranchCollectionRow = {
 };
 
 export type CollectionTargetVsPerformanceData = {
+  currencyCode: string;
   meta: {
     title: string;
     subtitle: string;

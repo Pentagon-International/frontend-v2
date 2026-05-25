@@ -14,7 +14,8 @@ import {
   IconReceipt,
   IconArrowsExchange,
 } from "@tabler/icons-react";
-import { branchDotColor, formatAmountInCr } from "../../accountsDashboardNormalize";
+import { branchDotColor } from "../../accountsDashboardNormalize";
+import { formatPendingActivityAmountCr } from "../financePendingActivitiesAmountFormat";
 import type { ActivityListPanel as ActivityListPanelData, PendingActivityCategory } from "../financePendingActivitiesTypes";
 import {
   PA_ACTIVITY_ROW_GRID,
@@ -49,6 +50,7 @@ type ActivityListPanelProps = {
   loading?: boolean;
   showTypeColumn?: boolean;
   compact?: boolean;
+  currencyCode?: string;
   onPageChange?: (pageIndex: number) => void;
 };
 
@@ -57,8 +59,10 @@ export function ActivityListPanel({
   loading,
   showTypeColumn,
   compact,
+  currencyCode = "INR",
   onPageChange,
 }: ActivityListPanelProps) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   const [activeTab, setActiveTab] = useState(panel.filterTabs?.[0]?.value ?? "all");
   const rowGrid = showTypeColumn ? PA_VOUCHER_ROW_GRID : PA_ACTIVITY_ROW_GRID;
   const tone: PendingActivityCategory = panel.id;
@@ -266,7 +270,7 @@ export function ActivityListPanel({
                 c={PA_INK}
                 style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
               >
-                {item.amountDisplay ?? `₹${formatAmountInCr(item.amountCr)}`}
+                {item.amountDisplay ?? formatPendingActivityAmountCr(item.amountCr, code)}
               </Text>
               <Text
                 fz={11}

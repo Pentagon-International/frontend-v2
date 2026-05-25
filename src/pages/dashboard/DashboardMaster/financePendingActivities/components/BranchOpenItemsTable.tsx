@@ -1,5 +1,9 @@
 import { Box, Flex, Skeleton, Text } from "@mantine/core";
-import { branchDotColor, formatAmountInCr } from "../../accountsDashboardNormalize";
+import { branchDotColor } from "../../accountsDashboardNormalize";
+import {
+  formatCountExposureDisplay,
+  formatPendingActivityAmountCr,
+} from "../financePendingActivitiesAmountFormat";
 import type { BranchOpenItemsSection } from "../financePendingActivitiesTypes";
 import {
   BRANCH_CHIP_CITY,
@@ -15,17 +19,24 @@ import {
 } from "../theme";
 import { DistributionBar } from "./DistributionBar";
 
-function formatCountAmount(count: number, amountCr: number, display?: string): string {
+function formatCountAmount(
+  count: number,
+  amountCr: number,
+  currencyCode: string,
+  display?: string,
+): string {
   if (display) return display;
-  return `${count} · ₹${formatAmountInCr(amountCr)}`;
+  return formatCountExposureDisplay(count, amountCr, currencyCode);
 }
 
 function BranchOpenItemRow({
   row,
   isTotal,
+  currencyCode = "INR",
 }: {
   row: BranchOpenItemsSection["rows"][0];
   isTotal?: boolean;
+  currencyCode?: string;
 }) {
   const chipCity =
     row.branchVariant && BRANCH_CHIP_CITY[row.branchVariant]
@@ -104,10 +115,10 @@ function BranchOpenItemRow({
         ) : null}
       </Box>
       <Text fz={12} c={PA_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCountAmount(row.invoiceCount, row.invoiceAmountCr, row.invoiceDisplay)}
+        {formatCountAmount(row.invoiceCount, row.invoiceAmountCr, currencyCode, row.invoiceDisplay)}
       </Text>
       <Text fz={12} c={PA_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCountAmount(row.costCount, row.costAmountCr, row.costDisplay)}
+        {formatCountAmount(row.costCount, row.costAmountCr, currencyCode, row.costDisplay)}
       </Text>
       <Box>{isTotal ? null : <DistributionBar segments={row.distribution} />}</Box>
       <Text
@@ -116,7 +127,8 @@ function BranchOpenItemRow({
         c={PA_INK}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        {row.totalExposureDisplay ?? `₹${formatAmountInCr(row.totalExposureCr)}`}
+        {row.totalExposureDisplay ??
+          formatPendingActivityAmountCr(row.totalExposureCr, currencyCode)}
       </Text>
       <Text fz={11} c={PA_INK_3} style={{ textAlign: "right" }}>
         {row.owner || "—"}
@@ -128,9 +140,15 @@ function BranchOpenItemRow({
 type BranchOpenItemsTableProps = {
   section: BranchOpenItemsSection;
   loading?: boolean;
+  currencyCode?: string;
 };
 
-export function BranchOpenItemsTable({ section, loading }: BranchOpenItemsTableProps) {
+export function BranchOpenItemsTable({
+  section,
+  loading,
+  currencyCode = "INR",
+}: BranchOpenItemsTableProps) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   const headerStyle = {
     fontSize: 10,
     fontWeight: 600,
@@ -161,7 +179,7 @@ export function BranchOpenItemsTable({ section, loading }: BranchOpenItemsTableP
           By Branch — Open Items
         </Text>
         <Text fz={11} c={PA_INK_4}>
-          Count · ₹ exposure
+          Count · {code} exposure
         </Text>
       </Flex>
 
@@ -197,9 +215,9 @@ export function BranchOpenItemsTable({ section, loading }: BranchOpenItemsTableP
         ) : (
           <>
             {section.rows.map((row) => (
-              <BranchOpenItemRow key={row.id ?? row.branchName} row={row} />
+              <BranchOpenItemRow key={row.id ?? row.branchName} row={row} currencyCode={code} />
             ))}
-            <BranchOpenItemRow row={section.total} isTotal />
+            <BranchOpenItemRow row={section.total} isTotal currencyCode={code} />
           </>
         )}
       </Box>

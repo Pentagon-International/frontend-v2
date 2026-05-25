@@ -479,6 +479,8 @@ export function normalizeAccountsDashboard(
 
   const dateFrom = firstString(filtersRaw.date_from, metaRaw.date_from);
   const dateTo = firstString(filtersRaw.date_to, metaRaw.date_to);
+  const currencyCode =
+    firstString(data.currency_code, filtersRaw.currency_code, metaRaw.currency_code) || "INR";
   const periodLabel =
     dateFrom && dateTo
       ? `${dateFrom} – ${dateTo}`
@@ -503,6 +505,7 @@ export function normalizeAccountsDashboard(
       : [];
 
   const normalized: AccountsDashboardData = {
+    currencyCode,
     meta: {
       title: firstString(metaRaw.title, data.title, breakdownRoot.title, "Profitability"),
       subtitle: firstString(
@@ -532,7 +535,7 @@ export function normalizeAccountsDashboard(
         monthlyRaw.fy_label,
         monthlyRaw.fyLabel,
         monthlyRaw.title,
-        "FY · ₹ Cr",
+        `FY · ${currencyCode} Cr`,
       ),
       points: monthlyPoints,
     },
@@ -611,7 +614,7 @@ export function formatDashboardAmount(value: number, unit = "Cr"): string {
   return formatCrLAmount(value);
 }
 
-/** Format a value stored in crores as ₹X.XX Cr or ₹X.X L (reference dashboard style). */
+/** Format a value stored in crores as X.XX Cr or X.X L (reference dashboard style). */
 export function formatAmountInCr(valueInCr: number): string {
   const abs = Math.abs(valueInCr);
   if (abs >= 1) return `${abs.toFixed(abs >= 10 ? 2 : 2)} Cr`;

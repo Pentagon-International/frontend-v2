@@ -27,6 +27,7 @@ export type ProfitabilityTrillOneProps = {
   company: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 };
 
 export default function ProfitabilityTrillOne({
@@ -39,6 +40,7 @@ export default function ProfitabilityTrillOne({
   company,
   fromDate,
   toDate,
+  headerBranchCode,
 }: ProfitabilityTrillOneProps) {
   const [selectedJob, setSelectedJob] = useState<ProfitabilityJob | null>(null);
   const [trillTwoOpened, setTrillTwoOpened] = useState(false);
@@ -127,6 +129,7 @@ export default function ProfitabilityTrillOne({
           destinationCode,
           fromDate,
           toDate,
+          headerBranchCode,
         })
       : isCustomerDrill
         ? fetchCustomerDrillData({
@@ -134,6 +137,7 @@ export default function ProfitabilityTrillOne({
             customerCode,
             fromDate,
             toDate,
+            headerBranchCode,
           })
         : isBranchCustomerDrill || isBranchOnlyDrill
           ? fetchBranchDrillData({
@@ -142,6 +146,7 @@ export default function ProfitabilityTrillOne({
               customerCode: isBranchCustomerDrill ? branchCustomerCode : undefined,
               fromDate,
               toDate,
+              headerBranchCode,
             })
           : isSalespersonCustomerDrill || isSalespersonOnlyDrill
             ? fetchSalespersonDrillData({
@@ -152,6 +157,7 @@ export default function ProfitabilityTrillOne({
                   : undefined,
                 fromDate,
                 toDate,
+                headerBranchCode,
               })
             : fetchSegmentDrillData({
                 company,
@@ -159,6 +165,7 @@ export default function ProfitabilityTrillOne({
                 customerCode: isSegmentCustomerDrill ? segmentCustomerCode : undefined,
                 fromDate,
                 toDate,
+                headerBranchCode,
               });
 
     void fetchPromise
@@ -213,6 +220,7 @@ export default function ProfitabilityTrillOne({
     company,
     fromDate,
     toDate,
+    headerBranchCode,
   ]);
 
   const jobs = drillData?.jobs ?? [];
@@ -399,6 +407,7 @@ export default function ProfitabilityTrillOne({
         company={company}
         fromDate={fromDate}
         toDate={toDate}
+        headerBranchCode={headerBranchCode}
       />
     </Drawer>
   );

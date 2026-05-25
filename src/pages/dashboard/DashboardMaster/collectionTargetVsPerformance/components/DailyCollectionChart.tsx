@@ -8,10 +8,16 @@ import { DashboardCard } from "./DashboardCard";
 
 type DailyCollectionChartProps = {
   data: CollectionTargetVsPerformanceData["dailyCollection"];
+  currencyCode?: string;
   loading?: boolean;
 };
 
-export function DailyCollectionChart({ data, loading }: DailyCollectionChartProps) {
+export function DailyCollectionChart({
+  data,
+  currencyCode = "INR",
+  loading,
+}: DailyCollectionChartProps) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   const chartOption = useMemo(() => {
     const labels = data.points.map((p) => String(p.day));
     const amounts = data.points.map((p) => p.amount);
@@ -25,7 +31,7 @@ export function DailyCollectionChart({ data, loading }: DailyCollectionChartProp
         textStyle: { fontFamily: ERP_LIST_FONT_SANS, fontSize: 12 },
         formatter: (params: { name: string; value: number }[]) => {
           const bar = params[0];
-          return `${bar?.name}: ₹${Number(bar?.value).toFixed(1)} L`;
+          return `${bar?.name}: ${code} ${Number(bar?.value).toFixed(1)} L`;
         },
       },
       xAxis: {
@@ -74,7 +80,7 @@ export function DailyCollectionChart({ data, loading }: DailyCollectionChartProp
         label: {
           show: true,
           position: "end",
-          formatter: data.runRateLabel ?? `Need ₹${data.runRateNeed} L/day`,
+          formatter: data.runRateLabel ?? `Need ${code} ${data.runRateNeed} L/day`,
           color: COL_ACCENT,
           fontFamily: ERP_LIST_FONT_MONO,
           fontSize: 10,
@@ -82,7 +88,7 @@ export function DailyCollectionChart({ data, loading }: DailyCollectionChartProp
         data: [{ yAxis: data.runRateNeed }],
       },
     };
-  }, [data]);
+  }, [data, code]);
 
   return (
     <DashboardCard title={data.title} subtitle={data.subtitle}>

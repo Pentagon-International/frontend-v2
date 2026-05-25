@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { formatCrLAmount } from "../accountsDashboardNormalize";
+import { formatCollectionCrLAmount } from "../collectionTargetVsPerformance/collectionAmountFormat";
 import { BRANCH_CHIP_CITY } from "../collectionTargetVsPerformance/theme";
 import type {
   CollectionBranchDrillData,
@@ -83,30 +83,33 @@ function normalizeInvoiceRow(raw: unknown): CollectionOutstandingInvoiceRow | nu
   };
 }
 
-function buildSummaryCards(summary: Record<string, unknown>): CollectionBranchDrillSummaryCard[] {
+function buildSummaryCards(
+  summary: Record<string, unknown>,
+  currencyCode: string,
+): CollectionBranchDrillSummaryCard[] {
   const outstanding = safeNumber(summary.outstanding);
   const invoiceCount = safeNumber(summary.invoice_count);
 
   return [
     {
       label: "Outstanding",
-      value: formatCrLAmount(outstanding),
+      value: formatCollectionCrLAmount(outstanding, currencyCode),
       detail: invoiceCount > 0 ? `${invoiceCount} invoices` : "—",
     },
     {
       label: "Current",
-      value: formatCrLAmount(summary.current),
+      value: formatCollectionCrLAmount(summary.current, currencyCode),
       detail: formatPct(summary.current_pct),
       valueColor: "#16a34a",
     },
     {
       label: "1–60 days",
-      value: formatCrLAmount(summary.days_1_60),
+      value: formatCollectionCrLAmount(summary.days_1_60, currencyCode),
       detail: formatPct(summary.days_1_60_pct),
     },
     {
       label: "60+ days",
-      value: formatCrLAmount(summary.days_60_plus),
+      value: formatCollectionCrLAmount(summary.days_60_plus, currencyCode),
       detail: formatPct(summary.days_60_plus_pct),
     },
   ];
@@ -117,7 +120,7 @@ export function emptyCollectionBranchDrill(branchName = "Branch"): CollectionBra
     breadcrumb: `${branchName} · Invoices`,
     title: `${branchName} · Collection drill-down`,
     subtitle: "Outstanding invoices contributing to collection gap",
-    summaryCards: buildSummaryCards({}),
+    summaryCards: buildSummaryCards({}, "INR"),
     invoices: [],
     invoiceCount: 0,
   };
@@ -145,6 +148,8 @@ export function normalizeCollectionBranchDrill(
     "";
 
   const summary = (branch.summary ?? {}) as Record<string, unknown>;
+  const currencyCode =
+    firstString(envelope.currency_code, branch.currency_code, summary.currency_code) || "INR";
   const invoicesRaw = Array.isArray(branch.outstanding_invoices)
     ? branch.outstanding_invoices
     : [];
@@ -159,7 +164,7 @@ export function normalizeCollectionBranchDrill(
     breadcrumb: `${branchName} · Invoices`,
     title: `${branchName} · Collection drill-down`,
     subtitle: "Outstanding invoices contributing to collection gap",
-    summaryCards: buildSummaryCards(summary),
+    summaryCards: buildSummaryCards(summary, currencyCode),
     invoices,
     invoiceCount: safeNumber(summary.invoice_count, invoices.length),
     pagination: paginationRaw.total_count != null

@@ -53,4 +53,5 @@ export type JobProfitabilityApiPayload = {
   job_id: string;
   date_from?: string;
   date_to?: string;
+  branch_code?: string;
 };

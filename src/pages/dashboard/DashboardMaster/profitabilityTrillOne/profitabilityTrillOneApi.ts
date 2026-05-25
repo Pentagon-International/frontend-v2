@@ -271,12 +271,25 @@ export type ProfitabilityDrillData = {
 /** @deprecated Use ProfitabilityDrillData */
 export type SegmentDrillData = ProfitabilityDrillData;
 
+function withHeaderBranchCode(
+  payload: Record<string, unknown>,
+  headerBranchCode?: string | null,
+): Record<string, unknown> {
+  const code = headerBranchCode?.trim();
+  if (!code) return payload;
+  return { ...payload, branch_code: code };
+}
+
 async function fetchProfitabilityDrillData(
   payload: Record<string, unknown>,
   segmentLabel: string,
   rowKind: "customer" | "job" = "customer",
+  headerBranchCode?: string | null,
 ): Promise<ProfitabilityDrillData> {
-  const body = await apiCallProtected.post(URL.dashboard.accountsProfitability, payload);
+  const body = await apiCallProtected.post(
+    URL.dashboard.accountsProfitability,
+    withHeaderBranchCode(payload, headerBranchCode),
+  );
   const summary = normalizeDrillSummary(body);
   const jobs = normalizeDrillJobs(body, segmentLabel, rowKind);
   jobs.sort((a, b) => b.grossProfit - a.grossProfit);
@@ -290,12 +303,14 @@ export async function fetchSegmentDrillData(options: {
   customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 }): Promise<ProfitabilityDrillData> {
   const customerCode = options.customerCode?.trim();
   return fetchProfitabilityDrillData(
     buildSegmentDrillPayload(options),
     options.service,
     customerCode ? "job" : "customer",
+    options.headerBranchCode,
   );
 }
 
@@ -305,12 +320,14 @@ export async function fetchBranchDrillData(options: {
   customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 }): Promise<ProfitabilityDrillData> {
   const customerCode = options.customerCode?.trim();
   return fetchProfitabilityDrillData(
     buildBranchDrillPayload(options),
     options.branchCode,
     customerCode ? "job" : "customer",
+    options.headerBranchCode,
   );
 }
 
@@ -319,11 +336,13 @@ export async function fetchCustomerDrillData(options: {
   customerCode: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 }): Promise<ProfitabilityDrillData> {
   return fetchProfitabilityDrillData(
     buildCustomerDrillPayload(options),
     options.customerCode,
     "job",
+    options.headerBranchCode,
   );
 }
 
@@ -333,10 +352,13 @@ export async function fetchTradelaneDrillData(options: {
   destinationCode: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 }): Promise<ProfitabilityDrillData> {
   return fetchProfitabilityDrillData(
     buildTradelaneDrillPayload(options),
     `${options.originCode} → ${options.destinationCode}`,
+    "customer",
+    options.headerBranchCode,
   );
 }
 
@@ -346,11 +368,13 @@ export async function fetchSalespersonDrillData(options: {
   customerCode?: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 }): Promise<ProfitabilityDrillData> {
   const customerCode = options.customerCode?.trim();
   return fetchProfitabilityDrillData(
     buildSalespersonDrillPayload(options),
     options.salespersonName,
     customerCode ? "job" : "customer",
+    options.headerBranchCode,
   );
 }

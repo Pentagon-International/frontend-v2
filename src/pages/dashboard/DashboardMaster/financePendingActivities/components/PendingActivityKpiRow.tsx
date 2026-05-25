@@ -5,9 +5,10 @@ import { PendingActivityKpiCard } from "./PendingActivityKpiCard";
 type PendingActivityKpiRowProps = {
   kpis: PendingActivityKpi[];
   loading?: boolean;
+  currencyCode?: string;
 };
 
-export function PendingActivityKpiRow({ kpis, loading }: PendingActivityKpiRowProps) {
+export function PendingActivityKpiRow({ kpis, loading, currencyCode = "INR" }: PendingActivityKpiRowProps) {
   const skeletonCount = Math.max(kpis.length, 4);
 
   return (
@@ -16,7 +17,9 @@ export function PendingActivityKpiRow({ kpis, loading }: PendingActivityKpiRowPr
         ? Array.from({ length: skeletonCount }).map((_, i) => (
             <PendingActivityKpiCard key={i} kpi={kpis[0] ?? { id: "invoices", label: "", subtitle: "", amountCr: 0, count: 0, avgAgeDays: 0 }} loading />
           ))
-        : kpis.map((kpi) => <PendingActivityKpiCard key={kpi.id} kpi={kpi} />)}
+        : kpis.map((kpi) => (
+            <PendingActivityKpiCard key={kpi.id} kpi={kpi} currencyCode={currencyCode} />
+          ))}
     </SimpleGrid>
   );
 }

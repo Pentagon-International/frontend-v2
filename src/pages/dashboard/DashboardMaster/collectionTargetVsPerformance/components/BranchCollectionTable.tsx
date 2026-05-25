@@ -3,7 +3,8 @@ import {
   ERP_LIST_FONT_MONO,
   ERP_LIST_FONT_SANS,
 } from "../../../../../components/ERPListPage/erpListGeistShell";
-import { branchDotColor, formatCrLAmount } from "../../accountsDashboardNormalize";
+import { branchDotColor } from "../../accountsDashboardNormalize";
+import { formatCollectionCrLAmount } from "../collectionAmountFormat";
 import type { BranchCollectionRow } from "../collectionTargetVsPerformanceTypes";
 import {
   BRANCH_CHIP_CITY,
@@ -32,10 +33,12 @@ function branchChipLabel(row: BranchCollectionRow): string | null {
 function BranchCollectionRowView({
   row,
   isTotal,
+  currencyCode = "INR",
   onRowClick,
 }: {
   row: BranchCollectionRow;
   isTotal?: boolean;
+  currencyCode?: string;
   onRowClick?: (row: BranchCollectionRow) => void;
 }) {
   const chipLabel = !isTotal ? branchChipLabel(row) : null;
@@ -132,7 +135,7 @@ function BranchCollectionRowView({
         </Box>
       </Flex>
       <Text fz={12} c={COL_INK_2} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {formatCrLAmount(row.target)}
+        {formatCollectionCrLAmount(row.target, currencyCode)}
       </Text>
       <Text
         fz={12}
@@ -140,7 +143,7 @@ function BranchCollectionRowView({
         c={COL_INK}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        {formatCrLAmount(row.collected)}
+        {formatCollectionCrLAmount(row.collected, currencyCode)}
       </Text>
       <CollectionPerformanceBar
         collectedWidthPct={row.barCollectedWidthPct}
@@ -153,7 +156,7 @@ function BranchCollectionRowView({
         c={row.gapDirection === "pos" ? COL_GOOD : COL_BAD}
         style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
       >
-        {row.gapDisplay ?? formatCrLAmount(row.gap)}
+        {row.gapDisplay ?? formatCollectionCrLAmount(row.gap, currencyCode)}
       </Text>
       <Text
         fz={11}
@@ -174,6 +177,7 @@ type BranchCollectionTableProps = {
   rows: BranchCollectionRow[];
   total: BranchCollectionRow;
   loading?: boolean;
+  currencyCode?: string;
   onRowClick?: (row: BranchCollectionRow) => void;
 };
 
@@ -181,6 +185,7 @@ export function BranchCollectionTable({
   rows,
   total,
   loading,
+  currencyCode = "INR",
   onRowClick,
 }: BranchCollectionTableProps) {
   const headerStyle = {
@@ -227,9 +232,14 @@ export function BranchCollectionTable({
         ) : (
           <>
             {rows.map((row) => (
-              <BranchCollectionRowView key={row.id ?? row.branchName} row={row} onRowClick={onRowClick} />
+              <BranchCollectionRowView
+                key={row.id ?? row.branchName}
+                row={row}
+                currencyCode={currencyCode}
+                onRowClick={onRowClick}
+              />
             ))}
-            <BranchCollectionRowView row={total} isTotal />
+            <BranchCollectionRowView row={total} isTotal currencyCode={currencyCode} />
           </>
         )}
       </Box>

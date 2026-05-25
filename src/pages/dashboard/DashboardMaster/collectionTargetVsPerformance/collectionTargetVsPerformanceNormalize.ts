@@ -7,7 +7,7 @@ import type {
   MonthlyStatItem,
 } from "./collectionTargetVsPerformanceTypes";
 import type { TrendDirection } from "../accountsDashboardTypes";
-import { formatCrLAmount } from "../accountsDashboardNormalize";
+import { formatCollectionCrLAmount } from "./collectionAmountFormat";
 
 const INR_PER_L = 100_000;
 
@@ -46,12 +46,16 @@ function barTone(achievementPct: number): CollectionBarTone {
   return "neutral";
 }
 
-function formatGapAmount(valueRupees: number): string {
-  const formatted = formatCrLAmount(valueRupees);
+function formatGapAmount(valueRupees: number, currencyCode: string): string {
+  const formatted = formatCollectionCrLAmount(valueRupees, currencyCode);
   return valueRupees >= 0 ? `+${formatted.replace(/^-/, "")}` : formatted;
 }
 
-function normalizeBranchRow(raw: unknown, options?: { isTotal?: boolean }): BranchCollectionRow {
+function normalizeBranchRow(
+  raw: unknown,
+  currencyCode: string,
+  options?: { isTotal?: boolean },
+): BranchCollectionRow {
   const row = (raw ?? {}) as Record<string, unknown>;
   const target = rupees(row.target ?? row.target_cr);
   const collected = rupees(row.collected ?? row.collected_cr);
@@ -71,12 +75,12 @@ function normalizeBranchRow(raw: unknown, options?: { isTotal?: boolean }): Bran
 
   const subtitleParts: string[] = [];
   if (receiptCount > 0) subtitleParts.push(`${receiptCount} receipts`);
-  if (bookRupees > 0) subtitleParts.push(`${formatCrLAmount(bookRupees)} book`);
+  if (bookRupees > 0) subtitleParts.push(`${formatCollectionCrLAmount(bookRupees, currencyCode)} book`);
   const overdueRupees = safeNumber(row.overdue);
   let exposureLabel: string | undefined;
   let exposureTone: BranchCollectionRow["exposureTone"];
   if (overdueRupees > 0) {
-    exposureLabel = `${formatCrLAmount(overdueRupees)} overdue`;
+    exposureLabel = `${formatCollectionCrLAmount(overdueRupees, currencyCode)} overdue`;
     exposureTone = overdueRupees > bookRupees * 0.5 ? "bad" : "warn";
   }
 
@@ -103,14 +107,14 @@ function normalizeBranchRow(raw: unknown, options?: { isTotal?: boolean }): Bran
     markerLeftPct: 100,
     barTone: barTone(achievementPct),
     gap,
-    gapDisplay: firstString(row.gap_display, row.gapDisplay) || formatGapAmount(gap),
+    gapDisplay: firstString(row.gap_display, row.gapDisplay) || formatGapAmount(gap, currencyCode),
     gapDirection: gapDirection as "pos" | "neg",
     achievementPct,
   };
 }
 
 /** Maps API `summary` → KPI row cards. */
-function buildSummaryKpis(summary: Record<string, unknown>): CollectionKpi[] {
+function buildSummaryKpis(summary: Record<string, unknown>, currencyCode: string): CollectionKpi[] {
   const targetRupees = rupees(summary.target);
   const collectedRupees = rupees(summary.collected);
   const gapRupees = rupees(summary.gap);
@@ -126,14 +130,14 @@ function buildSummaryKpis(summary: Record<string, unknown>): CollectionKpi[] {
     {
       label: "Target YTD",
       value: targetRupees,
-      formattedValue: formatCrLAmount(targetRupees),
+      formattedValue: formatCollectionCrLAmount(targetRupees, currencyCode),
       context: "Plan",
     },
     {
       label: "Collected YTD",
       value: collectedRupees,
-      formattedValue: formatCrLAmount(collectedRupees),
-      trendText: gapRupees !== 0 ? formatGapAmount(gapRupees) : undefined,
+      formattedValue: formatCollectionCrLAmount(collectedRupees, currencyCode),
+      trendText: gapRupees !== 0 ? formatGapAmount(gapRupees, currencyCode) : undefined,
       trendDirection: trendDirection(gapRupees),
     },
     {
@@ -156,7 +160,7 @@ function buildSummaryKpis(summary: Record<string, unknown>): CollectionKpi[] {
   ];
 }
 
-function buildMonthlyStats(monthly: Record<string, unknown>): MonthlyStatItem[] {
+function buildMonthlyStats(monthly: Record<string, unknown>, currencyCode: string): MonthlyStatItem[] {
   const collectedRupees = safeNumber(monthly.collected);
   const remainingRupees = safeNumber(monthly.remaining_target);
   const runRate = safeNumber(monthly.run_rate_per_day);
@@ -169,12 +173,12 @@ function buildMonthlyStats(monthly: Record<string, unknown>): MonthlyStatItem[] 
   const stats: MonthlyStatItem[] = [
     {
       label: "Collected",
-      value: formatCrLAmount(collectedRupees),
+      value: formatCollectionCrLAmount(collectedRupees, currencyCode),
       detail: receiptCount > 0 ? `${receiptCount} receipts` : undefined,
     },
     {
       label: "Remaining",
-      value: formatCrLAmount(remainingRupees),
+      value: formatCollectionCrLAmount(remainingRupees, currencyCode),
       detail:
         workingDaysRemaining > 0
           ? `${workingDaysRemaining} working days`
@@ -182,18 +186,18 @@ function buildMonthlyStats(monthly: Record<string, unknown>): MonthlyStatItem[] 
     },
     {
       label: "Run-rate / day",
-      value: formatCrLAmount(runRate),
+      value: formatCollectionCrLAmount(runRate, currencyCode),
       detail:
         requiredRunRate > 0
           ? runRateAbove
-            ? `Above ${formatCrLAmount(requiredRunRate)} need`
-            : `Below ${formatCrLAmount(requiredRunRate)} need`
+            ? `Above ${formatCollectionCrLAmount(requiredRunRate, currencyCode)} need`
+            : `Below ${formatCollectionCrLAmount(requiredRunRate, currencyCode)} need`
           : undefined,
       detailTone: runRateAbove ? "up" : requiredRunRate > 0 ? "down" : undefined,
     },
     {
       label: "Forecast EOM",
-      value: formatCrLAmount(forecast),
+      value: formatCollectionCrLAmount(forecast, currencyCode),
       detail: firstString(monthly.forecast_detail, monthly.forecast_note) || undefined,
     },
   ];
@@ -205,10 +209,11 @@ function buildMetaSubtitle(
   summary: Record<string, unknown>,
   dateFrom: string,
   dateTo: string,
+  currencyCode: string,
   periodDays?: number,
 ): string {
-  const collected = formatCrLAmount(safeNumber(summary.collected));
-  const target = formatCrLAmount(safeNumber(summary.target));
+  const collected = formatCollectionCrLAmount(safeNumber(summary.collected), currencyCode);
+  const target = formatCollectionCrLAmount(safeNumber(summary.target), currencyCode);
   const achievementRaw = summary.achievement_pct;
   const achievement =
     achievementRaw == null || achievementRaw === ""
@@ -232,7 +237,7 @@ function dayjsLabel(iso: string): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function sumBranchRows(rows: BranchCollectionRow[]): BranchCollectionRow {
+function sumBranchRows(rows: BranchCollectionRow[], currencyCode: string): BranchCollectionRow {
   const target = rows.reduce((s, r) => s + r.target, 0);
   const collected = rows.reduce((s, r) => s + r.collected, 0);
   const gap = collected - target;
@@ -245,11 +250,13 @@ function sumBranchRows(rows: BranchCollectionRow[]): BranchCollectionRow {
       gap,
       achievement_pct: achievementPct,
     },
+    currencyCode,
     { isTotal: true },
   );
 }
 
 const EMPTY_COLLECTION: CollectionTargetVsPerformanceData = {
+  currencyCode: "INR",
   meta: {
     title: "Collection Target vs Performance",
     subtitle: "",
@@ -270,7 +277,7 @@ const EMPTY_COLLECTION: CollectionTargetVsPerformanceData = {
   },
   branchPerformance: {
     rows: [],
-    total: normalizeBranchRow({ branch_name: "All Branches" }, { isTotal: true }),
+    total: normalizeBranchRow({ branch_name: "All Branches" }, "INR", { isTotal: true }),
   },
 };
 
@@ -307,6 +314,7 @@ export function normalizeCollectionTargetVsPerformance(
   const dateFrom = firstString(data.date_from);
   const dateTo = firstString(data.date_to);
   const periodDays = safeNumber(data.period_days, 0);
+  const currencyCode = firstString(data.currency_code, summary.currency_code, monthly.currency_code) || "INR";
 
   const monthLabel = firstString(monthly.month_label, monthly.month);
   const daysElapsed = safeNumber(monthly.days_elapsed);
@@ -345,8 +353,12 @@ export function normalizeCollectionTargetVsPerformance(
       ? (data.branch_performance as Record<string, unknown>).rows
       : [];
 
-  const rows = (rowsRaw as unknown[]).map((row) => normalizeBranchRow(row)).filter((r) => r.branchName);
-  const total = rows.length ? sumBranchRows(rows) : normalizeBranchRow({ branch_name: "All Branches" }, { isTotal: true });
+  const rows = (rowsRaw as unknown[])
+    .map((row) => normalizeBranchRow(row, currencyCode))
+    .filter((r) => r.branchName);
+  const total = rows.length
+    ? sumBranchRows(rows, currencyCode)
+    : normalizeBranchRow({ branch_name: "All Branches" }, currencyCode, { isTotal: true });
 
   const branchOptions = rows
     .filter((r) => r.branchCode)
@@ -363,31 +375,32 @@ export function normalizeCollectionTargetVsPerformance(
       : monthLabel || "Period";
 
   return {
+    currencyCode,
     meta: {
       title: "Collection Target vs Performance",
-      subtitle: buildMetaSubtitle(summary, dateFrom, dateTo, periodDays || undefined),
+      subtitle: buildMetaSubtitle(summary, dateFrom, dateTo, currencyCode, periodDays || undefined),
       periodLabel,
     },
-    kpis: buildSummaryKpis(summary),
+    kpis: buildSummaryKpis(summary, currencyCode),
     thisMonth: {
       title: monthLabel ? `This Month — ${monthLabel}` : "This Month",
       subtitle:
         daysElapsed > 0 && daysInMonth > 0
-          ? `${daysElapsed} days into month · ${formatCrLAmount(monthlyCollectedRupees)} collected of ${formatCrLAmount(monthlyTargetRupees)} target`
+          ? `${daysElapsed} days into month · ${formatCollectionCrLAmount(monthlyCollectedRupees, currencyCode)} collected of ${formatCollectionCrLAmount(monthlyTargetRupees, currencyCode)} target`
           : firstString(monthly.subtitle),
       gaugePct,
-      stats: buildMonthlyStats(monthly),
+      stats: buildMonthlyStats(monthly, currencyCode),
     },
     dailyCollection: {
       title: monthLabel ? `Daily Collection · ${monthLabel}` : "Daily Collection",
       subtitle:
         requiredRunRateL > 0
-          ? `Daily inflows vs daily run-rate need (${formatCrLAmount(safeNumber(monthly.required_run_rate_per_day))})`
+          ? `Daily inflows vs daily run-rate need (${formatCollectionCrLAmount(safeNumber(monthly.required_run_rate_per_day), currencyCode)})`
           : firstString(data.daily_subtitle),
       runRateNeed: requiredRunRateL,
       runRateLabel:
         requiredRunRateL > 0
-          ? `Need ${formatCrLAmount(safeNumber(monthly.required_run_rate_per_day))}/day`
+          ? `Need ${formatCollectionCrLAmount(safeNumber(monthly.required_run_rate_per_day), currencyCode)}/day`
           : undefined,
       points: dailyPoints,
     },

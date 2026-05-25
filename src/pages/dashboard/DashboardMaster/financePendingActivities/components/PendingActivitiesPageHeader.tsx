@@ -77,7 +77,7 @@ export function PendingActivitiesPageHeader({
       </Box>
 
       <Flex gap={8} wrap="wrap" justify="flex-end" align="flex-end">
-        <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} />
+        {/* <PeriodPillGroup value={periodGranularity} onChange={onPeriodGranularityChange} /> */}
         <Box>
           <Text fz={10} fw={600} c={PA_INK_4} mb={4} style={{ letterSpacing: "0.04em" }}>
             FROM
@@ -117,7 +117,7 @@ export function PendingActivitiesPageHeader({
           ]}
           styles={{ input: { ...selectStyles.input, width: 120 } }}
         />
-        <Select
+        {/* <Select
           size="xs"
           value={ownerFilter}
           onChange={onOwnerFilterChange}
@@ -126,8 +126,8 @@ export function PendingActivitiesPageHeader({
             ...(filterOptions?.owners ?? []),
           ]}
           styles={{ input: { ...selectStyles.input, width: 110 } }}
-        />
-        <Button
+        /> */}
+        {/* <Button
           size="compact-xs"
           variant="default"
           leftSection={<IconDownload size={14} />}
@@ -151,7 +151,7 @@ export function PendingActivitiesPageHeader({
           aria-label="Refresh"
         >
           <IconRefresh size={16} />
-        </Button>
+        </Button> */}
       </Flex>
     </Flex>
   );

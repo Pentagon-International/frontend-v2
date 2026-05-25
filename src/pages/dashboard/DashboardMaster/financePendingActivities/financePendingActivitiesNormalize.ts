@@ -1,5 +1,8 @@
 import dayjs from "dayjs";
-import { formatAmountInCr } from "../accountsDashboardNormalize";
+import {
+  formatCountExposureDisplay,
+  formatPendingActivityAmountCr,
+} from "./financePendingActivitiesAmountFormat";
 import type {
   ActivityListItem,
   ActivityListPanel,
@@ -67,8 +70,8 @@ const SUMMARY_KEY: Record<PendingActivityCategory, string> = {
   credit_notes: "credit_notes_pending",
 };
 
-function formatCountExposure(count: number, exposureInr: number): string {
-  return `${count} · ₹${formatAmountInCr(inrToCr(exposureInr))}`;
+function formatCountExposure(count: number, exposureInr: number, currencyCode: string): string {
+  return formatCountExposureDisplay(count, inrToCr(exposureInr), currencyCode);
 }
 
 function kpiHighlight(
@@ -108,21 +111,24 @@ function kpiHighlight(
 function normalizeKpiFromSummary(
   category: PendingActivityCategory,
   raw: unknown,
+  currencyCode: string,
 ): PendingActivityKpi {
   const row = (raw ?? {}) as Record<string, unknown>;
   const exposure = safeNumber(row.total_exposure ?? row.exposure ?? row.amount);
+  const amountCr = inrToCr(exposure);
   return {
     id: category,
     label: firstString(row.title, PANEL_DEFAULTS[category].title),
     subtitle: firstString(row.description, row.subtitle),
-    amountCr: inrToCr(exposure),
+    amountCr,
+    amountDisplay: formatPendingActivityAmountCr(amountCr, currencyCode),
     count: safeNumber(row.count),
     avgAgeDays: safeNumber(row.avg_age_days ?? row.avgAgeDays),
     ...kpiHighlight(category, row),
   };
 }
 
-function normalizeKpis(summary: unknown): PendingActivityKpi[] {
+function normalizeKpis(summary: unknown, currencyCode: string): PendingActivityKpi[] {
   if (!summary || typeof summary !== "object") return [];
   const record = summary as Record<string, unknown>;
   return KPI_ORDER.map((category) => {
@@ -138,7 +144,7 @@ function normalizeKpis(summary: unknown): PendingActivityKpi[] {
         avgAgeDays: 0,
       };
     }
-    return normalizeKpiFromSummary(category, block);
+    return normalizeKpiFromSummary(category, block, currencyCode);
   });
 }
 
@@ -166,7 +172,7 @@ function normalizeDistributionFromAmounts(
     .filter((seg) => seg.flex > 0);
 }
 
-function normalizeBranchRow(raw: unknown): BranchOpenItemRow {
+function normalizeBranchRow(raw: unknown, currencyCode: string): BranchOpenItemRow {
   const row = (raw ?? {}) as Record<string, unknown>;
   const invoices = (row.invoices ?? {}) as Record<string, unknown>;
   const costs = (row.costs ?? {}) as Record<string, unknown>;
@@ -181,20 +187,20 @@ function normalizeBranchRow(raw: unknown): BranchOpenItemRow {
     branchVariant: branchCode.toLowerCase() || undefined,
     invoiceCount: safeNumber(invoices.count),
     invoiceAmountCr: inrToCr(invoiceExposure),
-    invoiceDisplay: formatCountExposure(safeNumber(invoices.count), invoiceExposure),
+    invoiceDisplay: formatCountExposure(safeNumber(invoices.count), invoiceExposure, currencyCode),
     costCount: safeNumber(costs.count),
     costAmountCr: inrToCr(costExposure),
-    costDisplay: formatCountExposure(safeNumber(costs.count), costExposure),
+    costDisplay: formatCountExposure(safeNumber(costs.count), costExposure, currencyCode),
     distribution:
       normalizeDistributionFromPct(row.distribution_pct as Record<string, unknown>) ||
       normalizeDistributionFromAmounts(row.distribution as Record<string, unknown>),
     totalExposureCr: inrToCr(totalExposure),
-    totalExposureDisplay: `₹${formatAmountInCr(inrToCr(totalExposure))}`,
+    totalExposureDisplay: formatPendingActivityAmountCr(inrToCr(totalExposure), currencyCode),
     owner: firstString(row.owner, row.owner_name) || "—",
   };
 }
 
-function sumBranchRows(rows: BranchOpenItemRow[]): BranchOpenItemRow {
+function sumBranchRows(rows: BranchOpenItemRow[], currencyCode: string): BranchOpenItemRow {
   const total = rows.reduce(
     (acc, row) => ({
       invoiceCount: acc.invoiceCount + row.invoiceCount,
@@ -222,27 +228,27 @@ function sumBranchRows(rows: BranchOpenItemRow[]): BranchOpenItemRow {
     branchName: "All Branches",
     invoiceCount: total.invoiceCount,
     invoiceAmountCr: total.invoiceAmountCr,
-    invoiceDisplay: formatCountExposure(total.invoiceCount, invoiceInr),
+    invoiceDisplay: formatCountExposure(total.invoiceCount, invoiceInr, currencyCode),
     costCount: total.costCount,
     costAmountCr: total.costAmountCr,
-    costDisplay: formatCountExposure(total.costCount, costInr),
+    costDisplay: formatCountExposure(total.costCount, costInr, currencyCode),
     distribution: [],
     totalExposureCr: total.totalExposureCr,
-    totalExposureDisplay: `₹${formatAmountInCr(inrToCr(totalInr))}`,
+    totalExposureDisplay: formatPendingActivityAmountCr(inrToCr(totalInr), currencyCode),
     owner: "",
   };
 }
 
-function normalizeBranchSection(raw: unknown): BranchOpenItemsSection {
+function normalizeBranchSection(raw: unknown, currencyCode: string): BranchOpenItemsSection {
   const rowsRaw = Array.isArray(raw)
     ? raw
     : Array.isArray((raw as Record<string, unknown>)?.rows)
       ? ((raw as Record<string, unknown>).rows as unknown[])
       : [];
-  const rows = rowsRaw.map(normalizeBranchRow);
+  const rows = rowsRaw.map((row) => normalizeBranchRow(row, currencyCode));
   return {
     rows,
-    total: rows.length ? sumBranchRows(rows) : EMPTY_BRANCH_TOTAL,
+    total: rows.length ? sumBranchRows(rows, currencyCode) : EMPTY_BRANCH_TOTAL,
   };
 }
 
@@ -376,9 +382,10 @@ export function normalizeFinancePendingActivities(
   const filters = (root.filters ?? {}) as Record<string, unknown>;
   const data = (root.data ?? {}) as Record<string, unknown>;
   const topListsData = (data.top_lists ?? {}) as Record<string, unknown>;
+  const currencyCode = firstString(data.currency_code, filters.currency_code) || "INR";
 
-  const kpis = normalizeKpis(data.summary);
-  const byBranch = normalizeBranchSection(data.by_branch);
+  const kpis = normalizeKpis(data.summary, currencyCode);
+  const byBranch = normalizeBranchSection(data.by_branch, currencyCode);
   const filterOptions = branchFilterOptions(byBranch.rows);
 
   const invoicesRaw = topListsData.invoices_to_raise ?? data.invoices_to_raise;
@@ -387,6 +394,7 @@ export function normalizeFinancePendingActivities(
   const creditRaw = topListsData.credit_notes_pending ?? data.credit_notes_pending;
 
   return {
+    currencyCode,
     meta: buildMeta(root, data, filters),
     kpis,
     byBranch,

@@ -15,9 +15,16 @@ type CollectionKpiCardProps = {
   kpi: CollectionKpi;
   loading?: boolean;
   invertTrend?: boolean;
+  currencyCode?: string;
 };
 
-export function CollectionKpiCard({ kpi, loading, invertTrend }: CollectionKpiCardProps) {
+export function CollectionKpiCard({
+  kpi,
+  loading,
+  invertTrend,
+  currencyCode = "INR",
+}: CollectionKpiCardProps) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   if (loading) {
     return (
       <Box
@@ -68,7 +75,7 @@ export function CollectionKpiCard({ kpi, loading, invertTrend }: CollectionKpiCa
           <>
             {kpi.showCurrency && kpi.unit !== "%" ? (
               <Text span c={COL_INK_3} fz={14} fw={500} mr={2}>
-                ₹
+                {code}
               </Text>
             ) : null}
             {kpi.unit === "%" || kpi.unit === "days"

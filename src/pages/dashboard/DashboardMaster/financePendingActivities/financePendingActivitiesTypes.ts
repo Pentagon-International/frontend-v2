@@ -76,6 +76,7 @@ export type ActivityListPanel = {
 };
 
 export type FinancePendingActivitiesData = {
+  currencyCode: string;
   meta: {
     title: string;
     subtitle: string;
@@ -105,6 +106,7 @@ export const EMPTY_BRANCH_TOTAL: BranchOpenItemRow = {
 };
 
 export const EMPTY_FINANCE_PENDING_ACTIVITIES: FinancePendingActivitiesData = {
+  currencyCode: "INR",
   meta: {
     title: "Pending Activities",
     subtitle: "",

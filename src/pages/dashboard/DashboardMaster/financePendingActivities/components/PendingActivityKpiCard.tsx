@@ -1,12 +1,11 @@
 import { Box, Skeleton, Text } from "@mantine/core";
 import { IconFileInvoice, IconPackage, IconReceipt, IconArrowsExchange } from "@tabler/icons-react";
 import type { PendingActivityKpi } from "../financePendingActivitiesTypes";
-import { formatAmountInCr } from "../../accountsDashboardNormalize";
+import { formatPendingActivityAmountCr } from "../financePendingActivitiesAmountFormat";
 import {
   PA_BAD,
   PA_CARD_BG,
   PA_INK,
-  PA_INK_3,
   PA_INK_4,
   PA_KPI_ICON_BG,
   PA_KPI_STRIPE,
@@ -26,6 +25,7 @@ type PendingActivityKpiCardProps = {
   loading?: boolean;
   selected?: boolean;
   onSelect?: () => void;
+  currencyCode?: string;
 };
 
 export function PendingActivityKpiCard({
@@ -33,7 +33,9 @@ export function PendingActivityKpiCard({
   loading,
   selected,
   onSelect,
+  currencyCode = "INR",
 }: PendingActivityKpiCardProps) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   const Icon = ICONS[kpi.id];
 
   if (loading) {
@@ -119,10 +121,7 @@ export function PendingActivityKpiCard({
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          <Text span c={PA_INK_3} fz={14} fw={500} mr={2}>
-            ₹
-          </Text>
-          {kpi.amountDisplay ?? formatAmountInCr(kpi.amountCr)}
+          {kpi.amountDisplay ?? formatPendingActivityAmountCr(kpi.amountCr, code)}
         </Text>
         <FlexMiniStats kpi={kpi} highlightColor={highlightColor} />
       </Box>

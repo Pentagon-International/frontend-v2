@@ -73,6 +73,7 @@ export type MonthlyTrendPoint = {
 };
 
 export type AccountsDashboardData = {
+  currencyCode: string;
   meta: {
     title: string;
     subtitle: string;

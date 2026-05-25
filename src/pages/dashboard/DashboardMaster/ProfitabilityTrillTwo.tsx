@@ -33,6 +33,7 @@ export type ProfitabilityTrillTwoProps = {
   company: string;
   fromDate?: Date | null;
   toDate?: Date | null;
+  headerBranchCode?: string | null;
 };
 
 export default function ProfitabilityTrillTwo({
@@ -45,6 +46,7 @@ export default function ProfitabilityTrillTwo({
   company,
   fromDate,
   toDate,
+  headerBranchCode,
 }: ProfitabilityTrillTwoProps) {
   const [detail, setDetail] = useState<JobProfitabilityDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,6 +80,7 @@ export default function ProfitabilityTrillTwo({
               ? dayjs(fromDate).format("YYYY-MM-DD")
               : dayjs().startOf("month").format("YYYY-MM-DD"),
             date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
+            branch_code: headerBranchCode?.trim() || undefined,
           },
           job,
         );
@@ -92,7 +95,7 @@ export default function ProfitabilityTrillTwo({
     };
 
     void load();
-  }, [opened, job, company, fromDate, toDate]);
+  }, [opened, job, company, fromDate, toDate, headerBranchCode]);
 
   return (
     <Drawer

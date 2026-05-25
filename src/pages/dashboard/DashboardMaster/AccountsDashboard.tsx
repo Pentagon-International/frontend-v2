@@ -45,6 +45,7 @@ import type {
   BreakdownRow,
   TrendDirection,
 } from "./accountsDashboardTypes";
+import { AccountsBranchFilterSelect } from "./accountsDashboard/components/AccountsBranchFilterSelect";
 import ProfitabilityTrillOne from "./ProfitabilityTrillOne";
 
 const PAGE_BG = "#f1f5f9";
@@ -147,10 +148,13 @@ const PF_GRID: React.CSSProperties = {
 function CurrencyAmount({
   valueInCr,
   bold = false,
+  currencyCode = "INR",
 }: {
   valueInCr: number;
   bold?: boolean;
+  currencyCode?: string;
 }) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   return (
     <div
       className="pf-num"
@@ -161,7 +165,7 @@ function CurrencyAmount({
         color: bold ? INK : INK_2,
       }}
     >
-      <span style={{ color: INK_4, fontSize: 10, marginRight: 1 }}>₹</span>
+      <span style={{ color: INK_4, fontSize: 10, marginRight: 3 }}>{code}</span>
       {formatAmountInCr(valueInCr)}
     </div>
   );
@@ -305,12 +309,14 @@ function BreakdownTable({
   total,
   dimension,
   loading,
+  currencyCode = "INR",
   onRowClick,
 }: {
   rows: BreakdownRow[];
   total: BreakdownRow;
   dimension: BreakdownDimension;
   loading?: boolean;
+  currencyCode?: string;
   onRowClick?: (row: BreakdownRow) => void;
 }) {
   const maxMargin = Math.max(...rows.map((r) => r.marginPct), total.marginPct, 1);
@@ -370,9 +376,9 @@ function BreakdownTable({
           }}
         >
           <DimensionCell row={row} dimension={dimension} />
-          <CurrencyAmount valueInCr={row.revenue} />
-          <CurrencyAmount valueInCr={row.cost} />
-          <CurrencyAmount valueInCr={row.grossProfit} bold />
+          <CurrencyAmount valueInCr={row.revenue} currencyCode={currencyCode} />
+          <CurrencyAmount valueInCr={row.cost} currencyCode={currencyCode} />
+          <CurrencyAmount valueInCr={row.grossProfit} bold currencyCode={currencyCode} />
           <MarginBar marginPct={row.marginPct} maxMargin={maxMargin} tone={row.marginTone} />
           <YoyCell row={row} />
           <Flex justify="flex-end" align="center" c={INK_4}>
@@ -401,9 +407,9 @@ function BreakdownTable({
             </Text>
           ) : null}
         </Box>
-        <CurrencyAmount valueInCr={total.revenue} bold />
-        <CurrencyAmount valueInCr={total.cost} bold />
-        <CurrencyAmount valueInCr={total.grossProfit} bold />
+        <CurrencyAmount valueInCr={total.revenue} bold currencyCode={currencyCode} />
+        <CurrencyAmount valueInCr={total.cost} bold currencyCode={currencyCode} />
+        <CurrencyAmount valueInCr={total.grossProfit} bold currencyCode={currencyCode} />
         <MarginBar marginPct={total.marginPct} maxMargin={maxMargin} tone="neutral" />
         <YoyCell row={total} />
         <div />
@@ -412,7 +418,16 @@ function BreakdownTable({
   );
 }
 
-function KpiCard({ kpi, loading }: { kpi: AccountsKpi; loading?: boolean }) {
+function KpiCard({
+  kpi,
+  loading,
+  currencyCode = "INR",
+}: {
+  kpi: AccountsKpi;
+  loading?: boolean;
+  currencyCode?: string;
+}) {
+  const code = currencyCode.trim().toUpperCase() || "INR";
   if (loading) {
     return (
       <Box
@@ -466,7 +481,7 @@ function KpiCard({ kpi, loading }: { kpi: AccountsKpi; loading?: boolean }) {
       >
         {kpi.showCurrency && !kpi.isPercent ? (
           <Text span c={INK_3} fz={14} fw={500} mr={2}>
-            ₹
+            {code}
           </Text>
         ) : null}
         {kpi.isPercent ? kpi.value.toFixed(1) : kpi.value.toFixed(2)}
@@ -530,7 +545,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
   const [apiNotice, setApiNotice] = useState<string | null>(null);
   const [activeDimension, setActiveDimension] = useState<BreakdownDimension>("segment");
   const [periodGranularity, setPeriodGranularity] = useState<PeriodGranularity>("month");
-  const [branchFilter, setBranchFilter] = useState<string | null>("all");
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [modeFilter, setModeFilter] = useState<string | null>("all");
   const [drillRow, setDrillRow] = useState<BreakdownRow | null>(null);
   const [drillOpened, setDrillOpened] = useState(false);
@@ -547,7 +562,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     setLoading(true);
     setApiNotice(null);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         company,
         date_from: rangeFrom
           ? dayjs(rangeFrom).format("YYYY-MM-DD")
@@ -556,6 +571,8 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         compare_previous_period: true,
         ...profitabilityDimensionFlags(activeDimension),
       };
+      const branchCode = branchFilter?.trim();
+      if (branchCode) payload.branch_code = branchCode;
 
       // Interceptor already returns axios `response.data` (not the full AxiosResponse).
       const body = await apiCallProtected.post(URL.dashboard.accountsProfitability, payload);
@@ -576,7 +593,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [activeDimension, company, rangeFrom, rangeTo]);
+  }, [activeDimension, branchFilter, company, rangeFrom, rangeTo]);
 
   useEffect(() => {
     void loadDashboard();
@@ -590,6 +607,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
       ...EMPTY_BREAKDOWN_TOTAL,
       name: `Total · all ${activeDimension}s`,
     } satisfies BreakdownRow);
+  const currencyCode = data?.currencyCode ?? "INR";
 
   const monthlyChartOption = useMemo(() => {
     if (!data) return {};
@@ -676,7 +694,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         },
       ],
     };
-  }, [data]);
+  }, [data, currencyCode]);
 
   const donutOption = useMemo(() => {
     if (!data) return {};
@@ -685,7 +703,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
       textStyle: { fontFamily: ERP_LIST_FONT_SANS },
       tooltip: {
         trigger: "item",
-        formatter: "{b}: ₹{c} Cr ({d}%)",
+        formatter: `{b}: ${currencyCode} {c} Cr ({d}%)`,
         textStyle: { fontFamily: ERP_LIST_FONT_SANS },
       },
       series: [
@@ -708,7 +726,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
           left: "30%",
           top: "44%",
           style: {
-            text: `₹${data.revenueMix.total.toFixed(1)} Cr`,
+            text: `${currencyCode} ${data.revenueMix.total.toFixed(1)} Cr`,
             fill: INK,
             font: "600 16px Geist, sans-serif",
             textAlign: "center",
@@ -727,7 +745,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         },
       ],
     };
-  }, [data]);
+  }, [data, currencyCode]);
 
   const marginBarOption = useMemo(() => {
     if (!data) return {};
@@ -886,7 +904,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
           </Box>
 
           <Group gap={8} wrap="wrap" justify="flex-end" align="flex-end">
-            <Box
+            {/* <Box
               style={{
                 display: "inline-flex",
                 alignSelf: "flex-end",
@@ -922,7 +940,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                   {pill.label}
                 </Button>
               ))}
-            </Box>
+            </Box> */}
 
             <Flex gap={8} align="flex-end" wrap="nowrap">
               <Box>
@@ -970,7 +988,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
               </Box>
             </Flex>
 
-            <Button
+            {/* <Button
               size="compact-xs"
               variant="filled"
               styles={{
@@ -983,27 +1001,9 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
               }}
             >
               {data.meta.periodLabel?.split(" ")[0] ?? "Apr 2026"} · MTD
-            </Button>
-            <Select
-              size="xs"
-              value={branchFilter}
-              onChange={setBranchFilter}
-              data={[
-                { value: "all", label: "All branches" },
-                ...(data.filterOptions?.branches ?? []),
-              ]}
-              styles={{
-                input: {
-                  height: 32,
-                  minHeight: 32,
-                  width: 130,
-                  borderColor: LINE,
-                  fontSize: 12,
-                  fontWeight: 500,
-                },
-              }}
-            />
-            <Select
+            </Button> */}
+            <AccountsBranchFilterSelect value={branchFilter} onChange={setBranchFilter} />
+            {/* <Select
               size="xs"
               value={modeFilter}
               onChange={setModeFilter}
@@ -1021,7 +1021,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                   fontWeight: 500,
                 },
               }}
-            />
+            /> */}
             {/* <Button
               size="compact-xs"
               variant="default"
@@ -1038,7 +1038,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             >
               Export
             </Button> */}
-            <Button
+            {/* <Button
               size="compact-xs"
               variant="subtle"
               color="gray"
@@ -1046,7 +1046,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
               aria-label="Refresh"
             >
               <IconRefresh size={16} />
-            </Button>
+            </Button> */}
           </Group>
         </Flex>
 
@@ -1055,7 +1055,9 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             ? Array.from({ length: 5 }).map((_, i) => (
                 <KpiCard key={i} kpi={KPI_LOADING_SHAPE} loading />
               ))
-            : data.kpis.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} />)}
+            : data.kpis.map((kpi) => (
+                <KpiCard key={kpi.key} kpi={kpi} currencyCode={currencyCode} />
+              ))}
         </SimpleGrid>
 
         <Box
@@ -1126,6 +1128,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
             total={breakdownTotal}
             dimension={activeDimension}
             loading={loading}
+            currencyCode={currencyCode}
             onRowClick={(row) => {
               setDrillRow(row);
               setDrillOpened(true);
@@ -1205,7 +1208,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                       </Text>
                     </Flex>
                     <Text fz={12} fw={600} c={INK} style={{ fontVariantNumeric: "tabular-nums" }}>
-                      ₹{item.value.toFixed(2)} Cr
+                      {currencyCode} {item.value.toFixed(2)} Cr
                     </Text>
                     <Text fz={11} c={INK_4} w={32} ta="right">
                       {item.pct}%
@@ -1245,6 +1248,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         company={company}
         fromDate={rangeFrom}
         toDate={rangeTo}
+        headerBranchCode={activeDimension === "branch" ? null : branchFilter}
       />
     </Box>
   );
