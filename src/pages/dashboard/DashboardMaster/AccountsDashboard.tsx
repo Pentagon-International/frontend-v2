@@ -446,8 +446,8 @@ function KpiCard({
     );
   }
 
-  const trendUp = kpi.trend.direction === "up";
-  const arrow = trendUp ? "▲" : kpi.trend.direction === "down" ? "▼" : "—";
+  const trendUp = kpi.trend?.direction === "up";
+  const arrow = trendUp ? "▲" : kpi.trend?.direction === "down" ? "▼" : "—";
 
   return (
     <Box
@@ -489,20 +489,22 @@ function KpiCard({
           {kpi.unit}
         </Text>
       </Text>
-      <Flex align="center" gap={6} mt={6}>
-        <Text
-          fz={12}
-          fw={500}
-          c={trendColor(kpi.trend.direction, kpi.key === "direct_costs")}
-        >
-          {arrow} {kpi.trend.text}
-        </Text>
-        {kpi.trend.context ? (
-          <Text fz={12} c={INK_4} fw={400}>
-            {kpi.trend.context}
+      {kpi.trend ? (
+        <Flex align="center" gap={6} mt={6}>
+          <Text
+            fz={12}
+            fw={500}
+            c={trendColor(kpi.trend.direction, kpi.key === "direct_costs")}
+          >
+            {arrow} {kpi.trend.text}
           </Text>
-        ) : null}
-      </Flex>
+          {kpi.trend.context ? (
+            <Text fz={12} c={INK_4} fw={400}>
+              {kpi.trend.context}
+            </Text>
+          ) : null}
+        </Flex>
+      ) : null}
       {kpi.sparkline && kpi.sparkline.length > 1 ? (
         <svg
           viewBox="0 0 64 28"
@@ -572,7 +574,9 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         ...profitabilityDimensionFlags(activeDimension),
       };
       const branchCode = branchFilter?.trim();
-      if (branchCode) payload.branch_code = branchCode;
+      // if (branchCode) payload.branch_code = branchCode;
+      if (branchCode) payload.header_branch_code = branchCode;
+
 
       // Interceptor already returns axios `response.data` (not the full AxiosResponse).
       const body = await apiCallProtected.post(URL.dashboard.accountsProfitability, payload);

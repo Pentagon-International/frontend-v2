@@ -277,7 +277,7 @@ function withHeaderBranchCode(
 ): Record<string, unknown> {
   const code = headerBranchCode?.trim();
   if (!code) return payload;
-  return { ...payload, branch_code: code };
+  return { ...payload, header_branch_code: code };
 }
 
 async function fetchProfitabilityDrillData(

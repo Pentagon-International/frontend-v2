@@ -14,8 +14,8 @@ export function buildJobProfitabilityPayload(payload: JobProfitabilityApiPayload
     compare_previous_period: true,
     job_id: payload.job_id,
   };
-  const branchCode = payload.branch_code?.trim();
-  if (branchCode) request.branch_code = branchCode;
+  const headerBranchCode = payload.header_branch_code?.trim();
+  if (headerBranchCode) request.header_branch_code = headerBranchCode;
   return request;
 }
 

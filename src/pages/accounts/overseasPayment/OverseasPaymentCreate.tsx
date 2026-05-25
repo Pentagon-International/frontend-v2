@@ -2212,7 +2212,7 @@ export default function OverseasPaymentCreate({
                             readOnly
                             styles={partyFieldStyles}
                           /> */}
-                                                   <Dropdown
+                 <Dropdown
                 // label="Currency"
                 placeholder="Select currency"
                 data={currencyOptions}

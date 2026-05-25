@@ -7,7 +7,7 @@ export type AccountsKpi = {
   unit: string;
   isPercent?: boolean;
   showCurrency?: boolean;
-  trend: {
+  trend?: {
     direction: TrendDirection;
     text: string;
     context?: string;
