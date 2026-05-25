@@ -3,7 +3,7 @@ import axios, { AxiosError } from "axios";
 export type ChatMode = "operations" | "analytics";
 
 export const chatApi = axios.create({
-  baseURL: `${import.meta.env.VITE_API_BASE_URL}ai-workflow`,
+  baseURL: `${import.meta.env.VITE_CHATBOT_API_BASE_URL}`,
 });
 
 chatApi.interceptors.request.use((config) => {
