@@ -78,9 +78,10 @@ export function CollectionKpiCard({
                 {code}
               </Text>
             ) : null}
-            {kpi.unit === "%" || kpi.unit === "days"
+            {/* {kpi.unit === "%" || kpi.unit === "days" */}
+            {kpi.unit === "%" 
               ? kpi.value.toFixed(1)
-              : kpi.value.toFixed(2)}
+              : kpi.unit === "days" ? kpi.value.toFixed(0) : kpi.value.toFixed(2)}
             {kpi.unit ? (
               <Text span c={COL_INK_3} fz={14} fw={500} ml={2}>
                 {kpi.unit}

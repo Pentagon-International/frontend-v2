@@ -44,7 +44,14 @@ import {
   IconFileText,
   IconCircleCheck,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  type ChangeEvent,
+} from "react";
 import { getAPICall } from "../../service/getApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
@@ -241,6 +248,26 @@ type ChargeType = {
   // Present only for existing quotation charges (line items)
   id?: number;
 };
+
+function computeChargeLineTotals(charge: {
+  no_of_units?: string | number;
+  sell_per_unit?: string | number;
+  cost_per_unit?: string | number;
+  roe?: string | number;
+}): { total_sell: string; total_cost: string } {
+  const noOfUnits = parseFloat(String(charge.no_of_units ?? "")) || 0;
+  const sellPerUnit = parseFloat(String(charge.sell_per_unit ?? "")) || 0;
+  const costPerUnit = parseFloat(String(charge.cost_per_unit ?? "")) || 0;
+  const roe = parseFloat(String(charge.roe ?? "")) || 1;
+  const calculatedSell = noOfUnits * sellPerUnit * roe;
+  const calculatedCost = noOfUnits * costPerUnit * roe;
+  const format = (value: number) =>
+    Number.isFinite(value) ? value.toFixed(2) : "0.00";
+  return {
+    total_sell: format(calculatedSell),
+    total_cost: format(calculatedCost),
+  };
+}
 
 type CurrencyItem = {
   code: string;
@@ -728,6 +755,45 @@ function QuotationCreate({
     // Temporarily disable validation to debug charges display
     validate: yupResolver(dynamicFormSchema),
   });
+
+  const syncChargeTotalsAtIndex = useCallback(
+    (index: number, overrides?: Partial<ChargeType>) => {
+      const base = dynamicForm.values.charges[index];
+      if (!base) return;
+      const { total_sell, total_cost } = computeChargeLineTotals({
+        ...base,
+        ...overrides,
+      });
+      if (
+        base.total_sell === total_sell &&
+        base.total_cost === total_cost
+      ) {
+        return;
+      }
+      dynamicForm.setFieldValue(`charges.${index}.total_sell`, total_sell);
+      dynamicForm.setFieldValue(`charges.${index}.total_cost`, total_cost);
+    },
+    [dynamicForm],
+  );
+
+  const bindChargeAmountInput = useCallback(
+    (
+      index: number,
+      field: "sell_per_unit" | "cost_per_unit" | "no_of_units" | "roe",
+    ) => {
+      const inputProps = dynamicForm.getInputProps(`charges.${index}.${field}`);
+      return {
+        ...inputProps,
+        onChange: (event: ChangeEvent<HTMLInputElement>) => {
+          const value = event.currentTarget.value;
+          inputProps.onChange?.(event);
+          syncChargeTotalsAtIndex(index, { [field]: value });
+        },
+      };
+    },
+    [dynamicForm, syncChargeTotalsAtIndex],
+  );
+
   const tariffOption = useForm({
     initialValues: {
       tariffVal: "",
@@ -1215,18 +1281,12 @@ function QuotationCreate({
           sell_per_unit: charge.sell_per_unit?.toString() ?? "",
           min_sell: charge.min_sell?.toString() ?? "",
           cost_per_unit: charge.cost_per_unit?.toString() ?? "",
-          total_cost:
-            charge.no_of_units && charge.cost_per_unit
-              ? (
-                  Number(charge.no_of_units) * Number(charge.cost_per_unit)
-                ).toFixed(2)
-              : "",
-          total_sell:
-            charge.no_of_units && charge.sell_per_unit
-              ? (
-                  Number(charge.no_of_units) * Number(charge.sell_per_unit)
-                ).toFixed(2)
-              : "",
+          ...computeChargeLineTotals({
+            no_of_units: charge.no_of_units?.toString() || "",
+            sell_per_unit: charge.sell_per_unit?.toString() ?? "",
+            cost_per_unit: charge.cost_per_unit?.toString() ?? "",
+            roe: Number(charge.roe) || 1,
+          }),
           // preserve existing quotation charge id (fallbacks)
           id: charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
         }));
@@ -1300,23 +1360,21 @@ function QuotationCreate({
               )
             : "";
 
-        return {
+        const chargeRow = {
           charge_name: charge.charge_name ?? "",
           charge_id: (charge as any).charge_id ?? null,
           currency_country_code: charge.currency ?? "",
           roe: roe,
           unit: unit,
           no_of_units: calculatedNoOfUnits,
-
-          // ✅ Based on service
           sell_per_unit: isLCL ? rate.toString() : "",
           cost_per_unit: isLCL ? "" : rate.toString(),
-
           min_sell: "",
-
-          total_cost: "",
-          total_sell: "",
           toBeDisabled: false,
+        };
+        return {
+          ...chargeRow,
+          ...computeChargeLineTotals(chargeRow),
         };
       });
     });
@@ -1350,49 +1408,6 @@ function QuotationCreate({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargesData, location.state, selectedService, isEditMode]);
-
-  useEffect(() => {
-    const updatedCharges = dynamicForm.values.charges.map((charge) => {
-      const noOfUnits = Number(charge.no_of_units) || 0;
-      const sellPerUnit = Number(charge.sell_per_unit) || 0;
-      const costPerUnit = Number(charge.cost_per_unit) || 0;
-      // const minSell = Number(charge.min_sell) || 0;
-      // const minCost = Number(charge.min_cost) || 0;
-
-      // Use the ROE value from the form (user can manually change it)
-      const roe = Number(charge.roe) || 1;
-
-      // Calculate totals with ROE applied
-      const calculatedSell = noOfUnits * sellPerUnit * roe;
-      const calculatedCost = noOfUnits * costPerUnit * roe;
-
-      return {
-        ...charge,
-        total_sell: calculatedSell.toFixed(2),
-        total_cost: calculatedCost.toFixed(2),
-      };
-    });
-
-    // Only update if there are changes to avoid infinite loops
-    const hasChanges = updatedCharges.some(
-      (charge, index) =>
-        charge.total_sell !== dynamicForm.values.charges[index]?.total_sell ||
-        charge.total_cost !== dynamicForm.values.charges[index]?.total_cost,
-    );
-
-    if (hasChanges) {
-      dynamicForm.setValues({ charges: updatedCharges });
-    }
-  }, [
-    dynamicForm.values.charges.map((c) => c.sell_per_unit).join(","),
-    dynamicForm.values.charges.map((c) => c.cost_per_unit).join(","),
-    dynamicForm.values.charges.map((c) => c.no_of_units).join(","),
-    dynamicForm.values.charges.map((c) => c.roe).join(","),
-    dynamicForm.values.charges.map((c) => c.currency_country_code).join(","),
-    getRoeValue,
-    // dynamicForm.values.charges.map((c) => c.min_sell).join(","),
-    // dynamicForm.values.charges.map((c) => c.min_cost).join(","),
-  ]);
 
   // Handle quotation data from chatbot
   // useEffect(() => {
@@ -5243,18 +5258,24 @@ function QuotationCreate({
                               )}
                               onChange={(value) => {
                                 if (!isViewMode) {
-                                  // Set currency value
                                   dynamicForm.setFieldValue(
                                     `charges.${index}.currency_country_code`,
                                     value || "",
                                   );
-                                  // Automatically set ROE based on currency and user's country
                                   if (value) {
                                     const calculatedRoe = getRoeValue(value);
                                     dynamicForm.setFieldValue(
                                       `charges.${index}.roe`,
                                       calculatedRoe,
                                     );
+                                    syncChargeTotalsAtIndex(index, {
+                                      currency_country_code: value,
+                                      roe: calculatedRoe,
+                                    });
+                                  } else {
+                                    syncChargeTotalsAtIndex(index, {
+                                      currency_country_code: "",
+                                    });
                                   }
                                 }
                               }}
@@ -5277,9 +5298,7 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.roe`,
-                              )}
+                              {...bindChargeAmountInput(index, "roe")}
                               readOnly={isViewMode}
                               disabled={isViewMode}
                             />
@@ -5324,7 +5343,19 @@ function QuotationCreate({
                                         `charges.${index}.no_of_units`,
                                         calculatedNoOfUnits,
                                       );
+                                      syncChargeTotalsAtIndex(index, {
+                                        unit: value || "",
+                                        no_of_units: calculatedNoOfUnits,
+                                      });
+                                    } else {
+                                      syncChargeTotalsAtIndex(index, {
+                                        unit: value || "",
+                                      });
                                     }
+                                  } else {
+                                    syncChargeTotalsAtIndex(index, {
+                                      unit: value || "",
+                                    });
                                   }
                                 }
                               }}
@@ -5344,9 +5375,7 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.no_of_units`,
-                              )}
+                              {...bindChargeAmountInput(index, "no_of_units")}
                               readOnly={isViewMode}
                               disabled={
                                 isViewMode ||
@@ -5369,9 +5398,7 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.sell_per_unit`,
-                              )}
+                              {...bindChargeAmountInput(index, "sell_per_unit")}
                               readOnly={isViewMode}
                               disabled={isViewMode}
                             />
@@ -5421,9 +5448,7 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.cost_per_unit`,
-                              )}
+                              {...bindChargeAmountInput(index, "cost_per_unit")}
                             />
                           </Grid.Col>
                           {/* <Grid.Col span={1}>
@@ -6595,6 +6620,14 @@ function QuotationCreate({
                                   `charges.${index}.roe`,
                                   calculatedRoe,
                                 );
+                                syncChargeTotalsAtIndex(index, {
+                                  currency_country_code: value,
+                                  roe: calculatedRoe,
+                                });
+                              } else {
+                                syncChargeTotalsAtIndex(index, {
+                                  currency_country_code: "",
+                                });
                               }
                             }}
                           />
@@ -6610,9 +6643,7 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.roe`,
-                            )}
+                            {...bindChargeAmountInput(index, "roe")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -6647,7 +6678,19 @@ function QuotationCreate({
                                     `charges.${index}.no_of_units`,
                                     calculatedNoOfUnits,
                                   );
+                                  syncChargeTotalsAtIndex(index, {
+                                    unit: value,
+                                    no_of_units: calculatedNoOfUnits,
+                                  });
+                                } else {
+                                  syncChargeTotalsAtIndex(index, {
+                                    unit: value,
+                                  });
                                 }
+                              } else {
+                                syncChargeTotalsAtIndex(index, {
+                                  unit: value || "",
+                                });
                               }
                             }}
                             disabled={isLoadingUnitData}
@@ -6664,9 +6707,7 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.no_of_units`,
-                            )}
+                            {...bindChargeAmountInput(index, "no_of_units")}
                             disabled={
                               dynamicForm.values.charges[index]?.toBeDisabled
                             }
@@ -6683,9 +6724,7 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.sell_per_unit`,
-                            )}
+                            {...bindChargeAmountInput(index, "sell_per_unit")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -6721,9 +6760,7 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.cost_per_unit`,
-                            )}
+                            {...bindChargeAmountInput(index, "cost_per_unit")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>

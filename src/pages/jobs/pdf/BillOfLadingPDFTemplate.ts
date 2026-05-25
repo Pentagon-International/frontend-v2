@@ -73,6 +73,41 @@ const getDefaultBranchInfo = () => {
 
 // Helper function to get branch info
 
+const isUsBranchForBillOfLading = (
+  country?: { country_code?: string; country_name?: string } | null,
+  defaultBranch?: {
+    country?: { country_code?: string; country_name?: string };
+  } | null,
+): boolean => {
+  const codes: string[] = [];
+  const names: string[] = [];
+  const add = (code?: string, name?: string) => {
+    if (code) codes.push(String(code).trim().toUpperCase());
+    if (name) names.push(String(name).trim().toUpperCase());
+  };
+  add(country?.country_code, country?.country_name);
+  add(defaultBranch?.country?.country_code, defaultBranch?.country?.country_name);
+  try {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      add(user?.country?.country_code, user?.country?.country_name);
+      const def = user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      );
+      add(def?.country?.country_code, def?.country?.country_name);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return (
+    codes.includes("US") ||
+    names.some(
+      (n) => n.includes("USA") || n.includes("UNITED STATES"),
+    )
+  );
+};
+
 // Helper function to draw a box/rectangle
 const drawBox = (
   doc: jsPDF,
@@ -363,14 +398,10 @@ export const generateBillOfLadingPDF = (
     doc.setFont("helvetica", "normal");
     doc.text(vesselVoyNo || "", twoCol1X, leftY);
     doc.text(dateOfPeriodOfDelivery || "", twoCol2X, leftY);
-    leftY += 4; // Reduced padding to move border closer
-    const twoCol2SectionEndY = leftY + 3;
+    leftY += 8;
+    const twoCol2SectionEndY = leftY;
 
-    // Draw vertical border for two-column section (touching top border)
-    doc.line(twoCol2X - 2, twoCol2SectionTopBorder, twoCol2X - 2, twoCol2SectionEndY);
-
-    // Draw horizontal line (bottom border - touches left and middle borders)
-    // doc.line(innerMargin, twoCol2SectionEndY, midLineX, twoCol2SectionEndY);
+    // Vessel section borders drawn after column alignment (single bottom line at container table)
 
     // ===== RIGHT BOX CONTENT =====
     
@@ -512,8 +543,20 @@ export const generateBillOfLadingPDF = (
     leftHalfY += 4;
     doc.setFont("helvetica", "normal");
     doc.text(modesOfTransport || "", meansOfTransportLeftX, leftHalfY);
-    leftHalfY += 4; // Reduced padding to move border closer
-    
+    leftHalfY += 4;
+
+    const isUsBolBranch = isUsBranchForBillOfLading(country, defaultBranch);
+    if (isUsBolBranch) {
+      leftHalfY += 10;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("DBA Name:", meansOfTransportLeftX, leftHalfY);
+      leftHalfY += 4;
+      doc.setFont("helvetica", "normal");
+      doc.text("Pentagon Prime Americas Inc", meansOfTransportLeftX, leftHalfY);
+      leftHalfY += 4;
+    }
+
     // Right half: Route/ Place of Transhipments
     let rightHalfY = rightY;
     doc.setFont("helvetica", "bold");
@@ -523,30 +566,34 @@ export const generateBillOfLadingPDF = (
     doc.setFont("helvetica", "normal");
     const routeLines = doc.splitTextToSize(routePlaceOfTransshipment || "", meansOfTransportHalfWidth - 2);
     doc.text(routeLines, meansOfTransportRightX + 2, rightHalfY);
-    rightHalfY += Math.max(routeLines.length * 3.5, 4); // Reduced padding to move border closer
-    
-    // Use the maximum Y position from both halves
-    const meansOfTransportSectionEndY = Math.max(leftHalfY, rightHalfY);
-    rightY = meansOfTransportSectionEndY;
-    
-    // Draw vertical border between the two halves (touching top border)
-    doc.line(meansOfTransportMidX, meansOfTransportSectionTopBorder, meansOfTransportMidX, meansOfTransportSectionEndY);
-    
-    // Draw horizontal line (bottom border - touches middle and right borders)
-    // doc.line(midLineX, meansOfTransportSectionEndY, innerMargin + innerWidth, meansOfTransportSectionEndY);
-    // rightY += 5;
+    rightHalfY += Math.max(routeLines.length * 3.5, 4);
 
-    // Calculate actual main box height (align both sections to end at the same horizontal line)
-    // Ensure both "Vessel Voy No" (left) and "Modes/ Means of Transport" (right) end together
-    const finalLeftY = leftY; // Vessel Voy No section end
-    const finalRightY = rightY; // Modes/ Means of Transport section end
-    const maxY = Math.max(finalLeftY, finalRightY) - 5; // Reduced by ~5 lines to move border upwards
-    
-    // Align both sides to end at the same height (this will be the border of the second box)
-    leftY = maxY;
-    rightY = maxY;
-    
-    const actualMainBoxHeight = maxY - mainBoxStartY + boxPadding;
+    if (isUsBolBranch) {
+      rightHalfY += 10;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      const fmcTitleLines = doc.splitTextToSize(
+        "FMC Organization Number:",
+        meansOfTransportHalfWidth - 2,
+      );
+      doc.text(fmcTitleLines, meansOfTransportRightX + 2, rightHalfY);
+      rightHalfY += fmcTitleLines.length * 3.5;
+      doc.setFont("helvetica", "normal");
+      doc.text("FMC 034982N", meansOfTransportRightX + 2, rightHalfY);
+      rightHalfY += 4;
+    }
+
+    rightY = Math.max(leftHalfY, rightHalfY);
+
+    // Calculate actual main box height (align left vessel and right sections to same bottom)
+    const finalLeftY = twoCol2SectionEndY;
+    const finalRightY = rightY;
+    const mainTopSectionEndY = Math.max(finalLeftY, finalRightY);
+
+    leftY = mainTopSectionEndY;
+    rightY = mainTopSectionEndY;
+
+    const actualMainBoxHeight = mainTopSectionEndY - mainBoxStartY + boxPadding;
     
     // The shared border between top box and bottom box (container details section)
     const bottomBoxStartY = mainBoxStartY + actualMainBoxHeight;
@@ -563,8 +610,21 @@ export const generateBillOfLadingPDF = (
     
     // Draw the full box border (top box + container details section as one continuous box)
     drawBox(doc, innerMargin, mainBoxStartY, mainBoxWidth, fullBoxHeight);
-    doc.line(midLineX, mainBoxStartY, midLineX, mainBoxStartY + actualMainBoxHeight);
-    
+    // Center divider and section splits — single bottom at Gross Weight / container table
+    doc.line(midLineX, mainBoxStartY, midLineX, bottomBoxStartY);
+    doc.line(
+      twoCol2X - 2,
+      twoCol2SectionTopBorder,
+      twoCol2X - 2,
+      bottomBoxStartY,
+    );
+    doc.line(
+      meansOfTransportMidX,
+      meansOfTransportSectionTopBorder,
+      meansOfTransportMidX,
+      bottomBoxStartY,
+    );
+
     // Draw the shared horizontal border between top box and container details section
     doc.line(innerMargin, bottomBoxStartY, innerMargin + mainBoxWidth, bottomBoxStartY);
     

@@ -286,12 +286,25 @@ function normalizeProfitabilityKpis(
       trend: { ...marginTrend, context: "vs. last period" },
     },
     {
-      key: "net_profit",
-      label: "Net Profit",
-      value: toCr(kpisRaw.net_profit),
-      unit: "Cr",
-      showCurrency: true,
-      trend: { ...profitTrend, context: "vs. last period" },
+      key: "cbm",
+      label: "CBM",
+      value: safeNumber(kpisRaw.cbm),
+      unit: "",
+      isPercent: false,
+    },
+    {
+      key: "teu",
+      label: "TEU",
+      value: safeNumber(kpisRaw.teu),
+      unit: "",
+      isPercent: false,
+    },
+    {
+      key: "weight",
+      label: "Weight",
+      value: safeNumber(kpisRaw.weight),
+      unit: "",
+      isPercent: false,
     },
   ];
 }

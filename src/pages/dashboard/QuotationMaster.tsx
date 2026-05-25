@@ -364,6 +364,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   >({
     sno: true,
     enquiry_id: true,
+    quotation_id: true,
     customer_name: true,
     sales_person: true,
     created_at: true,
@@ -2685,6 +2686,7 @@ console.log("currentQuotation: ", currentQuotation);
     () => [
       { id: "sno", label: "S.No", checked: quotationVisibleColumns.sno !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
       { id: "enquiry_id", label: "Enquiry ID", checked: quotationVisibleColumns.enquiry_id !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, enquiry_id: !p.enquiry_id })) },
+      { id: "quotation_id", label: "Quotation ID", checked: quotationVisibleColumns.quotation_id !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, quotation_id: !p.quotation_id })) },
       { id: "customer_name", label: "Customer Name", checked: quotationVisibleColumns.customer_name !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
       { id: "sales_person", label: "Sales Person", checked: quotationVisibleColumns.sales_person !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
       { id: "created_at", label: "Quote Date", checked: quotationVisibleColumns.created_at !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, created_at: !p.created_at })) },

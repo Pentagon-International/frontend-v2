@@ -108,6 +108,7 @@ type HAWBDetailsForm = {
   marks_no: string;
   item_no: string;
   sub_item_no: string;
+  ref_no: string;
   events: Array<{ id?: number; type: string; date: string }>;
   event_modal_rows: Array<{
     id?: number;
@@ -596,6 +597,7 @@ function HouseCreate() {
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
+      ref_no: (editData as { ref_no?: string } | undefined)?.ref_no || "",
       events: initialHousingEvents,
       event_modal_rows: eventsToEventModalRows(initialHousingEvents),
     },
@@ -1122,6 +1124,7 @@ function HouseCreate() {
           "",
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
+        ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
 
       // Sync search display and address options from housing_details (like booking edit load)
@@ -2241,6 +2244,7 @@ function HouseCreate() {
       marks_no: v.marks_no,
       item_no: v.item_no,
       sub_item_no: v.sub_item_no,
+      ref_no: v.ref_no,
       cargo_details: cargoDetails,
       charges: chargesForm.values.charges,
     };
@@ -2321,6 +2325,7 @@ function HouseCreate() {
       marks_no: currentFormValues.marks_no,
       item_no: currentFormValues.item_no,
       sub_item_no: currentFormValues.sub_item_no,
+      ref_no: currentFormValues.ref_no,
       events: currentFormValues.events ?? [],
       cargo_details: cargoDetailsForPayload,
       charges: chargesForm.values.charges,
@@ -3300,6 +3305,15 @@ function HouseCreate() {
                   placeholder="Enter Sub Item Number"
                   {...form.getInputProps("sub_item_no")}
                   error={form.errors.sub_item_no}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Customer Ref No"
+                  placeholder="Enter Customer Ref No"
+                  {...form.getInputProps("ref_no")}
+                  error={form.errors.ref_no}
                 />
               </Grid.Col>
             </Grid>

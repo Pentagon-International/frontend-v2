@@ -80,7 +80,7 @@ export default function ProfitabilityTrillTwo({
               ? dayjs(fromDate).format("YYYY-MM-DD")
               : dayjs().startOf("month").format("YYYY-MM-DD"),
             date_to: toDate ? dayjs(toDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
-            branch_code: headerBranchCode?.trim() || undefined,
+            header_branch_code: headerBranchCode?.trim() || undefined,
           },
           job,
         );
