@@ -170,6 +170,9 @@ import FreightCreate from "./call-entry/tariff/FreightCreate";
 import DestinationCreate from "./call-entry/tariff/DestinationCreate";
 import HBLDocumentManager from "./Workflow/jobcreation/AutoJobCreation"
 import Invoice from "./Workflow/jobcreation/InvoiceCreation";
+import Chatbot from "./Workflow/Chatbot";
+import ChatbotGoogleApi from "./Workflow/Chatbot_google_api";
+import ChatbotBrowser from "./Workflow/Chatbot_browser";
 export {
   Login,
   Dashboard,
@@ -314,5 +317,8 @@ export {
   OceanImportBookingCreate,
   OceanImportToExportBooking,
   HBLDocumentManager,
-  Invoice
+  Invoice,
+  Chatbot,
+  ChatbotGoogleApi,
+  ChatbotBrowser,
 };

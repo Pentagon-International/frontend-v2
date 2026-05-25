@@ -55,7 +55,14 @@ import {
   IconLink,
   IconFileUpload,
   IconFiles,
+  IconRobot,
+  IconClipboardList,
 } from "@tabler/icons-react";
+import {
+  CHATBOT_PATH,
+  HBL_DOCUMENT_MANAGER_PATH,
+  INVOICE_MANAGER_PATH,
+} from "../../pages/Workflow/jobcreation/workflowUrls";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
 import { SimpleNavLink } from "./SimpleNavLink";
@@ -1090,29 +1097,34 @@ const Navbar = ({
                 label="Jobcreation"
                 key={"Jobcreation"}
                 icon={IconFileUpload}
-                path="/hbl-document-manager"
+                path={HBL_DOCUMENT_MANAGER_PATH}
                 collapsibles={{
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
                 }}
-
-
-
               />
               <SimpleNavLink
-                label="Invoice"
-                key={"Invoice"}
-                icon={IconFileInvoice}
-                path="/invoice"
+                label="Invoice Manager"
+                key={"Invoice Manager"}
+                icon={IconClipboardList}
+                path={INVOICE_MANAGER_PATH}
                 collapsibles={{
                   setIsSalesOpen,
                   setIsTariffOpen,
                   setIsCustomerServiceOpen,
                 }}
-
-
-
+              />
+              <SimpleNavLink
+                label="Chatbot"
+                key={"Chatbot"}
+                icon={IconRobot}
+                path={CHATBOT_PATH}
+                collapsibles={{
+                  setIsSalesOpen,
+                  setIsTariffOpen,
+                  setIsCustomerServiceOpen,
+                }}
               />
             </Stack>
             {/* System Section */}

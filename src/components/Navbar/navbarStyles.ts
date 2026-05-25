@@ -14,6 +14,8 @@ export const sectionIconColors: Record<string, string> = {
   Settings: "#60A5FA",
   Jobcreation: "#60A5FA",
   Invoice: "#60A5FA",
+  "Invoice Manager": "#60A5FA",
+  Chatbot: "#60A5FA",
 
   Reports: "#F472B6",
   Help: "#F472B6",
@@ -37,6 +39,8 @@ export const sectionIconBackground: Record<string, string> = {
   Settings: "rgba(96, 165, 250, 0.12)",
   Jobcreation: "rgba(96, 165, 250, 0.12)",
   Invoice: "rgba(96, 165, 250, 0.12)",
+  "Invoice Manager": "rgba(96, 165, 250, 0.12)",
+  Chatbot: "rgba(96, 165, 250, 0.12)",
 
   Reports: "rgba(244, 114, 182, 0.12)",
   Help: "rgba(244, 114, 182, 0.12)",

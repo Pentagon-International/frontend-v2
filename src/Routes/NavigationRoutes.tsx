@@ -134,6 +134,9 @@ import {
   OceanImportToExportBooking,
   HBLDocumentManager,
   Invoice,
+  Chatbot,
+  ChatbotGoogleApi,
+  ChatbotBrowser,
 } from "../pages";
 import Road from "../pages/dashboard/Road";
 import DemoPage from "../pages/dashboard/DemoPage";
@@ -532,8 +535,24 @@ const NavigationRoutes = () => {
         </Route>
         <Route path="/tariff-create" element={<TariffCreate />} />
         <Route path="/tariff-bulk-upload" element={<TariffBulkUpload />} />
-        <Route path="/hbl-document-manager" element={<HBLDocumentManager />} />
-        <Route path="/invoice" element={<Invoice />} />
+        <Route path="/workflow/hbl-document-manager" element={<HBLDocumentManager />} />
+        <Route path="/workflow/invoice-manager" element={<Invoice />} />
+        <Route
+          path="/hbl-document-manager"
+          element={<Navigate to="/workflow/hbl-document-manager" replace />}
+        />
+        <Route path="/workflow/chatbot" element={<Chatbot />} />
+        <Route path="/workflow/chatbot-google" element={<ChatbotGoogleApi />} />
+        <Route path="/workflow/chatbot-browser" element={<ChatbotBrowser />} />
+        <Route path="/chatbot" element={<Navigate to="/workflow/chatbot" replace />} />
+        <Route
+          path="/chatbot-google"
+          element={<Navigate to="/workflow/chatbot-google" replace />}
+        />
+        <Route
+          path="/chatbot-browser"
+          element={<Navigate to="/workflow/chatbot-browser" replace />}
+        />
         <Route path="master" element={<MastersPage />}>
           <Route path="group-company" element={<GroupCompany />} />
           <Route path="group-company-new" element={<NewGroupCompany />} />

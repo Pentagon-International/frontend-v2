@@ -86,6 +86,16 @@ const pathTitleMap: Record<string, string> = {
   "/collapse": "Collapse",
   "/settings": "Settings",
   "/customer-service": "Customer Service",
+  "/workflow/hbl-document-manager": "Jobcreation",
+  "/workflow/invoice-manager": "Invoice Manager",
+  "/hbl-document-manager": "Jobcreation",
+  "/invoice": "Invoice",
+  "/workflow/chatbot": "Chatbot",
+  "/workflow/chatbot-google": "Chatbot",
+  "/workflow/chatbot-browser": "Chatbot",
+  "/chatbot": "Chatbot",
+  "/chatbot-google": "Chatbot",
+  "/chatbot-browser": "Chatbot",
 
   // if different title for sub-routes
   //   '/master/group-company': 'Group Company',

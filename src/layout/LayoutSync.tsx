@@ -176,8 +176,14 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/debit-credit-note-non-trade")) {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");
-    } else if (path.startsWith("/hbl-document-manager")) {
+    } else if (path.startsWith("/workflow/hbl-document-manager")) {
       setActiveNav("Jobcreation");
+      setActiveSubNav("");
+    } else if (path.startsWith("/workflow/invoice-manager")) {
+      setActiveNav("Invoice Manager");
+      setActiveSubNav("");
+    } else if (path.startsWith("/workflow/chatbot")) {
+      setActiveNav("Chatbot");
       setActiveSubNav("");
     } else if (path === "/invoice" || path.startsWith("/invoice/")) {
       setActiveNav("Invoice");

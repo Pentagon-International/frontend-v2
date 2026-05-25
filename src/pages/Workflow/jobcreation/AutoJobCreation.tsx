@@ -253,12 +253,14 @@ const STYLES = `
   @keyframes hbl-modal-in { from { opacity:0; transform:scale(.96) translateY(8px) } }
   @keyframes hbl-bar-up { from { transform:translateX(-50%) translateY(80px) } to { transform:translateX(-50%) translateY(0) } }
   @keyframes hbl-toast-in { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
-  .hbl-app { width: 100%; display: flex; flex-direction: column; font-family: var(--sans); background: var(--bg); color: var(--text); }
+  .hbl-app { width:100%; display:flex; flex-direction:column; font-family:var(--sans); background:var(--surface); color:var(--text); min-height:300px; margin:1rem 0; border-radius:1rem; box-shadow:0 4px 12px rgba(0,0,0,.05); max-height:calc(100vh - 88px); overflow:hidden; }
   .hbl-app *, .hbl-app *::before, .hbl-app *::after { box-sizing: border-box; }
-  .hbl-app .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; display: flex; align-items: center; gap: 14px; min-height: 54px; flex-wrap: wrap; border-radius: 8px 8px 0 0; }
-  .hbl-app .logo-mark { font-family: var(--mono); font-size: .6rem; color: var(--accent); letter-spacing: .2em; text-transform: uppercase; }
-  .hbl-app .logo-name { font-size: 1.05rem; font-weight: 800; letter-spacing: -.03em; color: var(--text); }
-  .hbl-app .logo-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+  .hbl-app .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; display: flex; align-items: center; gap: 14px; min-height: 54px; flex-wrap: wrap; border-radius: 8px 8px 0 0; flex-shrink: 0;border-radius:1rem; }
+  .hbl-app .top-brand { display: flex; align-items: center; gap: 10px; }
+  .hbl-app .top-brand-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1rem; flex-shrink: 0; }
+  .hbl-app .top-brand-text { f font-size:.95rem; font-weight:700; letter-spacing:-.02em; color:var(--text);}
+  .hbl-app .top-brand-sub { font-size: .65rem; color: var(--muted); font-family: var(--mono); }
+  .hbl-app .top-divider { width: 1px; height: 24px; background: var(--border); }
   .hbl-app .search-wrap { position: relative; flex: 1; max-width: 380px; }
   .hbl-app .search-wrap input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px 8px 34px; font-size: .8rem; font-family: var(--sans); color: var(--text); outline: none; transition: border-color .15s; }
   .hbl-app .search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.1); background: var(--surface); }
@@ -272,7 +274,7 @@ const STYLES = `
   .hbl-app .btn-green:disabled { opacity: .5; cursor: not-allowed; }
   .hbl-app .btn-ghost { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
   .hbl-app .btn-ghost:hover { color: var(--text); border-color: var(--border2); background: var(--surface2); }
-  .hbl-app .filter-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 28px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hbl-app .filter-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 28px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
   .hbl-app .filter-label { font-size: .72rem; color: var(--muted); font-weight: 600; }
   .hbl-app .chip { padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: .72rem; font-family: var(--sans); cursor: pointer; transition: all .15s; }
   .hbl-app .chip:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
@@ -280,14 +282,16 @@ const STYLES = `
   .hbl-app .filter-sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
   .hbl-app .per-page { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 4px 8px; font-size: .72rem; font-family: var(--sans); cursor: pointer; outline: none; }
   .hbl-app .records-count { font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-left: auto; }
-  .hbl-app .table-wrap { background: var(--bg); }
-  .hbl-app table { width: 100%; border-collapse: collapse; background: var(--surface); }
-  .hbl-app thead tr { background: var(--surface2); position: sticky; top: 0; z-index: 5; }
+  .hbl-app .table-wrap { background: var(--bg); flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .hbl-app table { width: 100%; border-collapse: collapse; background: var(--surface); display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .hbl-app thead { display: table; width: 100%; table-layout: fixed; flex-shrink: 0; }
+  .hbl-app thead tr { background: var(--surface2); }
   .hbl-app th { text-align: left; padding: 10px 14px; font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
   .hbl-app th:first-child { padding-left: 24px; width: 36px; }
   .hbl-app th:last-child { padding-right: 24px; }
   .hbl-app th:hover { color: var(--text); }
-  .hbl-app tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; cursor: pointer; }
+  .hbl-app tbody { display: block; overflow-y: auto; flex: 1; min-height: 0; }
+  .hbl-app tbody tr { display: table; width: 100%; table-layout: fixed; border-bottom: 1px solid var(--border); transition: background .1s; cursor: pointer; }
   .hbl-app tbody tr:hover { background: #f8f9fc; }
   .hbl-app tbody tr.selected { background: rgba(37,99,235,.05); }
   .hbl-app td { padding: 11px 14px; font-size: .8rem; color: var(--muted); vertical-align: middle; }
@@ -322,7 +326,7 @@ const STYLES = `
   .hbl-app .act-btn.view:hover { color: var(--accent); border-color: var(--accent); background: rgba(37,99,235,.06); }
   .hbl-app .act-btn.dl:hover { color: #065f46; border-color: var(--green); background: rgba(5,150,105,.06); }
   .hbl-app .act-btn.payload:hover { color: var(--mbl); border-color: var(--mbl); background: rgba(8,145,178,.06); }
-  .hbl-app .pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 28px; border-top: 1px solid var(--border); background: var(--surface); }
+  .hbl-app .pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 28px; border-top: 1px solid var(--border); background: var(--surface); border-radius: 0 0 1rem 1rem; flex-shrink: 0; }
   .hbl-app .pag-info { font-family: var(--mono); font-size: .68rem; color: var(--muted); }
   .hbl-app .pag-controls { display: flex; align-items: center; gap: 4px; }
   .hbl-app .pag-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: .75rem; cursor: pointer; transition: all .15s; font-family: var(--sans); }
@@ -330,6 +334,7 @@ const STYLES = `
   .hbl-app .pag-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
   .hbl-app .pag-btn:disabled { opacity: .3; cursor: not-allowed; }
   .hbl-app .state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; gap: 12px; }
+  .hbl-app .table-wrap > .state-box { flex: 1; min-height: 0; }
   .hbl-app .state-icon { font-size: 2.4rem; opacity: .4; }
   .hbl-app .state-text { font-size: .88rem; color: var(--text); font-weight: 600; }
   .hbl-app .state-sub { font-size: .75rem; color: var(--muted); }
@@ -2381,7 +2386,14 @@ const HBLDocumentManager: FC = () => {
   return (
     <div className="hbl-app">
       <div className="topbar">
-        <div className="logo-sep" />
+        <div className="top-brand">
+          <div className="top-brand-icon">🧾</div>
+          <div>
+            <div className="top-brand-text">Job Creation</div>
+            <div className="top-brand-sub">HBL · MBL · Upload · Review</div>
+          </div>
+        </div>
+        <div className="top-divider" />
         <div className="search-wrap">
           <span className="search-icon">🔍</span>
           <input placeholder="Search TXN ID, filename, BL number…" value={search} onChange={e => searchSet(e.target.value)} />
