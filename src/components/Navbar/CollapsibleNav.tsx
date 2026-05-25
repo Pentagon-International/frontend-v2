@@ -49,6 +49,11 @@ export const CollapsibleNav = ({
         activeSubNav === "Call Entry" ||
         activeSubNav === "Outstanding / Overdue" ||
         activeSubNav === "Budget vs Actual")) ||
+    (label === "Finance Dashboard" &&
+      (activeSubNav === "Profitability" ||
+        activeSubNav === "Collection Target vs Performance" ||
+        activeSubNav === "Outstanding & Ageing" ||
+        activeSubNav === "Pending Activities")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
@@ -225,6 +230,12 @@ export const CollapsibleNav = ({
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Finance Dashboard", false);
+        } else if (label === "Finance Dashboard") {
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Dashboard", false);
         }
       }
       if (

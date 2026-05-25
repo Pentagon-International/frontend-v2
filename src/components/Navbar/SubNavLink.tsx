@@ -15,6 +15,8 @@ type Props = {
     setIsSeaExportOpen?: (v: boolean) => void;
     setIsAirOpen?: (v: boolean) => void;
     setIsAccountsOpen?: (v: boolean) => void;
+    setIsDashboardOpen?: (v: boolean) => void;
+    setIsFinanceDashboardOpen?: (v: boolean) => void;
   };
 };
 
@@ -155,10 +157,24 @@ export const SubNavLink = ({
           collapsibles?.setIsAirOpen?.(false);
           collapsibles?.setIsSeaExportOpen?.(false);
           collapsibles?.setIsAccountsOpen?.(false);
+          collapsibles?.setIsFinanceDashboardOpen?.(false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Accounts", false);
+          setOpenCollapsible("Finance Dashboard", false);
+        } else if (parent === "Finance Dashboard") {
+          collapsibles?.setIsSalesOpen?.(false);
+          collapsibles?.setIsTariffOpen?.(false);
+          collapsibles?.setIsAirOpen?.(false);
+          collapsibles?.setIsSeaExportOpen?.(false);
+          collapsibles?.setIsAccountsOpen?.(false);
+          collapsibles?.setIsDashboardOpen?.(false);
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Accounts", false);
+          setOpenCollapsible("Dashboard", false);
         } else {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsTariffOpen?.(false);

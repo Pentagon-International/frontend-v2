@@ -200,6 +200,21 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/dashboard/enquiry-conversion")) {
       setActiveNav("Dashboard");
       setActiveSubNav("Enquiry Conversion");
+    } else if (path.startsWith("/finance-dashboard/profitability")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Profitability");
+    } else if (path.startsWith("/finance-dashboard/branch-budget-vs-actual")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Branch Budget vs Actual");
+    } else if (path.startsWith("/finance-dashboard/collection-target-vs-performance")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Collection Target vs Performance");
+    } else if (path.startsWith("/finance-dashboard/outstanding-ageing")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Outstanding & Ageing");
+    } else if (path.startsWith("/finance-dashboard/pending-activities")) {
+      setActiveNav("Finance Dashboard");
+      setActiveSubNav("Pending Activities");
     } else if (path === "/") {
       setActiveNav("Dashboard");
       setActiveSubNav("Overview");
