@@ -51,7 +51,6 @@ export const CollapsibleNav = ({
         activeSubNav === "Budget vs Actual")) ||
     (label === "Finance Dashboard" &&
       (activeSubNav === "Profitability" ||
-        activeSubNav === "Branch Budget vs Actual" ||
         activeSubNav === "Collection Target vs Performance" ||
         activeSubNav === "Outstanding & Ageing" ||
         activeSubNav === "Pending Activities")) ||

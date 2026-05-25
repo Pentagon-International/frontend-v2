@@ -45,7 +45,6 @@ import {
   IconCash,
   IconWorldDollar,
   IconReportMoney,
-  IconScale,
   IconCashOff,
   IconChecklist,
   IconFileInvoiceFilled,
@@ -315,21 +314,6 @@ const Navbar = ({
                   label="Profitability"
                   icon={IconReportMoney}
                   path="/finance-dashboard/profitability"
-                  collapsibles={{
-                    setIsSalesOpen,
-                    setIsTariffOpen,
-                    setIsCustomerServiceOpen,
-                    setIsAirOpen,
-                    setIsSeaExportOpen,
-                    setIsAccountsOpen,
-                    setIsDashboardOpen,
-                  }}
-                />
-                <SubNavLink
-                  parent="Finance Dashboard"
-                  label="Branch Budget vs Actual"
-                  icon={IconScale}
-                  path="/finance-dashboard/branch-budget-vs-actual"
                   collapsibles={{
                     setIsSalesOpen,
                     setIsTariffOpen,
