@@ -38,6 +38,7 @@ import { Dropdown, SearchableSelect } from "../../../components";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "CFS_MASTER";
 
@@ -75,6 +76,7 @@ type CFSFilters = {
 };
 
 export default function CFSMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -493,7 +495,8 @@ export default function CFSMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -516,6 +519,7 @@ export default function CFSMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>

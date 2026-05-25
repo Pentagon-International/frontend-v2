@@ -62,6 +62,11 @@ import {
   housingEventsFromJobPatchData,
   resolveHousingEventsForHouseForm,
 } from "../../../utils/jobHousingEventsFromPatch";
+import {
+  calcCostLocalAmount,
+  calcSellLocalAmount,
+  resolveSellAmount,
+} from "../../../utils/houseChargeAmounts";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -860,11 +865,37 @@ function HouseCreate() {
               currency: currencyCode,
               roe: toNum(charge.roe),
               amount_per_unit: toNum(charge.amount_per_unit),
-              amount: toNum(charge.amount),
-              sell_local_amount: toNum(charge.sell_local_amount),
+              amount: (() => {
+                const noOfUnit = toNum(charge.no_of_unit);
+                const amountPerUnit = toNum(charge.amount_per_unit);
+                return resolveSellAmount(
+                  toNum(charge.amount),
+                  noOfUnit,
+                  amountPerUnit,
+                );
+              })(),
+              sell_local_amount: (() => {
+                const noOfUnit = toNum(charge.no_of_unit);
+                const amountPerUnit = toNum(charge.amount_per_unit);
+                const roe = toNum(charge.roe);
+                const amount = resolveSellAmount(
+                  toNum(charge.amount),
+                  noOfUnit,
+                  amountPerUnit,
+                );
+                const existing = toNum(charge.sell_local_amount);
+                if (existing != null && existing > 0) return existing;
+                return calcSellLocalAmount(amount, roe, noOfUnit, amountPerUnit);
+              })(),
               unit_cost: toNum(charge.unit_cost),
               total_cost: toNum(charge.total_cost),
-              cost_local_amount: toNum(charge.cost_local_amount),
+              cost_local_amount: (() => {
+                const roe = toNum(charge.roe);
+                const totalCost = toNum(charge.total_cost);
+                const existing = toNum(charge.cost_local_amount);
+                if (existing != null && existing > 0) return existing;
+                return calcCostLocalAmount(totalCost, roe);
+              })(),
             };
           },
         );

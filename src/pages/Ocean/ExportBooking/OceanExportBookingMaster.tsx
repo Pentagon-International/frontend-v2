@@ -150,6 +150,8 @@ type ExportShipmentData = {
     note?: string;
     source?: unknown;
   }>;
+  rate_details?: Array<Record<string, unknown>>;
+  routing_details?: Array<Record<string, unknown>>;
 };
 
 /** Matches `summary` on `customerServiceShipmentFilter` for ocean export (totals are filter-scoped). */

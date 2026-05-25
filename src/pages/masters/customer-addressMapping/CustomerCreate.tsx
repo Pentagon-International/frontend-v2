@@ -1,5 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Dropdown, SearchableSelect, SingleDateInput, ToastNotification } from "../../../components";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+} from "../../../components";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -46,18 +51,63 @@ function parseYesNoBoolean(value: unknown): boolean {
   if (typeof value === "number") return value === 1;
   const raw = String(value).trim().toLowerCase();
   if (!raw) return false;
-  if (raw === "true" || raw === "1" || raw === "yes" || raw === "y") return true;
-  if (raw === "false" || raw === "0" || raw === "no" || raw === "n") return false;
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "y")
+    return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "n")
+    return false;
   return Boolean(value);
 }
 
 function isGstRegistrationRegistered(status: unknown): boolean {
-  return String(status ?? "").trim().toLowerCase() === "registered";
+  return (
+    String(status ?? "")
+      .trim()
+      .toLowerCase() === "registered"
+  );
 }
 
-function isAgentCustomerType(codes?: string[]): boolean {
+/** True when address country is India (code IN or name contains "india"). */
+function isIndiaAddressCountry(country: string | null | undefined): boolean {
+  const raw = String(country ?? "").trim();
+  if (!raw) return false;
+  if (raw.toUpperCase() === "IN") return true;
+  return raw.toLowerCase().includes("india");
+}
+
+function isAgentCustomerType(
+  codes?: string[],
+  options?: Array<{ value: string; label: string }>,
+): boolean {
   if (!codes?.length) return false;
-  return codes.some((code) => String(code).trim().toLowerCase() === "agent");
+  return codes.some((code) => {
+    const option = options?.find((o) => o.value === code);
+    const label = option?.label ?? code;
+    const normLabel = String(label).trim().toLowerCase();
+    const normCode = String(code).trim().toLowerCase();
+    return normLabel === "agent" || normCode === "agent";
+  });
+}
+
+function isCustomerCustomerType(
+  codes?: string[],
+  options?: Array<{ value: string; label: string }>,
+): boolean {
+  if (!codes?.length) return false;
+  return codes.some((code) => {
+    const option = options?.find((o) => o.value === code);
+    const label = option?.label ?? code;
+    const normLabel = String(label).trim().toLowerCase();
+    const normCode = String(code).trim().toLowerCase();
+    return normLabel === "customer" || normCode === "customer";
+  });
+}
+
+function assignedToFromListRecord(
+  record: Pick<CustomerDetailRecord, "assigned_to" | "assigned_to_display">,
+): string {
+  const email = String(record.assigned_to ?? "").trim();
+  const display = String(record.assigned_to_display ?? "").trim();
+  return email || display;
 }
 
 // Type definitions
@@ -252,7 +302,8 @@ const customerValidationSchema = yup.object({
     .test(
       "valid-credit-amount",
       "Enter a valid credit amount",
-      (v) => !v || twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim()),
+      (v) =>
+        !v || twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim()),
     ),
   credit_day: yup
     .string()
@@ -266,7 +317,7 @@ const customerValidationSchema = yup.object({
     .string()
     .test("assign-to-required", "Assign To is required", function (value) {
       const codes = this.parent.customer_type_code as string[] | undefined;
-      if (isAgentCustomerType(codes)) return true;
+      if (!isCustomerCustomerType(codes)) return true;
       return Boolean(String(value ?? "").trim());
     }),
 });
@@ -290,7 +341,11 @@ const addressItemSchema = yup.object({
     .required("Country is required")
     .min(2, "Country must be at least 2 characters")
     .max(50, "Country must not exceed 50 characters"),
-  state: yup.string().required("State is required"),
+  state: yup.string().when("country", {
+    is: (country: string | undefined) => isIndiaAddressCountry(country),
+    then: (schema) => schema.required("State is required"),
+    otherwise: (schema) => schema.optional(),
+  }),
   phone_no: yup
     .string()
     .matches(
@@ -304,10 +359,16 @@ const addressItemSchema = yup.object({
     .email("Please enter a valid email address")
     .required("Email is required")
     .max(100, "Email must not exceed 100 characters"),
-  trn_no: yup.string().optional().max(30, "TRN No must not exceed 30 characters"),
+  trn_no: yup
+    .string()
+    .optional()
+    .max(30, "TRN No must not exceed 30 characters"),
   validity_date: yup.string().nullable().optional(),
   pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
-  gst_id: yup.string().optional().max(20, "GST No must not exceed 20 characters"),
+  gst_id: yup
+    .string()
+    .optional()
+    .max(20, "GST No must not exceed 20 characters"),
   tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
   arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
   uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
@@ -331,7 +392,10 @@ const addressItemSchema = yup.object({
 });
 
 const addressValidationSchema = yup.object({
-  addresses_data: yup.array().of(addressItemSchema).min(1, "At least one address is required"),
+  addresses_data: yup
+    .array()
+    .of(addressItemSchema)
+    .min(1, "At least one address is required"),
 });
 
 function buildAddressValidationSchema(isIndiaUser: boolean) {
@@ -343,10 +407,7 @@ function buildAddressValidationSchema(isIndiaUser: boolean) {
     gst_registration_status: yup
       .string()
       .required("GST Registration Status is required")
-      .oneOf(
-        ["Registered", "Unregistered"],
-        "Select GST registration status",
-      ),
+      .oneOf(["Registered", "Unregistered"], "Select GST registration status"),
     pan_no: yup.string().when("gst_registration_status", {
       is: (status: string | undefined) => isGstRegistrationRegistered(status),
       then: (schema) =>
@@ -434,7 +495,10 @@ function normalizeCustomerTypeCodes(source: {
     return [String(source.customer_type_code).trim()].filter(Boolean);
   }
 
-  if (Array.isArray(source.customer_types) && source.customer_types.length > 0) {
+  if (
+    Array.isArray(source.customer_types) &&
+    source.customer_types.length > 0
+  ) {
     return source.customer_types
       .map((item) => String(item?.customer_type_code ?? "").trim())
       .filter(Boolean);
@@ -533,10 +597,7 @@ function resolveCustomerLocation(
   },
 ): string {
   const raw =
-    addr.customer_location ??
-    addr.location ??
-    addr.location_name ??
-    "";
+    addr.customer_location ?? addr.location ?? addr.location_name ?? "";
   return String(raw ?? "").trim();
 }
 
@@ -589,9 +650,7 @@ function mapAddressFromApi(
     gst_registration_status: addr.gst_registration_status ?? "",
     composite_regular: addr.composite_regular ?? "",
     sez: parseYesNoBoolean(addr.sez),
-    msme: parseYesNoBoolean(
-      addr.msme ?? addr.msme_flag ?? addr.msme_status,
-    ),
+    msme: parseYesNoBoolean(addr.msme ?? addr.msme_flag ?? addr.msme_status),
     msme_no: addr.msme_no ?? "",
     latitude: addr.latitude || 0,
     longitude: addr.longitude || 0,
@@ -634,11 +693,11 @@ function buildCustomerFormValuesFromRecord(
   record: CustomerDetailRecord,
   cities: CityData[],
   salespersonOptions: SalespersonOption[] = [],
+  options?: { useListAssignedTo?: boolean },
 ): CustomerFormData {
-  const addressData =
-    record.addresses_data?.map((addr) => mapAddressFromApi(addr, cities)) ?? [
-      emptyAddressDefaults(),
-    ];
+  const addressData = record.addresses_data?.map((addr) =>
+    mapAddressFromApi(addr, cities),
+  ) ?? [emptyAddressDefaults()];
 
   return {
     customer_name: record.customer_name || record.name || "",
@@ -652,7 +711,9 @@ function buildCustomerFormValuesFromRecord(
           ? String(record.total_credit_amount)
           : "",
     credit_day: record.credit_day != null ? String(record.credit_day) : "",
-    assigned_to: resolveAssignedToValue(record, salespersonOptions),
+    assigned_to: options?.useListAssignedTo
+      ? assignedToFromListRecord(record)
+      : resolveAssignedToValue(record, salespersonOptions),
     network_id: record.network_id != null ? String(record.network_id) : "",
     network_name: record.network_name || "",
     addresses_data: addressData,
@@ -713,63 +774,57 @@ const tdsDisplayValidationSchema = yup
           section_code: yup.string().required("Section name is required"),
           section_name: yup.string().required("Section name is required"),
           exemption_tds: yup.boolean().required(),
-          exemption_certificate_no: yup
-            .string()
+          exemption_certificate_no: yup.string().when("exemption_tds", {
+            is: true,
+            then: (s) => s.required("Exemption certificate number is required"),
+            otherwise: (s) => s.optional(),
+          }),
+          tds_percent: yup.string().when("exemption_tds", {
+            is: true,
+            then: (s) =>
+              s
+                .required("TDS % is required")
+                .matches(twoDecimalRequiredRegex, "Enter a valid number"),
+            otherwise: (s) =>
+              s
+                .optional()
+                .test(
+                  "two-decimals",
+                  "Enter a valid number",
+                  (v) => !v || twoDecimalRequiredRegex.test(v),
+                ),
+          }),
+          valid_from: yup
+            .date()
+            .nullable()
             .when("exemption_tds", {
               is: true,
-              then: (s) => s.required("Exemption certificate number is required"),
+              then: (s) => s.required("Valid from is required"),
               otherwise: (s) => s.optional(),
             }),
-          tds_percent: yup
-            .string()
+          valid_to: yup
+            .date()
+            .nullable()
             .when("exemption_tds", {
               is: true,
-              then: (s) =>
-                s
-                  .required("TDS % is required")
-                  .matches(
-                    twoDecimalRequiredRegex,
-                    "Enter a valid number",
-                  ),
-              otherwise: (s) =>
-                s
-                  .optional()
-                  .test(
-                    "two-decimals",
-                    "Enter a valid number",
-                    (v) => !v || twoDecimalRequiredRegex.test(v),
-                  ),
+              then: (s) => s.required("Valid to is required"),
+              otherwise: (s) => s.optional(),
             }),
-          valid_from: yup.date().nullable().when("exemption_tds", {
+          tds_lower_limit: yup.string().when("exemption_tds", {
             is: true,
-            then: (s) => s.required("Valid from is required"),
-            otherwise: (s) => s.optional(),
+            then: (s) =>
+              s
+                .required("TDS lower limit is required")
+                .matches(twoDecimalRequiredRegex, "Enter a valid number"),
+            otherwise: (s) =>
+              s
+                .optional()
+                .test(
+                  "two-decimals",
+                  "Enter a valid number",
+                  (v) => !v || twoDecimalRequiredRegex.test(v),
+                ),
           }),
-          valid_to: yup.date().nullable().when("exemption_tds", {
-            is: true,
-            then: (s) => s.required("Valid to is required"),
-            otherwise: (s) => s.optional(),
-          }),
-          tds_lower_limit: yup
-            .string()
-            .when("exemption_tds", {
-              is: true,
-              then: (s) =>
-                s
-                  .required("TDS lower limit is required")
-                  .matches(
-                    twoDecimalRequiredRegex,
-                    "Enter a valid number",
-                  ),
-              otherwise: (s) =>
-                s
-                  .optional()
-                  .test(
-                    "two-decimals",
-                    "Enter a valid number",
-                    (v) => !v || twoDecimalRequiredRegex.test(v),
-                  ),
-            }),
         }),
       )
       .min(1, "At least one TDS section is required"),
@@ -784,284 +839,295 @@ const termCodeOptions = [
 ];
 
 const AddressCard = ({
-    index,
-    isViewMode,
-    isVendorMasterRoute,
-    isDubaiUser,
-    isIndiaUser,
-    addressForm,
-    countryOptions,
-    selectedCountries,
-    getStateOptions,
-    getStateValue,
-    cityOptions,
-    getCityValue,
-    handleCountryChange,
-    handleStateChange,
-    handleCityChange,
-    handleCustomCityChange,
-    handleCitySearch,
-    handleClearCustomCity,
-    customCities,
-    citySearchValues,
-    onRemove,
-    canRemove,
-  }: {
-    index: number;
-    isViewMode: boolean;
-    isVendorMasterRoute: boolean;
-    isDubaiUser: boolean;
-    isIndiaUser: boolean;
-    addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
-    countryOptions: { value: string; label: string }[];
-    selectedCountries: Record<number, string>;
-    getStateOptions: (
-      countryCode: string,
-    ) => { value: string; label: string }[];
-    getStateValue: (index: number) => string;
-    cityOptions: { value: string; label: string }[];
-    getCityValue: (cityName: string) => string;
-    handleCountryChange: (index: number, countryCode: string) => void;
-    handleStateChange: (index: number, stateId: string) => void;
-    handleCityChange: (index: number, cityId: string) => void;
-    handleCustomCityChange: (index: number, cityName: string) => void;
-    handleCitySearch: (index: number, searchValue: string) => void;
-    handleClearCustomCity: (index: number) => void;
-    customCities: Record<number, boolean>;
-    citySearchValues: Record<number, string>;
-    onRemove: (index: number) => void;
-    canRemove: boolean;
-  }) => {
-    const gstRegistrationStatus =
-      addressForm.values.addresses_data[index]?.gst_registration_status ?? "";
-    const panGstRequired =
-      isIndiaUser &&
-      !isViewMode &&
-      isGstRegistrationRegistered(gstRegistrationStatus);
-    const msmeEnabled = parseYesNoBoolean(
-      addressForm.values.addresses_data[index]?.msme,
-    );
+  index,
+  isViewMode,
+  isVendorMasterRoute,
+  isDubaiUser,
+  isIndiaUser,
+  addressForm,
+  countryOptions,
+  selectedCountries,
+  getStateOptions,
+  getStateValue,
+  cityOptions,
+  getCityValue,
+  handleCountryChange,
+  handleStateChange,
+  handleCityChange,
+  handleCustomCityChange,
+  handleCitySearch,
+  handleClearCustomCity,
+  customCities,
+  citySearchValues,
+  onRemove,
+  canRemove,
+}: {
+  index: number;
+  isViewMode: boolean;
+  isVendorMasterRoute: boolean;
+  isDubaiUser: boolean;
+  isIndiaUser: boolean;
+  addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
+  countryOptions: { value: string; label: string }[];
+  selectedCountries: Record<number, string>;
+  getStateOptions: (countryCode: string) => { value: string; label: string }[];
+  getStateValue: (index: number) => string;
+  cityOptions: { value: string; label: string }[];
+  getCityValue: (cityName: string) => string;
+  handleCountryChange: (index: number, countryCode: string) => void;
+  handleStateChange: (index: number, stateId: string) => void;
+  handleCityChange: (index: number, cityId: string) => void;
+  handleCustomCityChange: (index: number, cityName: string) => void;
+  handleCitySearch: (index: number, searchValue: string) => void;
+  handleClearCustomCity: (index: number) => void;
+  customCities: Record<number, boolean>;
+  citySearchValues: Record<number, string>;
+  onRemove: (index: number) => void;
+  canRemove: boolean;
+}) => {
+  const gstRegistrationStatus =
+    addressForm.values.addresses_data[index]?.gst_registration_status ?? "";
+  const panGstRequired =
+    isIndiaUser &&
+    !isViewMode &&
+    isGstRegistrationRegistered(gstRegistrationStatus);
+  const msmeEnabled = parseYesNoBoolean(
+    addressForm.values.addresses_data[index]?.msme,
+  );
+  const addressCountryValue =
+    selectedCountries[index] ??
+    addressForm.values.addresses_data[index]?.country ??
+    "";
+  const isStateRequired = isIndiaAddressCountry(addressCountryValue);
 
-    return (
-      <Card key={index} shadow="xs" padding="md">
-        <Stack gap="sm">
-          <Card withBorder radius="md" padding="md">
-            <Box
-              mb="sm"
-              px="sm"
-              py={6}
-              style={{
-                backgroundColor: "#F3F7FA",
-                border: "1px solid #D7E3ED",
-                borderRadius: 8,
-              }}
-            >
-              <Text size="sm" fw={600} c="#105476">
-                Address
-              </Text>
-            </Box>
-            <Grid>
+  return (
+    <Card key={index} shadow="xs" padding="md">
+      <Stack gap="sm">
+        <Card withBorder radius="md" padding="md">
+          <Box
+            mb="sm"
+            px="sm"
+            py={6}
+            style={{
+              backgroundColor: "#F3F7FA",
+              border: "1px solid #D7E3ED",
+              borderRadius: 8,
+            }}
+          >
+            <Text size="sm" fw={600} c="#105476">
+              Address
+            </Text>
+          </Box>
+          <Grid>
             <Grid.Col span={4}>
-            <TextInput
-              label="Location"
-              placeholder="Enter location"
-              disabled={!!isViewMode}
-              value={
-                addressForm.values.addresses_data[index]?.customer_location ??
-                  ""
-              }
-              onChange={(e) => {
-                const formattedValue = toTitleCase(e.target.value);
-                addressForm.setFieldValue(
-                  `addresses_data.${index}.customer_location`,
-                  formattedValue,
-                );
-              }}
-              error={
-                addressForm.errors[`addresses_data.${index}.customer_location`]
-              }
-            />
-          </Grid.Col>
-
-          <Grid.Col span={4}>
-            <Select
-              label="Address Type"
-              withAsterisk
-              placeholder="Select address type"
-              data={[
-                { value: "Primary", label: "Primary" },
-                { value: "Secondary", label: "Secondary" },
-                { value: "Billing", label: "Billing" },
-                { value: "Shipping", label: "Shipping" },
-              ]}
-              disabled={isViewMode}
-              {...addressForm.getInputProps(
-                `addresses_data.${index}.address_type`,
-              )}
-              error={addressForm.errors[`addresses_data.${index}.address_type`]}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={4}>
-            <Textarea
-              label="Address"
-              withAsterisk
-              placeholder="Enter complete address"
-              minRows={3}
-              disabled={isViewMode}
-              value={addressForm.values.addresses_data[index]?.address || ""}
-              onChange={(e) => {
-                const formattedValue = toTitleCase(e.currentTarget.value);
-                addressForm.setFieldValue(
-                  `addresses_data.${index}.address`,
-                  formattedValue,
-                );
-              }}
-              error={addressForm.errors[`addresses_data.${index}.address`]}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={4}>
-            <Select
-              label="Country"
-              withAsterisk
-              placeholder="Select country"
-              searchable
-              data={countryOptions}
-              disabled={isViewMode}
-              value={selectedCountries[index] || ""}
-              onChange={(value) => value && handleCountryChange(index, value)}
-              limit={50}
-              maxDropdownHeight={300}
-              error={addressForm.errors[`addresses_data.${index}.country`]}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={4}>
-            <Select
-              label="State"
-              withAsterisk
-              placeholder="Select state"
-              searchable
-              data={
-                selectedCountries[index]
-                  ? getStateOptions(selectedCountries[index])
-                  : []
-              }
-              disabled={isViewMode || !selectedCountries[index]}
-              value={getStateValue(index)}
-              onChange={(value) => value && handleStateChange(index, value)}
-              limit={50}
-              maxDropdownHeight={300}
-              error={addressForm.errors[`addresses_data.${index}.state`]}
-            />
-          </Grid.Col>
-
-          <Grid.Col span={4}>
-            {customCities[index] ? (
               <TextInput
-                label="City"
-                placeholder="Enter city name"
-                disabled={isViewMode}
+                label="Location"
+                placeholder="Enter location"
+                disabled={!!isViewMode}
                 value={
-                  citySearchValues[index] !== undefined &&
-                  citySearchValues[index] !== ""
-                    ? citySearchValues[index]
-                    : addressForm.values.addresses_data[index]?.city || ""
+                  addressForm.values.addresses_data[index]?.customer_location ??
+                  ""
                 }
                 onChange={(e) => {
                   const formattedValue = toTitleCase(e.target.value);
-                  handleCustomCityChange(index, formattedValue);
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.customer_location`,
+                    formattedValue,
+                  );
                 }}
                 error={
-                  (
-                    addressForm.errors as unknown as {
-                      addresses_data?: Array<Partial<Record<string, string>>>;
-                    }
-                  ).addresses_data?.[index]?.city
-                }
-                rightSection={
-                  !isViewMode && (
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => handleClearCustomCity(index)}
-                      title="Switch to dropdown"
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  )
+                  addressForm.errors[
+                    `addresses_data.${index}.customer_location`
+                  ]
                 }
               />
-            ) : (
+            </Grid.Col>
+
+            <Grid.Col span={4}>
               <Select
-                key={`city-select-${index}-${addressForm.values.addresses_data[index]?.city || ""}`}
-                label="City"
-                placeholder="Select or search city"
-                searchable
-                data={cityOptions}
+                label="Address Type"
+                withAsterisk
+                placeholder="Select address type"
+                data={[
+                  { value: "Primary", label: "Primary" },
+                  { value: "Secondary", label: "Secondary" },
+                  { value: "Billing", label: "Billing" },
+                  { value: "Shipping", label: "Shipping" },
+                ]}
                 disabled={isViewMode}
-                value={
-                  addressForm.values.addresses_data[index]?.city
-                    ? getCityValue(
-                        addressForm.values.addresses_data[index].city,
-                      )
-                    : ""
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.address_type`,
+                )}
+                error={
+                  addressForm.errors[`addresses_data.${index}.address_type`]
                 }
-                onChange={(value) => {
-                  if (value) {
-                    handleCityChange(index, value);
-                  }
-                }}
-                onSearchChange={(searchValue) => {
-                  handleCitySearch(index, searchValue);
-                }}
-                searchValue={citySearchValues[index] || ""}
-                limit={100}
-                maxDropdownHeight={300}
-                nothingFoundMessage="City not found - type to enter custom city"
               />
-            )}
-          </Grid.Col>
+            </Grid.Col>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="Pin/Zip Code"
-              placeholder="Enter pin/zip code"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.pincode`)}
-            />
-          </Grid.Col>
+            <Grid.Col span={4}>
+              <Textarea
+                label="Address"
+                withAsterisk
+                placeholder="Enter complete address"
+                minRows={3}
+                disabled={isViewMode}
+                value={addressForm.values.addresses_data[index]?.address || ""}
+                onChange={(e) => {
+                  const formattedValue = toTitleCase(e.currentTarget.value);
+                  addressForm.setFieldValue(
+                    `addresses_data.${index}.address`,
+                    formattedValue,
+                  );
+                }}
+                error={addressForm.errors[`addresses_data.${index}.address`]}
+              />
+            </Grid.Col>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="Landline Number"
-              placeholder="Enter Landline number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.phone_no`)}
-            />
-          </Grid.Col>
+            <Grid.Col span={4}>
+              <Select
+                label="Country"
+                withAsterisk
+                placeholder="Select country"
+                searchable
+                data={countryOptions}
+                disabled={isViewMode}
+                value={selectedCountries[index] || ""}
+                onChange={(value) => value && handleCountryChange(index, value)}
+                limit={50}
+                maxDropdownHeight={300}
+                error={addressForm.errors[`addresses_data.${index}.country`]}
+              />
+            </Grid.Col>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="Mobile Number"
-              withAsterisk
-              placeholder="Enter mobile number"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(
-                `addresses_data.${index}.mobile_no`,
+            <Grid.Col span={4}>
+              <Select
+                label="State"
+                withAsterisk={isStateRequired}
+                placeholder="Select state"
+                searchable
+                data={
+                  selectedCountries[index]
+                    ? getStateOptions(selectedCountries[index])
+                    : []
+                }
+                disabled={isViewMode || !selectedCountries[index]}
+                value={getStateValue(index)}
+                onChange={(value) => value && handleStateChange(index, value)}
+                limit={50}
+                maxDropdownHeight={300}
+                error={addressForm.errors[`addresses_data.${index}.state`]}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              {customCities[index] ? (
+                <TextInput
+                  label="City"
+                  placeholder="Enter city name"
+                  disabled={isViewMode}
+                  value={
+                    citySearchValues[index] !== undefined &&
+                    citySearchValues[index] !== ""
+                      ? citySearchValues[index]
+                      : addressForm.values.addresses_data[index]?.city || ""
+                  }
+                  onChange={(e) => {
+                    const formattedValue = toTitleCase(e.target.value);
+                    handleCustomCityChange(index, formattedValue);
+                  }}
+                  error={
+                    (
+                      addressForm.errors as unknown as {
+                        addresses_data?: Array<Partial<Record<string, string>>>;
+                      }
+                    ).addresses_data?.[index]?.city
+                  }
+                  rightSection={
+                    !isViewMode && (
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => handleClearCustomCity(index)}
+                        title="Switch to dropdown"
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    )
+                  }
+                />
+              ) : (
+                <Select
+                  key={`city-select-${index}-${addressForm.values.addresses_data[index]?.city || ""}`}
+                  label="City"
+                  placeholder="Select or search city"
+                  searchable
+                  data={cityOptions}
+                  disabled={isViewMode}
+                  value={
+                    addressForm.values.addresses_data[index]?.city
+                      ? getCityValue(
+                          addressForm.values.addresses_data[index].city,
+                        )
+                      : ""
+                  }
+                  onChange={(value) => {
+                    if (value) {
+                      handleCityChange(index, value);
+                    }
+                  }}
+                  onSearchChange={(searchValue) => {
+                    handleCitySearch(index, searchValue);
+                  }}
+                  searchValue={citySearchValues[index] || ""}
+                  limit={100}
+                  maxDropdownHeight={300}
+                  nothingFoundMessage="City not found - type to enter custom city"
+                />
               )}
-            />
-          </Grid.Col>
+            </Grid.Col>
 
-          <Grid.Col span={4}>
-            <TextInput
-              label="Email Id"
-              withAsterisk
-              placeholder="Enter email address"
-              disabled={isViewMode}
-              {...addressForm.getInputProps(`addresses_data.${index}.email`)}
-            />
+            <Grid.Col span={4}>
+              <TextInput
+                label="Pin/Zip Code"
+                placeholder="Enter pin/zip code"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.pincode`,
+                )}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <TextInput
+                label="Landline Number"
+                placeholder="Enter Landline number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.phone_no`,
+                )}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <TextInput
+                label="Mobile Number"
+                withAsterisk
+                placeholder="Enter mobile number"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(
+                  `addresses_data.${index}.mobile_no`,
+                )}
+              />
+            </Grid.Col>
+
+            <Grid.Col span={4}>
+              <TextInput
+                label="Email Id"
+                withAsterisk
+                placeholder="Enter email address"
+                disabled={isViewMode}
+                {...addressForm.getInputProps(`addresses_data.${index}.email`)}
+              />
             </Grid.Col>
             {isDubaiUser && (
               <>
@@ -1094,10 +1160,10 @@ const AddressCard = ({
                 </Grid.Col>
               </>
             )}
-            </Grid>
-          </Card>
+          </Grid>
+        </Card>
 
-          {isIndiaUser && (
+        {isIndiaUser && (
           <Card withBorder radius="md" padding="md">
             <Box
               mb="sm"
@@ -1114,239 +1180,253 @@ const AddressCard = ({
               </Text>
             </Box>
             <Grid>
-            <Grid.Col span={4}>
-              <Select
-                label="GST Registration Status"
-                withAsterisk={!isViewMode}
-                placeholder="Select status"
-                data={[
-                  { value: "Registered", label: "Registered" },
-                  { value: "Unregistered", label: "Unregistered" },
-                ]}
-                disabled={isViewMode}
-                value={gstRegistrationStatus || null}
-                onChange={(value) =>
-                  addressForm.setFieldValue(
-                    `addresses_data.${index}.gst_registration_status`,
-                    value ?? "",
-                  )
-                }
-                error={
-                  addressForm.errors[
-                    `addresses_data.${index}.gst_registration_status`
-                  ]
-                }
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="PAN No"
-                withAsterisk={panGstRequired}
-                placeholder="Enter PAN number"
-                disabled={isViewMode}
-                {...addressForm.getInputProps(`addresses_data.${index}.pan_no`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="GST No"
-                withAsterisk={panGstRequired}
-                placeholder="Enter GST number"
-                disabled={isViewMode}
-                {...addressForm.getInputProps(`addresses_data.${index}.gst_id`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="TAN No"
-                placeholder="Enter TAN number"
-                disabled={isViewMode}
-                {...addressForm.getInputProps(`addresses_data.${index}.tan_no`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="ARN No"
-                placeholder="Enter ARN number"
-                disabled={isViewMode}
-                {...addressForm.getInputProps(`addresses_data.${index}.arn_no`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <TextInput
-                label="UIN No"
-                placeholder="Enter UIN number"
-                disabled={isViewMode}
-                {...addressForm.getInputProps(`addresses_data.${index}.uin_no`)}
-              />
-            </Grid.Col>
-            <Grid.Col span={4}>
-              <Select
-                label="Composite / Regular"
-                placeholder="Select"
-                data={[
-                  { value: "composite", label: "Composite" },
-                  { value: "Regular", label: "Regular" },
-                ]}
-                disabled={isViewMode}
-                {...addressForm.getInputProps(
-                  `addresses_data.${index}.composite_regular`,
-                )}
-              />
-            </Grid.Col>
-
-            {isVendorMasterRoute && (
               <Grid.Col span={4}>
                 <Select
-                  label="Income tax return filed"
-                  placeholder="Select"
+                  label="GST Registration Status"
+                  withAsterisk={!isViewMode}
+                  placeholder="Select status"
                   data={[
-                    { value: "Yes", label: "Yes" },
-                    { value: "No", label: "No" },
-                      { value: "NA", label: "NA" },
+                    { value: "Registered", label: "Registered" },
+                    { value: "Unregistered", label: "Unregistered" },
                   ]}
                   disabled={isViewMode}
-                  {...addressForm.getInputProps(`addresses_data.${index}.Itr_filed`)}
+                  value={gstRegistrationStatus || null}
+                  onChange={(value) =>
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.gst_registration_status`,
+                      value ?? "",
+                    )
+                  }
+                  error={
+                    addressForm.errors[
+                      `addresses_data.${index}.gst_registration_status`
+                    ]
+                  }
                 />
               </Grid.Col>
-            )}
-
-            <Grid.Col span={4}>
-              <Select
-                label="SEZ"
-                placeholder="Select"
-                disabled={isViewMode}
-                data={[
-                  { value: "Yes", label: "Yes" },
-                  { value: "No", label: "No" },
-                ]}
-                value={
-                  addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
-                }
-                onChange={(value) =>
-                  addressForm.setFieldValue(
-                    `addresses_data.${index}.sez`,
-                    value === "Yes",
-                  )
-                }
-              />
-            </Grid.Col>
-
-            <Grid.Col span={4}>
-              <Select
-                label="MSME"
-                placeholder="Select"
-                disabled={isViewMode}
-                data={[
-                  { value: "Yes", label: "Yes" },
-                  { value: "No", label: "No" },
-                ]}
-                value={
-                  addressForm.values.addresses_data[index]?.msme ? "Yes" : "No"
-                }
-                onChange={(value) => {
-                  addressForm.setFieldValue(
-                    `addresses_data.${index}.msme`,
-                    value === "Yes",
-                  );
-                  if (value !== "Yes") {
-                    addressForm.setFieldValue(
-                      `addresses_data.${index}.msme_no`,
-                      "",
-                    );
-                  }
-                }}
-              />
-            </Grid.Col>
-
-            {msmeEnabled && (
               <Grid.Col span={4}>
                 <TextInput
-                  label="MSME No"
-                  withAsterisk={!isViewMode}
-                  placeholder="Enter MSME number"
+                  label="PAN No"
+                  withAsterisk={panGstRequired}
+                  placeholder="Enter PAN number"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
-                    `addresses_data.${index}.msme_no`,
+                    `addresses_data.${index}.pan_no`,
                   )}
                 />
               </Grid.Col>
-            )}
+              <Grid.Col span={4}>
+                <TextInput
+                  label="GST No"
+                  withAsterisk={panGstRequired}
+                  placeholder="Enter GST number"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.gst_id`,
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="TAN No"
+                  placeholder="Enter TAN number"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.tan_no`,
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="ARN No"
+                  placeholder="Enter ARN number"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.arn_no`,
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="UIN No"
+                  placeholder="Enter UIN number"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.uin_no`,
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <Select
+                  label="Composite / Regular"
+                  placeholder="Select"
+                  data={[
+                    { value: "composite", label: "Composite" },
+                    { value: "Regular", label: "Regular" },
+                  ]}
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.composite_regular`,
+                  )}
+                />
+              </Grid.Col>
 
-            {isVendorMasterRoute && (
-              <>
+              {isVendorMasterRoute && (
                 <Grid.Col span={4}>
-                  <Box pt={22}>
-                    <Switch
-                      label="PAN/Aadhaar linked"
-                      description={
-                        addressForm.values.addresses_data[index]
-                          ?.pan_aadhaar_link
-                          ? "Yes"
-                          : "No"
-                      }
-                      disabled={isViewMode}
-                      checked={Boolean(
-                        addressForm.values.addresses_data[index]
-                          ?.pan_aadhaar_link,
-                      )}
-                      onChange={(e) =>
-                        addressForm.setFieldValue(
-                          `addresses_data.${index}.pan_aadhaar_link`,
-                          e.currentTarget.checked,
-                        )
-                      }
-                    />
-                  </Box>
-                </Grid.Col>
-
-                <Grid.Col span={4}>
-                  <Box pt={22}>
-                    <Switch
-                      label="TDS less than 50,000"
-                      description={
-                        addressForm.values.addresses_data[index]
-                          ?.tds_threshold_flag
-                          ? "Yes"
-                          : "No"
-                      }
-                      disabled={isViewMode}
-                      checked={Boolean(
-                        addressForm.values.addresses_data[index]
-                          ?.tds_threshold_flag,
-                      )}
-                      onChange={(e) =>
-                        addressForm.setFieldValue(
-                          `addresses_data.${index}.tds_threshold_flag`,
-                          e.currentTarget.checked,
-                        )
-                      }
-                    />
-                  </Box>
-                </Grid.Col>
-              </>
-            )}
-
-            <Grid.Col span={12}>
-              <Group justify="right" mb="md">
-                {canRemove && (
-                  <ActionIcon
-                    variant="light"
-                    color="red"
-                    onClick={() => onRemove(index)}
+                  <Select
+                    label="Income tax return filed"
+                    placeholder="Select"
+                    data={[
+                      { value: "Yes", label: "Yes" },
+                      { value: "No", label: "No" },
+                      { value: "NA", label: "NA" },
+                    ]}
                     disabled={isViewMode}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                )}
-              </Group>
-            </Grid.Col>
+                    {...addressForm.getInputProps(
+                      `addresses_data.${index}.Itr_filed`,
+                    )}
+                  />
+                </Grid.Col>
+              )}
+
+              <Grid.Col span={4}>
+                <Select
+                  label="SEZ"
+                  placeholder="Select"
+                  disabled={isViewMode}
+                  data={[
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" },
+                  ]}
+                  value={
+                    addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
+                  }
+                  onChange={(value) =>
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.sez`,
+                      value === "Yes",
+                    )
+                  }
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Select
+                  label="MSME"
+                  placeholder="Select"
+                  disabled={isViewMode}
+                  data={[
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" },
+                  ]}
+                  value={
+                    addressForm.values.addresses_data[index]?.msme
+                      ? "Yes"
+                      : "No"
+                  }
+                  onChange={(value) => {
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.msme`,
+                      value === "Yes",
+                    );
+                    if (value !== "Yes") {
+                      addressForm.setFieldValue(
+                        `addresses_data.${index}.msme_no`,
+                        "",
+                      );
+                    }
+                  }}
+                />
+              </Grid.Col>
+
+              {msmeEnabled && (
+                <Grid.Col span={4}>
+                  <TextInput
+                    label="MSME No"
+                    withAsterisk={!isViewMode}
+                    placeholder="Enter MSME number"
+                    disabled={isViewMode}
+                    {...addressForm.getInputProps(
+                      `addresses_data.${index}.msme_no`,
+                    )}
+                  />
+                </Grid.Col>
+              )}
+
+              {isVendorMasterRoute && (
+                <>
+                  <Grid.Col span={4}>
+                    <Box pt={22}>
+                      <Switch
+                        label="PAN/Aadhaar linked"
+                        description={
+                          addressForm.values.addresses_data[index]
+                            ?.pan_aadhaar_link
+                            ? "Yes"
+                            : "No"
+                        }
+                        disabled={isViewMode}
+                        checked={Boolean(
+                          addressForm.values.addresses_data[index]
+                            ?.pan_aadhaar_link,
+                        )}
+                        onChange={(e) =>
+                          addressForm.setFieldValue(
+                            `addresses_data.${index}.pan_aadhaar_link`,
+                            e.currentTarget.checked,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  <Grid.Col span={4}>
+                    <Box pt={22}>
+                      <Switch
+                        label="TDS less than 50,000"
+                        description={
+                          addressForm.values.addresses_data[index]
+                            ?.tds_threshold_flag
+                            ? "Yes"
+                            : "No"
+                        }
+                        disabled={isViewMode}
+                        checked={Boolean(
+                          addressForm.values.addresses_data[index]
+                            ?.tds_threshold_flag,
+                        )}
+                        onChange={(e) =>
+                          addressForm.setFieldValue(
+                            `addresses_data.${index}.tds_threshold_flag`,
+                            e.currentTarget.checked,
+                          )
+                        }
+                      />
+                    </Box>
+                  </Grid.Col>
+                </>
+              )}
+
+              <Grid.Col span={12}>
+                <Group justify="right" mb="md">
+                  {canRemove && (
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      onClick={() => onRemove(index)}
+                      disabled={isViewMode}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  )}
+                </Group>
+              </Grid.Col>
             </Grid>
           </Card>
-          )}
-        </Stack>
-      </Card>
-    );
+        )}
+      </Stack>
+    </Card>
+  );
 };
 
 const fetchSalespersons = async (customerId: string = "") => {
@@ -1373,12 +1453,20 @@ function CustomerCreate() {
   const userCountry = useAuthStore((s) => s.user?.country);
   const isIndiaUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
-    String(userCountry?.country_name ?? "").toLowerCase().includes("india");
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
   const isDubaiUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "AE" ||
-    String(userCountry?.country_name ?? "").toLowerCase().includes("united arab emirates") ||
-    String(userCountry?.country_name ?? "").toLowerCase().includes("uae") ||
-    String(userCountry?.country_name ?? "").toLowerCase().includes("dubai");
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("united arab emirates") ||
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("uae") ||
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("dubai");
   const [selectedCountries, setSelectedCountries] = useState<
     Record<number, string>
   >({});
@@ -1395,7 +1483,9 @@ function CustomerCreate() {
   const [tdsIdBySectionId, setTdsIdBySectionId] = useState<
     Record<number, number>
   >({});
-  const [tdsType, setTdsType] = useState<"Company" | "Individual" | "Partnership" | "">("");
+  const [tdsType, setTdsType] = useState<
+    "Company" | "Individual" | "Partnership" | ""
+  >("");
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -1403,7 +1493,9 @@ function CustomerCreate() {
     | CustomerDetailRecord
     | undefined;
   const isVendorMasterRoute = location.pathname.includes("/master/vendor");
-  const baseMasterPath = isVendorMasterRoute ? "/master/vendor" : "/master/customer";
+  const baseMasterPath = isVendorMasterRoute
+    ? "/master/vendor"
+    : "/master/customer";
 
   // Determine the mode based on route parameters
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
@@ -1422,14 +1514,12 @@ function CustomerCreate() {
 
   // Customer ID from route parameters
   const customerId = params.id;
-  const customerCodeForSalespersons = customerData?.customer_code
-    ? String(customerData.customer_code)
-    : "";
+  // Edit/view: full salesperson list (empty payload). Create: unscoped list as well.
+  const salespersonsQueryKey = isEditMode || isViewMode ? "all" : "create";
 
-  // Salespersons for Assign To dropdown (scoped to customer code in edit mode)
   const { data: rawSalespersonsData = [] } = useQuery({
-    queryKey: ["salespersons", customerCodeForSalespersons],
-    queryFn: () => fetchSalespersons(customerCodeForSalespersons),
+    queryKey: ["salespersons", salespersonsQueryKey],
+    queryFn: () => fetchSalespersons(""),
     staleTime: 10 * 60 * 1000, // 10 minutes - longer cache
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
     refetchOnWindowFocus: false,
@@ -1582,9 +1672,7 @@ function CustomerCreate() {
     }));
     if (!isVendorMasterRoute) return opts;
     const allow = new Set(["supplier", "carrier", "transporter"]);
-    return opts.filter((o) =>
-      allow.has((o.label || "").toLowerCase()),
-    );
+    return opts.filter((o) => allow.has((o.label || "").toLowerCase()));
   }, [customerTypes, isVendorMasterRoute]);
 
   // Memoize country options
@@ -1602,7 +1690,10 @@ function CustomerCreate() {
     queryKey: ["tdsSectionMaster"],
     queryFn: async () => {
       try {
-        const response = await getAPICall(`${URL.tdsSectionMaster}`, API_HEADER);
+        const response = await getAPICall(
+          `${URL.tdsSectionMaster}`,
+          API_HEADER,
+        );
         return (response as { data?: unknown[] })?.data ?? response ?? [];
       } catch (error) {
         console.error("Error fetching TDS section master:", error);
@@ -1618,7 +1709,9 @@ function CustomerCreate() {
   const tdsSectionOptions = useMemo(() => {
     const rows = (tdsSectionMaster ?? []) as TdsSectionMasterItem[];
     return rows
-      .filter((r) => (r.status ? String(r.status).toUpperCase() === "ACTIVE" : true))
+      .filter((r) =>
+        r.status ? String(r.status).toUpperCase() === "ACTIVE" : true,
+      )
       .filter((r) => r.tds_section_code && r.tds_section_name)
       .map((r) => ({
         value: String(r.id ?? ""),
@@ -1737,6 +1830,7 @@ function CustomerCreate() {
         record,
         cities,
         salespersonsData,
+        { useListAssignedTo: isEditMode || isViewMode },
       );
 
       customerForm.setValues({
@@ -1813,16 +1907,19 @@ function CustomerCreate() {
       isVendorMasterRoute,
       tdsDisplayForm,
       salespersonsData,
+      isEditMode,
+      isViewMode,
     ],
   );
 
-  // Re-resolve Assign To once salesperson options load (dropdown matches by option value)
+  // Re-resolve Assign To once full salesperson options load (match list value to option value)
   useEffect(() => {
     if (
       !isFormInitialized ||
       !customerData ||
       location.state?.customerFormData ||
-      !salespersonsData.length
+      !salespersonsData.length ||
+      (!isEditMode && !isViewMode)
     ) {
       return;
     }
@@ -1837,6 +1934,8 @@ function CustomerCreate() {
     salespersonsData,
     location.state?.customerFormData,
     customerForm,
+    isEditMode,
+    isViewMode,
   ]);
 
   // Restore form data when coming back from relationship mapping (both create and edit mode)
@@ -1882,7 +1981,10 @@ function CustomerCreate() {
               ? String(restoredCustomerData.credit_day)
               : "",
           assigned_to: restoredCustomerData.assigned_to || "",
-          network_id: restoredCustomerData.network_id != null ? String(restoredCustomerData.network_id) : "",
+          network_id:
+            restoredCustomerData.network_id != null
+              ? String(restoredCustomerData.network_id)
+              : "",
           network_name: restoredCustomerData.network_name || "",
           addresses_data: addressDataToRestore,
         });
@@ -2357,7 +2459,9 @@ function CustomerCreate() {
     [customerForm, addressForm],
   );
 
-  const createCustomer = async (values: CustomerSubmitValues): Promise<void> => {
+  const createCustomer = async (
+    values: CustomerSubmitValues,
+  ): Promise<void> => {
     try {
       setIsSubmitting(true);
       const payload = {
@@ -2396,7 +2500,10 @@ function CustomerCreate() {
             : {}),
         })),
         ...(isVendorMasterRoute
-          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
+          ? {
+              tds_type: tdsType,
+              tds_section_data: values.tds_section_data ?? [],
+            }
           : {}),
       };
 
@@ -2444,7 +2551,9 @@ function CustomerCreate() {
     }
   };
 
-  const updateCustomer = async (values: CustomerSubmitValues): Promise<void> => {
+  const updateCustomer = async (
+    values: CustomerSubmitValues,
+  ): Promise<void> => {
     try {
       setIsSubmitting(true);
       const payload = {
@@ -2473,9 +2582,9 @@ function CustomerCreate() {
             uin_no: addr.uin_no ?? "",
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
-          sez: parseYesNoBoolean(addr.sez),
-          msme: parseYesNoBoolean(addr.msme),
-          msme_no: addr.msme_no ?? "",
+            sez: parseYesNoBoolean(addr.sez),
+            msme: parseYesNoBoolean(addr.msme),
+            msme_no: addr.msme_no ?? "",
             ...(isVendorMasterRoute
               ? {
                   pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
@@ -2493,7 +2602,10 @@ function CustomerCreate() {
           return addressPayload;
         }),
         ...(isVendorMasterRoute
-          ? { tds_type: tdsType, tds_section_data: values.tds_section_data ?? [] }
+          ? {
+              tds_type: tdsType,
+              tds_section_data: values.tds_section_data ?? [],
+            }
           : {}),
         // },
       };
@@ -2755,675 +2867,728 @@ function CustomerCreate() {
               minHeight: 0,
             }}
           >
-        <Tabs.List
-          mb="md"
-          style={{
-            display: "flex",
-            gap: "8px",
-            flexWrap: "wrap",
-            borderBottom: "none",
-          }}
-        >
-          <Tabs.Tab
-            value="0"
-            style={{
-              textAlign: "center",
-              padding: "12px",
-              backgroundColor: "transparent",
-              borderBottom: active === 0 ? "3px solid #105476" : "none",
-              color: "#105476",
-              fontSize: 16,
-              fontWeight: active === 0 ? 600 : 400,
-            }}
-          >
-            {isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
-          </Tabs.Tab>
-
-          <Tabs.Tab
-            value="1"
-            style={{
-              textAlign: "center",
-              padding: "12px",
-              backgroundColor: "transparent",
-              borderBottom: active === 1 ? "3px solid #105476" : "none",
-              color: "#105476",
-              fontSize: 16,
-              fontWeight: active === 1 ? 600 : 400,
-            }}
-          >
-            Address
-          </Tabs.Tab>
-
-          {isVendorMasterRoute && (
-            <Tabs.Tab
-              value="2"
+            <Tabs.List
+              mb="md"
               style={{
-                textAlign: "center",
-                padding: "12px",
-                backgroundColor: "transparent",
-                borderBottom: active === 2 ? "3px solid #105476" : "none",
-                color: "#105476",
-                fontSize: 16,
-                fontWeight: active === 2 ? 600 : 400,
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                borderBottom: "none",
               }}
             >
-              TDS Section
-            </Tabs.Tab>
-          )}
-        </Tabs.List>
+              <Tabs.Tab
+                value="0"
+                style={{
+                  textAlign: "center",
+                  padding: "12px",
+                  backgroundColor: "transparent",
+                  borderBottom: active === 0 ? "3px solid #105476" : "none",
+                  color: "#105476",
+                  fontSize: 16,
+                  fontWeight: active === 0 ? 600 : 400,
+                }}
+              >
+                {isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
+              </Tabs.Tab>
 
-        <Tabs.Panel value="0" style={{ flex: 1, minHeight: 0 }}>
-          <Box
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              paddingBottom: "16px",
-              backgroundColor: "#F8F8F8",
-            }}
-          >
-          <Box mt="md">
-            <Card shadow="sm" padding="lg" radius="md">
-              <Grid gutter={"sm"}>
-                <Grid.Col span={4}>
-                  <TextInput
-                    label={isVendorMasterRoute ? "Vendor Name" : "Customer Name"}
-                    withAsterisk
-                    placeholder={
-                      isVendorMasterRoute
-                        ? "Enter vendor name"
-                        : "Enter customer name"
-                    }
-                    disabled={!!isViewMode}
-                    value={customerForm.values.customer_name}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      customerForm.setFieldValue(
-                        "customer_name",
-                        formattedValue,
-                      );
-                    }}
-                    error={customerForm.errors.customer_name}
-                  />
-                </Grid.Col>
+              <Tabs.Tab
+                value="1"
+                style={{
+                  textAlign: "center",
+                  padding: "12px",
+                  backgroundColor: "transparent",
+                  borderBottom: active === 1 ? "3px solid #105476" : "none",
+                  color: "#105476",
+                  fontSize: 16,
+                  fontWeight: active === 1 ? 600 : 400,
+                }}
+              >
+                Address
+              </Tabs.Tab>
 
-                <Grid.Col span={4}>
-                  <MultiSelect
-                    label={isVendorMasterRoute ? "Vendor Type" : "Customer Type"}
-                    withAsterisk
-                    placeholder={
-                      isVendorMasterRoute
-                        ? "Select vendor type"
-                        : "Select customer type"
-                    }
-                    searchable
-                    data={customerTypeOptions}
-                    disabled={!!isViewMode}
-                    {...customerForm.getInputProps("customer_type_code")}
-                  />
-                </Grid.Col>
+              {isVendorMasterRoute && (
+                <Tabs.Tab
+                  value="2"
+                  style={{
+                    textAlign: "center",
+                    padding: "12px",
+                    backgroundColor: "transparent",
+                    borderBottom: active === 2 ? "3px solid #105476" : "none",
+                    color: "#105476",
+                    fontSize: 16,
+                    fontWeight: active === 2 ? 600 : 400,
+                  }}
+                >
+                  TDS Section
+                </Tabs.Tab>
+              )}
+            </Tabs.List>
 
-                <Grid.Col span={4}>
-                  <Select
-                    label="Credit Type"
-                    withAsterisk
-                    placeholder="Select credit type"
-                    data={termCodeOptions}
-                    disabled={isViewMode}
-                    {...customerForm.getInputProps("term_code")}
-                  />
-                </Grid.Col>
+            <Tabs.Panel value="0" style={{ flex: 1, minHeight: 0 }}>
+              <Box
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  paddingBottom: "16px",
+                  backgroundColor: "#F8F8F8",
+                }}
+              >
+                <Box mt="md">
+                  <Card shadow="sm" padding="lg" radius="md">
+                    <Grid gutter={"sm"}>
+                      <Grid.Col span={4}>
+                        <TextInput
+                          label={
+                            isVendorMasterRoute
+                              ? "Vendor Name"
+                              : "Customer Name"
+                          }
+                          withAsterisk
+                          placeholder={
+                            isVendorMasterRoute
+                              ? "Enter vendor name"
+                              : "Enter customer name"
+                          }
+                          disabled={!!isViewMode}
+                          value={customerForm.values.customer_name}
+                          onChange={(e) => {
+                            const formattedValue = toTitleCase(e.target.value);
+                            customerForm.setFieldValue(
+                              "customer_name",
+                              formattedValue,
+                            );
+                          }}
+                          error={customerForm.errors.customer_name}
+                        />
+                      </Grid.Col>
 
-                <Grid.Col span={4}>
-                  <Select
-                    label="Own Office"
-                    data={[
-                      { value: "true", label: "Yes" },
-                      { value: "false", label: "No" },
-                    ]}
-                    withAsterisk
-                    placeholder="Select Own Office"
-                    disabled={isViewMode}
-                    {...customerForm.getInputProps("own_office")}
-                  />
-                </Grid.Col>
+                      <Grid.Col span={4}>
+                        <MultiSelect
+                          label={
+                            isVendorMasterRoute
+                              ? "Vendor Type"
+                              : "Customer Type"
+                          }
+                          withAsterisk
+                          placeholder={
+                            isVendorMasterRoute
+                              ? "Select vendor type"
+                              : "Select customer type"
+                          }
+                          searchable
+                          data={customerTypeOptions}
+                          disabled={!!isViewMode}
+                          {...customerForm.getInputProps("customer_type_code")}
+                        />
+                      </Grid.Col>
 
-                <Grid.Col span={4}>
-                  <SearchableSelect
-                    label="Network Name"
-                    placeholder="Search network..."
-                    apiEndpoint={URL.networkMaster}
-                    value={customerForm.values.network_id || null}
-                    displayValue={customerForm.values.network_name || null}
-                    onChange={(value, selectedData) => {
-                      customerForm.setFieldValue("network_id", value ?? "");
-                      customerForm.setFieldValue("network_name", selectedData?.label ?? "");
-                    }}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.id ?? ""),
-                      label: String(item.network_name ?? ""),
-                    })}
-                    searchFields={["network_name"]}
-                    dropdownZIndex={1000}
-                    minSearchLength={1}
-                    disabled={!!isViewMode}
-                  />
-                </Grid.Col>
+                      <Grid.Col span={4}>
+                        <Select
+                          label="Credit Type"
+                          withAsterisk
+                          placeholder="Select credit type"
+                          data={termCodeOptions}
+                          disabled={isViewMode}
+                          {...customerForm.getInputProps("term_code")}
+                        />
+                      </Grid.Col>
 
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Credit Amount"
-                    placeholder="Enter credit amount"
-                    disabled={isViewMode}
-                    value={customerForm.values.credit_amount}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      if (next === "" || twoDecimalInputRegex.test(next)) {
-                        customerForm.setFieldValue("credit_amount", next);
-                      }
-                    }}
-                    error={customerForm.errors.credit_amount}
-                  />
-                </Grid.Col>
+                      <Grid.Col span={4}>
+                        <Select
+                          label="Own Office"
+                          data={[
+                            { value: "true", label: "Yes" },
+                            { value: "false", label: "No" },
+                          ]}
+                          withAsterisk
+                          placeholder="Select Own Office"
+                          disabled={isViewMode}
+                          {...customerForm.getInputProps("own_office")}
+                        />
+                      </Grid.Col>
 
-                <Grid.Col span={4}>
-                  <TextInput
-                    label="Credit Day"
-                    placeholder="Enter credit days"
-                    disabled={isViewMode}
-                    value={customerForm.values.credit_day}
-                    onChange={(e) => {
-                      const next = e.target.value.replace(/\D/g, "");
-                      customerForm.setFieldValue("credit_day", next);
-                    }}
-                    error={customerForm.errors.credit_day}
-                  />
-                </Grid.Col>
+                      <Grid.Col span={4}>
+                        <SearchableSelect
+                          label="Network Name"
+                          placeholder="Search network..."
+                          apiEndpoint={URL.networkMaster}
+                          value={customerForm.values.network_id || null}
+                          displayValue={
+                            customerForm.values.network_name || null
+                          }
+                          onChange={(value, selectedData) => {
+                            customerForm.setFieldValue(
+                              "network_id",
+                              value ?? "",
+                            );
+                            customerForm.setFieldValue(
+                              "network_name",
+                              selectedData?.label ?? "",
+                            );
+                          }}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.network_name ?? ""),
+                          })}
+                          searchFields={["network_name"]}
+                          dropdownZIndex={1000}
+                          minSearchLength={1}
+                          disabled={!!isViewMode}
+                        />
+                      </Grid.Col>
 
-                {(!customerForm.values.customer_type_code?.length ||
-                  customerForm.values.customer_type_code.find((value) => {
-                    const option = customerTypeOptions.find(
-                      (o) => o.value === value,
-                    );
-                    return (
-                      option?.label?.toLowerCase() === "agent" ||
-                      value?.toLowerCase() === "agent"
-                    );
-                  }) == null) && (
-                  <Grid.Col span={4}>
-                    <Dropdown
-                      label="Assign To"
-                      withAsterisk
-                      key={`assign-to-${customerForm.values.assigned_to}-${salespersonsData.length}`}
-                      placeholder="Select Salesperson"
-                      searchable
-                      data={salespersonsData}
-                      disabled={isViewMode}
-                      nothingFoundMessage="No salespersons found"
-                      value={customerForm.values.assigned_to || null}
-                      onChange={(value) => {
-                        customerForm.setFieldValue("assigned_to", value || "");
-                      }}
-                      error={customerForm.errors.assigned_to}
-                    />
-                  </Grid.Col>
-                )}
-              </Grid>
+                      <Grid.Col span={4}>
+                        <TextInput
+                          label="Credit Amount"
+                          placeholder="Enter credit amount"
+                          disabled={isViewMode}
+                          value={customerForm.values.credit_amount}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (
+                              next === "" ||
+                              twoDecimalInputRegex.test(next)
+                            ) {
+                              customerForm.setFieldValue("credit_amount", next);
+                            }
+                          }}
+                          error={customerForm.errors.credit_amount}
+                        />
+                      </Grid.Col>
 
-            </Card>
-          </Box>
-          </Box>
-        </Tabs.Panel>
+                      <Grid.Col span={4}>
+                        <TextInput
+                          label="Credit Day"
+                          placeholder="Enter credit days"
+                          disabled={isViewMode}
+                          value={customerForm.values.credit_day}
+                          onChange={(e) => {
+                            const next = e.target.value.replace(/\D/g, "");
+                            customerForm.setFieldValue("credit_day", next);
+                          }}
+                          error={customerForm.errors.credit_day}
+                        />
+                      </Grid.Col>
 
-        <Tabs.Panel value="1" style={{ flex: 1, minHeight: 0 }}>
-          <Box
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              paddingBottom: "16px",
-              backgroundColor: "#F8F8F8",
-            }}
-          >
-          <Box mt="md">
-            <Card shadow="sm" padding="xs" radius="md">
-              {/* <Text size="sm" fw={500}>
+                      {(isEditMode ||
+                        isViewMode ||
+                        !customerForm.values.customer_type_code?.length ||
+                        !isAgentCustomerType(
+                          customerForm.values.customer_type_code,
+                          customerTypeOptions,
+                        )) && (
+                        <Grid.Col span={4}>
+                          <Dropdown
+                            label="Assign To"
+                            withAsterisk={isCustomerCustomerType(
+                              customerForm.values.customer_type_code,
+                              customerTypeOptions,
+                            )}
+                            key={`assign-to-${customerForm.values.assigned_to}-${salespersonsData.length}`}
+                            placeholder="Select Salesperson"
+                            searchable
+                            data={salespersonsData}
+                            disabled={isViewMode}
+                            nothingFoundMessage="No salespersons found"
+                            value={customerForm.values.assigned_to || null}
+                            onChange={(value) => {
+                              customerForm.setFieldValue(
+                                "assigned_to",
+                                value || "",
+                              );
+                            }}
+                            error={customerForm.errors.assigned_to}
+                          />
+                        </Grid.Col>
+                      )}
+                    </Grid>
+                  </Card>
+                </Box>
+              </Box>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="1" style={{ flex: 1, minHeight: 0 }}>
+              <Box
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  paddingBottom: "16px",
+                  backgroundColor: "#F8F8F8",
+                }}
+              >
+                <Box mt="md">
+                  <Card shadow="sm" padding="xs" radius="md">
+                    {/* <Text size="sm" fw={500}>
                 Address
               </Text> */}
 
-              <Stack>
-                {addressForm.values.addresses_data.map((_, index) => (
-                  <AddressCard
-                    key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
-                    index={index}
-                    isViewMode={isViewMode}
-                    isVendorMasterRoute={isVendorMasterRoute}
-                    isDubaiUser={isDubaiUser}
-                    isIndiaUser={isIndiaUser}
-                    addressForm={addressForm}
-                    countryOptions={countryOptions}
-                    selectedCountries={selectedCountries}
-                    getStateOptions={getStateOptions}
-                    getStateValue={getStateValue}
-                    cityOptions={cityOptions}
-                    getCityValue={getCityValue}
-                    handleCountryChange={handleCountryChange}
-                    handleStateChange={handleStateChange}
-                    handleCityChange={handleCityChange}
-                    handleCustomCityChange={handleCustomCityChange}
-                    handleCitySearch={handleCitySearch}
-                    handleClearCustomCity={handleClearCustomCity}
-                    customCities={customCities}
-                    citySearchValues={citySearchValues}
-                    onRemove={removeAddress}
-                    canRemove={addressForm.values.addresses_data.length > 1}
-                  />
-                ))}
-              </Stack>
+                    <Stack>
+                      {addressForm.values.addresses_data.map((_, index) => (
+                        <AddressCard
+                          key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
+                          index={index}
+                          isViewMode={isViewMode}
+                          isVendorMasterRoute={isVendorMasterRoute}
+                          isDubaiUser={isDubaiUser}
+                          isIndiaUser={isIndiaUser}
+                          addressForm={addressForm}
+                          countryOptions={countryOptions}
+                          selectedCountries={selectedCountries}
+                          getStateOptions={getStateOptions}
+                          getStateValue={getStateValue}
+                          cityOptions={cityOptions}
+                          getCityValue={getCityValue}
+                          handleCountryChange={handleCountryChange}
+                          handleStateChange={handleStateChange}
+                          handleCityChange={handleCityChange}
+                          handleCustomCityChange={handleCustomCityChange}
+                          handleCitySearch={handleCitySearch}
+                          handleClearCustomCity={handleClearCustomCity}
+                          customCities={customCities}
+                          citySearchValues={citySearchValues}
+                          onRemove={removeAddress}
+                          canRemove={
+                            addressForm.values.addresses_data.length > 1
+                          }
+                        />
+                      ))}
+                    </Stack>
 
-              <Group justify="right" mt="md">
-                <Button
-                  variant="outline"
-                  leftSection={<IconPlus size={16} />}
-                  onClick={addAddress}
-                  disabled={isViewMode}
-                  color="#105476"
-                >
-                  Add Address
-                </Button>
-              </Group>
-            </Card>
-          </Box>
-          </Box>
-        </Tabs.Panel>
-
-        {isVendorMasterRoute && (
-          <Tabs.Panel value="2" style={{ flex: 1, minHeight: 0 }}>
-            <Box
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                paddingBottom: "16px",
-                backgroundColor: "#F8F8F8",
-              }}
-            >
-            <Box mt="md">
-              <Card shadow="sm" padding="lg" radius="md">
-                <Stack gap="md">
-                  <Grid gutter="sm">
-                    <Grid.Col span={4}>
-                      <Select
-                        label="TDS Type"
-                        placeholder="Select TDS type"
-                        data={[
-                          { value: "Company", label: "Company" },
-                          { value: "Individual", label: "Individual" },
-                          { value: "Partnership", label: "Partnership" },
-                        ]}
+                    <Group justify="right" mt="md">
+                      <Button
+                        variant="outline"
+                        leftSection={<IconPlus size={16} />}
+                        onClick={addAddress}
                         disabled={isViewMode}
-                        value={tdsType}
-                        onChange={(v) =>
-                          setTdsType(
-                            (v as "Company" | "Individual" | "Partnership" | "") ??
-                              "",
-                          )
-                        }
-                      />
-                    </Grid.Col>
-                  </Grid>
+                        color="#105476"
+                      >
+                        Add Address
+                      </Button>
+                    </Group>
+                  </Card>
+                </Box>
+              </Box>
+            </Tabs.Panel>
 
-                  {tdsDisplayForm.values.tds_sections.map((_, index) => (
-                    <Card
-                      key={index}
-                      withBorder
-                      padding="md"
-                      radius="md"
-                      bg="#fafafa"
-                    >
-                      <Group justify="space-between" align="center" mb="sm">
-                        <Text size="sm" fw={600} c="#105476">
-                          TDS Section {index + 1}
-                        </Text>
-                        {!isViewMode &&
-                          tdsDisplayForm.values.tds_sections.length > 1 && (
-                            <ActionIcon
-                              variant="light"
-                              color="red"
-                              onClick={() =>
-                                tdsDisplayForm.removeListItem(
-                                  "tds_sections",
-                                  index,
+            {isVendorMasterRoute && (
+              <Tabs.Panel value="2" style={{ flex: 1, minHeight: 0 }}>
+                <Box
+                  style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    paddingBottom: "16px",
+                    backgroundColor: "#F8F8F8",
+                  }}
+                >
+                  <Box mt="md">
+                    <Card shadow="sm" padding="lg" radius="md">
+                      <Stack gap="md">
+                        <Grid gutter="sm">
+                          <Grid.Col span={4}>
+                            <Select
+                              label="TDS Type"
+                              placeholder="Select TDS type"
+                              data={[
+                                { value: "Company", label: "Company" },
+                                { value: "Individual", label: "Individual" },
+                                { value: "Partnership", label: "Partnership" },
+                              ]}
+                              disabled={isViewMode}
+                              value={tdsType}
+                              onChange={(v) =>
+                                setTdsType(
+                                  (v as
+                                    | "Company"
+                                    | "Individual"
+                                    | "Partnership"
+                                    | "") ?? "",
                                 )
                               }
-                              aria-label="Remove TDS section"
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                          )}
-                      </Group>
-                      <Grid gutter="sm">
-                        <Grid.Col span={4}>
-                          <Select
-                            label="Section Name"
-                            placeholder="Select section name"
-                            searchable
-                            disabled={isViewMode}
-                            data={tdsSectionOptions}
-                            value={
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.section_id != null
-                                ? String(
-                                    tdsDisplayForm.values.tds_sections[index]
-                                      ?.section_id,
-                                  )
-                                : ""
-                            }
-                            onChange={(value) => {
-                              const selected = tdsSectionOptions.find(
-                                (o) => o.value === value,
-                              );
-                              const sectionId =
-                                value != null && value !== ""
-                                  ? Number(value)
-                                  : null;
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.section_id`,
-                                sectionId,
-                              );
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.id`,
-                                sectionId != null
-                                  ? tdsIdBySectionId[sectionId] ?? null
-                                  : null,
-                              );
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.section_code`,
-                                selected?.section_code || "",
-                              );
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.section_name`,
-                                selected?.label || "",
-                              );
-                            }}
-                            error={
-                              tdsDisplayForm.getInputProps(
-                                `tds_sections.${index}.section_id`,
-                              ).error
-                            }
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <TextInput
-                            label="Section Code"
-                            placeholder="Section code"
-                            disabled
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.section_code`,
-                            )}
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <Box pt={30}>
-                            <Switch
-                              label="Exemption TDS"
-                              description={
-                                tdsDisplayForm.values.tds_sections[index]
-                                  ?.exemption_tds
-                                  ? "Yes"
-                                  : "No"
-                              }
-                              disabled={isViewMode}
-                              checked={Boolean(
-                                tdsDisplayForm.values.tds_sections[index]
-                                  ?.exemption_tds,
-                              )}
-                              onChange={(e) => {
-                                const checked = e.currentTarget.checked;
-                                tdsDisplayForm.setFieldValue(
-                                  `tds_sections.${index}.exemption_tds`,
-                                  checked,
-                                );
-
-                                // When exemption is turned off, clear dependent fields
-                                // so payload does not carry stale values.
-                                if (!checked) {
-                                  tdsDisplayForm.setFieldValue(
-                                    `tds_sections.${index}.exemption_certificate_no`,
-                                    "",
-                                  );
-                                  tdsDisplayForm.setFieldValue(
-                                    `tds_sections.${index}.tds_percent`,
-                                    "",
-                                  );
-                                  tdsDisplayForm.setFieldValue(
-                                    `tds_sections.${index}.valid_from`,
-                                    null,
-                                  );
-                                  tdsDisplayForm.setFieldValue(
-                                    `tds_sections.${index}.valid_to`,
-                                    null,
-                                  );
-                                  tdsDisplayForm.setFieldValue(
-                                    `tds_sections.${index}.tds_lower_limit`,
-                                    "",
-                                  );
-                                }
-                              }}
                             />
-                          </Box>
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <TextInput
-                            label="Exemption Certificate No"
-                            placeholder="Certificate number"
-                            disabled={
-                              isViewMode ||
-                              !tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds
-                            }
-                            withAsterisk={Boolean(
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds,
-                            )}
-                            {...tdsDisplayForm.getInputProps(
-                              `tds_sections.${index}.exemption_certificate_no`,
-                            )}
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <TextInput
-                            label="TDS %"
-                            placeholder="TDS %"
-                            disabled={
-                              isViewMode ||
-                              !tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds
-                            }
-                            withAsterisk={Boolean(
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds,
-                            )}
-                            inputMode="decimal"
-                            value={
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.tds_percent ?? ""
-                            }
-                            onChange={(e) => {
-                              const v = e.currentTarget.value.trim();
-                              if (v === "" || twoDecimalInputRegex.test(v)) {
-                                tdsDisplayForm.setFieldValue(
-                                  `tds_sections.${index}.tds_percent`,
-                                  v,
-                                );
-                              }
-                            }}
-                            error={
-                              tdsDisplayForm.getInputProps(
-                                `tds_sections.${index}.tds_percent`,
-                              ).error
-                            }
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <SingleDateInput
-                            label="Valid From"
-                            placeholder="Valid from"
-                            disabled={
-                              isViewMode ||
-                              !tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds
-                            }
-                            value={
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.valid_from ?? null
-                            }
-                            onChange={(value) =>
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.valid_from`,
-                                value,
-                              )
-                            }
-                            error={
-                              tdsDisplayForm.getInputProps(
-                                `tds_sections.${index}.valid_from`,
-                              ).error
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <SingleDateInput
-                            label="Valid To"
-                            placeholder="Valid to"
-                            disabled={
-                              isViewMode ||
-                              !tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds
-                            }
-                            value={
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.valid_to ?? null
-                            }
-                            onChange={(value) =>
-                              tdsDisplayForm.setFieldValue(
-                                `tds_sections.${index}.valid_to`,
-                                value,
-                              )
-                            }
-                            error={
-                              tdsDisplayForm.getInputProps(
-                                `tds_sections.${index}.valid_to`,
-                              ).error
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={4}>
-                          <TextInput
-                            label="TDS Lower Limit"
-                            placeholder="TDS lower limit"
-                            disabled={
-                              isViewMode ||
-                              !tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds
-                            }
-                            withAsterisk={Boolean(
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.exemption_tds,
-                            )}
-                            inputMode="decimal"
-                            value={
-                              tdsDisplayForm.values.tds_sections[index]
-                                ?.tds_lower_limit ?? ""
-                            }
-                            onChange={(e) => {
-                              const v = e.currentTarget.value.trim();
-                              if (v === "" || twoDecimalInputRegex.test(v)) {
-                                tdsDisplayForm.setFieldValue(
-                                  `tds_sections.${index}.tds_lower_limit`,
-                                  v,
-                                );
-                              }
-                            }}
-                            error={
-                              tdsDisplayForm.getInputProps(
-                                `tds_sections.${index}.tds_lower_limit`,
-                              ).error
-                            }
-                            styles={{
-                              input: { fontSize: "13px", fontFamily: "Inter" },
-                              label: {
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                                marginBottom: "4px",
-                                fontFamily: "Inter",
-                              },
-                            }}
-                          />
-                        </Grid.Col>
-                      </Grid>
-                    </Card>
-                  ))}
+                          </Grid.Col>
+                        </Grid>
 
-                  <Group justify="flex-end">
-                    <Button
-                      variant="outline"
-                      leftSection={<IconPlus size={16} />}
-                      onClick={() =>
-                        tdsDisplayForm.insertListItem(
-                          "tds_sections",
-                          emptyTdsSectionRow(),
-                        )
-                      }
-                      disabled={isViewMode}
-                      color="#105476"
-                    >
-                      Add
-                    </Button>
-                  </Group>
-                </Stack>
-              </Card>
-            </Box>
-            </Box>
-          </Tabs.Panel>
-        )}
+                        {tdsDisplayForm.values.tds_sections.map((_, index) => (
+                          <Card
+                            key={index}
+                            withBorder
+                            padding="md"
+                            radius="md"
+                            bg="#fafafa"
+                          >
+                            <Group
+                              justify="space-between"
+                              align="center"
+                              mb="sm"
+                            >
+                              <Text size="sm" fw={600} c="#105476">
+                                TDS Section {index + 1}
+                              </Text>
+                              {!isViewMode &&
+                                tdsDisplayForm.values.tds_sections.length >
+                                  1 && (
+                                  <ActionIcon
+                                    variant="light"
+                                    color="red"
+                                    onClick={() =>
+                                      tdsDisplayForm.removeListItem(
+                                        "tds_sections",
+                                        index,
+                                      )
+                                    }
+                                    aria-label="Remove TDS section"
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
+                                )}
+                            </Group>
+                            <Grid gutter="sm">
+                              <Grid.Col span={4}>
+                                <Select
+                                  label="Section Name"
+                                  placeholder="Select section name"
+                                  searchable
+                                  disabled={isViewMode}
+                                  data={tdsSectionOptions}
+                                  value={
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.section_id != null
+                                      ? String(
+                                          tdsDisplayForm.values.tds_sections[
+                                            index
+                                          ]?.section_id,
+                                        )
+                                      : ""
+                                  }
+                                  onChange={(value) => {
+                                    const selected = tdsSectionOptions.find(
+                                      (o) => o.value === value,
+                                    );
+                                    const sectionId =
+                                      value != null && value !== ""
+                                        ? Number(value)
+                                        : null;
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.section_id`,
+                                      sectionId,
+                                    );
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.id`,
+                                      sectionId != null
+                                        ? (tdsIdBySectionId[sectionId] ?? null)
+                                        : null,
+                                    );
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.section_code`,
+                                      selected?.section_code || "",
+                                    );
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.section_name`,
+                                      selected?.label || "",
+                                    );
+                                  }}
+                                  error={
+                                    tdsDisplayForm.getInputProps(
+                                      `tds_sections.${index}.section_id`,
+                                    ).error
+                                  }
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                    },
+                                  }}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="Section Code"
+                                  placeholder="Section code"
+                                  disabled
+                                  {...tdsDisplayForm.getInputProps(
+                                    `tds_sections.${index}.section_code`,
+                                  )}
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                    },
+                                  }}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <Box pt={30}>
+                                  <Switch
+                                    label="Exemption TDS"
+                                    description={
+                                      tdsDisplayForm.values.tds_sections[index]
+                                        ?.exemption_tds
+                                        ? "Yes"
+                                        : "No"
+                                    }
+                                    disabled={isViewMode}
+                                    checked={Boolean(
+                                      tdsDisplayForm.values.tds_sections[index]
+                                        ?.exemption_tds,
+                                    )}
+                                    onChange={(e) => {
+                                      const checked = e.currentTarget.checked;
+                                      tdsDisplayForm.setFieldValue(
+                                        `tds_sections.${index}.exemption_tds`,
+                                        checked,
+                                      );
+
+                                      // When exemption is turned off, clear dependent fields
+                                      // so payload does not carry stale values.
+                                      if (!checked) {
+                                        tdsDisplayForm.setFieldValue(
+                                          `tds_sections.${index}.exemption_certificate_no`,
+                                          "",
+                                        );
+                                        tdsDisplayForm.setFieldValue(
+                                          `tds_sections.${index}.tds_percent`,
+                                          "",
+                                        );
+                                        tdsDisplayForm.setFieldValue(
+                                          `tds_sections.${index}.valid_from`,
+                                          null,
+                                        );
+                                        tdsDisplayForm.setFieldValue(
+                                          `tds_sections.${index}.valid_to`,
+                                          null,
+                                        );
+                                        tdsDisplayForm.setFieldValue(
+                                          `tds_sections.${index}.tds_lower_limit`,
+                                          "",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </Box>
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="Exemption Certificate No"
+                                  placeholder="Certificate number"
+                                  disabled={
+                                    isViewMode ||
+                                    !tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds
+                                  }
+                                  withAsterisk={Boolean(
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds,
+                                  )}
+                                  {...tdsDisplayForm.getInputProps(
+                                    `tds_sections.${index}.exemption_certificate_no`,
+                                  )}
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                    },
+                                  }}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="TDS %"
+                                  placeholder="TDS %"
+                                  disabled={
+                                    isViewMode ||
+                                    !tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds
+                                  }
+                                  withAsterisk={Boolean(
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds,
+                                  )}
+                                  inputMode="decimal"
+                                  value={
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.tds_percent ?? ""
+                                  }
+                                  onChange={(e) => {
+                                    const v = e.currentTarget.value.trim();
+                                    if (
+                                      v === "" ||
+                                      twoDecimalInputRegex.test(v)
+                                    ) {
+                                      tdsDisplayForm.setFieldValue(
+                                        `tds_sections.${index}.tds_percent`,
+                                        v,
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    tdsDisplayForm.getInputProps(
+                                      `tds_sections.${index}.tds_percent`,
+                                    ).error
+                                  }
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                    },
+                                  }}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <SingleDateInput
+                                  label="Valid From"
+                                  placeholder="Valid from"
+                                  disabled={
+                                    isViewMode ||
+                                    !tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds
+                                  }
+                                  value={
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.valid_from ?? null
+                                  }
+                                  onChange={(value) =>
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.valid_from`,
+                                      value,
+                                    )
+                                  }
+                                  error={
+                                    tdsDisplayForm.getInputProps(
+                                      `tds_sections.${index}.valid_from`,
+                                    ).error
+                                  }
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <SingleDateInput
+                                  label="Valid To"
+                                  placeholder="Valid to"
+                                  disabled={
+                                    isViewMode ||
+                                    !tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds
+                                  }
+                                  value={
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.valid_to ?? null
+                                  }
+                                  onChange={(value) =>
+                                    tdsDisplayForm.setFieldValue(
+                                      `tds_sections.${index}.valid_to`,
+                                      value,
+                                    )
+                                  }
+                                  error={
+                                    tdsDisplayForm.getInputProps(
+                                      `tds_sections.${index}.valid_to`,
+                                    ).error
+                                  }
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="TDS Lower Limit"
+                                  placeholder="TDS lower limit"
+                                  disabled={
+                                    isViewMode ||
+                                    !tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds
+                                  }
+                                  withAsterisk={Boolean(
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.exemption_tds,
+                                  )}
+                                  inputMode="decimal"
+                                  value={
+                                    tdsDisplayForm.values.tds_sections[index]
+                                      ?.tds_lower_limit ?? ""
+                                  }
+                                  onChange={(e) => {
+                                    const v = e.currentTarget.value.trim();
+                                    if (
+                                      v === "" ||
+                                      twoDecimalInputRegex.test(v)
+                                    ) {
+                                      tdsDisplayForm.setFieldValue(
+                                        `tds_sections.${index}.tds_lower_limit`,
+                                        v,
+                                      );
+                                    }
+                                  }}
+                                  error={
+                                    tdsDisplayForm.getInputProps(
+                                      `tds_sections.${index}.tds_lower_limit`,
+                                    ).error
+                                  }
+                                  styles={{
+                                    input: {
+                                      fontSize: "13px",
+                                      fontFamily: "Inter",
+                                    },
+                                    label: {
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                      marginBottom: "4px",
+                                      fontFamily: "Inter",
+                                    },
+                                  }}
+                                />
+                              </Grid.Col>
+                            </Grid>
+                          </Card>
+                        ))}
+
+                        <Group justify="flex-end">
+                          <Button
+                            variant="outline"
+                            leftSection={<IconPlus size={16} />}
+                            onClick={() =>
+                              tdsDisplayForm.insertListItem(
+                                "tds_sections",
+                                emptyTdsSectionRow(),
+                              )
+                            }
+                            disabled={isViewMode}
+                            color="#105476"
+                          >
+                            Add
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Card>
+                  </Box>
+                </Box>
+              </Tabs.Panel>
+            )}
           </Tabs>
         </Box>
 
@@ -3435,14 +3600,34 @@ function CustomerCreate() {
             backgroundColor: "#ffffff",
           }}
         >
-        <Group justify="space-between">
-          <Group gap="sm">
-            {active > 0 && (
+          <Group justify="space-between">
+            <Group gap="sm">
+              {active > 0 && (
+                <Button
+                  variant="outline"
+                  color="gray"
+                  size="sm"
+                  leftSection={<IconArrowLeft size={16} />}
+                  styles={{
+                    root: {
+                      borderColor: "#d0d0d0",
+                      color: "#666",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      fontStyle: "medium",
+                    },
+                  }}
+                  onClick={() => setActive((v) => Math.max(0, v - 1))}
+                  disabled={isSubmitting}
+                >
+                  Back
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 color="gray"
                 size="sm"
-                leftSection={<IconArrowLeft size={16} />}
                 styles={{
                   root: {
                     borderColor: "#d0d0d0",
@@ -3452,100 +3637,84 @@ function CustomerCreate() {
                     fontStyle: "medium",
                   },
                 }}
-                onClick={() => setActive((v) => Math.max(0, v - 1))}
+                onClick={() => navigate(baseMasterPath)}
                 disabled={isSubmitting}
               >
-                Back
+                {isViewMode ? "Back to List" : "Cancel"}
               </Button>
-            )}
+            </Group>
 
-            <Button
-              variant="outline"
-              color="gray"
-              size="sm"
-              styles={{
-                root: {
-                  borderColor: "#d0d0d0",
-                  color: "#666",
-                  fontSize: "13px",
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                },
-              }}
-              onClick={() => navigate(baseMasterPath)}
-              disabled={isSubmitting}
-            >
-              {isViewMode ? "Back to List" : "Cancel"}
-            </Button>
-          </Group>
-
-          <Group gap="sm">
-            {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
-              <Button
-                bg="#105476"
-                onClick={handleRelationshipMapping}
-                disabled={isSubmitting}
-                style={{ border: "1px solid #105476" }}
-                color="white"
-                size="sm"
-              >
-                {isCreateMode
-                  ? isVendorMasterRoute
-                    ? "Add Vendor Relationships"
-                    : "Add Customer Relationships"
-                  : isVendorMasterRoute
-                    ? "Edit Vendor Relationships"
-                    : "Edit Customer Relationships"}
-              </Button>
-            )}
-
-            {active < maxStep && (
-              <Button
-                size="sm"
-                style={{
-                  backgroundColor: "#105476",
-                  fontSize: "13px",
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                }}
-                rightSection={<IconArrowRight size={14} />}
-                onClick={() => setActive((v) => Math.min(maxStep, v + 1))}
-                disabled={isSubmitting}
-              >
-                Next
-              </Button>
-            )}
-
-            {active === maxStep && !isViewMode && (
-              <Button
-                size="sm"
-                style={{
-                  backgroundColor: "#105476",
-                  fontSize: "13px",
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                }}
-                rightSection={
-                  isSubmitting ? <Loader size={16} color="white" /> : <IconCheck size={16} />
-                }
-                onClick={handleFinalSubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting
-                  ? isCreateMode
+            <Group gap="sm">
+              {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
+                <Button
+                  bg="#105476"
+                  onClick={handleRelationshipMapping}
+                  disabled={isSubmitting}
+                  style={{ border: "1px solid #105476" }}
+                  color="white"
+                  size="sm"
+                >
+                  {isCreateMode
                     ? isVendorMasterRoute
-                      ? "Creating Vendor..."
-                      : "Creating Customer..."
+                      ? "Add Vendor Relationships"
+                      : "Add Customer Relationships"
                     : isVendorMasterRoute
-                      ? "Updating Vendor..."
-                      : "Updating Customer..."
-                  : isCreateMode
-                    ? "Create"
-                    : "Update"}
-              </Button>
-            )}
+                      ? "Edit Vendor Relationships"
+                      : "Edit Customer Relationships"}
+                </Button>
+              )}
+
+              {active < maxStep && (
+                <Button
+                  size="sm"
+                  style={{
+                    backgroundColor: "#105476",
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  }}
+                  rightSection={<IconArrowRight size={14} />}
+                  onClick={() => setActive((v) => Math.min(maxStep, v + 1))}
+                  disabled={isSubmitting}
+                >
+                  Next
+                </Button>
+              )}
+
+              {active === maxStep && !isViewMode && (
+                <Button
+                  size="sm"
+                  style={{
+                    backgroundColor: "#105476",
+                    fontSize: "13px",
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                  }}
+                  rightSection={
+                    isSubmitting ? (
+                      <Loader size={16} color="white" />
+                    ) : (
+                      <IconCheck size={16} />
+                    )
+                  }
+                  onClick={handleFinalSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? isCreateMode
+                      ? isVendorMasterRoute
+                        ? "Creating Vendor..."
+                        : "Creating Customer..."
+                      : isVendorMasterRoute
+                        ? "Updating Vendor..."
+                        : "Updating Customer..."
+                    : isCreateMode
+                      ? "Create"
+                      : "Update"}
+                </Button>
+              )}
+            </Group>
           </Group>
-        </Group>
         </Box>
       </Box>
     </Box>

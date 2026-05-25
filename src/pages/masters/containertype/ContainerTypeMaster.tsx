@@ -35,6 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type ContainerType = {
   code: string;
@@ -46,6 +47,7 @@ type ContainerType = {
 };
 
 export default function ContainerType() {
+  const isAdmin = useIsAdminUser();
   const [data, setData] = useState<ContainerType[]>([]);
   const navigate = useNavigate();
 
@@ -257,7 +259,8 @@ export default function ContainerType() {
           >
             Bulk Upload
           </Button>
-          <Button
+          {isAdmin && (
+<Button
             color="#105476"
             leftSection={<IconPlus size={16} />}
             size="xs"
@@ -265,6 +268,7 @@ export default function ContainerType() {
           >
             Create New
           </Button>
+            )}
         </Group>
       </Group>
       <MantineReactTable table={table} />

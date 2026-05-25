@@ -34,6 +34,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 type FrequencyMasterType = {
   id: number;
@@ -42,6 +43,7 @@ type FrequencyMasterType = {
 };
 
 export default function FrequencyMaster() {
+  const isAdmin = useIsAdminUser();
   const [data, setData] = useState<FrequencyMasterType[]>([]);
   const navigate = useNavigate();
   const location = useLocation(); // ✅ to detect refresh state
@@ -239,7 +241,8 @@ export default function FrequencyMaster() {
             Bulk Upload
           </Button>
 
-          <Button
+          {isAdmin && (
+<Button
             color="#105476"
             leftSection={<IconPlus size={16} />}
             size="xs"
@@ -247,6 +250,7 @@ export default function FrequencyMaster() {
           >
             Create New
           </Button>
+            )}
         </Group>
       </Group>
 

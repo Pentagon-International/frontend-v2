@@ -43,6 +43,7 @@ import {
 import { useListFilterStore } from "../../../store/listFilterStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "GST_CHARGE_MAPPING_MASTER";
 
@@ -73,6 +74,7 @@ type GSTChargeMappingFilters = {
 };
 
 export default function GSTChargeMappingMasterList() {
+  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -529,7 +531,8 @@ export default function GSTChargeMappingMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            <Button
+            {isAdmin && (
+<Button
               leftSection={<IconPlus size={16} />}
               size="sm"
               styles={{
@@ -554,6 +557,7 @@ export default function GSTChargeMappingMasterList() {
             >
               Create New
             </Button>
+            )}
           </Group>
         </Group>
       </Box>
