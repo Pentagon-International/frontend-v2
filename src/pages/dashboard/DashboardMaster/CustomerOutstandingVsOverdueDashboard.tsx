@@ -78,7 +78,8 @@ function drawerResponseFromClickedRow(
       days_1_30: String(row.days_1_30 ?? 0),
       days_31_60: String(row.days_31_60 ?? 0),
       days_61_90: String(row.days_61_90 ?? row.days_61_plus ?? 0),
-      days_90_plus: row.days_90_plus,
+      days_90_180: String(row.days_90_180 ?? 0),
+      days_180_plus: String(row.days_180_plus ?? 0),
     },
     data: [row],
     total: 1,
@@ -112,10 +113,18 @@ const toPercentNumber = (value: string | number | undefined | null): number => {
 };
 
 /** Top accent per aging bucket — matches ERP reference (green → amber → orange → deep orange → red). */
-const BUCKET_TOP_COLORS = ["#22C55E", "#F59E0B", "#FB923C", "#EA580C", "#DC2626"] as const;
+const BUCKET_TOP_COLORS = [
+  "#22C55E",
+  "#64748B",
+  "#F59E0B",
+  "#FB923C",
+  "#EA580C",
+  "#DC2626",
+  "#991B1B",
+] as const;
 
 /** Summary-card → table column mapping used for click-sort/filter. */
-type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90" | "90+";
+type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90" | "90-180" | "180+";
 
 function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
   switch (label) {
@@ -127,8 +136,10 @@ function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
       return "31-60";
     case "61-90 DAYS":
       return "61-90";
-    case "90+ DAYS":
-      return "90+";
+    case "90-180 DAYS":
+      return "90-180";
+    case "180+ DAYS":
+      return "180+";
     default:
       return null;
   }
@@ -144,8 +155,10 @@ function rowBucketNumeric(row: CustomerOutstandingVsOverdueItem, bucket: ColumnS
       return toNumber(row.days_31_60);
     case "61-90":
       return toNumber(row.days_61_90 ?? row.days_61_plus);
-    case "90+":
-      return toNumber(row.days_90_plus);
+    case "90-180":
+      return toNumber(row.days_90_180);
+    case "180+":
+      return toNumber(row.days_180_plus);
   }
 }
 
@@ -197,11 +210,11 @@ const hdr = {
 /** Fixed layout: send icon; customer; numeric columns (widths sum to 100%). */
 const col = {
   send: { width: "4%", minWidth: 44, maxWidth: 52 } as const,
-  customer: { width: "23%", minWidth: 88, maxWidth: 200 } as const,
-  outstanding: { width: "12.5%", minWidth: 72 } as const,
-  overdue: { width: "12.5%", minWidth: 72 } as const,
-  aging: { width: "9%", minWidth: 60 } as const,
-  risk: { width: "12%", minWidth: 56 } as const,
+  customer: { width: "20%", minWidth: 88, maxWidth: 200 } as const,
+  outstanding: { width: "11%", minWidth: 72 } as const,
+  overdue: { width: "11%", minWidth: 72 } as const,
+  aging: { width: "7.5%", minWidth: 56 } as const,
+  risk: { width: "10%", minWidth: 56 } as const,
 };
 
 /** Match `ConversionByRepCustomerwiseEnquiryList` "Enquiries & Quotations" table. */
@@ -453,28 +466,24 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     const days1_30 = toNumber(summary.days_1_30);
     const days31_60 = toNumber(summary.days_31_60);
     const days61_90 = toNumber(summary.days_61_90);
-    const raw90Plus =
-      summary.days_90_plus ??
-      (summary as unknown as Record<string, unknown>)["days_90+"];
-    const raw90Str =
-      typeof raw90Plus === "string" || typeof raw90Plus === "number" ? raw90Plus : "";
-    const hasDays90Plus = String(raw90Str).trim() !== "";
-    const days90Plus = toNumber(raw90Str);
+    const days_90_180 = toNumber(summary.days_90_180);
+    const days_180_plus = toNumber(summary.days_180_plus);
     const cards = [
       {
         label: "OVERDUE",
         amount: toNumber(summary.total_overdue),
         pct: toPercentNumber(summary.total_overdue_percentage),
       },
+      {
+        label: "DSO DAYS",
+        amount: toNumber(summary.dso_days),
+        pct: toPercentNumber(summary.dso_days_percentage),
+      },
       { label: "1-30 DAYS", amount: days1_30, pct: (days1_30 / totalOutstanding) * 100 },
       { label: "31-60 DAYS", amount: days31_60, pct: (days31_60 / totalOutstanding) * 100 },
       { label: "61-90 DAYS", amount: days61_90, pct: (days61_90 / totalOutstanding) * 100 },
-      {
-        label: "90+ DAYS",
-        amount: days90Plus,
-        pct: (days90Plus / totalOutstanding) * 100,
-        missing: !hasDays90Plus,
-      },
+      { label: "90-180 DAYS", amount: days_90_180, pct: (days_90_180 / totalOutstanding) * 100 },
+      { label: "180+ DAYS", amount: days_180_plus, pct: (days_180_plus / totalOutstanding) * 100 },
     ];
     const openInv = toNumber(summary.open_invoices);
     const invoiceSplits = splitInvoicesByPct(
@@ -745,12 +754,12 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   lh={1.1}
                   style={{ fontVariantNumeric: "tabular-nums" }}
                 >
-                  {card.label === "90+ DAYS" && card.missing ? "-" : formatAmount(card.amount)}
+                  {formatAmount(card.amount)}
                 </Text>
                 <Text fz={11} fw={500} c={enquiryConversionColors.subHeading} mt={2} lh={1.3}>
                   {formatPct(card.pct)}%
                 </Text>
-                {card.label === "90+ DAYS" && card.pct > 0 ? (
+                {card.label === "180+ DAYS" && card.pct > 0 ? (
                   <Text size="10px" fw={600} c="#EF4444" mt={2}>
                     High risk
                   </Text>
@@ -787,7 +796,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               highlightOnHoverColor={OSTD_LIST_HEAD_BG}
               verticalSpacing={11}
               horizontalSpacing={12}
-              miw={isMobile ? 720 : 920}
+              miw={isMobile ? 800 : 1040}
               style={{ tableLayout: "fixed", width: "100%", borderTop: `1px solid ${OSTD_LIST_LINE}` }}
             >
               <Table.Thead>
@@ -919,7 +928,23 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                       borderBottom: `1px solid ${OSTD_LIST_LINE}`,
                     }}
                   >
-                    90+
+                    90-180
+                  </Table.Th>
+                  <Table.Th
+                    ta="right"
+                    fz={11}
+                    fw={500}
+                    c="#64748b"
+                    tt="uppercase"
+                    lts="0.04em"
+                    style={{
+                      ...col.aging,
+                      background: OSTD_LIST_HEAD_BG,
+                      padding: "10px 12px",
+                      borderBottom: `1px solid ${OSTD_LIST_LINE}`,
+                    }}
+                  >
+                    180+
                   </Table.Th>
                   <Table.Th
                     ta="right"
@@ -942,7 +967,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               <Table.Tbody>
                 {isLoading && !response ? (
                   <Table.Tr>
-                    <Table.Td colSpan={9}>
+                    <Table.Td colSpan={10}>
                       <Group justify="center" py="md">
                         <Loader size="sm" color="#153F72" />
                       </Group>
@@ -950,7 +975,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : rows.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={9}>
+                    <Table.Td colSpan={10}>
                       <Text ta="center" py="sm" size="sm" c={enquiryConversionColors.subHeading}>
                         No records found
                       </Text>
@@ -958,7 +983,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : displayRows.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={9}>
+                    <Table.Td colSpan={10}>
                       <Text ta="center" py="sm" size="sm" c={enquiryConversionColors.subHeading}>
                         No customers with an amount in this bucket on this page.
                       </Text>
@@ -968,8 +993,13 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   displayRows.map((row: CustomerOutstandingVsOverdueItem) => {
                     const days61_90 = toNumber(row.days_61_90 ?? row.days_61_plus);
                     const riskUpper = String(row.risk || "LOW").toUpperCase();
+                    const days90_180 = toNumber(row.days_90_180);
+                    const days180_plus = toNumber(row.days_180_plus);
                     const highlight61_90 =
                       days61_90 > 0 && (riskUpper === "HIGH" || riskUpper === "MEDIUM");
+                    const highlightAged =
+                      (days90_180 > 0 || days180_plus > 0) &&
+                      (riskUpper === "HIGH" || riskUpper === "MEDIUM");
                     const rp = riskPillStyle(row.risk);
                     return (
                       <Table.Tr key={`${row.customer_code}-${row.sno}`}>
@@ -1131,21 +1161,21 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
-                          <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {(() => {
-                              const raw =
-                                row.days_90_plus ??
-                                (row as unknown as Record<string, unknown>)["days_90+"];
-                              if (
-                                raw === undefined ||
-                                raw === null ||
-                                raw === "" ||
-                                toNumber(raw as string | number) === 0
-                              ) {
-                                return "-";
-                              }
-                              return formatAmount(raw as string | number);
-                            })()}
+                          <Text
+                            {...OSTD_TABLE_VALUE_TEXT}
+                            c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
+                            style={ostdTableValueNumericStyle}
+                          >
+                            {formatAmountCell(row.days_90_180, userCountryCode)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                          <Text
+                            {...OSTD_TABLE_VALUE_TEXT}
+                            c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
+                            style={ostdTableValueNumericStyle}
+                          >
+                            {formatAmountCell(row.days_180_plus, userCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.risk, whiteSpace: "nowrap" }}>
@@ -1303,7 +1333,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         highlightOnHover
                         verticalSpacing={10}
                         horizontalSpacing="md"
-                        miw={720}
+                        miw={800}
                         style={{ tableLayout: "fixed", width: "100%" }}
                       >
                         <Table.Thead>
@@ -1387,7 +1417,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               tt="uppercase"
                               style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}
                             >
-                              90+
+                              90-180
+                            </Table.Th>
+                            <Table.Th
+                              ta="right"
+                              fz={10}
+                              fw={500}
+                              c="#94A3B8"
+                              tt="uppercase"
+                              style={{ ...hdr, ...col.aging, verticalAlign: "middle" }}
+                            >
+                              180+
                             </Table.Th>
                             <Table.Th
                               ta="right"
@@ -1404,7 +1444,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         <Table.Tbody>
                           {(drawerResponse?.data || []).length === 0 ? (
                             <Table.Tr>
-                              <Table.Td colSpan={9}>
+                              <Table.Td colSpan={10}>
                                 <Text ta="center" py="sm" fz={13} fw={500} c="#64748B">
                                   No records found
                                 </Text>
@@ -1414,8 +1454,13 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             (drawerResponse?.data || []).map((drow: CustomerOutstandingVsOverdueItem) => {
                               const days61_90d = toNumber(drow.days_61_90 ?? drow.days_61_plus);
                               const riskUpperd = String(drow.risk || "LOW").toUpperCase();
+                              const days90_180d = toNumber(drow.days_90_180);
+                              const days180_plusd = toNumber(drow.days_180_plus);
                               const highlight61_90d =
                                 days61_90d > 0 && (riskUpperd === "HIGH" || riskUpperd === "MEDIUM");
+                              const highlightAgedd =
+                                (days90_180d > 0 || days180_plusd > 0) &&
+                                (riskUpperd === "HIGH" || riskUpperd === "MEDIUM");
                               const rpd = riskPillStyle(drow.risk);
                               return (
                                 <Table.Tr key={`drawer-${drow.sno}-${drow.customer_code}`}>
@@ -1485,21 +1530,21 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
-                                    <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {(() => {
-                                        const raw =
-                                          drow.days_90_plus ??
-                                          (drow as unknown as Record<string, unknown>)["days_90+"];
-                                        if (
-                                          raw === undefined ||
-                                          raw === null ||
-                                          raw === "" ||
-                                          toNumber(raw as string | number) === 0
-                                        ) {
-                                          return "-";
-                                        }
-                                        return formatAmount(raw as string | number);
-                                      })()}
+                                    <Text
+                                      {...OSTD_TABLE_VALUE_TEXT}
+                                      c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
+                                      style={ostdTableValueNumericStyle}
+                                    >
+                                      {formatAmountCell(drow.days_90_180, userCountryCode)}
+                                    </Text>
+                                  </Table.Td>
+                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                    <Text
+                                      {...OSTD_TABLE_VALUE_TEXT}
+                                      c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
+                                      style={ostdTableValueNumericStyle}
+                                    >
+                                      {formatAmountCell(drow.days_180_plus, userCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>
