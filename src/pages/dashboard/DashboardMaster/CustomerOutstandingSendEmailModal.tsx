@@ -64,12 +64,14 @@ function defaultOutstandingMessage(
     "",
     `Outstanding (INR): ${fmtAmount(row.outstanding)}`,
     `Overdue (INR): ${fmtAmount(row.overdue)}`,
-    `DSO Days (INR): ${fmtAmount(row.dso_days)}`,
     `1-30 days (INR): ${fmtAmount(row.days_1_30)}`,
     `31-60 days (INR): ${fmtAmount(row.days_31_60)}`,
-    `61-90 days (INR): ${fmtAmount(row.days_61_90)}`,
-    `90-180 days (INR): ${fmtAmount(row.days_90_180)}`,
-    `180+ days (INR): ${fmtAmount(row.days_180_plus)}`,
+    `61-90 days (INR): ${fmtAmount(row.days_61_90 ?? row.days_61_plus)}`,
+    `90+ days (INR): ${
+      row.days_90_plus === undefined || row.days_90_plus === "" || row.days_90_plus === null
+        ? "—"
+        : fmtAmount(row.days_90_plus)
+    }`,
     "",
     `Risk: ${row.risk || "LOW"}`,
     `Open line count: ${row.open_line_count ?? 0}`,

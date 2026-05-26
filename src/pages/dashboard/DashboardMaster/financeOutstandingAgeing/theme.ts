@@ -17,8 +17,7 @@ export const OST_WARN_BG = "#fef3c7";
 
 export const OST_AR_ROW_GRID: CSSProperties = {
   display: "grid",
-  gridTemplateColumns:
-    "minmax(140px, 1.4fr) repeat(9, minmax(64px, 1fr)) minmax(56px, 0.75fr)",
+  gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr 1fr 0.8fr",
   gap: 12,
   alignItems: "center",
   padding: "10px 18px",
@@ -26,8 +25,6 @@ export const OST_AR_ROW_GRID: CSSProperties = {
 
 export const AGEING_BUCKET_STRIPES: Record<string, string> = {
   current: "#22c55e",
-  overdue: "#dc2626",
-  dso_days: "#64748b",
   days_1_30: "#fbbf24",
   days_31_60: "#fb923c",
   days_61_90: "#ea580c",

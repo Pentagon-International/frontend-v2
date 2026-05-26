@@ -112,7 +112,7 @@ export function PendingActivitiesPageHeader({
           value={branchFilter}
           onChange={onBranchFilterChange}
           data={[
-            { value: "", label: "All branches" },
+            { value: "all", label: "All branches" },
             ...(filterOptions?.branches ?? []),
           ]}
           styles={{ input: { ...selectStyles.input, width: 120 } }}
