@@ -67,18 +67,26 @@ export function OutstandingPageHeader({
         >
           {meta.title}
         </Text>
-        <Text fz={12} c={OST_INK_3} mt={6} style={{ lineHeight: 1.5 }}>
+        <Text fz={12} c={OST_INK_3} mt={6} style={{ lineHeight: 1.5, wordBreak: "break-word" }}>
           {meta.subtitle}
         </Text>
       </Box>
 
-      <Flex gap={8} wrap="wrap" justify="flex-end" align="center">
+      <Flex
+        gap={8}
+        wrap="wrap"
+        justify={isMobile ? "stretch" : "flex-end"}
+        align="stretch"
+        direction={isMobile ? "column" : "row"}
+        style={{ width: isMobile ? "100%" : undefined, minWidth: 0 }}
+      >
         <Button
           size="xs"
           radius={6}
           variant="filled"
           style={{
-            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 120px",
+            flex: isMobile ? "1 1 auto" : "1 1 120px",
+            width: isMobile ? "100%" : undefined,
             minWidth: isMobile ? 0 : undefined,
           }}
           styles={{
@@ -120,7 +128,8 @@ export function OutstandingPageHeader({
           value={filters.risk}
           onChange={(value) => onFiltersChange((prev) => ({ ...prev, risk: value || "" }))}
           style={{
-            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px",
+            flex: isMobile ? "1 1 auto" : "1 1 130px",
+            width: isMobile ? "100%" : undefined,
             minWidth: isMobile ? 0 : 120,
           }}
           styles={selectInputStyles}
@@ -132,16 +141,20 @@ export function OutstandingPageHeader({
           value={filters.location}
           onChange={(value) => onFiltersChange((prev) => ({ ...prev, location: value || "" }))}
           style={{
-            flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 160px",
+            flex: isMobile ? "1 1 auto" : "1 1 160px",
+            width: isMobile ? "100%" : undefined,
             minWidth: isMobile ? 0 : 120,
           }}
           styles={selectInputStyles}
         />
         <Box
+          w={isMobile ? "100%" : undefined}
           style={{
-            width: "clamp(200px, 20vw, 280px)",
-            minWidth: 200,
-            flexShrink: 0,
+            width: isMobile ? "100%" : "clamp(200px, 20vw, 280px)",
+            minWidth: isMobile ? 0 : 200,
+            maxWidth: "100%",
+            flex: isMobile ? "1 1 auto" : undefined,
+            flexShrink: isMobile ? undefined : 0,
           }}
         >
           <DashboardChartSearch

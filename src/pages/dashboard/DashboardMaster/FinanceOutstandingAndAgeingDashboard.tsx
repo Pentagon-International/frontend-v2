@@ -131,9 +131,13 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
         fontFamily: ERP_LIST_FONT_SANS,
         borderRadius: 12,
         minHeight: 400,
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
       }}
     >
-      <Box px={{ base: 12, sm: 16 }} py="md">
+      <Box px={{ base: 12, sm: 16 }} py="md" style={{ minWidth: 0 }}>
         {loadError ? (
           <Alert color="red" variant="light" mb="md" radius="md" title="Could not load data">
             {loadError}
@@ -164,14 +168,29 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
           onRefresh={() => void loadDashboard()}
         />
 
-        <Flex align="center" gap={12} wrap="wrap" mb={14}>
+        <Flex
+          align={{ base: "stretch", sm: "center" }}
+          direction={{ base: "column", sm: "row" }}
+          gap={12}
+          wrap="wrap"
+          mb={14}
+          style={{ minWidth: 0 }}
+        >
           {/* <PartyTabs data={data} value={partyType} onChange={setPartyType} /> */}
-          <Box style={{ flex: 1, minWidth: 8 }} />
-          <ViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            partyLabel={partyColumnLabel}
-          />
+          <Box visibleFrom="sm" style={{ flex: 1, minWidth: 8 }} />
+          <Box
+            w="100%"
+            style={{
+              minWidth: 0,
+              display: "flex",
+            }}
+          >
+            <ViewToggle
+              value={viewMode}
+              onChange={setViewMode}
+              partyLabel={partyColumnLabel}
+            />
+          </Box>
         </Flex>
 
         <Box
@@ -179,11 +198,16 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
             background: "#ffffff",
             border: "1px solid #e2e8f0",
             borderRadius: 10,
-            padding: "16px 18px 8px",
+            minWidth: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
           }}
+          pt={{ base: 12, sm: 16 }}
+          px={{ base: 10, sm: 18 }}
+          pb={8}
         >
           {loading ? (
-            <Skeleton height={88} mb={16} radius="md" />
+            <Skeleton height={100} mb={16} radius="md" />
           ) : (
             <AgeingSummaryBar buckets={partySlice.ageingBuckets} currency={data.currency} />
           )}

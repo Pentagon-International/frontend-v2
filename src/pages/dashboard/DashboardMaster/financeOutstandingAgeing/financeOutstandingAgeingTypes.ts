@@ -5,6 +5,8 @@ export type OutstandingRiskLevel = "low" | "medium" | "high";
 export type AgeingBucket = {
   id: string;
   label: string;
+  /** Raw API value (amount string or DSO day count). */
+  raw: unknown;
   amountDisplay?: string;
   amountCr: number;
   pct: number;
@@ -16,8 +18,14 @@ export type AgeingBucket = {
 export type OutstandingAmountCells = {
   outstanding: string;
   overdue: string;
+  dso_days: string;
   days1_30: string;
   days31_60: string;
+  days61_90: string;
+  days90_180: string;
+  days180_plus: string;
+  open_line_count: string;
+  /** Legacy combined 60+ column (fallback display). */
   days60Plus: string;
 };
 

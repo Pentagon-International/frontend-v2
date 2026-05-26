@@ -123,10 +123,15 @@ export interface CustomerOutstandingVsOverdueItem {
   days_31_60: string;
   /** New API row key for 61-90 bucket. */
   days_61_90?: string | number;
+  /** 90–180 day ageing bucket. */
+  days_90_180?: string | number;
+  /** 180+ day ageing bucket. */
+  days_180_plus?: string | number;
   /** Primary API row key for 90+ bucket. */
   days_90_plus?: string | number;
   /** Backward compatibility for older API shape. */
   days_61_plus?: string | number;
+  dso_days?: string | number;
   risk: "LOW" | "MEDIUM" | "HIGH" | string;
   open_line_count: number;
 }
@@ -142,7 +147,14 @@ export interface CustomerOutstandingVsOverdueSummary {
   days_1_30: string;
   days_31_60: string;
   days_61_90: string;
+  /** 90–180 day ageing bucket (finance outstanding API shape). */
+  days_90_180?: string | number;
+  /** 180+ day ageing bucket (finance outstanding API shape). */
+  days_180_plus?: string | number;
+  /** Legacy combined 90+ bucket when split buckets are absent. */
   days_90_plus?: string | number;
+  dso_days?: string | number;
+  dso_days_percentage?: string;
 }
 
 export interface CustomerOutstandingVsOverdueResponse {
