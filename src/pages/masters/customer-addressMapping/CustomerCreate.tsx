@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Dropdown,
   SearchableSelect,
@@ -1479,6 +1479,8 @@ function CustomerCreate() {
   >({});
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [addressStateRestored, setAddressStateRestored] = useState(false);
+  /** Prevents auto-resolve effect from overwriting user edits to Assign To in edit mode. */
+  const assignToUserEditedRef = useRef(false);
   // For edit flow: keep existing row IDs keyed by `section_id` so we can send them back on update.
   const [tdsIdBySectionId, setTdsIdBySectionId] = useState<
     Record<number, number>
@@ -1830,7 +1832,7 @@ function CustomerCreate() {
         record,
         cities,
         salespersonsData,
-        { useListAssignedTo: isEditMode || isViewMode },
+        { useListAssignedTo: isViewMode },
       );
 
       customerForm.setValues({
@@ -1912,9 +1914,10 @@ function CustomerCreate() {
     ],
   );
 
-  // Re-resolve Assign To once full salesperson options load (match list value to option value)
+  // Re-resolve Assign To once salesperson options load (initial load only — do not overwrite user edits)
   useEffect(() => {
     if (
+      assignToUserEditedRef.current ||
       !isFormInitialized ||
       !customerData ||
       location.state?.customerFormData ||
@@ -1925,7 +1928,7 @@ function CustomerCreate() {
     }
 
     const resolved = resolveAssignedToValue(customerData, salespersonsData);
-    if (resolved && customerForm.values.assigned_to !== resolved) {
+    if (resolved) {
       customerForm.setFieldValue("assigned_to", resolved);
     }
   }, [
@@ -1933,7 +1936,6 @@ function CustomerCreate() {
     customerData,
     salespersonsData,
     location.state?.customerFormData,
-    customerForm,
     isEditMode,
     isViewMode,
   ]);
@@ -2182,6 +2184,7 @@ function CustomerCreate() {
   // Reset form initialization flag when route changes
   useEffect(() => {
     setIsFormInitialized(false);
+    assignToUserEditedRef.current = false;
   }, [params.id, location.pathname]);
 
   // Tabs navigation handled via setActive.
@@ -3092,6 +3095,7 @@ function CustomerCreate() {
                             nothingFoundMessage="No salespersons found"
                             value={customerForm.values.assigned_to || null}
                             onChange={(value) => {
+                              assignToUserEditedRef.current = true;
                               customerForm.setFieldValue(
                                 "assigned_to",
                                 value || "",
