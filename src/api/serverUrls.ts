@@ -68,6 +68,7 @@ export const URL = {
   quotationFilterGained: "quotation/filter-gained/",
   filter_call_entries: "call-entry/filter_call_entries/",
   filter_freight: "filter/freight/",
+  filter_contract: "freight/contract/filter/",
   filter_origin: "filter/origin/",
   filter_destination: "filter/destination/",
   enquiryPreviewExcel: "enquiry/preview-excel-data/",

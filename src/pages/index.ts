@@ -164,6 +164,7 @@ import CFSMaster from "./masters/cfs/CFSMaster";
 import CFSCreate from "./masters/cfs/CFSCreate";
 
 import Freight from "./call-entry/tariff/FreightMaster";
+import TariffContractsList from "./call-entry/tariff/TariffContractsList";
 import DestinationMaster from "./call-entry/tariff/DestinationMaster";
 import Origin from "./call-entry/tariff/OriginMaster";
 import FreightCreate from "./call-entry/tariff/FreightCreate";
@@ -265,6 +266,7 @@ export {
   Tariff,
   TariffCreate,
   Freight,
+  TariffContractsList,
   DestinationMaster,
   Origin,
   FreightCreate,

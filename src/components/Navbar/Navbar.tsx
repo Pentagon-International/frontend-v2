@@ -479,6 +479,20 @@ const Navbar = ({
                     <NestedSubNavLink
                       parent="Sales"
                       subParent="Tariff"
+                      label="Contracts"
+                      path="/tariff/contracts"
+                      icon={IconFileDescription as any}
+                      collapsibles={{
+                        setIsCustomerServiceOpen,
+                        setIsTariffOpen,
+                        setIsSalesOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <NestedSubNavLink
+                      parent="Sales"
+                      subParent="Tariff"
                       label="Origin"
                       path="/tariff/origin"
                       icon={IconMapPin as any}
