@@ -340,7 +340,9 @@ export function normalizeCollectionTargetVsPerformance(
   const dailyPoints: DailyCollectionPoint[] = dailyPointsRaw.map((point) => {
     const row = (point ?? {}) as Record<string, unknown>;
     return {
-      day: safeNumber(row.day, row.label) || firstString(row.day, row.label),
+      day:
+        safeNumber(row.day, safeNumber(row.label)) ||
+        firstString(row.day, row.label),
       amount: rupeesToL(row.amount ?? row.value ?? row.collection),
     };
   });

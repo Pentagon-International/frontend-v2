@@ -633,6 +633,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   style={{ flex: isMobile ? "1 1 calc(50% - 4px)" : "1 1 130px", minWidth: isMobile ? 0 : 120 }}
                   styles={selectInputStyles}
                 />
+                
                 <Select
                   size="xs"
                   radius={6}
