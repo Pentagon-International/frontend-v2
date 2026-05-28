@@ -49,7 +49,6 @@ import { useForm } from "@mantine/form";
 import { SearchableSelect } from "../../../components";
 import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 
 type AddressData = {
@@ -262,10 +261,14 @@ type CustomerDataResponse = {
 };
 
 function CustomerMaster() {
-  const isAdmin = useIsAdminUser();
-  const userPulseId = useAuthStore((s) => s.user?.pulse_id);
-  // Hide "Create New" only for Pentagon company users who are non-admins
-  const showCreateButton = isAdmin || userPulseId !== "P2PEN";
+  const user = useAuthStore((s) => s.user);
+  const isIndiaUser =
+    String(user?.country?.country_code ?? "").toUpperCase() === "IN" ||
+    String(user?.country?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
+  // Hide "Create New" only for non-staff users in India (all pulse_id values)
+  const showCreateButton = Boolean(user?.is_staff) || !isIndiaUser;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
