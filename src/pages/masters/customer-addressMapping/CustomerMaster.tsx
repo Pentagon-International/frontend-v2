@@ -51,7 +51,6 @@ import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
-import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 type AddressData = {
   id?: number;
@@ -264,14 +263,9 @@ type CustomerDataResponse = {
 
 function CustomerMaster() {
   const isAdmin = useIsAdminUser();
-  const userCountry = useAuthStore((s) => s.user?.country);
-  const isIndiaUser =
-    isIndianUserCountry(userCountry?.country_code) ||
-    String(userCountry?.country_name ?? "")
-      .toLowerCase()
-      .includes("india");
-  // India: create only for admins; foreign branches: all users may create
-  const showCreateButton = isIndiaUser ? isAdmin : true;
+  const userPulseId = useAuthStore((s) => s.user?.pulse_id);
+  // Hide "Create New" only for Pentagon company users who are non-admins
+  const showCreateButton = isAdmin || userPulseId !== "P2PEN";
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
