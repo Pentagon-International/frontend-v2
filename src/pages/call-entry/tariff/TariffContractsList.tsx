@@ -10,6 +10,7 @@ import {
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Loader } from "@mantine/core";
+import { useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
@@ -197,6 +198,7 @@ async function fetchContracts(params: {
 }
 
 export default function TariffContractsList() {
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const userInitials = useMemo(() => {
     const name = user?.full_name || user?.username || user?.email || "U";
@@ -443,7 +445,11 @@ export default function TariffContractsList() {
               <IconUpload size={14} />
               Import
             </button>
-            <button type="button" className="tariff-contracts-btn">
+            <button
+              type="button"
+              className="tariff-contracts-btn"
+              onClick={() => navigate("/tariff/contracts/create")}
+            >
               <IconPlus size={14} />
               New contract
             </button>

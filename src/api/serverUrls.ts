@@ -69,6 +69,8 @@ export const URL = {
   filter_call_entries: "call-entry/filter_call_entries/",
   filter_freight: "filter/freight/",
   filter_contract: "freight/contract/filter/",
+  create_contract: "freight/contract/",
+  get_contract: "freight/contract/",
   filter_origin: "filter/origin/",
   filter_destination: "filter/destination/",
   enquiryPreviewExcel: "enquiry/preview-excel-data/",

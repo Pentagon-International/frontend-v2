@@ -59,7 +59,9 @@ import {
   UserCreate,
   TariffCreate,
   Freight,
-  TariffContractsList,
+  TariffContractsListRoute,
+  TariffContractsDetail,
+  CreateContract,
   Origin,
   DestinationMaster,
   FreightCreate,
@@ -528,7 +530,10 @@ const NavigationRoutes = () => {
           //  element={<Tariff />}
         >
           <Route path="freight" element={<Freight />} />
-          <Route path="contracts" element={<TariffContractsList />} />
+          <Route path="contracts" element={<TariffContractsListRoute />}>
+            <Route path=":carrierCode/:service" element={<TariffContractsDetail />} />
+          </Route>
+          <Route path="contracts/create" element={<CreateContract />} />
           <Route path="freight/create" element={<FreightCreate />} />
           <Route path="origin" element={<Origin />} />
           <Route path="origin/create" element={<OriginCreate />} />
