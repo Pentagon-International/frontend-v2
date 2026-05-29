@@ -264,14 +264,20 @@ type CustomerDataResponse = {
 
 function CustomerMaster() {
   const isAdmin = useIsAdminUser();
+  const userPulseId = useAuthStore((s) => s.user?.pulse_id);
   const userCountry = useAuthStore((s) => s.user?.country);
+  const isPentagonUser =
+    String(userPulseId ?? "")
+      .trim()
+      .toUpperCase() === "P2PEN";
   const isIndiaUser =
     isIndianUserCountry(userCountry?.country_code) ||
     String(userCountry?.country_name ?? "")
       .toLowerCase()
       .includes("india");
-  // India: create only for admins; foreign branches: all users may create
-  const showCreateButton = isIndiaUser ? isAdmin : true;
+  // Hide only for non-admin P2PEN users based in India; P2PEN abroad (e.g. US) may create
+  const showCreateButton =
+    isAdmin || !isPentagonUser || !isIndiaUser;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
