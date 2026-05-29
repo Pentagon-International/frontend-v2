@@ -1,19 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  IconChevronDown,
-  IconChevronLeft,
-  IconChevronRight,
   IconPlus,
   IconSearch,
   IconUpload,
 } from "@tabler/icons-react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Loader } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Group,
+  Loader,
+  MantineProvider,
+  Paper,
+  Select,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
-import useAuthStore from "../../../store/authStore";
+import {
+  DEFAULT_ERP_LIST_THEME,
+  ERP_LIST_GEIST_ROOT_CLASS,
+  ERP_LIST_INNER_PAD_X,
+  ERPListPaginationFooter,
+  ERPListToolbar,
+  erpListGeistMantineTheme,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
+  erpToolbarSelectStyles,
+} from "../../../components";
 import "./tariffContractsList.css";
 
 export type TariffContractRow = {
@@ -91,19 +110,22 @@ function formatContractId(sno: number, validFrom?: string): string {
 }
 
 function formatRateDisplay(row: TariffContractRow): string {
+  const prefix = row.currency_code ? `${row.currency_code} ` : "";
+
   if (row.avg_buy_rate && row.rate_unit) {
     const amount = Number(row.avg_buy_rate);
     const formattedAmount = Number.isFinite(amount)
       ? amount.toLocaleString("en-US", { maximumFractionDigits: 2 })
       : row.avg_buy_rate;
     const unit = row.rate_unit.replace(/\s+/g, "");
-    return `$${formattedAmount}/${unit}`;
+    return `${prefix}${formattedAmount}/${unit}`;
   }
 
   if (row.avg_buy_rate_display) {
-    return row.avg_buy_rate_display
-      .replace(/\s*(USD|EUR|INR|GBP|AED)\s*$/i, "")
+    const amount = row.avg_buy_rate_display
+      .replace(/\s*(USD|EUR|INR|GBP|AED|[A-Z]{3})\s*$/i, "")
       .trim();
+    return `${prefix}${amount}`;
   }
 
   return "—";
@@ -183,7 +205,7 @@ async function fetchContracts(params: {
     `${URL.filter_contract}?index=${params.index}&limit=${params.limit}`,
     {
       filters: params.filters,
-      ordering: "-updated_at",
+      // ordering: "-updated_at",
     },
   )) as ContractFilterResponse;
 
@@ -199,11 +221,7 @@ async function fetchContracts(params: {
 
 export default function TariffContractsList() {
   const navigate = useNavigate();
-  const user = useAuthStore((state) => state.user);
-  const userInitials = useMemo(() => {
-    const name = user?.full_name || user?.username || user?.email || "U";
-    return getInitials(String(name));
-  }, [user]);
+  const erpTheme = DEFAULT_ERP_LIST_THEME;
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch] = useDebouncedValue(searchInput, 500);
@@ -265,7 +283,7 @@ export default function TariffContractsList() {
       {
         queryKey: ["tariff-contracts-count", "all", baseFilters],
         queryFn: () =>
-          fetchContracts({ index: 0, limit: 1, filters: baseFilters }),
+          fetchContracts({ index: pageIndex, limit: pageSize, filters: baseFilters }),
         select: (response: ContractFilterResponse) => response.total,
         staleTime: 30_000,
       },
@@ -273,8 +291,8 @@ export default function TariffContractsList() {
         queryKey: ["tariff-contracts-count", "active", baseFilters],
         queryFn: () =>
           fetchContracts({
-            index: 0,
-            limit: 1,
+            index: pageIndex,
+            limit: pageSize,
             filters: { ...baseFilters, status: "ACTIVE" },
           }),
         select: (response: ContractFilterResponse) => response.total,
@@ -284,8 +302,8 @@ export default function TariffContractsList() {
         queryKey: ["tariff-contracts-count", "expiring", baseFilters],
         queryFn: () =>
           fetchContracts({
-            index: 0,
-            limit: 1,
+            index: pageIndex,
+            limit: pageSize,
             filters: { ...baseFilters, status: "EXPIRING" },
           }),
         select: (response: ContractFilterResponse) => response.total,
@@ -295,8 +313,8 @@ export default function TariffContractsList() {
         queryKey: ["tariff-contracts-count", "expired", baseFilters],
         queryFn: () =>
           fetchContracts({
-            index: 0,
-            limit: 1,
+            index: pageIndex,
+            limit: pageSize,
             filters: { ...baseFilters, status: "EXPIRED" },
           }),
         select: (response: ContractFilterResponse) => response.total,
@@ -331,7 +349,6 @@ export default function TariffContractsList() {
 
   const rows = data?.data ?? [];
   const totalRecords = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
   const ownerOptions = useMemo(() => {
     const owners = new Set<string>();
@@ -349,342 +366,314 @@ export default function TariffContractsList() {
     return Array.from(currencies).sort((a, b) => a.localeCompare(b));
   }, [rows]);
 
-  const rangeStart = totalRecords === 0 ? 0 : pageIndex * pageSize + 1;
-  const rangeEnd =
-    totalRecords === 0 ? 0 : Math.min(totalRecords, pageIndex * pageSize + rows.length);
-
   const subtitle = isLoading
     ? "Loading contracts…"
-    : totalRecords <= pageSize
-      ? `${totalRecords} of ${totalRecords} contracts · all vendor types · click any row for detail`
-      : `${rangeStart}–${rangeEnd} of ${totalRecords} contracts · all vendor types · click any row for detail`;
-
-  const pageButtons = useMemo(() => {
-    const maxButtons = 5;
-    const count = Math.min(maxButtons, totalPages);
-    return Array.from({ length: count }, (_, i) => {
-      if (totalPages <= maxButtons) return i;
-      if (pageIndex < 3) return i;
-      if (pageIndex > totalPages - 4) return totalPages - maxButtons + i;
-      return pageIndex - 2 + i;
-    });
-  }, [pageIndex, totalPages]);
+    : `${totalRecords} contracts${isFetching ? " · Refreshing…" : ""}`;
 
   const handleCategoryTab = (key: CategoryTab) => {
     setCategoryTab((current) => (current === key ? "all" : key));
   };
 
   return (
-    <div className="tariff-contracts-page">
-      <div className="tariff-contracts-topbar">
-        <div className="tariff-contracts-crumbs">
-          Pentagon Freight
-          <span className="sep">›</span>
-          Tariff &amp; Contract
-          <span className="sep">›</span>
-          <span className="here">Contracts</span>
-        </div>
-        <div className="tariff-contracts-spacer" />
-        <label className="tariff-contracts-search">
-          <IconSearch size={14} stroke={1.8} />
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search contracts, vendors, lanes, rules…"
-            aria-label="Search contracts"
-          />
-        </label>
-        <div
-          className="tariff-contracts-vendor-avatar"
-          style={{ borderRadius: "50%", width: 30, height: 30 }}
-          aria-hidden
-        >
-          {userInitials}
-        </div>
-      </div>
-
-      <div className="tariff-contracts-main">
-        <div className="tariff-contracts-page-head">
-          <div>
-            <h1>Contracts</h1>
-            <div className="sub">{subtitle}</div>
-          </div>
-          <div className="tariff-contracts-toolbar">
-            <button type="button" className="tariff-contracts-filter primary">
-              FY 26
-              <IconChevronDown size={14} />
-            </button>
-            <select
-              className="tariff-contracts-filter"
-              value={selectedCurrency}
-              onChange={(event) => setSelectedCurrency(event.target.value)}
-              aria-label="Filter by currency"
-            >
-              <option value="">All currencies</option>
-              {currencyOptions.map((currency) => (
-                <option key={currency} value={currency}>
-                  {currency}
-                </option>
-              ))}
-            </select>
-            <select
-              className="tariff-contracts-filter"
-              value={selectedOwner}
-              onChange={(event) => setSelectedOwner(event.target.value)}
-              aria-label="Filter by owner"
-            >
-              <option value="">All owners</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner} value={owner}>
-                  {owner}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="tariff-contracts-btn secondary">
-              <IconUpload size={14} />
-              Import
-            </button>
-            <button
-              type="button"
-              className="tariff-contracts-btn"
-              onClick={() => navigate("/tariff/contracts/create")}
-            >
-              <IconPlus size={14} />
-              New contract
-            </button>
-          </div>
-        </div>
-
-        <div className="tariff-contracts-pill-row combined">
-          <div className="tariff-contracts-pill-group">
-            <button
-              type="button"
-              className={`tariff-contracts-pill${statusTab === "all" ? " active" : ""}`}
-              onClick={() => setStatusTab("all")}
-            >
-              All{allCount > 0 ? ` ${allCount}` : ""}
-            </button>
-            <button
-              type="button"
-              className={`tariff-contracts-pill${statusTab === "active" ? " active" : ""}`}
-              onClick={() => setStatusTab("active")}
-            >
-              Active{activeCount > 0 ? ` ${activeCount}` : ""}
-            </button>
-            <button
-              type="button"
-              className={`tariff-contracts-pill${statusTab === "expiring_expired" ? " active" : ""}`}
-              onClick={() => setStatusTab("expiring_expired")}
-            >
-              Expiring / Expired
-              {expiringExpiredCount > 0 ? ` ${expiringExpiredCount}` : ""}
-            </button>
-          </div>
-          <span className="tariff-contracts-pill-divider" aria-hidden />
-          <div className="tariff-contracts-pill-group">
-            {(
-              [
-                ["shipping", "Shipping lines"],
-                ["airlines", "Airlines"],
-                ["brokers", "Customs brokers"],
-                ["transporters", "Transporters"],
-                ["warehouses", "Warehouses"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                className={`tariff-contracts-pill${categoryTab === key ? " active" : ""}`}
-                onClick={() => handleCategoryTab(key)}
+    <MantineProvider theme={erpListGeistMantineTheme}>
+      {/* tariff-contracts-page scopes CSS custom-property variables to descendants */}
+      <Box
+        className={`${ERP_LIST_GEIST_ROOT_CLASS} tariff-contracts-page`}
+        style={{
+          ...erpListGeistRootTypography,
+          flex: 1,
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: erpTheme.pageBg,
+        }}
+      >
+        {/* ── Component toolbar: replaces the old custom topbar + page-head ── */}
+        <ERPListToolbar
+          theme={erpTheme}
+          leading={
+            <Group gap={12} align="baseline" wrap="nowrap">
+              <Text
+                fw={700}
+                size="md"
+                c={erpTheme.fg}
+                style={{ fontFamily: erpTheme.fontSans }}
               >
-                {label}
+                Contracts
+              </Text>
+              <Text
+                size="xs"
+                c={erpTheme.muted}
+                style={{ fontFamily: erpTheme.fontSans }}
+              >
+                {subtitle}
+              </Text>
+            </Group>
+          }
+          actions={
+            <>
+              <TextInput
+                placeholder="Search contracts, vendors, lanes…"
+                leftSection={<IconSearch size={14} />}
+                w={260}
+                size="xs"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.currentTarget.value)}
+                classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                styles={{
+                  input: {
+                    fontFamily: erpTheme.fontSans,
+                    fontSize: 12,
+                    height: 32,
+                    borderColor: erpTheme.border,
+                  },
+                }}
+              />
+              {/* <Select
+                size="xs"
+                placeholder="All currencies"
+                value={selectedCurrency || null}
+                onChange={(v) => setSelectedCurrency(v ?? "")}
+                data={currencyOptions.map((c) => ({ value: c, label: c }))}
+                clearable
+                w={130}
+                classNames={erpListGeistSelectClassNames}
+                styles={erpToolbarSelectStyles(erpTheme)}
+              /> */}
+              {/* <Select
+                size="xs"
+                placeholder="All owners"
+                value={selectedOwner || null}
+                onChange={(v) => setSelectedOwner(v ?? "")}
+                data={ownerOptions.map((o) => ({ value: o, label: o }))}
+                clearable
+                w={140}
+                classNames={erpListGeistSelectClassNames}
+                styles={erpToolbarSelectStyles(erpTheme)}
+              /> */}
+              {/* <Button
+                variant="default"
+                size="xs"
+                leftSection={<IconUpload size={14} />}
+                styles={erpToolbarOutlineButtonStyles(erpTheme)}
+              >
+                Import
+              </Button> */}
+              <Button
+                size="xs"
+                leftSection={<IconPlus size={14} />}
+                styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                onClick={() => navigate("/tariff/contracts/create")}
+              >
+                New contract
+              </Button>
+            </>
+          }
+        />
+
+        {/* ── Main content ── */}
+        <Box component="main" px={ERP_LIST_INNER_PAD_X} py="md">
+
+          {/* Status + Category filter tabs */}
+          <div className="tariff-contracts-pill-row combined">
+            <div className="tariff-contracts-pill-group">
+              <button
+                type="button"
+                className={`tariff-contracts-pill${statusTab === "all" ? " active" : ""}`}
+                onClick={() => setStatusTab("all")}
+              >
+                All{allCount > 0 ? ` ${allCount}` : ""}
               </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="tariff-contracts-table-card">
-          <div className="tariff-contracts-table-wrap">
-            {isLoading ? (
-              <div className="tariff-contracts-state">
-                <Loader size="sm" color="#0b1f3a" />
-              </div>
-            ) : isError ? (
-              <div className="tariff-contracts-state error">
-                {(error as Error)?.message || "Unable to load contracts."}
-              </div>
-            ) : rows.length === 0 ? (
-              <div className="tariff-contracts-state">
-                No contracts found for the selected filters.
-              </div>
-            ) : (
-              <table className="tariff-contracts-table">
-                <thead>
-                  <tr>
-                    <th>Contract</th>
-                    <th>Vendor</th>
-                    <th>Mode &amp; Lanes</th>
-                    <th>Commitment</th>
-                    <th>Avg Buy Rate</th>
-                    <th>Validity</th>
-                    <th>Owner</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const vendorCategory = getVendorCategory(row.service, row.mode);
-                    const statusPresentation = getStatusPresentation(row.status);
-                    const validityFill = getValidityFillClass(
-                      row.days_left,
-                      row.status,
-                    );
-
-                    return (
-                      <tr key={`${row.vendor_reference}-${row.sno}`} className="contract-row">
-                        <td>
-                          <div className="tariff-contracts-contract-id">
-                            {formatContractId(row.sno, row.valid_from)}
-                          </div>
-                          <div className="tariff-contracts-contract-sub">
-                            {row.vendor_reference}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-vendor-cell">
-                            <div className="tariff-contracts-vendor-avatar">
-                              {getInitials(row.carrier_name)}
-                            </div>
-                            <div>
-                              <div className="tariff-contracts-vendor-name">
-                                {row.carrier_name}
-                              </div>
-                              <span
-                                className={`tariff-contracts-mode-chip ${vendorCategory.className}`}
-                              >
-                                {vendorCategory.label}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-mode-title">{row.mode}</div>
-                          <div className="tariff-contracts-mode-sub">
-                            {row.coverage_description}
-                            {row.lanes_label ? ` · ${row.lanes_label}` : ""}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-commitment">
-                            {row.commitment ?? "—"}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-rate">
-                            {formatRateDisplay(row)}
-                          </div>
-                          {row.currency_code ? (
-                            <span className="tariff-contracts-fx">
-                              {row.currency_code}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-validity-days">
-                            {formatValidityDays(row.days_left, row.status)}
-                          </div>
-                          <div className="tariff-contracts-validity-bar">
-                            <div
-                              className={`fill ${validityFill}`}
-                              style={{
-                                width: `${Math.max(0, Math.min(100, row.validity_percent ?? 0))}%`,
-                              }}
-                            />
-                          </div>
-                          <div className="tariff-contracts-validity-range">
-                            {row.validity_display}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="tariff-contracts-owner">
-                            {row.created_by}
-                          </div>
-                        </td>
-                        <td>
-                          <span
-                            className={`tariff-contracts-cstat ${statusPresentation.className}`}
-                          >
-                            <span className="dot" />
-                            {statusPresentation.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {!isLoading && !isError && totalRecords > 0 ? (
-            <div className="tariff-contracts-footer">
-              <div className="tariff-contracts-footer-meta">
-                Showing {rangeStart}–{rangeEnd} of {totalRecords}
-                {isFetching ? " · Refreshing…" : ""}
-              </div>
-              <div className="tariff-contracts-footer-controls">
-                <select
-                  className="tariff-contracts-filter"
-                  value={String(pageSize)}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  aria-label="Rows per page"
-                >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size} / page
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="tariff-contracts-page-btn"
-                  disabled={pageIndex <= 0}
-                  onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
-                  aria-label="Previous page"
-                >
-                  <IconChevronLeft size={14} />
-                </button>
-                {pageButtons.map((buttonIndex) => (
-                  <button
-                    key={buttonIndex}
-                    type="button"
-                    className={`tariff-contracts-page-btn${
-                      buttonIndex === pageIndex ? " active" : ""
-                    }`}
-                    onClick={() => setPageIndex(buttonIndex)}
-                  >
-                    {buttonIndex + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="tariff-contracts-page-btn"
-                  disabled={pageIndex >= totalPages - 1}
-                  onClick={() =>
-                    setPageIndex((current) =>
-                      Math.min(totalPages - 1, current + 1),
-                    )
-                  }
-                  aria-label="Next page"
-                >
-                  <IconChevronRight size={14} />
-                </button>
-              </div>
+              <button
+                type="button"
+                className={`tariff-contracts-pill${statusTab === "active" ? " active" : ""}`}
+                onClick={() => setStatusTab("active")}
+              >
+                Active{activeCount > 0 ? ` ${activeCount}` : ""}
+              </button>
+              <button
+                type="button"
+                className={`tariff-contracts-pill${statusTab === "expiring_expired" ? " active" : ""}`}
+                onClick={() => setStatusTab("expiring_expired")}
+              >
+                Expiring / Expired
+                {expiringExpiredCount > 0 ? ` ${expiringExpiredCount}` : ""}
+              </button>
             </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
+            <span className="tariff-contracts-pill-divider" aria-hidden />
+            <div className="tariff-contracts-pill-group">
+              {(
+                [
+                  ["shipping", "Shipping lines"],
+                  ["airlines", "Airlines"],
+                  ["brokers", "Customs brokers"],
+                  ["transporters", "Transporters"],
+                  ["warehouses", "Warehouses"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`tariff-contracts-pill${categoryTab === key ? " active" : ""}`}
+                  onClick={() => handleCategoryTab(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table card */}
+          <Paper
+            withBorder
+            radius="xl"
+            shadow="sm"
+            p={0}
+            style={{
+              overflow: "hidden",
+              borderColor: erpTheme.border,
+              backgroundColor: erpTheme.cardBg,
+            }}
+          >
+            <Box style={{ overflowX: "auto" }}>
+              {isLoading ? (
+                <div className="tariff-contracts-state">
+                  <Loader size="sm" color="#0b1f3a" />
+                </div>
+              ) : isError ? (
+                <div className="tariff-contracts-state error">
+                  {(error as Error)?.message || "Unable to load contracts."}
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="tariff-contracts-state">
+                  No contracts found for the selected filters.
+                </div>
+              ) : (
+                <table className="tariff-contracts-table">
+                  <thead>
+                    <tr>
+                      <th>Contract</th>
+                      <th>Vendor</th>
+                      <th>Mode &amp; Lanes</th>
+                      <th>Commitment</th>
+                      <th>Avg Buy Rate</th>
+                      <th>Validity</th>
+                      <th>Owner</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const vendorCategory = getVendorCategory(row.service, row.mode);
+                      const statusPresentation = getStatusPresentation(row.status);
+                      const validityFill = getValidityFillClass(
+                        row.days_left,
+                        row.status,
+                      );
+
+                      return (
+                        <tr
+                          key={`${row.vendor_reference}-${row.sno}`}
+                          className="contract-row"
+                        >
+                          <td>
+                            <div className="tariff-contracts-contract-id">
+                              {formatContractId(row.sno, row.valid_from)}
+                            </div>
+                            <div className="tariff-contracts-contract-sub">
+                              {row.vendor_reference}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-vendor-cell">
+                              <div className="tariff-contracts-vendor-avatar">
+                                {getInitials(row.carrier_name)}
+                              </div>
+                              <div>
+                                <div className="tariff-contracts-vendor-name">
+                                  {row.carrier_name}
+                                </div>
+                                <span
+                                  className={`tariff-contracts-mode-chip ${vendorCategory.className}`}
+                                >
+                                  {vendorCategory.label}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-mode-title">{row.mode}</div>
+                            <div className="tariff-contracts-mode-sub">
+                              {row.coverage_description}
+                              {row.lanes_label ? ` · ${row.lanes_label}` : ""}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-commitment">
+                              {row.commitment ?? "—"}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-rate">
+                              {formatRateDisplay(row)}
+                            </div>
+                            {row.currency_code ? (
+                              <span className="tariff-contracts-fx">
+                                {row.currency_code}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-validity-days">
+                              {formatValidityDays(row.days_left, row.status)}
+                            </div>
+                            <div className="tariff-contracts-validity-bar">
+                              <div
+                                className={`fill ${validityFill}`}
+                                style={{
+                                  width: `${Math.max(0, Math.min(100, row.validity_percent ?? 0))}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="tariff-contracts-validity-range">
+                              {row.validity_display}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tariff-contracts-owner">
+                              {row.created_by}
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className={`tariff-contracts-cstat ${statusPresentation.className}`}
+                            >
+                              <span className="dot" />
+                              {statusPresentation.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Box>
+
+            {!isLoading && !isError && totalRecords > 0 ? (
+              <ERPListPaginationFooter
+                theme={erpTheme}
+                totalRecords={totalRecords}
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
+              />
+            ) : null}
+          </Paper>
+        </Box>
+      </Box>
+    </MantineProvider>
   );
 }

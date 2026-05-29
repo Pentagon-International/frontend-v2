@@ -5,11 +5,10 @@ import {
   IconCheck,
   IconClipboard,
   IconPlus,
-  IconSearch,
   IconX,
 } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader } from "@mantine/core";
+import { Loader, Select } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { URL } from "../../../api/serverUrls";
@@ -19,12 +18,9 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import { useLayoutStore } from "../../../store/useLayoutStore";
+import { useContractEditHydration } from "./contractDetail/useContractEditHydration";
 import "./createContract.css";
 
-type ServiceOption = {
-  service_code: string;
-  service_name: string;
-};
 
 type ContainerOption = {
   container_code?: string;
@@ -35,6 +31,15 @@ type ChargeMasterRow = {
   id?: number;
   charge_code?: string;
   charge_name?: string;
+};
+
+type CarrierMasterRow = {
+  carrier_code: string;
+  carrier_name: string;
+};
+
+type CurrencyMasterRow = {
+  code: string;
 };
 
 type RateSheetRow = {
@@ -70,7 +75,6 @@ type CreateContractPayload = {
     valid_from: string;
     valid_to: string;
     status: string;
-    country_code: string;
     auto_renew: boolean;
     auto_renew_days: number | null;
     approved_by: string;
@@ -101,12 +105,6 @@ type CreateContractResponse = {
   vendor_reference?: string;
 };
 
-const SERVICE_MODE_LABELS: Record<string, string> = {
-  FCL: "Ocean FCL",
-  LCL: "Ocean LCL",
-  AIR: "Air Freight",
-};
-
 const EMPTY_RATE_ROW = (): RateSheetRow => ({
   key: crypto.randomUUID(),
   origin_code: "",
@@ -120,12 +118,16 @@ const EMPTY_RATE_ROW = (): RateSheetRow => ({
   notes: "",
 });
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-}
+const EMPTY_SURCHARGE_ROW = (): SurchargeRow => ({
+  key: crypto.randomUUID(),
+  charge_code: "",
+  charge_name: "",
+  basis: "",
+  rate: "",
+  frequency: "",
+  applied: true,
+});
+
 
 function formatContractDraftId(): string {
   const year = new Date().getFullYear();
@@ -147,12 +149,7 @@ function parseRate(value: string): number | null {
 }
 
 function getCurrencyPrefix(currencyCode: string): string {
-  if (currencyCode === "EUR") return "€";
-  if (currencyCode === "INR") return "₹";
-  if (currencyCode === "VND") return "₫";
-  if (currencyCode === "GBP") return "£";
-  if (currencyCode === "AED") return "AED ";
-  return "$";
+  return currencyCode ? `${currencyCode} ` : "";
 }
 
 function formatMoney(amount: number, currencyCode: string): string {
@@ -171,12 +168,18 @@ function formatRateValue(value: string): string {
   return parsed !== null ? parsed.toFixed(2) : value.trim();
 }
 
-async function fetchServiceMaster(): Promise<ServiceOption[]> {
-  const response = await getAPICall(URL.serviceMaster, API_HEADER);
-  if (Array.isArray(response)) return response as ServiceOption[];
-  return Array.isArray((response as { data?: ServiceOption[] })?.data)
-    ? ((response as { data: ServiceOption[] }).data ?? [])
-    : [];
+function portMasterDisplayFormat(item: Record<string, unknown>) {
+  return {
+    value: String(item.port_code ?? ""),
+    label: `${String(item.port_name ?? "")} (${String(item.port_code ?? "")})`,
+  };
+}
+
+function chargeMasterDisplayFormat(item: Record<string, unknown>) {
+  return {
+    value: String(item.charge_code ?? ""),
+    label: `${String(item.charge_name ?? "")} (${String(item.charge_code ?? "")})`,
+  };
 }
 
 async function fetchContainerTypes(): Promise<ContainerOption[]> {
@@ -187,11 +190,20 @@ async function fetchContainerTypes(): Promise<ContainerOption[]> {
     : [];
 }
 
-async function fetchChargeMasterRows(): Promise<ChargeMasterRow[]> {
-  const response = (await apiCallProtected.post(URL.chargeMasterFilter, {
-    filters: {},
-  })) as { data?: ChargeMasterRow[] };
-  return Array.isArray(response?.data) ? response.data : [];
+async function fetchCarrierMaster(): Promise<CarrierMasterRow[]> {
+  const response = await getAPICall(URL.carrier, API_HEADER);
+  if (Array.isArray(response)) return response as CarrierMasterRow[];
+  return Array.isArray((response as { data?: CarrierMasterRow[] })?.data)
+    ? ((response as { data: CarrierMasterRow[] }).data ?? [])
+    : [];
+}
+
+async function fetchCurrencyMaster(): Promise<CurrencyMasterRow[]> {
+  const response = await getAPICall(URL.currencyMaster, API_HEADER);
+  if (Array.isArray(response)) return response as CurrencyMasterRow[];
+  return Array.isArray((response as { data?: CurrencyMasterRow[] })?.data)
+    ? ((response as { data: CurrencyMasterRow[] }).data ?? [])
+    : [];
 }
 
 async function createContract(payload: CreateContractPayload): Promise<CreateContractResponse> {
@@ -203,13 +215,9 @@ export default function CreateContract() {
   const isSidebarCollapsed = useLayoutStore((state) => state.isSidebarCollapsed);
   const sidebarOffset = isSidebarCollapsed ? 64 : 260;
   const user = useAuthStore((state) => state.user);
-  const userInitials = useMemo(() => {
-    const name = user?.full_name || user?.username || user?.email || "U";
-    return getInitials(String(name));
-  }, [user]);
   const contractOwner = user?.full_name || user?.username || "";
 
-  const [contractId] = useState(formatContractDraftId);
+  const [contractId, setContractId] = useState(formatContractDraftId);
   const [carrierCode, setCarrierCode] = useState("");
   const [carrierLabel, setCarrierLabel] = useState("");
   const [vendorReference, setVendorReference] = useState("");
@@ -217,8 +225,6 @@ export default function CreateContract() {
   const [coverageDescription, setCoverageDescription] = useState("");
   const [currencyCode, setCurrencyCode] = useState("");
   const [currencyLabel, setCurrencyLabel] = useState("");
-  const [countryCode, setCountryCode] = useState("");
-  const [countryLabel, setCountryLabel] = useState("");
   const [validFrom, setValidFrom] = useState("");
   const [validTo, setValidTo] = useState("");
   const [commitment, setCommitment] = useState("");
@@ -229,15 +235,34 @@ export default function CreateContract() {
   const [internalNotes, setInternalNotes] = useState("");
   const [rateSheetMode, setRateSheetMode] = useState<"manual" | "upload" | "clone">("manual");
   const [rateRows, setRateRows] = useState<RateSheetRow[]>([EMPTY_RATE_ROW()]);
-  const [surchargeRows, setSurchargeRows] = useState<SurchargeRow[]>([]);
+  const [surchargeRows, setSurchargeRows] = useState<SurchargeRow[]>([EMPTY_SURCHARGE_ROW()]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
-  const { data: serviceOptions = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ["contract-create-services"],
-    queryFn: fetchServiceMaster,
-    staleTime: 60_000,
+  useContractEditHydration({
+    setContractId,
+    setCarrierCode,
+    setCarrierLabel,
+    setVendorReference,
+    setService,
+    setCoverageDescription,
+    setCurrencyCode,
+    setCurrencyLabel,
+    setValidFrom,
+    setValidTo,
+    setApproverLabel,
+    setAutoRenew,
+    setAutoRenewDays,
+    setInternalNotes,
+    setRateRows,
+    setSurchargeRows,
   });
+
+  const serviceOptions = [
+    { label: "FCL", value: "FCL" },
+    { label: "LCL", value: "LCL" },
+    { label: "AIR", value: "AIR" },
+  ];
 
   const { data: containerOptions = [], isLoading: containersLoading } = useQuery({
     queryKey: ["contract-create-containers"],
@@ -245,15 +270,46 @@ export default function CreateContract() {
     staleTime: 60_000,
   });
 
-  const {
-    refetch: loadSurchargeDefaults,
-    isFetching: surchargesLoading,
-  } = useQuery({
-    queryKey: ["contract-create-charges"],
-    queryFn: fetchChargeMasterRows,
-    enabled: false,
+  const { data: carrierOptions = [], isLoading: carriersLoading } = useQuery({
+    queryKey: ["contract-create-carriers"],
+    queryFn: fetchCarrierMaster,
     staleTime: 60_000,
   });
+
+  const carrierSelectData = useMemo(() => {
+    const options = carrierOptions.map((item) => ({
+      value: item.carrier_code,
+      label: `${item.carrier_name} - ${item.carrier_code}`,
+    }));
+    if (
+      carrierCode &&
+      carrierLabel &&
+      !options.some((item) => item.value === carrierCode)
+    ) {
+      return [{ value: carrierCode, label: carrierLabel }, ...options];
+    }
+    return options;
+  }, [carrierOptions, carrierCode, carrierLabel]);
+
+  const { data: currencyOptions = [], isLoading: currenciesLoading } = useQuery({
+    queryKey: ["contract-create-currencies"],
+    queryFn: fetchCurrencyMaster,
+    staleTime: 60_000,
+  });
+
+  const currencySelectData = useMemo(() => {
+    const options = currencyOptions.map((item) => ({
+      value: item.code,
+      label: item.code,
+    }));
+    if (currencyCode && !options.some((item) => item.value === currencyCode)) {
+      return [
+        { value: currencyCode, label: currencyLabel || currencyCode },
+        ...options,
+      ];
+    }
+    return options;
+  }, [currencyOptions, currencyCode, currencyLabel]);
 
   const createMutation = useMutation({
     mutationFn: createContract,
@@ -285,11 +341,6 @@ export default function CreateContract() {
     [containerOptions],
   );
 
-  const selectedServiceLabel = useMemo(() => {
-    const match = serviceOptions.find((item) => item.service_code === service);
-    return match?.service_name || service;
-  }, [service, serviceOptions]);
-
   const rateStats = useMemo(() => {
     const values = rateRows
       .map((row) => parseRate(row.buy_rate))
@@ -304,7 +355,7 @@ export default function CreateContract() {
   }, [rateRows]);
 
   const appliedSurchargeCount = useMemo(
-    () => surchargeRows.filter((row) => row.applied).length,
+    () => surchargeRows.filter((row) => row.applied && row.charge_code.trim()).length,
     [surchargeRows],
   );
 
@@ -326,33 +377,9 @@ export default function CreateContract() {
       service &&
       coverageDescription.trim() &&
       currencyCode &&
-      countryCode &&
       validFrom &&
       validTo,
   );
-
-  const handleApplySurchargeDefaults = useCallback(async () => {
-    const result = await loadSurchargeDefaults();
-    const rows = result.data ?? [];
-    if (rows.length === 0) {
-      ToastNotification({
-        type: "error",
-        message: "No surcharge charges available from charge master.",
-      });
-      return;
-    }
-    setSurchargeRows(
-      rows.map((row) => ({
-        key: crypto.randomUUID(),
-        charge_code: String(row.charge_code || "").trim(),
-        charge_name: String(row.charge_name || "").trim(),
-        basis: "",
-        rate: "",
-        frequency: "",
-        applied: false,
-      })),
-    );
-  }, [loadSurchargeDefaults]);
 
   const updateRateRow = (key: string, patch: Partial<RateSheetRow>) => {
     setRateRows((current) =>
@@ -431,10 +458,6 @@ export default function CreateContract() {
       errors.coverage_description = "Coverage description is required.";
     }
     if (!currencyCode) errors.currency_code = "Currency is required.";
-    if (!countryCode) {
-      errors.country_code =
-        "Country is required. Select a vendor with a country or choose another carrier.";
-    }
     if (!validFrom) errors.valid_from = "Start date is required.";
     if (!validTo) errors.valid_to = "End date is required.";
     if (validFrom && validTo && dayjs(validTo).isBefore(dayjs(validFrom), "day")) {
@@ -464,7 +487,6 @@ export default function CreateContract() {
       valid_from: toApiDate(validFrom),
       valid_to: toApiDate(validTo),
       status,
-      country_code: countryCode,
       auto_renew: autoRenew,
       auto_renew_days: autoRenew ? autoRenewDays : null,
       approved_by: approverLabel.trim(),
@@ -516,30 +538,9 @@ export default function CreateContract() {
 
   return (
     <div className="create-contract-page">
-      <div className="create-contract-topbar">
-        <div className="create-contract-crumbs">
-          Pentagon Freight
-          <span className="sep">›</span>
-          Tariff &amp; Contract
-          <span className="sep">›</span>
-          <span className="here">New Contract</span>
-        </div>
-        <div className="create-contract-spacer" />
-        <label className="create-contract-search">
-          <IconSearch size={14} stroke={1.8} />
-          <input
-            type="search"
-            placeholder="Search contracts, vendors, lanes, rules…"
-            aria-label="Search contracts"
-            readOnly
-          />
-        </label>
-        <div className="create-contract-avatar" aria-hidden>
-          {userInitials}
-        </div>
-      </div>
 
-      <div className="create-contract-main">
+      {/* Full-bleed header bar — aligns with app-shell and other list screens */}
+      <div className="create-contract-topbar">
         <button
           type="button"
           className="create-contract-back"
@@ -548,97 +549,90 @@ export default function CreateContract() {
           <IconArrowLeft size={14} />
           Contracts
         </button>
-
-        <div className="create-contract-page-head">
-          <div>
-            <h1>New Contract</h1>
-            <div className="sub">
-              Enter contract basics, rate lines &amp; surcharges · review before activation ·{" "}
-              <span className="mono">{contractId}</span>
-            </div>
-          </div>
-          <div className="create-contract-toolbar">
-            <button
-              type="button"
-              className="create-contract-btn secondary"
-              disabled={createMutation.isPending}
-              onClick={() => handleSubmit("DRAFT")}
-            >
-              Save as draft
-            </button>
-            <button
-              type="button"
-              className="create-contract-btn"
-              disabled={createMutation.isPending}
-              onClick={() => handleSubmit("ACTIVE")}
-            >
-              Review &amp; confirm
-              <IconArrowRight size={14} />
-            </button>
+        <div className="create-contract-topbar-title">
+          <h1>New Contract</h1>
+          <div className="sub">
+            Enter contract basics, rate lines &amp; surcharges · review before activation ·{" "}
+            <span className="mono">{contractId}</span>
           </div>
         </div>
+        <div className="create-contract-toolbar">
+          <button
+            type="button"
+            className="create-contract-btn"
+            disabled={createMutation.isPending}
+            onClick={() => handleSubmit("ACTIVE")}
+          >
+            Review &amp; confirm
+            <IconArrowRight size={14} />
+          </button>
+        </div>
+      </div>
 
-        <div className="create-contract-stepper">
-          <div
-            className={`create-contract-step${basicsComplete ? " done" : " active"}`}
-          >
-            <div className="create-contract-step-icon">
-              {basicsComplete ? <IconCheck size={14} /> : "1"}
-            </div>
-            <div>
-              <div className="create-contract-step-label">Contract basics</div>
-              <div className="create-contract-step-sub">Vendor, term, scope</div>
-            </div>
-          </div>
-          <div
-            className={`create-contract-step${
-              completedRateLines > 0
-                ? " done"
-                : basicsComplete
-                  ? " active"
-                  : ""
-            }${basicsComplete ? " connector-done" : ""}`}
-          >
-            <div className="create-contract-step-icon">
-              {completedRateLines > 0 ? <IconCheck size={14} /> : "2"}
-            </div>
-            <div>
-              <div className="create-contract-step-label">Rate sheet</div>
-              <div className="create-contract-step-sub">
-                {completedRateLines > 0
-                  ? `${completedRateLines} lane${completedRateLines === 1 ? "" : "s"} entered`
-                  : "Add lane rates"}
+      <div className="create-contract-main">
+        <div className="create-contract-stepper-wrap">
+          <div className="create-contract-stepper">
+            <div
+              className={`create-contract-step${basicsComplete ? " done" : " active"}`}
+            >
+              <div className="create-contract-step-icon">
+                {basicsComplete ? <IconCheck size={14} /> : "1"}
+              </div>
+              <div className="create-contract-step-content">
+                <div className="create-contract-step-label">Contract basics</div>
+                <div className="create-contract-step-sub">Vendor, term, scope</div>
               </div>
             </div>
-          </div>
-          <div
-            className={`create-contract-step${
-              appliedSurchargeCount > 0
-                ? " done"
-                : completedRateLines > 0
-                  ? " active"
-                  : ""
-            }${completedRateLines > 0 ? " connector-done" : ""}`}
-          >
-            <div className="create-contract-step-icon">
-              {appliedSurchargeCount > 0 ? <IconCheck size={14} /> : "3"}
-            </div>
-            <div>
-              <div className="create-contract-step-label">Surcharges</div>
-              <div className="create-contract-step-sub">
-                {appliedSurchargeCount > 0
-                  ? `${appliedSurchargeCount} applied`
-                  : surchargeRows.length > 0
-                    ? `${surchargeRows.length} available`
-                    : "Optional charges"}
+            <div
+              className={`create-contract-step${
+                completedRateLines > 0
+                  ? " done"
+                  : basicsComplete
+                    ? " active"
+                    : ""
+              }`}
+            >
+              <div className="create-contract-step-icon">
+                {completedRateLines > 0 ? <IconCheck size={14} /> : "2"}
+              </div>
+              <div className="create-contract-step-content">
+                <div className="create-contract-step-label">Rate sheet</div>
+                <div className="create-contract-step-sub">
+                  {completedRateLines > 0
+                    ? `${completedRateLines} lane${completedRateLines === 1 ? "" : "s"} entered`
+                    : "Add lane rates"}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="create-contract-step">
-            <div className="create-contract-step-icon">4</div>
-            <div>
-              <div className="create-contract-step-label">Review &amp; confirm</div>
-              <div className="create-contract-step-sub">Validate &amp; activate</div>
+            <div
+              className={`create-contract-step${
+                appliedSurchargeCount > 0
+                  ? " done"
+                  : completedRateLines > 0
+                    ? " active"
+                    : ""
+              }`}
+            >
+              <div className="create-contract-step-icon">
+                {appliedSurchargeCount > 0 ? <IconCheck size={14} /> : "3"}
+              </div>
+              <div className="create-contract-step-content">
+                <div className="create-contract-step-label">Surcharges</div>
+                <div className="create-contract-step-sub">
+                  {appliedSurchargeCount > 0
+                    ? `${appliedSurchargeCount} applied`
+                    : surchargeRows.length > 0
+                      ? `${surchargeRows.length} available`
+                      : "Optional charges"}
+                </div>
+              </div>
+            </div>
+            <div className="create-contract-step">
+              <div className="create-contract-step-icon">4</div>
+              <div className="create-contract-step-content">
+                <div className="create-contract-step-label">Review &amp; confirm</div>
+                <div className="create-contract-step-sub">Validate &amp; activate</div>
+              </div>
             </div>
           </div>
         </div>
@@ -655,35 +649,37 @@ export default function CreateContract() {
 
           <div className="create-contract-form-grid">
             <div className="create-contract-field create-contract-searchable">
-              <SearchableSelect
-                apiEndpoint={URL.carrier}
+              <Select
                 label="Vendor"
-                placeholder="Search carrier"
+                placeholder={carriersLoading ? "Loading carriers…" : "Select carrier"}
+                searchable
+                clearable
+                data={carrierSelectData}
                 value={carrierCode || null}
-                displayValue={carrierLabel || null}
-                returnOriginalData
-                dropdownZIndex={40}
-                onChange={(value, selectedData, originalData) => {
+                comboboxProps={{ zIndex: 40 }}
+                disabled={carriersLoading}
+                onChange={(value) => {
                   setCarrierCode(value || "");
-                  setCarrierLabel(selectedData?.label || "");
-                  const nextCountry = String(
-                    (originalData as { country_code?: string })?.country_code || "",
-                  ).trim();
-                  if (nextCountry) {
-                    setCountryCode(nextCountry);
-                    setCountryLabel(nextCountry);
-                  }
+                  const selected = carrierSelectData.find((item) => item.value === value);
+                  setCarrierLabel(selected?.label || "");
                 }}
-                searchFields={["carrier_code", "carrier_name"]}
-                displayFormat={(item) => ({
-                  value: String(item.carrier_code),
-                  label: `${item.carrier_name} · ${
-                    SERVICE_MODE_LABELS[String(item.service || service || "FCL")] ||
-                    "Shipping Line"
-                  }`,
-                })}
                 required
+                withAsterisk
                 error={formErrors.carrier_code}
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    height: "36px",
+                    fontFamily: "Inter",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                    marginBottom: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
               />
             </div>
 
@@ -700,10 +696,10 @@ export default function CreateContract() {
               ) : null}
             </div>
 
-            <div className="create-contract-field">
+            {/* <div className="create-contract-field">
               <label htmlFor="contract-id">Contract ID (auto)</label>
               <input id="contract-id" value={contractId} disabled />
-            </div>
+            </div> */}
 
             <div className="create-contract-field">
               <label htmlFor="service">Mode</label>
@@ -711,14 +707,11 @@ export default function CreateContract() {
                 id="service"
                 value={service}
                 onChange={(event) => setService(event.target.value)}
-                disabled={servicesLoading}
               >
-                <option value="">
-                  {servicesLoading ? "Loading services…" : "Select mode"}
-                </option>
+                <option value="">Select mode</option>
                 {serviceOptions.map((item) => (
-                  <option key={item.service_code} value={item.service_code}>
-                    {SERVICE_MODE_LABELS[item.service_code] || item.service_name}
+                  <option key={item.value} value={item.value}>
+                    {item.label}
                   </option>
                 ))}
               </select>
@@ -741,24 +734,36 @@ export default function CreateContract() {
             </div>
 
             <div className="create-contract-field create-contract-searchable">
-              <SearchableSelect
-                apiEndpoint={URL.currencyMaster}
+              <Select
                 label="Currency"
-                placeholder="Search currency"
+                placeholder={currenciesLoading ? "Loading currencies…" : "Select currency"}
+                searchable
+                clearable
+                data={currencySelectData}
                 value={currencyCode || null}
-                displayValue={currencyLabel || null}
-                dropdownZIndex={40}
-                onChange={(value, selectedData) => {
+                comboboxProps={{ zIndex: 40 }}
+                disabled={currenciesLoading}
+                onChange={(value) => {
                   setCurrencyCode(value || "");
-                  setCurrencyLabel(selectedData?.label || "");
+                  setCurrencyLabel(value || "");
                 }}
-                searchFields={["currency_code", "currency_name"]}
-                displayFormat={(item) => ({
-                  value: String(item.currency_code),
-                  label: String(item.currency_code),
-                })}
                 required
+                withAsterisk
                 error={formErrors.currency_code}
+                styles={{
+                  input: {
+                    fontSize: "13px",
+                    height: "36px",
+                    fontFamily: "Inter",
+                  },
+                  label: {
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                    marginBottom: "4px",
+                    fontFamily: "Inter",
+                  },
+                }}
               />
             </div>
 
@@ -788,15 +793,7 @@ export default function CreateContract() {
               ) : null}
             </div>
 
-            <div className="create-contract-field">
-              <label htmlFor="commitment">Commitment</label>
-              <input
-                id="commitment"
-                value={commitment}
-                onChange={(event) => setCommitment(event.target.value)}
-                placeholder="600 TEU/qtr"
-              />
-            </div>
+
 
             <div className="create-contract-field">
               <label htmlFor="contract-owner">Contract owner</label>
@@ -805,7 +802,7 @@ export default function CreateContract() {
 
             <div className="create-contract-field create-contract-searchable">
               <SearchableSelect
-                apiEndpoint={URL.user}
+                apiEndpoint={URL.accountsSalespersons}
                 label="Approver"
                 placeholder="Search approver"
                 value={approverId || null}
@@ -813,12 +810,14 @@ export default function CreateContract() {
                 dropdownZIndex={40}
                 onChange={(value, selectedData) => {
                   setApproverId(value || "");
-                  setApproverLabel(selectedData?.label || "");
+                  setApproverLabel(
+                    String((selectedData as { sales_person?: string } | null)?.sales_person || selectedData?.label || ""),
+                  );
                 }}
-                searchFields={["full_name", "username", "email"]}
+                searchFields={["sales_person"]}
                 displayFormat={(item) => ({
-                  value: String(item.user_id ?? item.id ?? item.username),
-                  label: String(item.full_name || item.username || item.email),
+                  value: String(item.sales_person ?? ""),
+                  label: String(item.sales_person ?? ""),
                 })}
               />
             </div>
@@ -866,35 +865,6 @@ export default function CreateContract() {
               ) : null}
             </div>
 
-            {formErrors.country_code ? (
-              <div className="create-contract-field">
-                <div className="field-error">{formErrors.country_code}</div>
-              </div>
-            ) : null}
-
-            {!countryCode && carrierCode ? (
-              <div className="create-contract-field create-contract-searchable">
-                <SearchableSelect
-                  apiEndpoint={URL.country}
-                  label="Country"
-                  placeholder="Search country"
-                  value={countryCode || null}
-                  displayValue={countryLabel || null}
-                  dropdownZIndex={40}
-                  onChange={(value, selectedData) => {
-                    setCountryCode(value || "");
-                    setCountryLabel(selectedData?.label || "");
-                  }}
-                  searchFields={["country_code", "country_name"]}
-                  displayFormat={(item) => ({
-                    value: String(item.country_code),
-                    label: `${item.country_name} (${item.country_code})`,
-                  })}
-                  required
-                  error={formErrors.country_code}
-                />
-              </div>
-            ) : null}
           </div>
         </section>
 
@@ -906,7 +876,15 @@ export default function CreateContract() {
                 <span className="meta">{rateRows.length} lines</span>
               </h2>
             </div>
-            <div className="create-contract-mini-tabs">
+            <button
+                type="button"
+                className="create-contract-btn secondary"
+                onClick={() => setRateRows((current) => [...current, EMPTY_RATE_ROW()])}
+              >
+                <IconPlus size={14} />
+                Add lane
+              </button>
+            {/* <div className="create-contract-mini-tabs">
               <button
                 type="button"
                 className={`create-contract-link${rateSheetMode === "manual" ? " active" : ""}`}
@@ -938,7 +916,7 @@ export default function CreateContract() {
               >
                 Clone existing
               </button>
-            </div>
+            </div> */}
           </div>
 
           <div className="create-contract-hint">
@@ -949,22 +927,22 @@ export default function CreateContract() {
           <div className="create-contract-section-head" style={{ marginBottom: 10 }}>
             <span />
             <div className="create-contract-toolbar">
-              <button
+              {/* <button
                 type="button"
                 className="create-contract-btn secondary"
                 onClick={() => setRateRows((current) => [...current, EMPTY_RATE_ROW()])}
               >
                 <IconPlus size={14} />
                 Add lane
-              </button>
-              <button
+              </button> */}
+              {/* <button
                 type="button"
                 className="create-contract-btn secondary"
                 onClick={() => void handlePasteRateLines()}
               >
                 <IconClipboard size={14} />
                 Paste from clipboard
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -998,6 +976,7 @@ export default function CreateContract() {
                           placeholder="Origin port"
                           value={row.origin_code || null}
                           displayValue={row.origin_label || null}
+                          minSearchLength={2}
                           onChange={(value, selectedData) =>
                             updateRateRow(row.key, {
                               origin_code: value || "",
@@ -1005,10 +984,7 @@ export default function CreateContract() {
                             })
                           }
                           searchFields={["port_code", "port_name"]}
-                          displayFormat={(item) => ({
-                            value: String(item.port_code),
-                            label: `${item.port_name} (${item.port_code})`,
-                          })}
+                          displayFormat={portMasterDisplayFormat}
                           dropdownZIndex={40}
                         />
                         <SearchableSelect
@@ -1016,6 +992,7 @@ export default function CreateContract() {
                           placeholder="Destination port"
                           value={row.destination_code || null}
                           displayValue={row.destination_label || null}
+                          minSearchLength={2}
                           onChange={(value, selectedData) =>
                             updateRateRow(row.key, {
                               destination_code: value || "",
@@ -1023,10 +1000,7 @@ export default function CreateContract() {
                             })
                           }
                           searchFields={["port_code", "port_name"]}
-                          displayFormat={(item) => ({
-                            value: String(item.port_code),
-                            label: `${item.port_name} (${item.port_code})`,
-                          })}
+                          displayFormat={portMasterDisplayFormat}
                           dropdownZIndex={40}
                         />
                       </div>
@@ -1060,7 +1034,7 @@ export default function CreateContract() {
                         onChange={(event) =>
                           updateRateRow(row.key, { buy_rate: event.target.value })
                         }
-                        placeholder="2,840"
+                        placeholder="Enter buy rate"
                         inputMode="decimal"
                       />
                     </td>
@@ -1072,7 +1046,7 @@ export default function CreateContract() {
                             service_transit: event.target.value,
                           })
                         }
-                        placeholder="Direct · 24 days · weekly Sun"
+                        placeholder="Enter service transit"
                       />
                     </td>
                     <td>
@@ -1081,7 +1055,7 @@ export default function CreateContract() {
                         onChange={(event) =>
                           updateRateRow(row.key, { notes: event.target.value })
                         }
-                        placeholder="preferred routing"
+                        placeholder="Enter notes"
                       />
                     </td>
                     <td>
@@ -1116,7 +1090,7 @@ export default function CreateContract() {
                 Min rate:{" "}
                 <strong>
                   {rateStats.min !== null
-                    ? formatMoney(rateStats.min, currencyCode || "USD")
+                    ? formatMoney(rateStats.min, currencyCode || "")
                     : "—"}
                 </strong>
               </span>
@@ -1124,7 +1098,7 @@ export default function CreateContract() {
                 Max rate:{" "}
                 <strong>
                   {rateStats.max !== null
-                    ? formatMoney(rateStats.max, currencyCode || "USD")
+                    ? formatMoney(rateStats.max, currencyCode || "")
                     : "—"}
                 </strong>
               </span>
@@ -1132,12 +1106,11 @@ export default function CreateContract() {
                 Avg rate:{" "}
                 <strong>
                   {rateStats.avg !== null
-                    ? formatMoney(Math.round(rateStats.avg), currencyCode || "USD")
+                    ? formatMoney(Math.round(rateStats.avg), currencyCode || "")
                     : "—"}
                 </strong>
               </span>
             </div>
-            <div className="hint">Tab to navigate · Esc to cancel edit</div>
           </div>
         </section>
 
@@ -1146,45 +1119,58 @@ export default function CreateContract() {
             <div>
               <h2>
                 3 · Surcharges
-                <span className="meta">
-                  {appliedSurchargeCount} applied
-                  {surchargeRows.length > 0 ? ` · ${surchargeRows.length} available` : ""}
-                </span>
+                <span className="meta">{surchargeRows.length} lines</span>
               </h2>
             </div>
-            <button
-              type="button"
-              className="create-contract-link"
-              disabled={surchargesLoading || !service}
-              onClick={() => void handleApplySurchargeDefaults()}
-            >
-              {surchargesLoading
-                ? "Loading charges…"
-                : `Apply defaults for ${selectedServiceLabel || "selected mode"}`}
-            </button>
+            <div className="create-contract-toolbar">
+              <button
+                type="button"
+                className="create-contract-btn secondary"
+                onClick={() =>
+                  setSurchargeRows((current) => [...current, EMPTY_SURCHARGE_ROW()])
+                }
+              >
+                <IconPlus size={14} />
+                Add surcharge
+              </button>
+            </div>
           </div>
 
-          {surchargeRows.length === 0 ? (
-            <div className="create-contract-state">
-              Load surcharge defaults from charge master to configure optional charges.
+          {/* <div className="create-contract-section-head" style={{ marginBottom: 10 }}>
+            <span />
+            <div className="create-contract-toolbar">
+              <button
+                type="button"
+                className="create-contract-btn secondary"
+                onClick={() =>
+                  setSurchargeRows((current) => [...current, EMPTY_SURCHARGE_ROW()])
+                }
+              >
+                <IconPlus size={14} />
+                Add surcharge
+              </button>
             </div>
-          ) : (
-            <div className="create-contract-table-wrap">
-              <table className="create-contract-table">
-                <thead>
-                  <tr>
-                    <th aria-label="Apply surcharge" />
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Basis</th>
-                    <th>Value ({currencyCode || "—"})</th>
-                    <th>Update frequency</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {surchargeRows.map((row) => (
-                    <tr key={row.key} className={row.applied ? "" : "disabled"}>
-                      <td>
+          </div> */}
+
+          <div className="create-contract-table-wrap">
+            <table className="create-contract-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th aria-label="Apply surcharge" />
+                  <th>Code</th>
+                  <th>Charge Name</th>
+                  <th>Basis</th>
+                  <th>Value ({currencyCode || "—"})</th>
+                  <th>Update frequency</th>
+                  <th aria-label="Remove row" />
+                </tr>
+              </thead>
+              <tbody>
+                {surchargeRows.map((row, index) => (
+                  <tr key={row.key} className={row.applied ? "" : "disabled"}>
+                    <td className="row-index">{index + 1}</td>
+                    <td>
                         <input
                           type="checkbox"
                           checked={row.applied}
@@ -1197,10 +1183,36 @@ export default function CreateContract() {
                       </td>
                       <td>
                         <span className="create-contract-surcharge-code">
-                          {row.charge_code}
+                          {row.charge_code || "—"}
                         </span>
                       </td>
-                      <td>{row.charge_name || "—"}</td>
+                      <td>
+                        <SearchableSelect
+                          apiEndpoint={URL.chargeMaster}
+                          placeholder="Search charge"
+                          value={row.charge_code || null}
+                          displayValue={
+                            row.charge_name && row.charge_code
+                              ? `${row.charge_name} (${row.charge_code})`
+                              : row.charge_name || null
+                          }
+                          returnOriginalData
+                          minSearchLength={2}
+                          onChange={(value, _selectedData, originalData) =>
+                            updateSurchargeRow(row.key, {
+                              charge_code: value || "",
+                              charge_name: value
+                                ? String(
+                                    (originalData as ChargeMasterRow)?.charge_name || "",
+                                  ).trim()
+                                : "",
+                            })
+                          }
+                          searchFields={["charge_code", "charge_name"]}
+                          displayFormat={chargeMasterDisplayFormat}
+                          dropdownZIndex={40}
+                        />
+                      </td>
                       <td>
                         <input
                           value={row.basis}
@@ -1215,14 +1227,14 @@ export default function CreateContract() {
                         {row.applied ? (
                           <div className="create-contract-value-input">
                             {!isPercentRate(row.rate) ? (
-                              <span>{getCurrencyPrefix(currencyCode || "USD")}</span>
+                              <span>{getCurrencyPrefix(currencyCode || "")}</span>
                             ) : null}
                             <input
                               value={row.rate}
                               onChange={(event) =>
                                 updateSurchargeRow(row.key, { rate: event.target.value })
                               }
-                              placeholder={isPercentRate(row.rate) ? "3.8%" : "320.00"}
+                              placeholder={isPercentRate(row.rate) ? "Enter value" : "Enter value"}
                             />
                           </div>
                         ) : (
@@ -1241,12 +1253,28 @@ export default function CreateContract() {
                           placeholder="monthly"
                         />
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="create-contract-delete-btn"
+                          aria-label="Remove surcharge"
+                          disabled={surchargeRows.length === 1}
+                          onClick={() =>
+                            setSurchargeRows((current) =>
+                              current.length === 1
+                                ? current
+                                : current.filter((item) => item.key !== row.key),
+                            )
+                          }
+                        >
+                          <IconX size={14} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
         </section>
 
         <section className="create-contract-card">
@@ -1312,14 +1340,14 @@ export default function CreateContract() {
           >
             Cancel
           </button>
-          <button
+          {/* <button
             type="button"
             className="create-contract-btn secondary"
             disabled={createMutation.isPending}
             onClick={() => handleSubmit("DRAFT")}
           >
             Save as draft
-          </button>
+          </button> */}
           <button
             type="button"
             className="create-contract-btn"

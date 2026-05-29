@@ -107,7 +107,7 @@ export default function TariffContractsDetail() {
                 totalRows={data.surcharges_summary.total_rows}
               />
 
-              {data.internal_notes ? (
+              {/* {data.internal_notes ? (
                 <section className="contract-detail-section">
                   <div className="contract-detail-section-head">
                     <div>
@@ -116,7 +116,7 @@ export default function TariffContractsDetail() {
                   </div>
                   <div className="contract-detail-notes">{data.internal_notes}</div>
                 </section>
-              ) : null}
+              ) : null} */}
 
               <div className="contract-detail-two-col">
                 <ContractAuditSection items={buildAuditHistory(data)} />

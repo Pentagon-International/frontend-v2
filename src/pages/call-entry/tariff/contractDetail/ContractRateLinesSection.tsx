@@ -28,9 +28,9 @@ export default function ContractRateLinesSection({
             rate detail
           </p>
         </div>
-        <button type="button" className="contract-detail-outline-btn">
+        {/* <button type="button" className="contract-detail-outline-btn">
           Upload update
-        </button>
+        </button> */}
       </div>
 
       {lines.length === 0 ? (

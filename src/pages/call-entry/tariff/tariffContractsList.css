@@ -1,3 +1,4 @@
+/* Scopes CSS custom properties for all .tariff-contracts-* descendants */
 .tariff-contracts-page {
   --navy-900: #0b1f3a;
   --navy-800: #12284a;
@@ -20,159 +21,9 @@
   --radius-sm: 6px;
   --font: "Plus Jakarta Sans", "Geist", -apple-system, system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
-
-  font-family: var(--font);
-  color: var(--ink);
-  background: var(--bg);
-  min-height: calc(100vh - 56px);
-  margin: -16px -16px 0;
-  padding: 0 0 32px;
 }
 
-@media (min-width: 768px) {
-  .tariff-contracts-page {
-    margin: -24px -24px 0;
-  }
-}
-
-.tariff-contracts-topbar {
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 24px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-.tariff-contracts-crumbs {
-  font-size: 13px;
-  color: var(--ink-3);
-}
-
-.tariff-contracts-crumbs .sep {
-  margin: 0 8px;
-  color: var(--ink-4);
-}
-
-.tariff-contracts-crumbs .here {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.tariff-contracts-spacer {
-  flex: 1;
-}
-
-.tariff-contracts-search {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  color: var(--ink-3);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: min(320px, 100%);
-}
-
-.tariff-contracts-search input {
-  border: none;
-  background: transparent;
-  outline: none;
-  width: 100%;
-  font-size: 12px;
-  font-family: var(--font);
-  color: var(--ink);
-}
-
-.tariff-contracts-main {
-  padding: 22px 28px 0;
-  max-width: 1440px;
-}
-
-.tariff-contracts-page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-
-.tariff-contracts-page-head h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.tariff-contracts-page-head .sub {
-  color: var(--ink-3);
-  font-size: 13px;
-  margin-top: 2px;
-}
-
-.tariff-contracts-toolbar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.tariff-contracts-filter {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 7px 10px 7px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-2);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-family: var(--font);
-}
-
-.tariff-contracts-filter:hover {
-  border-color: var(--line-2);
-}
-
-.tariff-contracts-filter.primary {
-  background: var(--navy-900);
-  color: #fff;
-  border-color: var(--navy-900);
-}
-
-.tariff-contracts-btn {
-  background: var(--navy-900);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--font);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tariff-contracts-btn.secondary {
-  background: var(--card);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
-
-.tariff-contracts-btn.secondary:hover {
-  border-color: var(--line-2);
-}
+/* ── Filter pill tabs ── */
 
 .tariff-contracts-pill-row {
   display: flex;
@@ -230,17 +81,7 @@
   border-color: var(--navy-900);
 }
 
-.tariff-contracts-table-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.05);
-}
-
-.tariff-contracts-table-wrap {
-  overflow-x: auto;
-}
+/* ── Table ── */
 
 .tariff-contracts-table {
   width: 100%;
@@ -275,6 +116,8 @@
 .tariff-contracts-table tbody tr.contract-row:hover td {
   background: var(--bg-2);
 }
+
+/* ── Cell components ── */
 
 .tariff-contracts-contract-id {
   font-family: var(--mono);
@@ -489,49 +332,7 @@
   background: var(--ink-4);
 }
 
-.tariff-contracts-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  background: var(--card);
-  flex-wrap: wrap;
-}
-
-.tariff-contracts-footer-meta {
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-.tariff-contracts-footer-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tariff-contracts-page-btn {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--ink-2);
-  font-family: var(--font);
-}
-
-.tariff-contracts-page-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.tariff-contracts-page-btn.active {
-  background: var(--navy-900);
-  color: #fff;
-  border-color: var(--navy-900);
-}
+/* ── Empty / loading / error state ── */
 
 .tariff-contracts-state {
   padding: 48px 24px;

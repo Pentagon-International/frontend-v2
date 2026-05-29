@@ -70,12 +70,7 @@ export function getValidityPercent(validFrom?: string, validTo?: string): number
 }
 
 export function getCurrencyPrefix(currencyCode: string): string {
-  if (currencyCode === "EUR") return "€";
-  if (currencyCode === "INR") return "₹";
-  if (currencyCode === "VND") return "₫";
-  if (currencyCode === "GBP") return "£";
-  if (currencyCode === "AED") return "AED ";
-  return "$";
+  return currencyCode ? `${currencyCode} ` : "";
 }
 
 export function formatMoney(
