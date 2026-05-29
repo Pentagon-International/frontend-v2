@@ -51,6 +51,7 @@ import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
+import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 type AddressData = {
   id?: number;
@@ -264,8 +265,19 @@ type CustomerDataResponse = {
 function CustomerMaster() {
   const isAdmin = useIsAdminUser();
   const userPulseId = useAuthStore((s) => s.user?.pulse_id);
-  // Hide "Create New" only for Pentagon company users who are non-admins
-  const showCreateButton = isAdmin || userPulseId !== "P2PEN";
+  const userCountry = useAuthStore((s) => s.user?.country);
+  const isPentagonUser =
+    String(userPulseId ?? "")
+      .trim()
+      .toUpperCase() === "P2PEN";
+  const isIndiaUser =
+    isIndianUserCountry(userCountry?.country_code) ||
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
+  // Hide only for non-admin P2PEN users based in India; P2PEN abroad (e.g. US) may create
+  const showCreateButton =
+    isAdmin || !isPentagonUser || !isIndiaUser;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
