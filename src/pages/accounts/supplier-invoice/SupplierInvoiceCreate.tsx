@@ -40,6 +40,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -564,6 +565,12 @@ export default function SupplierInvoiceCreate({
     [user?.country?.country_code],
   );
 
+  const isIndiaUser =
+    isIndianUserCountry(user?.country?.country_code) ||
+    String(user?.country?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
+
   const form = useForm<SupplierInvoiceFormValues>({
     initialValues: {
       cbp_number: "",
@@ -621,7 +628,8 @@ export default function SupplierInvoiceCreate({
       date: (v) => (!v ? "Date is required" : null),
       due_date: (v) => (!v ? "Due date is required" : null),
       currency_id: (v) => (!v ? "Currency is required" : null),
-      state_id: (v) => (!v ? "State is required" : null),
+      state_id: (v) =>
+        isIndiaUser && !v ? "State is required" : null,
       Inv_Crn_no: (v) =>
         !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
     },
@@ -918,11 +926,22 @@ export default function SupplierInvoiceCreate({
     if (next.some((c, i) => c.currency_id !== charges[i]?.currency_id)) {
       form.setFieldValue("charges_data", next);
     }
+    // Sync header ROE when currency is set (create flow)
+    if (!isViewMode && !isEditMode && !isReversal) {
+      const currCode =
+        currencyOptions.find((o) => o.value === effectiveCurrency)?.label ?? "";
+      if (currCode && form.values.roe == null) {
+        form.setFieldValue("roe", getRoeValue(currCode));
+      }
+    }
   }, [
     defaultBranchCurrencyId,
     form.values.currency_id,
     isViewMode,
     isEditMode,
+    isReversal,
+    currencyOptions,
+    getRoeValue,
   ]);
 
   // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes (not for supplier reversal — preserve API figures)
@@ -943,23 +962,25 @@ export default function SupplierInvoiceCreate({
     if (changed) form.setFieldValue("charges_data", next);
   }, [chargesAmountRoeKey, isReversal]);
 
-  // Auto-calc Inv/Crn Amount = sum of breakup amounts (skipped for reversal — totals come from server)
+  // Auto-calc Inv/Crn Amount = sum of breakup amounts × Agent INV/CRN ROE
   const invCrnCalcKey = [
     form.values.taxable_amount,
     form.values.non_taxable_amount,
     form.values.cgst_amount,
     form.values.sgst_amount,
     form.values.igst_amount,
+    form.values.roe,
   ].join("|");
   useEffect(() => {
     if (isReversal) return;
-    const inv =
+    const baseSum =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
       (parseNum(form.values.cgst_amount) ?? 0) +
       (parseNum(form.values.sgst_amount) ?? 0) +
       (parseNum(form.values.igst_amount) ?? 0);
-    const nextInv = clampAmount(inv);
+    const roe = parseNum(form.values.roe) ?? 1;
+    const nextInv = clampAmount(baseSum * roe);
     if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
@@ -2031,7 +2052,7 @@ export default function SupplierInvoiceCreate({
                 value={form.values.state_id || null}
                 onChange={(v) => form.setFieldValue("state_id", v ?? "")}
                 searchable
-                withAsterisk
+                withAsterisk={isIndiaUser}
                 error={form.errors.state_id}
                 disabled={
                   isStateLoading ||
@@ -2164,7 +2185,14 @@ export default function SupplierInvoiceCreate({
                 }
                 data={currencyOptions}
                 value={form.values.currency_id || null}
-                onChange={(v) => form.setFieldValue("currency_id", v ?? "")}
+                onChange={(v) => {
+                  form.setFieldValue("currency_id", v ?? "");
+                  const code =
+                    currencyOptions.find((o) => o.value === v)?.label ?? "";
+                  if (code) {
+                    form.setFieldValue("roe", getRoeValue(code));
+                  }
+                }}
                 searchable
                 withAsterisk
                 error={form.errors.currency_id}
