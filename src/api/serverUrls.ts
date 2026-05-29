@@ -9,6 +9,7 @@ export const URL = {
   termsOfShipment: "terms_of_shipment_master/",
   company: "company-master/",
   portMaster: "port-master/",
+  portMasterFilter: "filter/port-master/",
   containerType: "container_type_master/",
   callEntry: "call-entry/",
   profiling: "customer-profiling/",

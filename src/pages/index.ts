@@ -50,9 +50,7 @@ import ContainerTypeEdit from "../pages/masters/containertype/ContainerTypeEdit"
 import ContainerTypeView from "../pages/masters/containertype/ContainerTypeView";
 
 import PortMaster from "../pages/masters/portmaster/PortMaster";
-import NewPortMaster from "../pages/masters/portmaster/NewPortMaster";
-import PortMasterEdit from "../pages/masters/portmaster/PortMasterEdit";
-import PortMasterView from "../pages/masters/portmaster/PortMasterView";
+import PortCreate from "../pages/masters/portmaster/PortCreate";
 
 import CustomerType from "./masters/customertype/CustomerTypeMaster";
 import CustomerTypeNew from "./masters/customertype/CustomerTypeNew";
@@ -207,9 +205,7 @@ export {
   ContainerTypeEdit,
   ContainerTypeView,
   PortMaster,
-  NewPortMaster,
-  PortMasterEdit,
-  PortMasterView,
+  PortCreate,
   CustomerType,
   CustomerTypeNew,
   CustomerTypeEdit,

@@ -22,9 +22,7 @@ import {
   ContainerTypeNew,
   ContainerTypeView,
   PortMaster,
-  NewPortMaster,
-  PortMasterEdit,
-  PortMasterView,
+  PortCreate,
   CompanyMaster,
   CompanyNew,
   CompanyEdit,
@@ -649,10 +647,24 @@ const NavigationRoutes = () => {
           <Route path="service-edit" element={<ServiceMasterEdit />} />
           <Route path="service-view" element={<ServiceMasterView />} />
 
-          <Route path="port" element={<PortMaster />} />
-          <Route path="port-new" element={<NewPortMaster />} />
-          <Route path="/master/port-edit" element={<PortMasterEdit />} />
-          <Route path="/master/port-view" element={<PortMasterView />} />
+          <Route path="port">
+            <Route index element={<PortMaster />} />
+            <Route path="create" element={<PortCreate />} />
+            <Route path="edit" element={<PortCreate />} />
+            <Route path="view" element={<PortCreate />} />
+          </Route>
+          <Route
+            path="port-new"
+            element={<Navigate to="/master/port/create" replace />}
+          />
+          <Route
+            path="port-edit"
+            element={<Navigate to="/master/port/edit" replace />}
+          />
+          <Route
+            path="port-view"
+            element={<Navigate to="/master/port/view" replace />}
+          />
 
           <Route path="cfs-master">
             <Route index element={<CFSMaster />} />
