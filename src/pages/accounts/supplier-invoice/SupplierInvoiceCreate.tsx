@@ -266,13 +266,38 @@ function normalizeDrCr(value: unknown): "Dr" | "Cr" {
   return "Dr";
 }
 
-function parseDDMMYYYY(s: string | null | undefined): Date | null {
+function parseDateOnly(s: string | null | undefined): Date | null {
   if (s == null || String(s).trim() === "") return null;
-  const p = String(s).trim().split("-");
+  const trimmed = String(s).trim();
+
+  // Accept YYYY-MM-DD or DD-MM-YYYY (list endpoints are inconsistent across modules).
+  const p = trimmed.split("-");
   if (p.length !== 3) return null;
-  const d = parseInt(p[0], 10);
-  const m = parseInt(p[1], 10) - 1;
-  const y = parseInt(p[2], 10);
+
+  const a = String(p[0] ?? "").trim();
+  const b = String(p[1] ?? "").trim();
+  const c = String(p[2] ?? "").trim();
+
+  // If it looks like ISO date-time (e.g. 2026-05-28T11:44:47Z), defer to normalizeDate.
+  if (c.includes("T") || c.includes(":")) {
+    return normalizeDate(trimmed);
+  }
+
+  let y: number;
+  let m: number;
+  let d: number;
+  if (a.length === 4) {
+    // YYYY-MM-DD
+    y = parseInt(a, 10);
+    m = parseInt(b, 10) - 1;
+    d = parseInt(c, 10);
+  } else {
+    // DD-MM-YYYY
+    d = parseInt(a, 10);
+    m = parseInt(b, 10) - 1;
+    y = parseInt(c, 10);
+  }
+
   if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y))
     return null;
   const date = new Date(y, m, d);
@@ -1001,14 +1026,14 @@ export default function SupplierInvoiceCreate({
           : "";
 
     // Reversal create: Credit Journal Voucher date and Agent INV/CRN Detail due_date auto-set to today
-    // List API returns date/due_date as DD-MM-YYYY; use parseDDMMYYYY so they display in edit/view
+    // List API date formats may vary (DD-MM-YYYY vs YYYY-MM-DD); use parseDateOnly first.
     const dateValue = runForReversalCreate
       ? new Date()
-      : parseDDMMYYYY((data.date as string) ?? undefined) ??
+      : parseDateOnly((data.date as string) ?? undefined) ??
         normalizeDate((data.date as string) ?? null);
     const dueDateValue = runForReversalCreate
       ? new Date()
-      : parseDDMMYYYY((data.due_date as string) ?? undefined) ??
+      : parseDateOnly((data.due_date as string) ?? undefined) ??
         normalizeDate((data.due_date as string) ?? null);
 
     // Reversal create: do not set saveResponse so daybook and date stay editable; saveResponse set after POST
@@ -1043,7 +1068,7 @@ export default function SupplierInvoiceCreate({
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
       Inv_Crn_note:
-        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       roe:
@@ -1116,7 +1141,7 @@ export default function SupplierInvoiceCreate({
     const prData = (location.state as any)?.paymentRequestData as Record<string, any> | null | undefined;
     if (!prData || isViewMode || isEditMode || isReversal) return;
 
-    const prDate = parseDDMMYYYY(String(prData.date ?? "")) ?? null;
+    const prDate = parseDateOnly(String(prData.date ?? "")) ?? null;
     const amountNum =
       prData.amount != null && prData.amount !== ""
         ? parseFloat(String(prData.amount)) || null
@@ -1420,8 +1445,8 @@ export default function SupplierInvoiceCreate({
       cbp_number: (data.cbp_number ?? "") as string,
       cost_center: (data.cost_center ?? "") as string,
       day_book_id: data.day_book_id != null ? String(data.day_book_id) : "",
-      date: parseDDMMYYYY(data.date as string) ?? form.values.date,
-      due_date: parseDDMMYYYY(data.due_date as string) ?? form.values.due_date,
+      date: parseDateOnly(data.date as string) ?? normalizeDate(data.date as string) ?? form.values.date,
+      due_date: parseDateOnly(data.due_date as string) ?? normalizeDate(data.due_date as string) ?? form.values.due_date,
       creditor_agent: (data.creditor_agent ?? "") as string,
       agent_code: (data.agent_code ?? "") as string,
       state_id: data.state_id != null ? String(data.state_id) : "",
@@ -1431,7 +1456,7 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
       Inv_Crn_note:
-        parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+        parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
       Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
       currency_id: data.currency_id != null ? String(data.currency_id) : "",
