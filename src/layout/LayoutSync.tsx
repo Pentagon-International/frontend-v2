@@ -14,6 +14,12 @@ export const LayoutSync = () => {
       setActiveSubNav("Tariff");
       if (path.includes("freight")){
         setActiveTariffSubNav("Freight");
+      } else if (path.includes("contracts/create")) {
+        setActiveTariffSubNav("Contracts");
+      } else if (/^\/tariff\/contracts\/[^/]+\/[^/]+$/.test(path)) {
+        setActiveTariffSubNav("Contracts");
+      } else if (path.includes("contracts")) {
+        setActiveTariffSubNav("Contracts");
       } else if (path.includes("origin")) {
         setActiveTariffSubNav("Origin");
       } else if (path.includes("destination")) {

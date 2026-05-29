@@ -50,9 +50,7 @@ import ContainerTypeEdit from "../pages/masters/containertype/ContainerTypeEdit"
 import ContainerTypeView from "../pages/masters/containertype/ContainerTypeView";
 
 import PortMaster from "../pages/masters/portmaster/PortMaster";
-import NewPortMaster from "../pages/masters/portmaster/NewPortMaster";
-import PortMasterEdit from "../pages/masters/portmaster/PortMasterEdit";
-import PortMasterView from "../pages/masters/portmaster/PortMasterView";
+import PortCreate from "../pages/masters/portmaster/PortCreate";
 
 import CustomerType from "./masters/customertype/CustomerTypeMaster";
 import CustomerTypeNew from "./masters/customertype/CustomerTypeNew";
@@ -164,6 +162,10 @@ import CFSMaster from "./masters/cfs/CFSMaster";
 import CFSCreate from "./masters/cfs/CFSCreate";
 
 import Freight from "./call-entry/tariff/FreightMaster";
+import TariffContractsList from "./call-entry/tariff/TariffContractsList";
+import TariffContractsListRoute from "./call-entry/tariff/TariffContractsListRoute";
+import TariffContractsDetail from "./call-entry/tariff/TariffContractsDetail";
+import CreateContract from "./call-entry/tariff/CreateContract";
 import DestinationMaster from "./call-entry/tariff/DestinationMaster";
 import Origin from "./call-entry/tariff/OriginMaster";
 import FreightCreate from "./call-entry/tariff/FreightCreate";
@@ -207,9 +209,7 @@ export {
   ContainerTypeEdit,
   ContainerTypeView,
   PortMaster,
-  NewPortMaster,
-  PortMasterEdit,
-  PortMasterView,
+  PortCreate,
   CustomerType,
   CustomerTypeNew,
   CustomerTypeEdit,
@@ -265,6 +265,10 @@ export {
   Tariff,
   TariffCreate,
   Freight,
+  TariffContractsList,
+  TariffContractsListRoute,
+  TariffContractsDetail,
+  CreateContract,
   DestinationMaster,
   Origin,
   FreightCreate,
