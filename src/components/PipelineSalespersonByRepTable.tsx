@@ -83,9 +83,9 @@ const BAR_FILLS = {
 const STRIPED_TRACK =
   "repeating-linear-gradient(-45deg, #f1f5f9, #f1f5f9 4px, #e8ecf1 4px, #e8ecf1 8px)";
 
-/** Salesman ~80px; reporting slightly narrower so names fit on one line */
+/** Salesman capped width; reporting to compact — avoid fr growth that gaps the two name columns */
 const GRID_TEMPLATE =
-  "minmax(0, 80px) minmax(0, 0.95fr) minmax(0, 0.34fr) minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.64fr) minmax(0, 0.64fr) minmax(0, 0.64fr)";
+  "minmax(108px, 152px) minmax(64px, 92px) minmax(0, 0.34fr) minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.64fr) minmax(0, 0.64fr) minmax(0, 0.64fr)";
 
 const GRID_COLUMN_GAP = 4;
 
@@ -177,13 +177,12 @@ function CoordinatorCell({ name }: { name?: string }) {
       fz={11}
       fw={500}
       c={enquiryConversionColors.heading}
-      lineClamp={2}
+      lineClamp={1}
+      truncate
       style={{
         textAlign: "center",
         minWidth: 0,
         lineHeight: 1.3,
-        wordBreak: "break-word",
-        overflowWrap: "anywhere",
       }}
     >
       {display}
@@ -191,12 +190,12 @@ function CoordinatorCell({ name }: { name?: string }) {
   );
 
   if (display === "—") {
-    return <Box style={{ minWidth: 0, paddingInline: 2 }}>{text}</Box>;
+    return <Box style={{ minWidth: 0, paddingInline: "0 2px" }}>{text}</Box>;
   }
 
   return (
     <Tooltip label={display} multiline w={280} withArrow position="top">
-      <Box style={{ minWidth: 0, paddingInline: 2, cursor: "default" }}>
+      <Box style={{ minWidth: 0, paddingInline: "0 2px", cursor: "default" }}>
         {text}
       </Box>
     </Tooltip>
@@ -355,10 +354,10 @@ function PipelineSalespersonByRepTable({
               marginBottom: 2,
             }}
           >
-            <Box style={{ paddingInline: "4px 2px", minWidth: 0 }}>
+            <Box style={{ paddingInline: "4px 0", minWidth: 0 }}>
               {headerCell("Salesman", "left")}
             </Box>
-            <Box style={{ minWidth: 0, paddingInline: 2 }}>
+            <Box style={{ minWidth: 0, paddingInline: "0 2px" }}>
               {headerCell("Reporting to")}
             </Box>
             {headerCell("Branch")}
@@ -398,7 +397,7 @@ function PipelineSalespersonByRepTable({
                   style={{
                     minWidth: 0,
                     textAlign: "left",
-                    padding: "6px 2px 6px 4px",
+                    padding: "6px 0 6px 4px",
                   }}
                 >
                   <Tooltip
