@@ -1,7 +1,7 @@
 import { AppShell, Box } from "@mantine/core";
 import { Navbar } from "../components/index";
 import MainSectionHeader from "../components/MainSectionHeader";
-import ChatBot from "../pages/dashboard/Chatbot";
+import GlobalOperationsChatModal from "../pages/Workflow/GlobalOperationsChatModal";
 import { useLayoutStore } from "../store/useLayoutStore";
 
 const AppShellLayout = ({ children }) => {
@@ -70,7 +70,7 @@ const AppShellLayout = ({ children }) => {
         </Box>
       </AppShell.Main>
 
-      <ChatBot />
+      <GlobalOperationsChatModal />
     </AppShell>
   );
 };

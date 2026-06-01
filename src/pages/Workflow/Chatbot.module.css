@@ -1,5 +1,30 @@
 /* Pulse AI chatbot — Claude / ChatGPT–style layout, ERP palette */
 
+.fabWrap {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+}
+
+.embeddedChat {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.rootEmbedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 0.5rem 0.75rem 0;
+  gap: 0.5rem;
+}
+
 .root {
   display: flex;
   flex-direction: column;
@@ -297,6 +322,147 @@
   background: transparent;
   padding: 0;
   color: inherit;
+}
+
+/* GFM tables inside assistant markdown */
+.tableScroll {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.65em 0;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  -webkit-overflow-scrolling: touch;
+}
+
+.chatTable {
+  min-width: 100%;
+  width: max-content;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  background: var(--surface, #ffffff);
+}
+
+.chatTableHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.chatTableHead .chatTableCell {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+
+.chatTableRow:nth-child(even) .chatTableCell {
+  background: #f8fafc;
+}
+
+.chatTableCell {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+/* KPI summary: Metric|Count or Label|Value (≤10 rows) */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0.65em 0;
+}
+
+.kpiCard {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(16, 84, 118, 0.06);
+}
+
+.kpiLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 4px;
+}
+
+.kpiValue {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--accent, #105476);
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+/* Analytics structured message blocks */
+.analyticsMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.analyticsSummary {
+  color: var(--text-muted, #64748b);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  margin: 0 0 0.25rem;
+}
+
+.analyticsBlock {
+  margin: 0.35em 0;
+}
+
+.analyticsMeta {
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+  margin: 0.35em 0 0;
+}
+
+.analyticsTableHeading {
+  margin-bottom: 0.5rem;
+}
+
+.analyticsTableTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+
+.analyticsTableDescription {
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+  margin-top: 0.2rem;
+}
+
+.analyticsChartTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+  margin-bottom: 0.5rem;
+}
+
+.chartScroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #ffffff);
+}
+
+.chartLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.analyticsActions {
+  margin-top: 0.25rem;
 }
 
 /* Bottom compose — ChatGPT-style pill */

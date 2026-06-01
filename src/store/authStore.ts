@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invalidateBranchRelatedQueries } from "../utils/queryClient";
 import { URL } from "../api/serverUrls";
+import { resetOperationsChatSession } from "../pages/Workflow/operationsChatSessionStore";
 // const useAuthStore = create(
 //   persist(
 //     (set,get) => {
@@ -134,6 +135,8 @@ const useAuthStore = create<AuthStore>((set) => ({
     // console.log("Login data received:", data);
     // console.log("User object created:", user);
 
+    resetOperationsChatSession();
+
     localStorage.setItem("user", JSON.stringify(user));
     localStorage.setItem("accessToken", data.access);
     localStorage.setItem("refreshToken", data.refresh);
@@ -153,12 +156,14 @@ const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: () => {
+    resetOperationsChatSession();
     localStorage.clear();
     set({ user: null, accessToken: null, refreshToken: null });
     window.location.href = "/login"; // or use navigate()
   },
 
   resetAuth: () => {
+    resetOperationsChatSession();
     localStorage.clear();
     set({ user: null, accessToken: null, refreshToken: null });
     window.location.href = "/login";

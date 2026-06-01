@@ -1,7 +1,4 @@
-import { FC, ReactNode, RefObject, useEffect, useMemo } from "react";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import type { Components } from "react-markdown";
+import { FC, ReactNode, RefObject, useEffect } from "react";
 import {
   Box,
   Text,
@@ -20,7 +17,6 @@ import {
   Burger,
   Center,
   SegmentedControl,
-  UnstyledButton,
 } from "@mantine/core";
 import type { ChatMode } from "./chatApi";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
@@ -33,22 +29,12 @@ import {
   IconSend,
 } from "@tabler/icons-react";
 import styles from "./Chatbot.module.css";
-import {
-  getDisplayContent,
-  injectReferenceLinksIntoContent,
-  type ChatReferences,
-} from "./chatbotMessageUtils";
+import type { ChatReferences } from "./chatbotMessageUtils";
 import type { ReferenceLinkTarget } from "./chatReferenceNavigation";
+import type { AnalyticsMessagePayload } from "./analyticsChatTypes";
 import { useIsAdminUser } from "../../hooks/useIsAdminUser";
-
-const preserveChatRefUrl = (url: string) =>
-  url.startsWith("chat-ref:") ? url : defaultUrlTransform(url);
-
-const parseChatRefHref = (href?: string): ReferenceLinkTarget | null => {
-  if (href === "chat-ref:enquiry") return "enquiry";
-  if (href === "chat-ref:quotation") return "quotation";
-  return null;
-};
+import { AssistantMarkdown } from "./AssistantMarkdown";
+import { AssistantAnalyticsMessage } from "./AssistantAnalyticsMessage";
 
 export interface ChatbotUiMessage {
   id: string;
@@ -56,6 +42,7 @@ export interface ChatbotUiMessage {
   content: string;
   timestamp: Date;
   references?: ChatReferences;
+  analytics?: AnalyticsMessagePayload;
 }
 
 export interface ChatbotUiSession {
@@ -92,81 +79,17 @@ export interface ChatbotPageUiProps {
   inputListening?: boolean;
   inputPlaceholder?: string;
   micButton: ReactNode;
+  /** Embedded drawer/modal: hide sidebar and mode switch. */
+  compact?: boolean;
+  hideModeSelector?: boolean;
 }
-
-const AssistantMarkdown: FC<{
-  content: string;
-  references?: ChatReferences;
-  onReferenceLinkClick?: (
-    target: ReferenceLinkTarget,
-    refs: ChatReferences,
-  ) => void;
-}> = ({ content, references, onReferenceLinkClick }) => {
-  const plainText = useMemo(() => getDisplayContent(content) ?? content, [content]);
-
-  const linkableRefs = useMemo(
-    (): ChatReferences | undefined => {
-      if (!references) return undefined;
-      const enquiry_id = references.enquiry_id?.trim();
-      const quotation_id = references.quotation_id?.trim();
-      if (!enquiry_id && !quotation_id) return undefined;
-      return { enquiry_id, quotation_id };
-    },
-    [references],
-  );
-
-  const displayContent = useMemo(() => {
-    if (!linkableRefs || !onReferenceLinkClick) return plainText;
-    return injectReferenceLinksIntoContent(plainText, linkableRefs);
-  }, [plainText, linkableRefs, onReferenceLinkClick]);
-
-  const components = useMemo<Components>(() => {
-    if (!linkableRefs || !onReferenceLinkClick) return {};
-    return {
-      a: ({ href, children }) => {
-        const target = parseChatRefHref(href);
-        if (target) {
-          return (
-            <UnstyledButton
-              type="button"
-              className={styles.refLink}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onReferenceLinkClick(target, linkableRefs);
-              }}
-            >
-              {children}
-            </UnstyledButton>
-          );
-        }
-        if (!href) {
-          return <span>{children}</span>;
-        }
-        return (
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {children}
-          </a>
-        );
-      },
-    };
-  }, [linkableRefs, onReferenceLinkClick]);
-
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={components}
-      urlTransform={preserveChatRefUrl}
-    >
-      {displayContent}
-    </ReactMarkdown>
-  );
-};
 
 export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
   subtitle,
   chatMode = "operations",
   onChatModeChange,
+  compact = false,
+  hideModeSelector = false,
   sessions,
   activeSessionId,
   activeSession,
@@ -323,11 +246,15 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
     </>
   );
 
+  const showModeSelector = !hideModeSelector && onChatModeChange && isStaffAdmin;
+  const showSidebar = !compact;
+
   return (
-    <Box className={styles.root}>
+    <Box className={compact ? styles.rootEmbedded : styles.root}>
+      {!compact && (
       <Box className={styles.pageHeader}>
         <Box className={styles.pageTitleRow}>
-          {isMobile && (
+          {isMobile && showSidebar && (
             <Burger
               opened={sidebarOpened}
               onClick={openSidebar}
@@ -346,7 +273,14 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
           </Box>
         </Box>
         <Box className={styles.headerActions}>
-          {onChatModeChange && isStaffAdmin && (
+          {activeSession && (
+            <Badge variant="light" color="blue" size="md">
+              <Text span truncate inherit>
+                {activeSession.label}
+              </Text>
+            </Badge>
+          )}
+          {showModeSelector && (
             <SegmentedControl
               size="xs"
               value={chatMode}
@@ -358,23 +292,18 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
               className={styles.modeSelector}
             />
           )}
-          {activeSession && (
-            <Badge variant="light" color="blue" size="md">
-              <Text span truncate inherit>
-                {activeSession.label}
-              </Text>
-            </Badge>
-          )}
         </Box>
       </Box>
+      )}
 
       <Box className={styles.layout}>
-        {!isMobile && (
+        {showSidebar && !isMobile && (
           <Paper withBorder className={styles.sidebar}>
             {renderSessionsPanel()}
           </Paper>
         )}
 
+        {showSidebar && (
         <Drawer
           opened={Boolean(isMobile && sidebarOpened)}
           onClose={closeSidebar}
@@ -392,6 +321,7 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
             {renderSessionsPanel()}
           </Paper>
         </Drawer>
+        )}
 
         <Box className={styles.chatMain}>
           <Paper withBorder className={styles.chatPanel}>
@@ -424,15 +354,17 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
                         <Text fz="sm" c="dimmed" maw={320}>
                           Use the sessions panel to start a new conversation with Pulse AI.
                         </Text>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          leftSection={<IconPlus size={14} />}
-                          onClick={onNewSession}
-                          loading={sessionCreating}
-                        >
-                          New Session
-                        </Button>
+                        {!compact && (
+                          <Button
+                            size="sm"
+                            variant="light"
+                            leftSection={<IconPlus size={14} />}
+                            onClick={onNewSession}
+                            loading={sessionCreating}
+                          >
+                            New Session
+                          </Button>
+                        )}
                       </Stack>
                     </Box>
                   )}
@@ -477,11 +409,20 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
                             className={`${styles.assistantBubble} ${styles.assistantBubbleCard}`}
                           >
                             <div className={styles.markdownBody}>
-                              <AssistantMarkdown
-                                content={msg.content}
-                                references={msg.references}
-                                onReferenceLinkClick={onReferenceLinkClick}
-                              />
+                              {msg.analytics ? (
+                                <AssistantAnalyticsMessage
+                                  content={msg.content}
+                                  analytics={msg.analytics}
+                                  references={msg.references}
+                                  onReferenceLinkClick={onReferenceLinkClick}
+                                />
+                              ) : (
+                                <AssistantMarkdown
+                                  content={msg.content}
+                                  references={msg.references}
+                                  onReferenceLinkClick={onReferenceLinkClick}
+                                />
+                              )}
                             </div>
                           </Box>
                           <Text className={styles.messageTimestamp} ta="left">

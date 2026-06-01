@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   chatApi,
+  CHAT_URL_SESSION_PARAM,
+  CHAT_URL_TYPE_PARAM,
+  chatModeFromUrlParam,
   chatTypeParam,
   handleChatApiError,
+  resolveChatModeFromUrl,
   sessionIdForApi,
   type ChatMode,
 } from "./chatApi";
@@ -18,6 +22,22 @@ import {
   sleep,
 } from "./chatbotMessageUtils";
 import { useIsAdminUser } from "../../hooks/useIsAdminUser";
+import {
+  hasAnalyticsStructuredBlocks,
+  parseAnalyticsChatData,
+  toAnalyticsMessagePayload,
+  type AnalyticsMessagePayload,
+} from "./analyticsChatTypes";
+import { useOperationsChatSessionStore } from "./operationsChatSessionStore";
+
+export type UseChatSessionsOptions = {
+  /** Fixed mode (e.g. global modal — operations only). */
+  lockMode?: ChatMode;
+  /** Sync type/session_id to URL search params. Disable in embedded modal. */
+  syncUrl?: boolean;
+  /** Share operations session id in memory until reload/login. */
+  usePersistedSession?: boolean;
+};
 
 export interface ChatMessage {
   id: string;
@@ -25,6 +45,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   references?: ChatReferences;
+  /** Analytics structured blocks from POST /chat/message (not used for operations). */
+  analytics?: AnalyticsMessagePayload;
 }
 
 export interface ChatSession {
@@ -68,7 +90,7 @@ const mapOperationsSessions = (rows: any[]): ChatSession[] =>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapAnalyticsSessions = (rows: any[]): ChatSession[] =>
   rows.map((row) => {
-    const id = String(row.session_id);
+    const id = String(row.session_id ?? row.id);
     return {
       id,
       label: row.title || row.preview || "New Chat",
@@ -86,14 +108,12 @@ type HistoryItem = {
   references?: unknown;
 };
 
-const parseHistoryItems = (mode: ChatMode, data: unknown): HistoryItem[] => {
+const parseHistoryItems = (_mode: ChatMode, data: unknown): HistoryItem[] => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload = data as any;
-  if (mode === "analytics") {
-    const messages = payload?.messages;
-    return Array.isArray(messages) ? (messages as HistoryItem[]) : [];
-  }
-  return Array.isArray(payload) ? (payload as HistoryItem[]) : [];
+  if (Array.isArray(payload)) return payload as HistoryItem[];
+  const messages = payload?.messages;
+  return Array.isArray(messages) ? (messages as HistoryItem[]) : [];
 };
 
 const parseCreatedSessionId = (mode: ChatMode, res: { data?: unknown }): string | null => {
@@ -101,17 +121,51 @@ const parseCreatedSessionId = (mode: ChatMode, res: { data?: unknown }): string 
   const payload = res.data as any;
   const data = payload?.data ?? payload;
   if (mode === "analytics") {
-    const sid = data?.session_id;
+    const sid = data?.session_id ?? data?.id;
     return sid != null ? String(sid) : null;
   }
   const id = data?.id;
   return id != null ? String(id) : null;
 };
 
-export const useChatSessions = () => {
+const readSearchParamsFromLocation = () => new URLSearchParams(window.location.search);
+
+const readChatModeFromLocation = (): ChatMode =>
+  chatModeFromUrlParam(readSearchParamsFromLocation().get(CHAT_URL_TYPE_PARAM));
+
+const readSessionIdFromLocation = (): string | null => {
+  const value = readSearchParamsFromLocation().get(CHAT_URL_SESSION_PARAM);
+  return value?.trim() ? value.trim() : null;
+};
+
+const resolveActiveSessionId = (
+  mode: ChatMode,
+  mapped: ChatSession[],
+  opts: { syncUrl: boolean; usePersistedSession: boolean },
+): string | null => {
+  if (mapped.length === 0) return null;
+
+  if (mode === "operations" && opts.usePersistedSession) {
+    const urlId = opts.syncUrl ? readSessionIdFromLocation() : null;
+    if (urlId && mapped.some((s) => s.id === urlId)) return urlId;
+    const stored = useOperationsChatSessionStore.getState().sessionId;
+    if (stored && mapped.some((s) => s.id === stored)) return stored;
+    return mapped[0].id;
+  }
+
+  const urlSessionId = opts.syncUrl ? readSessionIdFromLocation() : null;
+  if (urlSessionId && mapped.some((s) => s.id === urlSessionId)) return urlSessionId;
+  return mapped[0].id;
+};
+
+export const useChatSessions = (options: UseChatSessionsOptions = {}) => {
+  const { lockMode, syncUrl = true, usePersistedSession = false } = options;
+
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isStaffAdmin = useIsAdminUser();
-  const [chatMode, setChatMode] = useState<ChatMode>("operations");
+  const initialMode = lockMode ?? readChatModeFromLocation();
+  const [chatMode, setChatMode] = useState<ChatMode>(initialMode);
   const [modeStates, setModeStates] = useState<Record<ChatMode, ModeSlice>>({
     operations: emptyModeSlice(),
     analytics: emptyModeSlice(),
@@ -126,8 +180,50 @@ export const useChatSessions = () => {
   const historyRequestId = useRef<Record<string, number>>({});
   const sessionsFetchIdRef = useRef(0);
   const activeSessionIdRef = useRef<string | null>(null);
-  const chatModeRef = useRef<ChatMode>("operations");
+  const chatModeRef = useRef<ChatMode>(initialMode);
+  const urlSyncReady = useRef(false);
   const viewport = useRef<HTMLDivElement>(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const modeStatesRef = useRef(modeStates);
+  modeStatesRef.current = modeStates;
+
+  const syncChatUrlParams = useCallback(
+    (mode: ChatMode, sessionId: string | null, replace = true) => {
+      if (!optionsRef.current.syncUrl) return;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          let changed = false;
+
+          if (prev.get(CHAT_URL_TYPE_PARAM) !== mode) {
+            next.set(CHAT_URL_TYPE_PARAM, mode);
+            changed = true;
+          }
+
+          if (sessionId) {
+            if (prev.get(CHAT_URL_SESSION_PARAM) !== sessionId) {
+              next.set(CHAT_URL_SESSION_PARAM, sessionId);
+              changed = true;
+            }
+          } else if (prev.has(CHAT_URL_SESSION_PARAM)) {
+            next.delete(CHAT_URL_SESSION_PARAM);
+            changed = true;
+          }
+
+          return changed ? next : prev;
+        },
+        { replace },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const persistOperationsSessionId = useCallback((sessionId: string | null) => {
+    if (optionsRef.current.usePersistedSession && sessionId) {
+      useOperationsChatSessionStore.getState().setSessionId(sessionId);
+    }
+  }, []);
 
   const { sessions, activeSessionId } = modeStates[chatMode];
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
@@ -138,6 +234,20 @@ export const useChatSessions = () => {
       [mode]: { ...prev[mode], ...patch },
     }));
   }, []);
+
+  const applySessionSelection = useCallback(
+    (mode: ChatMode, sessionId: string | null) => {
+      activeSessionIdRef.current = sessionId;
+      patchMode(mode, { activeSessionId: sessionId });
+      if (sessionId) {
+        syncChatUrlParams(mode, sessionId);
+        persistOperationsSessionId(sessionId);
+      } else {
+        syncChatUrlParams(mode, null);
+      }
+    },
+    [patchMode, syncChatUrlParams, persistOperationsSessionId],
+  );
 
   const updateSessions = useCallback(
     (mode: ChatMode, updater: (prev: ChatSession[]) => ChatSession[]) => {
@@ -222,6 +332,46 @@ export const useChatSessions = () => {
     [updateSessions],
   );
 
+  const activateSession = useCallback(
+    (mode: ChatMode, sessionId: string, loadHistory = true) => {
+      applySessionSelection(mode, sessionId);
+      if (loadHistory) {
+        void fetchHistory(mode, sessionId, true);
+      }
+    },
+    [fetchHistory, applySessionSelection],
+  );
+
+  const createOperationsSession = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await chatApi.post(
+        "/chat/session",
+        { title: "New Chat" },
+        { params: chatTypeParam("operations") },
+      );
+      const newId = parseCreatedSessionId("operations", res);
+      if (!newId) return null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (res.data as any)?.data ?? res.data;
+      const title = data?.title ?? "New Chat";
+      const newSession: ChatSession = {
+        id: newId,
+        label: title,
+        messages: [WELCOME_MSG(newId)],
+        createdAt: new Date(),
+      };
+
+      updateSessions("operations", (prev) => [newSession, ...prev]);
+      applySessionSelection("operations", newId);
+      historyLoaded.current.delete(historyKey("operations", newId));
+      await fetchHistory("operations", newId, true);
+      return newId;
+    } catch {
+      return null;
+    }
+  }, [applySessionSelection, fetchHistory, updateSessions]);
+
   const fetchSessions = useCallback(
     async (mode: ChatMode) => {
       const fetchId = ++sessionsFetchIdRef.current;
@@ -241,13 +391,25 @@ export const useChatSessions = () => {
 
         patchMode(mode, { sessions: mapped });
 
+        const opts = {
+          syncUrl: optionsRef.current.syncUrl !== false,
+          usePersistedSession: Boolean(optionsRef.current.usePersistedSession),
+        };
+
         if (mapped.length > 0) {
-          const firstId = mapped[0].id;
-          activeSessionIdRef.current = firstId;
-          patchMode(mode, { activeSessionId: firstId });
-          await fetchHistory(mode, firstId, true);
+          const refId = activeSessionIdRef.current;
+          const activeId =
+            refId && mapped.some((s) => s.id === refId)
+              ? refId
+              : resolveActiveSessionId(mode, mapped, opts);
+          if (activeId) {
+            applySessionSelection(mode, activeId);
+            await fetchHistory(mode, activeId, true);
+          }
+        } else if (mode === "operations" && opts.usePersistedSession) {
+          await createOperationsSession();
         } else {
-          patchMode(mode, { activeSessionId: null });
+          applySessionSelection(mode, null);
         }
       } catch {
         // silently fail
@@ -257,7 +419,7 @@ export const useChatSessions = () => {
         }
       }
     },
-    [fetchHistory, patchMode],
+    [fetchHistory, patchMode, applySessionSelection, createOperationsSession],
   );
 
   const loadMode = useCallback(
@@ -270,30 +432,74 @@ export const useChatSessions = () => {
   );
 
   useEffect(() => {
-    loadMode("operations");
+    if (lockMode) {
+      setChatMode(lockMode);
+      chatModeRef.current = lockMode;
+      loadMode(lockMode);
+      urlSyncReady.current = true;
+      return () => {
+        sessionsFetchIdRef.current += 1;
+      };
+    }
+
+    const mode = resolveChatModeFromUrl(searchParams.get(CHAT_URL_TYPE_PARAM), isStaffAdmin);
+    setChatMode(mode);
+    chatModeRef.current = mode;
+    loadMode(mode);
+    if (syncUrl) {
+      syncChatUrlParams(mode, readSessionIdFromLocation());
+    }
+    urlSyncReady.current = true;
     return () => {
       sessionsFetchIdRef.current += 1;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial operations load only
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount: restore mode from URL once
   }, []);
+
+  useEffect(() => {
+    if (!urlSyncReady.current || !syncUrl || lockMode) return;
+    const urlMode = resolveChatModeFromUrl(searchParams.get(CHAT_URL_TYPE_PARAM), isStaffAdmin);
+    if (urlMode !== chatModeRef.current) {
+      setChatMode(urlMode);
+      chatModeRef.current = urlMode;
+      setInput("");
+      loadMode(urlMode);
+      return;
+    }
+
+    const urlSessionId = searchParams.get(CHAT_URL_SESSION_PARAM)?.trim() || null;
+    if (!urlSessionId || urlSessionId === activeSessionIdRef.current) return;
+
+    const slice = modeStatesRef.current[urlMode];
+    if (!slice.sessions.some((s) => s.id === urlSessionId)) return;
+
+    activateSession(urlMode, urlSessionId);
+    // Intentionally omit modeStates — including it re-ran this effect after
+    // sidebar select (state updated before URL), reverting to the stale session_id.
+  }, [searchParams, isStaffAdmin, loadMode, lockMode, syncUrl, activateSession]);
 
   const handleChatModeChange = useCallback(
     (mode: ChatMode) => {
       if (mode === "analytics" && !isStaffAdmin) return;
       if (mode === chatMode) return;
       setChatMode(mode);
+      chatModeRef.current = mode;
       setInput("");
+      syncChatUrlParams(mode, readSessionIdFromLocation());
       loadMode(mode);
     },
-    [chatMode, loadMode, isStaffAdmin],
+    [chatMode, loadMode, isStaffAdmin, syncChatUrlParams],
   );
 
   useEffect(() => {
+    if (lockMode) return;
     if (chatMode === "analytics" && !isStaffAdmin) {
       setChatMode("operations");
+      chatModeRef.current = "operations";
+      syncChatUrlParams("operations", readSessionIdFromLocation());
       loadMode("operations");
     }
-  }, [chatMode, isStaffAdmin, loadMode]);
+  }, [chatMode, isStaffAdmin, loadMode, lockMode, syncChatUrlParams]);
 
   const handleNewSession = useCallback(async () => {
     const mode = chatModeRef.current;
@@ -318,7 +524,7 @@ export const useChatSessions = () => {
       };
 
       updateSessions(mode, (prev) => [newSession, ...prev]);
-      patchMode(mode, { activeSessionId: newId });
+      applySessionSelection(mode, newId);
       setInput("");
       historyLoaded.current.delete(historyKey(mode, newId));
     } catch {
@@ -326,7 +532,7 @@ export const useChatSessions = () => {
     } finally {
       setSessionCreating(false);
     }
-  }, [patchMode, updateSessions]);
+  }, [patchMode, updateSessions, applySessionSelection]);
 
   const handleDeleteSession = useCallback(
     async (sessionId: string) => {
@@ -340,10 +546,11 @@ export const useChatSessions = () => {
         // proceed with local removal
       }
 
+      let nextActiveId: string | null = null;
       setModeStates((prev) => {
         const slice = prev[mode];
         const remaining = slice.sessions.filter((s) => s.id !== sessionId);
-        const nextActive =
+        nextActiveId =
           slice.activeSessionId === sessionId
             ? remaining.length > 0
               ? remaining[0].id
@@ -351,12 +558,13 @@ export const useChatSessions = () => {
             : slice.activeSessionId;
         return {
           ...prev,
-          [mode]: { sessions: remaining, activeSessionId: nextActive },
+          [mode]: { sessions: remaining, activeSessionId: nextActiveId },
         };
       });
+      applySessionSelection(mode, nextActiveId);
       historyLoaded.current.delete(historyKey(mode, sessionId));
     },
-    [],
+    [applySessionSelection],
   );
 
   const sendMessage = useCallback(async () => {
@@ -391,7 +599,7 @@ export const useChatSessions = () => {
       );
 
       const data = res.data?.data;
-      const returnedSessionId = data?.session_id;
+      const returnedSessionId = data?.session_id ?? data?.id;
       if (returnedSessionId != null) {
         const newId = String(returnedSessionId);
         if (newId !== sessionId) {
@@ -400,7 +608,7 @@ export const useChatSessions = () => {
           );
           historyLoaded.current.delete(historyKey(mode, sessionId));
           sessionId = newId;
-          patchMode(mode, { activeSessionId: newId });
+          applySessionSelection(mode, newId);
         }
       }
 
@@ -423,6 +631,37 @@ export const useChatSessions = () => {
         rawReply,
         data?.references,
       );
+
+      if (mode === "analytics") {
+        const analyticsData = parseAnalyticsChatData(data);
+        const hasStructured = hasAnalyticsStructuredBlocks(analyticsData);
+        const hasDisplayText = Boolean(reply?.trim());
+
+        if (!hasDisplayText && !hasStructured) {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            await sleep(400 * (attempt + 1));
+            await fetchHistory(mode, sessionId, true);
+          }
+          return;
+        }
+
+        const analyticsPayload = toAnalyticsMessagePayload(analyticsData);
+        const assistantMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: reply ?? "",
+          timestamp: new Date(),
+          references,
+          ...(analyticsPayload ? { analytics: analyticsPayload } : {}),
+        };
+
+        updateSessions(mode, (prev) =>
+          prev.map((s) =>
+            s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s,
+          ),
+        );
+        return;
+      }
 
       if (!reply) {
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -460,16 +699,13 @@ export const useChatSessions = () => {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, fetchHistory, patchMode, updateSessions]);
+  }, [input, loading, fetchHistory, patchMode, updateSessions, applySessionSelection]);
 
   const handleSelectSession = useCallback(
     (sessionId: string) => {
-      const mode = chatModeRef.current;
-      activeSessionIdRef.current = sessionId;
-      patchMode(mode, { activeSessionId: sessionId });
-      fetchHistory(mode, sessionId, true);
+      activateSession(chatModeRef.current, sessionId);
     },
-    [fetchHistory, patchMode],
+    [activateSession],
   );
 
   const historyLoading =

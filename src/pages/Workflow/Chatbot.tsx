@@ -44,7 +44,7 @@ const Chatbot: FC = () => {
     handleDeleteSession,
     handleSelectSession,
     handleReferenceLinkClick,
-  } = useChatSessions();
+  } = useChatSessions({ usePersistedSession: true });
 
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<"listening" | "processing">("listening");
