@@ -1,4 +1,4 @@
-import { Route, Routes, Navigate, Outlet } from "react-router-dom";
+import { Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
 import RootLayout from "../layout/RootLayout";
 import {
   CallModeEdit,
@@ -207,6 +207,11 @@ import AirImportDsr from "../pages/Air/AirImportDsr";
 import AirExportDsr from "../pages/Air/AirExportDsr";
 import OceanImportDsr from "../pages/Ocean/OceanImportDsr";
 import OceanExportDsr from "../pages/Ocean/OceanExportDsr";
+
+function NavigateKeepSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: to, search }} replace />;
+}
 
 const NavigationRoutes = () => {
   usePageTitleSync();
@@ -549,14 +554,14 @@ const NavigationRoutes = () => {
         <Route path="/workflow/chatbot" element={<Chatbot />} />
         <Route path="/workflow/chatbot-google" element={<ChatbotGoogleApi />} />
         <Route path="/workflow/chatbot-browser" element={<ChatbotBrowser />} />
-        <Route path="/chatbot" element={<Navigate to="/workflow/chatbot" replace />} />
+        <Route path="/chatbot" element={<NavigateKeepSearch to="/workflow/chatbot" />} />
         <Route
           path="/chatbot-google"
-          element={<Navigate to="/workflow/chatbot-google" replace />}
+          element={<NavigateKeepSearch to="/workflow/chatbot-google" />}
         />
         <Route
           path="/chatbot-browser"
-          element={<Navigate to="/workflow/chatbot-browser" replace />}
+          element={<NavigateKeepSearch to="/workflow/chatbot-browser" />}
         />
         <Route path="master" element={<MastersPage />}>
           <Route path="group-company" element={<GroupCompany />} />

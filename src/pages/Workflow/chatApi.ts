@@ -2,6 +2,24 @@ import axios, { AxiosError } from "axios";
 
 export type ChatMode = "operations" | "analytics";
 
+/** Query param on chatbot app routes (`?type=operations|analytics`). */
+export const CHAT_URL_TYPE_PARAM = "type";
+
+/** Active chat session on chatbot app routes (`?session_id=84`). */
+export const CHAT_URL_SESSION_PARAM = "session_id";
+
+export const chatModeFromUrlParam = (value: string | null): ChatMode =>
+  value === "analytics" ? "analytics" : "operations";
+
+export const resolveChatModeFromUrl = (
+  value: string | null,
+  isStaffAdmin: boolean,
+): ChatMode => {
+  const mode = chatModeFromUrlParam(value);
+  if (mode === "analytics" && !isStaffAdmin) return "operations";
+  return mode;
+};
+
 export const chatApi = axios.create({
   baseURL: `${import.meta.env.VITE_CHATBOT_API_BASE_URL}`,
 });
