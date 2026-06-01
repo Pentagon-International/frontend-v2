@@ -31,10 +31,10 @@ import {
 import styles from "./Chatbot.module.css";
 import type { ChatReferences } from "./chatbotMessageUtils";
 import type { ReferenceLinkTarget } from "./chatReferenceNavigation";
-import type { AnalyticsMessagePayload } from "./analyticsChatTypes";
+// import type { AnalyticsMessagePayload } from "./analyticsChatTypes";
 import { useIsAdminUser } from "../../hooks/useIsAdminUser";
-import { AssistantMarkdown } from "./AssistantMarkdown";
-import { AssistantAnalyticsMessage } from "./AssistantAnalyticsMessage";
+// import { AssistantMarkdown } from "./AssistantMarkdown";
+// import { AssistantAnalyticsMessage } from "./AssistantAnalyticsMessage";
 
 export interface ChatbotUiMessage {
   id: string;
