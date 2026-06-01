@@ -279,20 +279,7 @@ function PipelineSalespersonByRepTable({
     );
     const maxGained = Math.max(1, ...list.map((r) => Math.max(0, r.gained)));
     const maxLost = Math.max(1, ...list.map((r) => Math.max(0, r.lost)));
-    const sorted = [...list].sort((a, b) => {
-      const sa =
-        Math.max(0, a.quote) +
-        Math.max(0, a.expected) +
-        Math.max(0, a.gained) +
-        Math.max(0, a.lost);
-      const sb =
-        Math.max(0, b.quote) +
-        Math.max(0, b.expected) +
-        Math.max(0, b.gained) +
-        Math.max(0, b.lost);
-      return sb - sa;
-    });
-    return { sorted, maxInProgress, maxGained, maxLost };
+    return { displayRows: list, maxInProgress, maxGained, maxLost };
   }, [rows]);
 
   if (loading) {
@@ -305,7 +292,7 @@ function PipelineSalespersonByRepTable({
     );
   }
 
-  if (!prepared.sorted.length) {
+  if (!prepared.displayRows.length) {
     return (
       <Box py="xl" px="md">
         <Text size="sm" c="dimmed" ta="center">
@@ -382,7 +369,7 @@ function PipelineSalespersonByRepTable({
             {headerCell("Lost")}
           </Box>
 
-          {prepared.sorted.map((row) => {
+          {prepared.displayRows.map((row) => {
             const sub = getRepSubline?.(row);
             const inProg = Math.max(0, row.quote) + Math.max(0, row.expected);
             return (
@@ -567,7 +554,7 @@ function PipelineSalespersonByRepTable({
             <TotalsFooterRow
               gridTemplate={GRID_TEMPLATE}
               labelLeading="Total"
-              labelTrailing={`${prepared.sorted.length} salespersons`}
+              labelTrailing={`${prepared.displayRows.length} salespersons`}
               potential={summary.total_potential}
               pipeline={summary.total_pipeline}
               gained={summary.total_gained}
