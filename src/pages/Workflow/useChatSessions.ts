@@ -2,12 +2,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   chatApi,
-  // CHAT_URL_SESSION_PARAM,
-  // CHAT_URL_TYPE_PARAM,
-  // chatModeFromUrlParam,
+  CHAT_URL_SESSION_PARAM,
+  CHAT_URL_TYPE_PARAM,
+  chatModeFromUrlParam,
   chatTypeParam,
   handleChatApiError,
-  // resolveChatModeFromUrl,
+  resolveChatModeFromUrl,
   sessionIdForApi,
   type ChatMode,
 } from "./chatApi";
@@ -22,12 +22,12 @@ import {
   sleep,
 } from "./chatbotMessageUtils";
 import { useIsAdminUser } from "../../hooks/useIsAdminUser";
-// import {
-//   hasAnalyticsStructuredBlocks,
-//   parseAnalyticsChatData,
-//   toAnalyticsMescsagePayload,
-//   type AnalyticsMessagePayload,
-// } from "./analyticsChatTypes";
+import {
+  hasAnalyticsStructuredBlocks,
+  parseAnalyticsChatData,
+  toAnalyticsMescsagePayload,
+  type AnalyticsMessagePayload,
+} from "./analyticsChatTypes";
 import { useOperationsChatSessionStore } from "./operationsChatSessionStore";
 
 export type UseChatSessionsOptions = {

@@ -12,7 +12,7 @@ import { IconHistory, IconRobot } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { ChatbotPageUi } from "./ChatbotUi";
 import { useChatSessions } from "./useChatSessions";
-// import { CHAT_URL_SESSION_PARAM, CHAT_URL_TYPE_PARAM } from "./chatApi";
+import { CHAT_URL_SESSION_PARAM, CHAT_URL_TYPE_PARAM } from "./chatApi";
 import { CHATBOT_PATH } from "./jobcreation/workflowUrls";
 import { navigateFromChatReferences } from "./chatReferenceNavigation";
 import type { ReferenceLinkTarget } from "./chatReferenceNavigation";
