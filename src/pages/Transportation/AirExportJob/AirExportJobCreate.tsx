@@ -377,6 +377,16 @@ function AirExportJobCreate() {
 
   const isReadOnly = mode === "view";
 
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const handleBackToListClick = () => {
+    // In create mode the job is not saved yet; confirm before leaving.
+    if (!isReadOnly && mode === "create" && !jobData?.id) {
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    navigate("/air/export-job");
+  };
+
   // When navigated from Customer Service (Jobs without BL) with jobId only - fetch job and show
   useEffect(() => {
     const jobId = location.state?.jobId as number | undefined;
@@ -1227,46 +1237,63 @@ function AirExportJobCreate() {
           });
           return false;
         }
-
-        // Validate transport-type-specific required fields
-        if (normalizedTransportType === "SEA") {
-          if (vessel === "" || voyageNumber === "") {
-            ToastNotification({
-              type: "error",
-              message:
-                "Vessel Name and Voyage Number are required for Sea transport",
-            });
-            return false;
-          }
-        } else if (normalizedTransportType === "AIR") {
-          if (carrierCode === "" || flight === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Flight No are required for Air transport",
-            });
-            return false;
-          }
-        } else if (normalizedTransportType === "ROAD") {
-          if (carrierCode === "" || truckNo === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Truck No are required for Road transport",
-            });
-            return false;
-          }
-        } else if (normalizedTransportType === "RAIL") {
-          const carrierName = routing.carrier_name?.trim() || "";
-          if (carrierName === "" || railNo === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Rail No are required for Rail transport",
-            });
-            return false;
-          }
-        }
       }
       // If hasAnyMandatoryValue is false, skip validation for this routing (allow empty)
     }
+    return true;
+  };
+
+  const validateEstimates = () => {
+    const rows = estimatesForm.values.estimates ?? [];
+    estimatesForm.clearErrors();
+
+    const rowHasAnyValue = (e: (typeof rows)[number]) => {
+      return (
+        !!e.supplier_code ||
+        !!e.supplier_name ||
+        e.charge_id != null ||
+        !!e.charge_name ||
+        !!e.pp_cc ||
+        !!e.unit_id ||
+        !!e.currency_id ||
+        e.no_of_unit != null ||
+        e.roe != null ||
+        e.cost_per_unit != null ||
+        e.total_cost != null
+      );
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const e = rows[i];
+      if (!rowHasAnyValue(e)) continue;
+
+      const missing: Array<{ key: keyof typeof e; label: string }> = [];
+      if (e.charge_id == null) missing.push({ key: "charge_id", label: "Charge" });
+      if (!String(e.pp_cc ?? "").trim())
+        missing.push({ key: "pp_cc", label: "Prepaid / Collect" });
+      if (!String(e.unit_id ?? "").trim()) missing.push({ key: "unit_id", label: "Unit" });
+      if (e.no_of_unit == null) missing.push({ key: "no_of_unit", label: "No of Unit" });
+      if (!String(e.currency_id ?? "").trim())
+        missing.push({ key: "currency_id", label: "Currency" });
+      if (e.roe == null) missing.push({ key: "roe", label: "ROE" });
+      if (e.cost_per_unit == null) missing.push({ key: "cost_per_unit", label: "Cost / Unit" });
+      if (e.total_cost == null) missing.push({ key: "total_cost", label: "Total Cost" });
+
+      if (missing.length > 0) {
+        missing.forEach((m) => {
+          estimatesForm.setFieldError(
+            `estimates.${i}.${String(m.key)}`,
+            `${m.label} is required`,
+          );
+        });
+        ToastNotification({
+          type: "error",
+          message: "Please fill all mandatory fields in Estimates row",
+        });
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -2004,6 +2031,11 @@ function AirExportJobCreate() {
 
     // Validate routings if any field has value
     if (!validateStep2()) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!validateEstimates()) {
       setIsSubmitting(false);
       return;
     }
@@ -2990,13 +3022,27 @@ function AirExportJobCreate() {
                 const routingTransportType = String(
                   routing.transport_type || "",
                 ).toUpperCase();
+                const requireRouting = Boolean(
+                  String(routing.transport_type ?? "").trim() ||
+                    String(routing.from_code ?? "").trim() ||
+                    String(routing.to_code ?? "").trim() ||
+                    String(routing.carrier_code ?? "").trim() ||
+                    String(routing.carrier_name ?? "").trim() ||
+                    String(routing.vessel ?? "").trim() ||
+                    String(routing.flight ?? "").trim() ||
+                    String(routing.voyage_number ?? "").trim() ||
+                    String(routing.truck_no ?? "").trim() ||
+                    String(routing.rail_no ?? "").trim() ||
+                    routing.etd != null ||
+                    routing.eta != null,
+                );
                 return (
                 <Box key={`${index}-${formInitializedKey}`}>
                   <Grid>
                     <Grid.Col span={2.5}>
                       <Dropdown
                         label="Transport Type"
-                        required
+                        required={requireRouting}
                         placeholder="Select Transport Type"
                         searchable
                         clearable
@@ -3056,7 +3102,7 @@ function AirExportJobCreate() {
                     <Grid.Col span={2.5}>
                       <SearchableSelect
                         label="From"
-                        required
+                        required={requireRouting}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type from location"
                         searchFields={["port_code", "port_name"]}
@@ -3105,7 +3151,7 @@ function AirExportJobCreate() {
                     <Grid.Col span={2.5}>
                       <SearchableSelect
                         label="To"
-                        required
+                        required={requireRouting}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type to location"
                         searchFields={["port_code", "port_name"]}
@@ -3157,7 +3203,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2}>
                           <SearchableSelect
                             label="Carrier"
-                            required
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3193,7 +3238,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2}>
                           <FormTextInput
                             label="Vessel"
-                            required
                             placeholder="Enter vessel name"
                             value={routing.vessel || ""}
                             onChange={(e) => {
@@ -3215,7 +3259,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2.5}>
                           <FormTextInput
                             label="Voyage Number"
-                            required
                             placeholder="Enter voyage number"
                             {...routingsForm.getInputProps(
                               `routings.${index}.voyage_number`,
@@ -3230,7 +3273,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2}>
                           <SearchableSelect
                             label="Carrier"
-                            required
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3265,7 +3307,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2.5}>
                           <FormTextInput
                             label="Flight Number"
-                            required
                             placeholder="Enter flight number"
                             {...routingsForm.getInputProps(
                               `routings.${index}.flight`,
@@ -3280,7 +3321,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2}>
                           <SearchableSelect
                             label="Carrier"
-                            required
                             apiEndpoint={URL.carrier}
                             placeholder="Type carrier name"
                             searchFields={["carrier_code", "carrier_name"]}
@@ -3315,7 +3355,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2.5}>
                           <FormTextInput
                             label="Truck Number"
-                            required
                             placeholder="Enter truck number"
                             {...routingsForm.getInputProps(
                               `routings.${index}.truck_no`,
@@ -3330,7 +3369,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2}>
                           <FormTextInput
                             label="Carrier"
-                            required
                             placeholder="Enter carrier name"
                             value={routing.carrier_name || ""}
                             onChange={(e) => {
@@ -3357,7 +3395,6 @@ function AirExportJobCreate() {
                         <Grid.Col span={2.5}>
                           <FormTextInput
                             label="Rail Number"
-                            required
                             placeholder="Enter rail number"
                             {...routingsForm.getInputProps(
                               `routings.${index}.rail_no`,
@@ -3370,7 +3407,7 @@ function AirExportJobCreate() {
                     <Grid.Col span={2.5}>
                       <SingleDateInput
                         label="ETD"
-                        withAsterisk
+                        withAsterisk={requireRouting}
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
@@ -3394,7 +3431,7 @@ function AirExportJobCreate() {
                     <Grid.Col span={2.5}>
                       <SingleDateInput
                         label="ETA"
-                        withAsterisk
+                        withAsterisk={requireRouting}
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
@@ -3705,6 +3742,7 @@ function AirExportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              conditionalRequired
               debugTag="AIR_EXPORT_JOB"
             />
           </Box>
@@ -4398,7 +4436,7 @@ function AirExportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("/air/export-job")}
+            onClick={handleBackToListClick}
           >
             Back to List
           </Button>
@@ -4456,6 +4494,31 @@ function AirExportJobCreate() {
           )}
         </Group>
       </Group>
+
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Confirm"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Do you want to close it since the job is not saved
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              navigate("/air/export-job");
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
       {/* Cargo Manifest PDF Preview Modal */}
       <Modal
         opened={previewOpen}

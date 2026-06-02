@@ -397,6 +397,16 @@ function AirImportJobCreate() {
 
   const isReadOnly = mode === "view";
 
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const handleBackToListClick = () => {
+    // In create mode the job is not saved yet; confirm before leaving.
+    if (!isReadOnly && mode === "create" && !jobData?.id) {
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    navigate("/air/import-job");
+  };
+
   // When navigated from Customer Service Import with jobId only - fetch job and show
   useEffect(() => {
     const jobId = location.state?.jobId as number | undefined;
@@ -5567,7 +5577,7 @@ function AirImportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("/air/import-job")}
+            onClick={handleBackToListClick}
           >
             Back to List
           </Button>
@@ -5634,6 +5644,31 @@ function AirImportJobCreate() {
           )}
         </Group>
       </Group>
+
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Confirm"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Do you want to close it since the job is not saved
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              navigate("/air/import-job");
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
       {/* HAWB Details Display - Show at the top (all steps) */}
       {hawbDetails.length > 0 && (
         <Box mb="xl">

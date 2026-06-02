@@ -12,7 +12,6 @@ import {
   Badge,
   ActionIcon,
   Radio,
-  Tooltip,
   Menu,
   Modal,
   Loader,
@@ -217,23 +216,83 @@ const carrierDetailsSchema = yup.object({
   mbl_date: yup.date().nullable(),
 });
 
-const containerDetailSchema = yup.object({
-  container_type: yup.string().required("Container Type is required"),
-  container_no: yup
-    .string()
-    .required("Container No is required")
-    .matches(/^[A-Za-z0-9]{11}$/, "Container No must be exactly 11 characters"),
-  actual_seal_no: yup.string().nullable(),
-  customs_seal_no: yup.string().nullable(),
-  loading_date: yup.date().nullable(),
-  unloading_date: yup.date().nullable(),
-});
+const containerDetailSchema = yup
+  .object({
+    container_type: yup.string().nullable(),
+    container_no: yup.string().nullable(),
+    actual_seal_no: yup.string().nullable(),
+    customs_seal_no: yup.string().nullable(),
+    loading_date: yup.date().nullable(),
+    unloading_date: yup.date().nullable(),
+  })
+  .test(
+    "container-row-conditional-required",
+    "Invalid container row",
+    function (row) {
+      const r = (row ?? {}) as {
+        container_type?: string | null;
+        container_no?: string | null;
+        actual_seal_no?: string | null;
+        customs_seal_no?: string | null;
+        loading_date?: Date | null;
+        unloading_date?: Date | null;
+      };
+
+      const type = (r.container_type ?? "").trim();
+      const no = (r.container_no ?? "").trim();
+
+      const any =
+        type !== "" ||
+        no !== "" ||
+        (r.actual_seal_no ?? "").trim() !== "" ||
+        (r.customs_seal_no ?? "").trim() !== "" ||
+        r.loading_date != null ||
+        r.unloading_date != null;
+
+      if (!any) return true;
+
+      if (!type) {
+        return this.createError({
+          path: `${this.path}.container_type`,
+          message: "Container Type is required",
+        });
+      }
+      if (!no) {
+        return this.createError({
+          path: `${this.path}.container_no`,
+          message: "Container No is required",
+        });
+      }
+      if (!/^[A-Za-z0-9]{11}$/.test(no)) {
+        return this.createError({
+          path: `${this.path}.container_no`,
+          message: "Container No must be exactly 11 characters",
+        });
+      }
+      return true;
+    },
+  );
 
 const containerDetailsFormSchema = yup.object({
   containers: yup
     .array()
     .of(containerDetailSchema)
     .min(1, "At least one container detail is required")
+    .test(
+      "at-least-one-container-filled",
+      "At least one container detail is required",
+      function (containers) {
+        const arr = (containers ?? []) as Array<{
+          container_type?: string | null;
+          container_no?: string | null;
+        }>;
+        return arr.some(
+          (c) =>
+            (c.container_type ?? "").trim() !== "" &&
+            (c.container_no ?? "").trim() !== "",
+        );
+      },
+    )
     .test(
       "unique-container-no",
       "Container numbers must be unique",
@@ -523,6 +582,16 @@ function ExportJobCreate() {
   }, [location.pathname, location.state]);
 
   const isReadOnly = mode === "view";
+
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const handleBackToListClick = () => {
+    // In create mode the job is not saved yet; confirm before leaving.
+    if (!isReadOnly && mode === "create" && !jobData?.id) {
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    navigate("/SeaExport/export-job");
+  };
 
   // When navigated from Customer Service (Jobs without BL) with jobId only - fetch job and show
   useEffect(() => {
@@ -1568,45 +1637,8 @@ function ExportJobCreate() {
           return false;
         }
 
-        // Validate transport-type-specific required fields using correct field names
-        if (routing.transport_type === "SEA") {
-          const voyageNumber = routing.voyage_number?.trim() || "";
-          if (vessel === "" || voyageNumber === "") {
-            ToastNotification({
-              type: "error",
-              message:
-                "Vessel Name and Voyage Number are required for Sea transport",
-            });
-            return false;
-          }
-        } else if (routing.transport_type === "AIR") {
-          const flight = routing.flight?.trim() || "";
-          if (carrierCode === "" || flight === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Flight No are required for Air transport",
-            });
-            return false;
-          }
-        } else if (routing.transport_type === "ROAD") {
-          const truckNo = routing.truck_no?.trim() || "";
-          if (carrierCode === "" || truckNo === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Truck No are required for Road transport",
-            });
-            return false;
-          }
-        } else if (routing.transport_type === "RAIL") {
-          const railNo = routing.rail_no?.trim() || "";
-          if (carrierCode === "" || railNo === "") {
-            ToastNotification({
-              type: "error",
-              message: "Carrier and Rail No are required for Rail transport",
-            });
-            return false;
-          }
-        }
+        // Routings are optional. When any routing field is entered, only these are mandatory:
+        // transport type, from, to, ETD, ETA. No transport-type-specific requirements.
       }
       // If hasAnyMandatoryValue is false, skip validation for this routing (allow empty)
     }
@@ -1687,6 +1719,23 @@ function ExportJobCreate() {
     }
   };
 
+  // const canNavigateToTab = (nextActive: number): boolean => {
+  //   if (Number.isNaN(nextActive)) return false;
+  //   if (nextActive <= active) return true;
+
+  //   // Validate sequentially when moving forward (keeps existing mandatory checks)
+  //   if (active <= 0 && nextActive >= 1) {
+  //     if (!validateStep1()) return false;
+  //   }
+  //   if (active <= 1 && nextActive >= 2) {
+  //     if (!validateStep2()) return false;
+  //   }
+  //   if (active <= 2 && nextActive >= 3) {
+  //     if (!validateStep3()) return false;
+  //   }
+  //   return true;
+  // };
+
   // Handle previous step
   const handlePrev = () => {
     if (active > 0) {
@@ -1735,6 +1784,14 @@ function ExportJobCreate() {
       (container) =>
         container.container_type?.trim() && container.container_no?.trim(),
     );
+  }, [containerDetailsForm.values.containers]);
+
+  const hasValidContainerForHouse = useMemo(() => {
+    return containerDetailsForm.values.containers.some((c) => {
+      const type = (c.container_type ?? "").trim();
+      const no = (c.container_no ?? "").trim();
+      return Boolean(type) && no.length === 11;
+    });
   }, [containerDetailsForm.values.containers]);
 
   // Handle save container details
@@ -2966,11 +3023,10 @@ function ExportJobCreate() {
 
       <Tabs
         value={String(active)}
-        onChange={(v) =>
-          v !== null &&
-          (isReadOnly || (mode === "edit" && jobData?.id)) &&
-          setActive(Number(v))
-        }
+        onChange={(v) => {
+          if (v === null) return;
+          setActive(Number(v));
+        }}
         color="#105476"
       >
         <Tabs.List
@@ -3426,14 +3482,31 @@ function ExportJobCreate() {
             </Text>
 
             <Stack gap="xl">
-              {routingsForm.values.routings.map((routing, index) => (
-                <Box key={index}>
+              {routingsForm.values.routings.map((routing, index) => {
+                const requireRouting =
+                  (routing.transport_type ?? "").trim() !== "" ||
+                  (routing.from_code ?? "").trim() !== "" ||
+                  (routing.to_code ?? "").trim() !== "" ||
+                  routing.etd != null ||
+                  routing.eta != null ||
+                  routing.atd != null ||
+                  routing.ata != null ||
+                  (routing.vessel ?? "").trim() !== "" ||
+                  (routing.voyage_number ?? "").trim() !== "" ||
+                  (routing.flight ?? "").trim() !== "" ||
+                  (routing.truck_no ?? "").trim() !== "" ||
+                  (routing.rail_no ?? "").trim() !== "" ||
+                  (routing.carrier_code ?? "").trim() !== "" ||
+                  (routing.flight_voyage_number ?? "").trim() !== "";
+
+                return (
+                  <Box key={index}>
                   <Grid>
                     <Grid.Col span={2.4}>
                       <Dropdown
                         size="sm"
                         label="Transport Type"
-                        required
+                        required={requireRouting}
                         placeholder="Select Transport Type"
                         searchable
                         clearable
@@ -3459,7 +3532,7 @@ function ExportJobCreate() {
                     <Grid.Col span={2.4}>
                       <SearchableSelect
                         label="From"
-                        required
+                        required={requireRouting}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type from location"
                         searchFields={["port_code", "port_name"]}
@@ -3508,7 +3581,7 @@ function ExportJobCreate() {
                     <Grid.Col span={2.4}>
                       <SearchableSelect
                         label="To"
-                        required
+                        required={requireRouting}
                         apiEndpoint={URL.portMaster}
                         placeholder="Type to location"
                         searchFields={["port_code", "port_name"]}
@@ -3797,7 +3870,7 @@ function ExportJobCreate() {
                     <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETD"
-                        withAsterisk
+                        withAsterisk={requireRouting}
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
@@ -3821,7 +3894,7 @@ function ExportJobCreate() {
                     <Grid.Col span={2.4}>
                       <SingleDateInput
                         label="ETA"
-                        withAsterisk
+                        withAsterisk={requireRouting}
                         placeholder="YYYY-MM-DD"
                         {...(() => {
                           const inputProps = routingsForm.getInputProps(
@@ -3935,7 +4008,8 @@ function ExportJobCreate() {
                     <Divider my="xl" />
                   )}
                 </Box>
-              ))}
+                );
+              })}
             </Stack>
           </Box>
         </Tabs.Panel>
@@ -3987,10 +4061,10 @@ function ExportJobCreate() {
                 gutter="sm"
               >
                 <Grid.Col span={2.2}>
-                  <RequiredLabel label="Container Type" required={false} />
+                  <RequiredLabel label="Container Type" required />
                 </Grid.Col>
                 <Grid.Col span={1.8}>
-                  <RequiredLabel label="Container No" required={false} />
+                  <RequiredLabel label="Container No" required />
                 </Grid.Col>
                 <Grid.Col span={1.8}>
                   <RequiredLabel label="Actual Seal No" required={false} />
@@ -4048,8 +4122,7 @@ function ExportJobCreate() {
                       }
                       onChange={(e) => {
                         const raw = e.currentTarget.value.toUpperCase();
-                        const alnumOnly = raw.replace(/[^A-Z0-9]/g, "");
-                        const next = alnumOnly.slice(0, 11);
+                        const next = raw.slice(0, 11);
                         containerDetailsForm.setFieldValue(
                           `containers.${index}.container_no`,
                           next,
@@ -5095,7 +5168,7 @@ function ExportJobCreate() {
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate("/SeaExport/export-job")}
+            onClick={handleBackToListClick}
           >
             Back to List
           </Button>
@@ -5116,25 +5189,31 @@ function ExportJobCreate() {
         </Group>
 
         <Group>
-          {!isReadOnly && active === 2 && (
-            <Tooltip
-              label="Please enter Container Type and Container Number in at least one row to enable Add HBL"
-              disabled={canAddHBL}
-              withArrow
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                if (!canAddHBL) {
+                  ToastNotification({
+                    type: "error",
+                    message: "Please fill all mandatory MBL details.",
+                  });
+                  return;
+                }
+                if (!hasValidContainerForHouse) {
+                  ToastNotification({
+                    type: "error",
+                    message: "The container no should contain 11 characters",
+                  });
+                  return;
+                }
+                navigateToHouseCreate();
+              }}
             >
-              <Button
-                variant="outline"
-                color="#105476"
-                leftSection={<IconPlus size={16} />}
-                onClick={() => navigateToHouseCreate()}
-                disabled={!canAddHBL}
-                style={{
-                  cursor: canAddHBL ? "pointer" : "not-allowed",
-                }}
-              >
-                Add HBL
-              </Button>
-            </Tooltip>
+              Add HBL
+            </Button>
           )}
           {active === 0 && !isReadOnly && (
             <Button
@@ -5168,6 +5247,31 @@ function ExportJobCreate() {
           )}
         </Group>
       </Group>
+
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Confirm"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Do you want to close it since the job is not saved
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              navigate("/SeaExport/export-job");
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
       {/* Housing Details Display - Show at the top (all steps) */}
       {housingDetails.length > 0 && (
         <Box mb="xl">
