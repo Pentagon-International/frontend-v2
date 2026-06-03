@@ -57,7 +57,7 @@ const OUTSTANDING_CURRENCY_SYMBOL_BY_CODE: Record<string, string> = {
 };
 
 /**
- * Outstanding amount prefix: ₹ for India branch; otherwise mapped symbol or code + space.
+ * Amount prefix: symbols for mapped codes; AED uses code + space; empty when unknown.
  */
 export function getOutstandingAmountCurrencySymbol(
   currencyCode?: string | null,
@@ -66,7 +66,8 @@ export function getOutstandingAmountCurrencySymbol(
   const code = String(currencyCode ?? "").trim().toUpperCase();
   if (isIndianOutstandingBranch(branchCountryCode, code)) return "₹";
   if (!code) return "";
-  return OUTSTANDING_CURRENCY_SYMBOL_BY_CODE[code] ?? `${code} `;
+  if (code === "AED") return "AED ";
+  return OUTSTANDING_CURRENCY_SYMBOL_BY_CODE[code] ?? "";
 }
 
 /** India (en-IN): 10,00,000 — foreign default branch (en-US): 1,000,000 */
@@ -77,14 +78,16 @@ export function isIndianNumberFormatCountry(
   return isIndianOutstandingBranch(countryCode, currencyCode);
 }
 
-/** Currency code label for badges (INR, AED, USD) — same source as amount prefix. */
+/** Badge label: symbols for mapped codes; AED shows code without trailing space. */
 export function getOutstandingCurrencyCodeLabel(
   currencyCode?: string | null,
   branchCountryCode?: string | null,
 ): string {
   const code = String(currencyCode ?? "").trim().toUpperCase();
-  if (isIndianOutstandingBranch(branchCountryCode, code)) return "INR";
-  return code || "INR";
+  if (isIndianOutstandingBranch(branchCountryCode, code)) return "₹";
+  if (!code) return "";
+  if (code === "AED") return "AED";
+  return OUTSTANDING_CURRENCY_SYMBOL_BY_CODE[code] ?? "";
 }
 
 /**
