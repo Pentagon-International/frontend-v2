@@ -17,6 +17,7 @@ import dayjs from "dayjs";
 import ReactECharts from "echarts-for-react";
 import type { SalespersonMonthlyBudgetItem } from "../../../service/dashboard.service";
 import { getBranchMonthlyBudgetMock } from "./branchMonthlyBudgetMock";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
 
@@ -35,22 +36,6 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const formatCrL = (value: unknown): string => {
-  const amount = toNumber(value);
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)} L`;
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
-
-const formatCurrencyFull = (value: unknown): string => {
-  const amount = toNumber(value);
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
-
 const getAchievementColor = (percentage: number): string => {
   if (percentage >= 90) return "#27ae60";
   if (percentage >= 70) return "#FFBF00";
@@ -66,6 +51,12 @@ export default function BranchMonthlyBudget({
   startMonth,
   endMonth,
 }: BranchMonthlyBudgetProps) {
+  const {
+    formatBudgetCrL: formatCrL,
+    formatBudgetFull: formatCurrencyFull,
+    numberLocale,
+    isIndianBranch,
+  } = useBranchNumberFormat();
   const [isLoading, setIsLoading] = useState(false);
   const [rows, setRows] = useState<SalespersonMonthlyBudgetItem[]>([]);
   const [summary, setSummary] = useState({
@@ -121,7 +112,16 @@ export default function BranchMonthlyBudget({
           show: true,
           color: "#A1A1AA",
           fontSize: 9,
-          formatter: (v: number) => `${(v / 10000000).toFixed(1)}Cr`,
+          formatter: (v: number) =>
+            isIndianBranch
+              ? `${(v / 1e7).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })}Cr`
+              : `${(v / 1e6).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })}M`,
         },
         splitLine: { show: true, lineStyle: { color: "#EEF2F7", type: "dashed" } },
       },
@@ -178,7 +178,7 @@ export default function BranchMonthlyBudget({
         },
       ],
     };
-  }, [rows]);
+  }, [rows, formatCurrencyFull, isIndianBranch, numberLocale]);
 
   const branchTitle = branchCode ? `${branchName} (${branchCode})` : branchName;
 

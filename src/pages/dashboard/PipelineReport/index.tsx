@@ -4335,8 +4335,10 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           </Box>
 
           <ScrollArea
-            type="scroll"
-            scrollbarSize={8}
+            type="always"
+            offsetScrollbars
+            scrollbarSize={10}
+            scrollHideDelay={0}
             style={{ flex: 1, minHeight: 0 }}
           >
             <Box p={20} pb={28} style={{ minWidth: 0 }}>

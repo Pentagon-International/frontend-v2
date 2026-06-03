@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 import { Badge, Box, Group, SegmentedControl, Select, Text } from "@mantine/core";
 import { IconArrowRight } from "@tabler/icons-react";
 import {
@@ -43,14 +44,6 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const formatCrL = (value: number): string => {
-  const abs = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)} L`;
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
-
 const toTitleCase = (value: string): string =>
   value
     .split("_")
@@ -72,6 +65,7 @@ const BudgetVsActualCard = ({
   handleBudgetMonthFilterChange,
   setSelectedYear,
 }: BudgetVsActualCardProps) => {
+  const { formatBudgetCrL: formatCrL } = useBranchNumberFormat();
   const summaryView = useMemo<BudgetSummaryView>(() => {
     const summary = budgetRawData?.summary;
     if (summary && typeof summary === "object") {

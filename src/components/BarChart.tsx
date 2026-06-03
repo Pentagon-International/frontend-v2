@@ -17,6 +17,8 @@ export interface BarChartProps {
   isLoading?: boolean;
   onBarClick?: (params: any) => void;
   yAxisFormatter?: (value: number) => string;
+  /** Grouping for tooltips (en-IN India, en-US foreign). Defaults to en-IN. */
+  numberLocale?: string;
   maxValue?: number;
   showLegend?: boolean;
   legendPosition?: "top" | "bottom";
@@ -29,6 +31,7 @@ const BarChart = ({
   isLoading = false,
   onBarClick,
   yAxisFormatter,
+  numberLocale = "en-IN",
   maxValue,
   showLegend = true,
   legendPosition = "bottom",
@@ -88,7 +91,7 @@ const BarChart = ({
           const value = typeof p.value === "number" ? p.value : p.value[1];
           tooltip += `<div style="margin: 2px 0;">
             <span style="display: inline-block; width: 10px; height: 10px; background-color: ${p.color}; margin-right: 5px; border-radius: 2px;"></span>
-            ${p.seriesName}: ${value.toLocaleString("en-IN")}
+            ${p.seriesName}: ${value.toLocaleString(numberLocale)}
           </div>`;
         });
 
@@ -290,6 +293,7 @@ const BarChart = ({
     hoveredIndex,
     isOutstandingOverdue,
     labels,
+    numberLocale,
   ]);
 
   const chartStyle = useMemo(

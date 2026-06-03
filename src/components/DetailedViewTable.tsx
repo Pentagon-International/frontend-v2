@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Text,
   Button,
@@ -13,6 +13,11 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { IconArrowLeft, IconSend } from "@tabler/icons-react";
+import useAuthStore from "../store/authStore";
+import {
+  formatUserInteger,
+  getDefaultBranchCountryCode,
+} from "../utils/userNumberFormat";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -181,6 +186,17 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
 }) => {
   const pipelineReportDrill2 =
     moduleType === "pipelineReport" && drillLevel === 2;
+  const branches = useAuthStore((state) => state.user?.branches);
+  const branchCountryCode = getDefaultBranchCountryCode(branches);
+  const formatPipelineNumber = useCallback((value: unknown): string => {
+    if (typeof value === "number") {
+      return formatUserInteger(value, branchCountryCode);
+    }
+    if (typeof value === "string" && !Number.isNaN(parseFloat(value))) {
+      return formatUserInteger(parseFloat(value), branchCountryCode);
+    }
+    return String(value ?? "");
+  }, [branchCountryCode]);
 
   // State to track which cell is being edited (rowIndex, columnKey)
   const [editingCell, setEditingCell] = useState<{
@@ -747,9 +763,12 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           Cell: ({ row }) => {
             const cellValue = row.original[key];
             const displayValue =
+              moduleType === "pipelineReport" &&
               typeof cellValue === "number"
-                ? cellValue.toLocaleString()
-                : cellValue;
+                ? formatPipelineNumber(cellValue)
+                : typeof cellValue === "number"
+                  ? cellValue.toLocaleString()
+                  : cellValue;
 
             const rowIndex = row.index;
             const isEditing =
@@ -1300,6 +1319,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
     selectedColumnType,
     hideExpected,
     pipelineReportDrill2,
+    formatPipelineNumber,
   ]);
 
   const columnOrder = useMemo(() => {
@@ -1415,9 +1435,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             : moduleType === "pipelineReport"
               ? "calc(70vh - 120px)"
               : "70vh",
-        overflowY: "auto",
+        overflowY:
+          moduleType === "pipelineReport" ? ("scroll" as const) : "auto",
         overflowX: "auto",
         position: "relative",
+        scrollbarGutter: moduleType === "pipelineReport" ? "stable" : undefined,
       },
     },
   });

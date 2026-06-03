@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Box, Center, Group, Loader, Stack, Table, Text } from "@mantine/core";
+import { useBranchNumberFormat } from "../hooks/useBranchNumberFormat";
 import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 
 type DrawerSummary = {
@@ -47,10 +48,20 @@ const DOT = "#105476";
 const GREEN = "#16A34A";
 const RED = "#EF4444";
 
-function MetricText({ n, fw = 400, c = "#0F172A" }: { n: number; fw?: number; c?: string }) {
+function MetricText({
+  n,
+  formatAmount,
+  fw = 400,
+  c = "#0F172A",
+}: {
+  n: number;
+  formatAmount: (value: number) => string;
+  fw?: number;
+  c?: string;
+}) {
   return (
     <Text fz={13} fw={fw} c={c} style={{ fontVariantNumeric: "tabular-nums" }}>
-      {Math.round(n).toLocaleString("en-IN")}
+      {formatAmount(n)}
     </Text>
   );
 }
@@ -72,6 +83,8 @@ export default function PipelineSalespersonBreakdownDrawerTable({
   onSalespersonClick,
   onFinancialColumnClick,
 }: PipelineSalespersonBreakdownDrawerTableProps) {
+  const { formatAmountFromNumber: formatAmount } = useBranchNumberFormat();
+
   const tableRows = useMemo(
     () =>
       rows.filter(
@@ -92,11 +105,11 @@ export default function PipelineSalespersonBreakdownDrawerTable({
 
   const headerKpiCards = (
     [
-      ["TOTAL POTENTIAL", Math.round(kpis.pot).toLocaleString("en-IN")],
-      ["TOTAL PIPELINE", Math.round(kpis.pipe).toLocaleString("en-IN")],
-      ["TOTAL QUOTED", Math.round(kpis.quoted).toLocaleString("en-IN")],
-      ["TOTAL GAINED", Math.round(kpis.gained).toLocaleString("en-IN")],
-      ["TOTAL LOST", Math.round(kpis.lost).toLocaleString("en-IN")],
+      ["TOTAL POTENTIAL", formatAmount(kpis.pot)],
+      ["TOTAL PIPELINE", formatAmount(kpis.pipe)],
+      ["TOTAL QUOTED", formatAmount(kpis.quoted)],
+      ["TOTAL GAINED", formatAmount(kpis.gained)],
+      ["TOTAL LOST", formatAmount(kpis.lost)],
       ["TOTAL SALESMAN", String(kpis.count)],
     ] as const
   ).map(([label, val]) => (
@@ -239,8 +252,8 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                         {r.branch_code?.trim() || "—"}
                       </Text>
                     </Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.potential} /></Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.pipeline} /></Table.Td>
+                    <Table.Td ta="center"><MetricText n={r.potential} formatAmount={formatAmount} /></Table.Td>
+                    <Table.Td ta="center"><MetricText n={r.pipeline} formatAmount={formatAmount} /></Table.Td>
                     <Table.Td
                       ta="center"
                       onClick={(e) => {
@@ -256,7 +269,7 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                             : undefined,
                       }}
                     >
-                      <MetricText n={r.quote} fw={inProg > 0 && onFinancialColumnClick ? 700 : 400} c={inProg > 0 && onFinancialColumnClick ? GREEN : "#0F172A"} />
+                      <MetricText n={r.quote} formatAmount={formatAmount} fw={inProg > 0 && onFinancialColumnClick ? 700 : 400} c={inProg > 0 && onFinancialColumnClick ? GREEN : "#0F172A"} />
                     </Table.Td>
                     <Table.Td
                       ta="center"
@@ -273,7 +286,7 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                             : undefined,
                       }}
                     >
-                      <MetricText n={r.gained} fw={700} c={r.gained > 0 ? GREEN : "#0F172A"} />
+                      <MetricText n={r.gained} formatAmount={formatAmount} fw={700} c={r.gained > 0 ? GREEN : "#0F172A"} />
                     </Table.Td>
                     <Table.Td
                       ta="center"
@@ -290,9 +303,9 @@ export default function PipelineSalespersonBreakdownDrawerTable({
                             : undefined,
                       }}
                     >
-                      <MetricText n={r.lost} fw={700} c={r.lost > 0 ? RED : "#0F172A"} />
+                      <MetricText n={r.lost} formatAmount={formatAmount} fw={700} c={r.lost > 0 ? RED : "#0F172A"} />
                     </Table.Td>
-                    <Table.Td ta="center"><MetricText n={r.expected} /></Table.Td>
+                    <Table.Td ta="center"><MetricText n={r.expected} formatAmount={formatAmount} /></Table.Td>
                   </Table.Tr>
                 );
                 })

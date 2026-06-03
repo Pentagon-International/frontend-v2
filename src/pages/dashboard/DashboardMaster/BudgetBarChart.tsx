@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 import {
   Box,
   Group,
@@ -91,6 +92,16 @@ const BudgetBarChart = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetBarChartProps) => {
+  const { numberLocale, currencySymbol } = useBranchNumberFormat();
+  const budgetYAxisFormatter = useMemo(
+    () => (value: number) =>
+      `${currencySymbol}${(value / 1e6).toLocaleString(numberLocale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      })}M`,
+    [currencySymbol, numberLocale],
+  );
+
   // Memoized chart data preparation
   const barChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -351,6 +362,8 @@ const BudgetBarChart = ({
         height={320}
         isLoading={isLoadingBudget}
         onBarClick={handleBarClickEvent}
+        numberLocale={numberLocale}
+        yAxisFormatter={budgetYAxisFormatter}
         showLegend={true}
         legendPosition="bottom"
       />

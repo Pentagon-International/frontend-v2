@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 import {
   Card,
   Group,
@@ -96,6 +97,8 @@ const Budget = ({
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
 }: BudgetProps) => {
+  const { numberLocale, currencySymbol } = useBranchNumberFormat();
+
   // Memoized chart data preparation
   const budgetChartData = useMemo(() => {
     if (!budgetRawData?.data || !Array.isArray(budgetRawData.data)) {
@@ -211,7 +214,7 @@ const Budget = ({
             tooltip = params[0].axisValue + "<br>";
           }
           params.forEach((param: any) => {
-            tooltip += `${param.seriesName}: ${param.value.toLocaleString()}<br>`;
+            tooltip += `${param.seriesName}: ${param.value.toLocaleString(numberLocale)}<br>`;
           });
           return tooltip;
         },
@@ -249,7 +252,10 @@ const Budget = ({
         type: "value",
         axisLabel: {
           formatter: function (value: number) {
-            return `₹${(value / 1000000).toFixed(1)}M`;
+            return `${currencySymbol}${(value / 1000000).toLocaleString(numberLocale, {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            })}M`;
           },
           fontSize: 10,
           color: "#666",
@@ -301,7 +307,14 @@ const Budget = ({
         },
       ],
     };
-  }, [budgetChartData, budgetDrillLevel, budgetRawData, budgetWindowStart]);
+  }, [
+    budgetChartData,
+    budgetDrillLevel,
+    budgetRawData,
+    budgetWindowStart,
+    numberLocale,
+    currencySymbol,
+  ]);
 
   const budgetBarChartStyle = useMemo(
     () => ({

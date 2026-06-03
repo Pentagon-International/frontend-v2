@@ -34,6 +34,10 @@ import { CustomerOutstandingSendEmailModal } from "./CustomerOutstandingSendEmai
 import {
   formatUserDecimal,
   formatUserInteger,
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  getOutstandingAmountCurrencySymbol,
+  resolveOutstandingDisplayCurrency,
 } from "../../../utils/userNumberFormat";
 import { enquiryConversionColors } from "./EnquiryConversion/enquiryConversionTokens";
 import {
@@ -196,10 +200,16 @@ function riskPillStyle(risk: string | undefined): { bg: string; fg: string; bord
 function formatAmountCell(
   value: string | number | undefined | null,
   countryCode?: string | null,
+  currencyCode?: string | null,
+  branchCountryCode?: string | null,
 ): string {
   if (value === undefined || value === null || value === "") return "—";
   if (toNumber(value) === 0) return "—";
-  return formatUserInteger(value, countryCode);
+  const prefix = getOutstandingAmountCurrencySymbol(
+    currencyCode,
+    branchCountryCode,
+  );
+  return `${prefix}${formatUserInteger(value, countryCode)}`;
 }
 
 const hdr = {
@@ -257,8 +267,9 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const routeState = (location.state || {}) as RouteState;
   const user = useAuthStore((state) => state.user);
   const userCountryCode = user?.country?.country_code;
-  const formatAmount = (value: string | number | undefined | null) =>
-    formatUserInteger(value, userCountryCode);
+  const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+  const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+  const amountCountryCode = branchCountryCode || userCountryCode;
   const formatCount = (value: string | number | undefined | null) =>
     formatUserInteger(value, userCountryCode);
   const formatPct = (value: string | number | undefined | null) =>
@@ -290,6 +301,28 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<CustomerOutstandingVsOverdueResponse | null>(null);
+  const resolveBranchCurrency = useCallback(
+    (summaryCurrency?: string | null) =>
+      resolveOutstandingDisplayCurrency(
+        summaryCurrency,
+        branchCurrencyCode,
+        branchCountryCode,
+      ),
+    [branchCurrencyCode, branchCountryCode],
+  );
+  const displayCurrencyCode = resolveBranchCurrency(response?.summary?.currency);
+  const amountSymbol = getOutstandingAmountCurrencySymbol(
+    displayCurrencyCode,
+    branchCountryCode,
+  );
+  const formatAmount = useCallback(
+    (value: string | number | undefined | null) => {
+      const formatted = formatUserInteger(value, amountCountryCode);
+      if (toNumber(value) === 0) return formatted;
+      return `${amountSymbol}${formatted}`;
+    },
+    [amountCountryCode, amountSymbol],
+  );
   /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
   const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
   const [emailRow, setEmailRow] = useState<CustomerOutstandingVsOverdueItem | null>(null);
@@ -1139,17 +1172,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.overdue, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.overdue, userCountryCode)}
+                            {formatAmountCell(row.overdue, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.days_1_30, userCountryCode)}
+                            {formatAmountCell(row.days_1_30, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                            {formatAmountCell(row.days_31_60, userCountryCode)}
+                            {formatAmountCell(row.days_31_60, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
@@ -1158,7 +1191,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             c={highlight61_90 ? "#EF4444" : OSTD_LIST_INK}
                             style={ostdTableValueNumericStyle}
                           >
-                            {formatAmountCell(row.days_61_90 ?? row.days_61_plus, userCountryCode)}
+                            {formatAmountCell(row.days_61_90 ?? row.days_61_plus, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
@@ -1167,7 +1200,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
                             style={ostdTableValueNumericStyle}
                           >
-                            {formatAmountCell(row.days_90_180, userCountryCode)}
+                            {formatAmountCell(row.days_90_180, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
@@ -1176,7 +1209,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
                             style={ostdTableValueNumericStyle}
                           >
-                            {formatAmountCell(row.days_180_plus, userCountryCode)}
+                            {formatAmountCell(row.days_180_plus, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right" style={{ ...ostdListTd(), ...col.risk, whiteSpace: "nowrap" }}>
@@ -1508,17 +1541,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.overdue, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.overdue, userCountryCode)}
+                                      {formatAmountCell(drow.overdue, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.days_1_30, userCountryCode)}
+                                      {formatAmountCell(drow.days_1_30, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
-                                      {formatAmountCell(drow.days_31_60, userCountryCode)}
+                                      {formatAmountCell(drow.days_31_60, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
@@ -1527,7 +1560,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       c={highlight61_90d ? "#EF4444" : OSTD_LIST_INK}
                                       style={ostdTableValueNumericStyle}
                                     >
-                                      {formatAmountCell(drow.days_61_90 ?? drow.days_61_plus, userCountryCode)}
+                                      {formatAmountCell(drow.days_61_90 ?? drow.days_61_plus, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
@@ -1536,7 +1569,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
                                       style={ostdTableValueNumericStyle}
                                     >
-                                      {formatAmountCell(drow.days_90_180, userCountryCode)}
+                                      {formatAmountCell(drow.days_90_180, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
@@ -1545,7 +1578,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
                                       style={ostdTableValueNumericStyle}
                                     >
-                                      {formatAmountCell(drow.days_180_plus, userCountryCode)}
+                                      {formatAmountCell(drow.days_180_plus, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
                                   <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Box, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import { useBranchNumberFormat } from "../hooks/useBranchNumberFormat";
 import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 
 export type PipelineProductByServiceRow = {
@@ -73,11 +74,6 @@ const GRID_TEMPLATE =
 
 const BAR_TRACK_W = 80;
 const BAR_H = 16;
-
-function formatAmount(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  return Math.round(n).toLocaleString();
-}
 
 function StripedBarTrack({ children }: { children: React.ReactNode }) {
   return (
@@ -218,6 +214,8 @@ export default function PipelineProductByServiceTable({
   onFinancialColumnClick,
   emptyMessage = "No product pipeline data",
 }: PipelineProductByServiceTableProps) {
+  const { formatAmountFromNumber: formatAmount } = useBranchNumberFormat();
+
   const prepared = useMemo(() => {
     const list = rows.filter(
       (r) =>

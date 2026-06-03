@@ -19,6 +19,7 @@ import ReactECharts from "echarts-for-react";
 import dayjs from "dayjs";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import { ActionIcon } from "@mantine/core";
@@ -47,15 +48,6 @@ const toNumber = (value: unknown): number => {
 };
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
-const formatCrL = (value: unknown): string => {
-  const amount = toNumber(value);
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)} L`;
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
 
 const toTitle = (value: string) =>
   value
@@ -115,6 +107,8 @@ export default function BudgetVsActualDashboard() {
   const isMobile = useMediaQuery("(max-width: 62em)");
   const isCompact = useMediaQuery("(max-width: 48em)");
   const user = useAuthStore((state) => state.user);
+  const { formatBudgetCrL: formatCrL, numberLocale, isIndianBranch, currencySymbol } =
+    useBranchNumberFormat();
   const routeState = (location.state || {}) as RouteState;
 
   const company = routeState.company?.trim() || user?.company?.company_name || "PENTAGON INDIA";
@@ -280,7 +274,16 @@ export default function BudgetVsActualDashboard() {
           fontSize: 10,
           color: "#9CA3AF",
           fontFamily: ERP_FONT_SANS,
-          formatter: (v: number) => (v / 10000000).toFixed(2),
+          formatter: (v: number) =>
+            isIndianBranch
+              ? (v / 1e7).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : (v / 1e6).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                }),
         },
         splitLine: { lineStyle: { color: "#F3F4F6", type: "solid" } },
       },
@@ -339,7 +342,7 @@ export default function BudgetVsActualDashboard() {
         textStyle: { fontFamily: ERP_FONT_SANS, fontSize: 12 },
       },
     };
-  }, [monthlyTrend]);
+  }, [monthlyTrend, isIndianBranch, numberLocale]);
 
   const fyLabel = `FY ${selectedYear?.slice(-2)}-${String(Number(selectedYear) + 1).slice(-2)}`;
   const achYtd = toNumber(summary.achievement_pct);
@@ -961,7 +964,7 @@ export default function BudgetVsActualDashboard() {
                       Monthly Trend
                     </Text>
                     <Text fz={11} c="#9CA3AF" fw={600}>
-                      {fyLabel} · ₹ 
+                      {fyLabel} · {currencySymbol}{" "}
                     </Text>
                   </Group>
                   <Box h={isCompact ? 220 : isMobile ? 240 : 280}>

@@ -19,6 +19,10 @@ import useAuthStore from "../../../store/authStore";
 import {
   formatOutstandingAmountCompact,
   formatUserInteger,
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  getOutstandingCurrencyCodeLabel,
+  resolveOutstandingDisplayCurrency,
 } from "../../../utils/userNumberFormat";
 import {
   dashboardPanelBody,
@@ -58,15 +62,37 @@ const OutstandingVsOverdueCard = ({
   company,
   onViewAll,
 }: OutstandingVsOverdueCardProps) => {
-  const userCountryCode = useAuthStore((state) => state.user?.country?.country_code);
-  const formatAmountCompact = (value: string | number | undefined | null) =>
-    formatOutstandingAmountCompact(value, userCountryCode);
+  const user = useAuthStore((state) => state.user);
+  const userCountryCode = user?.country?.country_code;
+  const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+  const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+  const amountCountryCode = branchCountryCode || userCountryCode;
   const formatCount = (value: string | number | undefined | null) =>
     formatUserInteger(value, userCountryCode);
 
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] =
     useState<CustomerOutstandingVsOverdueResponse | null>(null);
+
+  const summary = response?.summary;
+  const displayCurrencyCode = resolveOutstandingDisplayCurrency(
+    summary?.currency,
+    branchCurrencyCode,
+    branchCountryCode,
+  );
+  const currencyBadgeLabel = getOutstandingCurrencyCodeLabel(
+    displayCurrencyCode,
+    branchCountryCode,
+  );
+  const formatAmountCompact = useCallback(
+    (value: string | number | undefined | null) =>
+      formatOutstandingAmountCompact(
+        value,
+        amountCountryCode,
+        displayCurrencyCode,
+      ),
+    [amountCountryCode, displayCurrencyCode],
+  );
 
   const fetchCardData = useCallback(async () => {
     if (!company?.trim()) return;
@@ -89,7 +115,6 @@ const OutstandingVsOverdueCard = ({
     void fetchCardData();
   }, [fetchCardData]);
 
-  const summary = response?.summary;
   const metrics = useMemo(() => {
     if (!summary) {
       return {
@@ -181,7 +206,7 @@ const OutstandingVsOverdueCard = ({
               },
             }}
           >
-            {summary?.currency || "INR"}
+            {currencyBadgeLabel}
           </Badge>
         </Group>
         <Text fz={11} fw={600} c="#8AA0B9" mt={4} style={{ lineHeight: 1.4 }}>

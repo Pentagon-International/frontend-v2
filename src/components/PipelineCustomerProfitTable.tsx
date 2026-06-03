@@ -9,6 +9,7 @@ import {
   Text,
   Tooltip,
 } from "@mantine/core";
+import { useBranchNumberFormat } from "../hooks/useBranchNumberFormat";
 import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 import type { PipelineCustomerProfitRow } from "../pages/dashboard/PipelineReport/pipelineCustomerProfit";
 
@@ -49,16 +50,18 @@ const RED = "#EF4444";
 
 function MetricText({
   n,
+  formatAmount,
   fw = 400,
   c = "#0F172A",
 }: {
   n: number;
+  formatAmount: (value: number) => string;
   fw?: number;
   c?: string;
 }) {
   return (
     <Text fz={13} fw={fw} c={c} style={{ fontVariantNumeric: "tabular-nums" }}>
-      {Math.round(n).toLocaleString("en-IN")}
+      {formatAmount(n)}
     </Text>
   );
 }
@@ -83,6 +86,8 @@ export default function PipelineCustomerProfitTable({
   drillableMetrics = ["gained", "quote", "lost"],
   onMetricClick,
 }: PipelineCustomerProfitTableProps) {
+  const { formatAmountFromNumber: formatAmount } = useBranchNumberFormat();
+
   const tableRows = useMemo(
     () =>
       [...rows]
@@ -112,11 +117,11 @@ export default function PipelineCustomerProfitTable({
 
   const headerKpiCards = (
     [
-      ["TOTAL POTENTIAL", Math.round(kpis.pot).toLocaleString("en-IN")],
-      ["TOTAL PIPELINE", Math.round(kpis.pipe).toLocaleString("en-IN")],
-      ["TOTAL QUOTED", Math.round(kpis.quoted).toLocaleString("en-IN")],
-      ["TOTAL GAINED", Math.round(kpis.gained).toLocaleString("en-IN")],
-      ["TOTAL LOST", Math.round(kpis.lost).toLocaleString("en-IN")],
+      ["TOTAL POTENTIAL", formatAmount(kpis.pot)],
+      ["TOTAL PIPELINE", formatAmount(kpis.pipe)],
+      ["TOTAL QUOTED", formatAmount(kpis.quoted)],
+      ["TOTAL GAINED", formatAmount(kpis.gained)],
+      ["TOTAL LOST", formatAmount(kpis.lost)],
       ["TOTAL CUSTOMERS", String(kpis.count)],
     ] as const
   ).map(([label, val]) => (
@@ -176,6 +181,7 @@ export default function PipelineCustomerProfitTable({
       >
         <MetricText
           n={value}
+          formatAmount={formatAmount}
           fw={canDrill ? 700 : 400}
           c={canDrill ? color ?? GREEN : "#0F172A"}
         />
@@ -327,6 +333,7 @@ export default function PipelineCustomerProfitTable({
                       >
                         <MetricText
                           n={r.quote}
+                          formatAmount={formatAmount}
                           fw={
                             inProg > 0 &&
                             onMetricClick &&
@@ -346,7 +353,7 @@ export default function PipelineCustomerProfitTable({
                       {renderDrillableMetric(r, "gained", r.gained, GREEN)}
                       {renderDrillableMetric(r, "lost", r.lost, RED)}
                       <Table.Td ta="center">
-                        <MetricText n={r.expected} />
+                        <MetricText n={r.expected} formatAmount={formatAmount} />
                       </Table.Td>
                     </Table.Tr>
                   );

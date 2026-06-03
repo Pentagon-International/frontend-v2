@@ -21,6 +21,7 @@ import {
   type SalespersonMonthlyBudgetBreakdownItem,
   type SalespersonMonthlyBudgetItem,
 } from "../../../service/dashboard.service";
+import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
 
@@ -37,22 +38,6 @@ type SalespersonMonthlyBudgetProps = {
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const formatCrL = (value: unknown): string => {
-  const amount = toNumber(value);
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)} L`;
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
-
-const formatCurrencyFull = (value: unknown): string => {
-  const amount = toNumber(value);
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 };
 
 const getAchievementColor = (percentage: number): string => {
@@ -113,6 +98,12 @@ export default function SalespersonMonthlyBudget({
   endMonth,
   type,
 }: SalespersonMonthlyBudgetProps) {
+  const {
+    formatBudgetCrL: formatCrL,
+    formatBudgetFull: formatCurrencyFull,
+    numberLocale,
+    isIndianBranch,
+  } = useBranchNumberFormat();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<SalespersonMonthlyBudgetItem[]>([]);
@@ -189,7 +180,16 @@ export default function SalespersonMonthlyBudget({
           show: true,
           color: "#A1A1AA",
           fontSize: 9,
-          formatter: (v: number) => `${(v / 10000000).toFixed(1)}Cr`,
+          formatter: (v: number) =>
+            isIndianBranch
+              ? `${(v / 1e7).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })}Cr`
+              : `${(v / 1e6).toLocaleString(numberLocale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })}M`,
         },
         splitLine: { show: true, lineStyle: { color: "#EEF2F7", type: "dashed" } },
       },
@@ -264,7 +264,7 @@ export default function SalespersonMonthlyBudget({
         },
       ],
     };
-  }, [rows]);
+  }, [rows, formatCurrencyFull, isIndianBranch, numberLocale]);
 
   const sparklineInsights = useMemo(() => {
     if (!rows.length) {

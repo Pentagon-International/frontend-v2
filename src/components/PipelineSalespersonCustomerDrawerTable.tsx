@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { useBranchNumberFormat } from "../hooks/useBranchNumberFormat";
 import { enquiryConversionColors } from "../pages/dashboard/DashboardMaster/EnquiryConversion/enquiryConversionTokens";
 
 const GREEN = "#16A34A";
@@ -119,16 +120,18 @@ function ExpectedEditCell({
 
 function MetricText({
   n,
+  formatAmount,
   fw = 400,
   c = "#0F172A",
 }: {
   n: number;
+  formatAmount: (value: number) => string;
   fw?: number;
   c?: string;
 }) {
   return (
     <Text fz={13} fw={fw} c={c} style={{ fontVariantNumeric: "tabular-nums" }}>
-      {Math.round(n).toLocaleString("en-IN")}
+      {formatAmount(n)}
     </Text>
   );
 }
@@ -145,6 +148,8 @@ export default function PipelineSalespersonCustomerDrawerTable({
   onFinancialColumnClick,
   onExpectedEnter,
 }: PipelineSalespersonCustomerDrawerTableProps) {
+  const { formatAmountFromNumber: formatAmount } = useBranchNumberFormat();
+
   const kpis = useMemo(() => {
     const pot = summary?.total_potential ?? sumField(rows, "potential");
     const pipe = summary?.total_pipeline ?? sumField(rows, "pipeline");
@@ -166,26 +171,11 @@ export default function PipelineSalespersonCustomerDrawerTable({
 
   const headerKpiCards = (
     [
-      [
-        "TOTAL POTENTIAL",
-        Math.round(kpis.pot).toLocaleString("en-IN"),
-      ],
-      [
-        "TOTAL PIPELINE",
-        Math.round(kpis.pipe).toLocaleString("en-IN"),
-      ],
-      [
-        "TOTAL QUOTED",
-        Math.round(kpis.quoted).toLocaleString("en-IN"),
-      ],
-      [
-        "TOTAL GAINED",
-        Math.round(kpis.gained).toLocaleString("en-IN"),
-      ],
-      [
-        "TOTAL LOST",
-        Math.round(kpis.lost).toLocaleString("en-IN"),
-      ],
+      ["TOTAL POTENTIAL", formatAmount(kpis.pot)],
+      ["TOTAL PIPELINE", formatAmount(kpis.pipe)],
+      ["TOTAL QUOTED", formatAmount(kpis.quoted)],
+      ["TOTAL GAINED", formatAmount(kpis.gained)],
+      ["TOTAL LOST", formatAmount(kpis.lost)],
       ["TOTAL CUSTOMER", String(totalCustomerCount)],
     ] as const
   ).map(([label, val]) => (
@@ -344,7 +334,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                             onFinancialColumnClick("potential", r);
                         }}
                       >
-                        <MetricText n={r.potential} fw={r.potential > 0 ? 600 : 400} />
+                        <MetricText n={r.potential} formatAmount={formatAmount} fw={r.potential > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
                         ta="center"
@@ -357,7 +347,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                             onFinancialColumnClick("pipeline", r);
                         }}
                       >
-                        <MetricText n={r.pipeline} fw={r.pipeline > 0 ? 600 : 400} />
+                        <MetricText n={r.pipeline} formatAmount={formatAmount} fw={r.pipeline > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
                         ta="center"
@@ -369,7 +359,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                           if (r.quote > 0) onFinancialColumnClick("quote", r);
                         }}
                       >
-                        <MetricText n={r.quote} fw={r.quote > 0 ? 600 : 400} />
+                        <MetricText n={r.quote} formatAmount={formatAmount} fw={r.quote > 0 ? 600 : 400} />
                       </Table.Td>
                       <Table.Td
                         ta="center"
@@ -383,6 +373,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                       >
                         <MetricText
                           n={r.gained}
+                          formatAmount={formatAmount}
                           fw={700}
                           c={r.gained > 0 ? GREEN : "#0F172A"}
                         />
@@ -399,6 +390,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
                       >
                         <MetricText
                           n={r.lost}
+                          formatAmount={formatAmount}
                           fw={700}
                           c={r.lost > 0 ? RED : "#0F172A"}
                         />
