@@ -48,8 +48,10 @@ const getAchievementColor = (percentage: number): string => {
 
 function BreakdownRow({
   segment,
+  formatAmount,
 }: {
   segment: SalespersonMonthlyBudgetBreakdownItem;
+  formatAmount: (value: string | number | null | undefined) => string;
 }) {
   const actual = segment.actual_budget;
   const budget = segment.sales_budget;
@@ -66,18 +68,18 @@ function BreakdownRow({
         </Text>
       </Table.Td>
       <Table.Td ta="right">
-        <Text fz={12} fw={600} c="#0F172A">
-          {actual}
+        <Text fz={12} fw={600} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {formatAmount(actual)}
         </Text>
       </Table.Td>
       <Table.Td ta="right">
-        <Text fz={12} fw={500} c="#64748B">
-          {budget}
+        <Text fz={12} fw={500} c="#64748B" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {formatAmount(budget)}
         </Text>
       </Table.Td>
       <Table.Td ta="right">
-        <Text fz={12} fw={600} c="#0F172A">
-          {segment.incentive_amount ?? 0}
+        <Text fz={12} fw={600} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {formatAmount(segment.incentive_amount)}
         </Text>
       </Table.Td>
       <Table.Td ta="right">
@@ -99,6 +101,7 @@ export default function SalespersonMonthlyBudget({
   type,
 }: SalespersonMonthlyBudgetProps) {
   const {
+    formatAmount,
     formatBudgetCrL: formatCrL,
     formatBudgetFull: formatCurrencyFull,
     numberLocale,
@@ -365,8 +368,8 @@ export default function SalespersonMonthlyBudget({
               <Text fz={11} fw={700} c="#64748B" tt="uppercase">
                 Actual Budget
               </Text>
-              <Text fw={800} fz={24} c="#111827" mt={4}>
-                {summary.totalActualBudget}
+              <Text fw={800} fz={24} c="#111827" mt={4} style={{ fontVariantNumeric: "tabular-nums" }}>
+                {formatAmount(summary.totalActualBudget)}
               </Text>
             </Card>
           </Grid.Col>
@@ -375,8 +378,8 @@ export default function SalespersonMonthlyBudget({
               <Text fz={11} fw={700} c="#64748B" tt="uppercase">
                 Sales Budget
               </Text>
-              <Text fw={800} fz={24} c="#111827" mt={4}>
-                {summary.totalSalesBudget}
+              <Text fw={800} fz={24} c="#111827" mt={4} style={{ fontVariantNumeric: "tabular-nums" }}>
+                {formatAmount(summary.totalSalesBudget)}
               </Text>
             </Card>
           </Grid.Col>
@@ -581,16 +584,18 @@ export default function SalespersonMonthlyBudget({
                             </Group>
                           </Table.Td>
                           <Table.Td ta="right">
-                            <Text fw={700} fz={13}>{actual}</Text>
-                          </Table.Td>
-                          <Table.Td ta="right">
-                            <Text fw={600} fz={13} c="#475569">
-                              {budget}
+                            <Text fw={700} fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {formatAmount(actual)}
                             </Text>
                           </Table.Td>
                           <Table.Td ta="right">
-                            <Text fw={700} fz={13} c="#0F172A">
-                              {row.incentive_amount ?? 0}
+                            <Text fw={600} fz={13} c="#475569" style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {formatAmount(budget)}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={700} fz={13} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {formatAmount(row.incentive_amount)}
                             </Text>
                           </Table.Td>
                           <Table.Td ta="right">
@@ -604,6 +609,7 @@ export default function SalespersonMonthlyBudget({
                             <BreakdownRow
                               key={`${row.month}-${segIdx}-${segment.trade_type}-${segment.service_type}`}
                               segment={segment}
+                              formatAmount={formatAmount}
                             />
                           ))}
                       </Fragment>

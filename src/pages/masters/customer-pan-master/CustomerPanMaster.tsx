@@ -1,48 +1,208 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
 import {
   Box,
   Button,
   Card,
   Checkbox,
   Group,
+  ScrollArea,
   Stack,
+  Table,
   Text,
   TextInput,
-  Divider,
+  Badge,
 } from "@mantine/core";
 import { IconSearch } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import { ToastNotification } from "../../../components";
 import { postAPICall } from "../../../service/postApiCall";
+import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
+import {
+  searchGstinByPan,
+  buildAddressLine,
+  type AttestrGstinRecord,
+} from "../../../service/attestrGstin.service";
 
-type PanAddress = {
-  id: number;
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-  pincode: string;
-  phone_no?: string;
-  mobile_no?: string;
-  email?: string;
-  pan_no?: string;
-  gst_id?: string;
-  gst_registration_status?: string;
+const DUMMY_EMAIL = "customer@dummy.local";
+const DUMMY_PHONE = "9999999999";
+
+type CustomerTypeRow = {
+  customer_type_code: string;
+  customer_type_name: string;
+  status?: string;
 };
 
+type SalespersonRow = {
+  sales_person: string;
+};
+
+type SalespersonsResponse = {
+  success?: boolean;
+  data?: SalespersonRow[];
+};
+
+function resolveCustomerTypeCode(types: CustomerTypeRow[]): string {
+  const match = types.find(
+    (t) =>
+      String(t.customer_type_name ?? "").trim().toLowerCase() === "customer",
+  );
+  if (match?.customer_type_code) return match.customer_type_code;
+  const loose = types.find((t) =>
+    String(t.customer_type_name ?? "").toLowerCase().includes("customer"),
+  );
+  return loose?.customer_type_code ?? "customer";
+}
+
+function resolveLoggedInAssignTo(
+  salespersons: SalespersonRow[],
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): string {
+  if (!user) return "";
+  const candidates = [
+    String(user.email ?? "").trim().toLowerCase(),
+    String(user.full_name ?? "").trim().toLowerCase(),
+    String(user.username ?? "").trim().toLowerCase(),
+  ].filter(Boolean);
+
+  for (const sp of salespersons) {
+    const person = String(sp.sales_person ?? "").trim();
+    const norm = person.toLowerCase();
+    if (candidates.some((c) => c === norm)) return person;
+    if (
+      candidates.some(
+        (c) => norm.includes(c) || c.includes(norm),
+      )
+    ) {
+      return person;
+    }
+  }
+
+  return (
+    salespersons[0]?.sales_person ??
+    user.full_name ??
+    user.email ??
+    user.username ??
+    ""
+  );
+}
+
+function buildCustomerPayload(
+  record: AttestrGstinRecord,
+  pan: string,
+  customerTypeCode: string,
+  assignedTo: string,
+) {
+  const addr = record.primaryAddress ?? {};
+  const addressLine = buildAddressLine(addr);
+  const lat = Number(addr.latitude);
+  const lng = Number(addr.longitude);
+
+  return {
+    customer_name: record.legalName || record.tradeName || "",
+    customer_type_code: [customerTypeCode],
+    term_code: "CREDIT",
+    own_office: false,
+    status: "ACTIVE",
+    assigned_to: assignedTo,
+    addresses_data: [
+      {
+        customer_location: addr.locality || addr.district || "",
+        address_type: "Primary",
+        address: addressLine,
+        city: addr.locality || addr.district || "",
+        state: addr.state || "",
+        country: "India",
+        pincode: addr.zip || "",
+        phone_no: DUMMY_PHONE,
+        mobile_no: DUMMY_PHONE,
+        email: DUMMY_EMAIL,
+        pan_no: record.pan || pan,
+        gst_id: record.gstin || "",
+        gst_registration_status: record.status || "",
+        latitude: Number.isFinite(lat) ? lat : 0,
+        longitude: Number.isFinite(lng) ? lng : 0,
+      },
+    ],
+  };
+}
+
 export default function CustomerPanMaster() {
+  const user = useAuthStore((s) => s.user);
   const [panNumber, setPanNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [addresses, setAddresses] = useState<PanAddress[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [customerName, setCustomerName] = useState("");
-  const [apiMessage, setApiMessage] = useState("");
-  const navigate = useNavigate();
+  const [isCreating, setIsCreating] = useState(false);
+  const [records, setRecords] = useState<AttestrGstinRecord[]>([]);
+  const [selectedGstins, setSelectedGstins] = useState<Set<string>>(new Set());
+  const [searchMessage, setSearchMessage] = useState("");
+
+  const { data: customerTypes = [] } = useQuery({
+    queryKey: ["customerTypes", "pan-master"],
+    queryFn: async () => {
+      const response = (await getAPICall(`${URL.customerType}`, API_HEADER)) as
+        | { success?: boolean; data?: CustomerTypeRow[] }
+        | CustomerTypeRow[];
+      if (Array.isArray(response)) {
+        return response.filter((t) => t.status !== "INACTIVE");
+      }
+      if (response?.success && Array.isArray(response.data)) {
+        return response.data.filter((t) => t.status !== "INACTIVE");
+      }
+      return [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: salespersons = [] } = useQuery({
+    queryKey: ["salespersons", "pan-master"],
+    queryFn: async () => {
+      const response = (await postAPICall(
+        URL.salespersons,
+        { customer_code: "" },
+        API_HEADER,
+      )) as SalespersonsResponse;
+      return Array.isArray(response?.data) ? response.data : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const customerTypeCode = useMemo(
+    () => resolveCustomerTypeCode(customerTypes),
+    [customerTypes],
+  );
+
+  const assignedTo = useMemo(
+    () => resolveLoggedInAssignTo(salespersons, user),
+    [salespersons, user],
+  );
+
+  const allSelected =
+    records.length > 0 && selectedGstins.size === records.length;
+  const someSelected =
+    selectedGstins.size > 0 && selectedGstins.size < records.length;
+
+  const toggleGstin = useCallback((gstin: string) => {
+    setSelectedGstins((prev) => {
+      const next = new Set(prev);
+      if (next.has(gstin)) next.delete(gstin);
+      else next.add(gstin);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedGstins((prev) => {
+      if (records.length > 0 && prev.size === records.length) {
+        return new Set();
+      }
+      return new Set(records.map((r) => r.gstin));
+    });
+  }, [records]);
 
   const handleSearchClick = async () => {
-    const pan = panNumber.trim();
+    const pan = panNumber.trim().toUpperCase();
     if (!pan) {
       ToastNotification({
         type: "error",
@@ -51,143 +211,120 @@ export default function CustomerPanMaster() {
       return;
     }
 
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      ToastNotification({
+        type: "error",
+        message: "Please enter a valid PAN (e.g. AAGCP4765J)",
+      });
+      return;
+    }
+
     try {
       setIsSearching(true);
-      setSelectedIds(new Set());
-      setAddresses([]);
-      setCustomerName("");
-      setApiMessage("");
+      setSelectedGstins(new Set());
+      setRecords([]);
+      setSearchMessage("");
 
-      const response = (await postAPICall(
-        URL.panGstByPan,
-        { pan_no: pan },
-        API_HEADER,
-      )) as {
-        status?: string;
-        message?: string;
-        data?: {
-          pan_no?: string;
-          customer_name?: string;
-          gst_uin_list?: Array<{
-            gst_uin?: string;
-            status?: string;
-            state?: string;
-            address?: string;
-          }>;
-        };
-      };
+      const response = await searchGstinByPan(pan);
 
-      const status = response?.status;
-      const message = response?.message ?? "";
-      const data = response?.data;
-
-      if (!status || status.toLowerCase() !== "success" || !data) {
+      if (!response.valid) {
         ToastNotification({
           type: "error",
           message:
-            message ||
-            "No GST registrations found for this PAN. Please verify the PAN number.",
+            response.message ||
+            "No valid GST registrations found for this PAN.",
         });
         return;
       }
 
-      setCustomerName(data.customer_name ?? "");
-      setApiMessage(message);
-
-      const gstList = Array.isArray(data.gst_uin_list)
-        ? data.gst_uin_list
-        : [];
-
-      if (!gstList.length) {
+      const list = response.records ?? [];
+      if (!list.length) {
         ToastNotification({
           type: "info",
           message: "No GST registrations found for this PAN.",
         });
-        setAddresses([]);
         return;
       }
 
-      const mapped: PanAddress[] = gstList.map((item, index) => ({
-        id: index + 1,
-        address: item.address ?? "",
-        city: "",
-        state: item.state ?? "",
-        country: "",
-        pincode: "",
-        phone_no: "",
-        mobile_no: "",
-        email: "",
-        pan_no: data.pan_no ?? pan,
-        gst_id: item.gst_uin ?? "",
-        gst_registration_status: item.status ?? "",
-      }));
-
-      setAddresses(mapped);
+      setRecords(list);
+      setSearchMessage(response.message ?? "");
     } catch (error) {
-      console.error("Error searching by PAN:", error);
+      console.error("Attestr GSTIN search error:", error);
       ToastNotification({
         type: "error",
-        message: "Failed to search addresses for this PAN number",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to search GST registrations for this PAN",
       });
     } finally {
       setIsSearching(false);
     }
   };
 
-  const toggleAddressSelection = (id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const handleCreateCustomer = () => {
-    const selected = addresses.filter((addr) => selectedIds.has(addr.id));
-
-    if (selected.length === 0) {
+  const handleCreateCustomers = async () => {
+    const selected = records.filter((r) => selectedGstins.has(r.gstin));
+    if (!selected.length) {
       ToastNotification({
         type: "error",
-        message: "Please select at least one address before creating a customer",
+        message: "Please select at least one GST registration to create customers",
       });
       return;
     }
 
-    const mappedAddresses = selected.map((addr) => ({
-      customer_location: "",
-      address_type: "Primary",
-      address: addr.address,
-      city: addr.city,
-      state: addr.state,
-      country: addr.country || "",
-      pincode: addr.pincode,
-      phone_no: addr.phone_no ?? "",
-      mobile_no: addr.mobile_no ?? "",
-      email: addr.email ?? "",
-      pan_no: addr.pan_no ?? panNumber.trim(),
-      gst_id: addr.gst_id ?? "",
-      gst_registration_status: addr.gst_registration_status ?? "",
-      latitude: 0,
-      longitude: 0,
-    }));
+    if (!assignedTo) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Could not resolve Assign To for the logged-in user. Check salesperson mapping.",
+      });
+      return;
+    }
 
-    navigate("/master/customer/create", {
-      state: {
-        customerData: {
-          customer_name: customerName || "",
-          customer_type_code: "customer",
-          term_code: "",
-          own_office: false,
-          assigned_to: "",
-          addresses_data: mappedAddresses,
-        },
-      },
-    });
+    setIsCreating(true);
+    let created = 0;
+    const failures: string[] = [];
+
+    for (const record of selected) {
+      try {
+        const payload = buildCustomerPayload(
+          record,
+          panNumber.trim().toUpperCase(),
+          customerTypeCode,
+          assignedTo,
+        );
+        await postAPICall(URL.customer, payload, API_HEADER);
+        created += 1;
+      } catch (error) {
+        const label = record.gstin || record.legalName;
+        const msg =
+          error instanceof Error ? error.message : "Create failed";
+        failures.push(`${label}: ${msg}`);
+      }
+    }
+
+    setIsCreating(false);
+
+    if (created > 0) {
+      ToastNotification({
+        type: "success",
+        message: `Created ${created} customer${created === 1 ? "" : "s"} successfully.`,
+      });
+      setSelectedGstins(new Set());
+    }
+
+    if (failures.length) {
+      ToastNotification({
+        type: "error",
+        message:
+          failures.length === selected.length
+            ? failures[0]
+            : `${failures.length} failed: ${failures[0]}`,
+      });
+    }
   };
+
+  const primaryLegalName = records[0]?.legalName ?? "";
 
   return (
     <Card shadow="sm" padding="lg" radius="md">
@@ -202,9 +339,10 @@ export default function CustomerPanMaster() {
           label="PAN Number"
           placeholder="Enter PAN Number"
           value={panNumber}
-          onChange={(e) => setPanNumber(e.target.value)}
+          onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
           style={{ flex: 1, maxWidth: 400 }}
           size="sm"
+          maxLength={10}
         />
         <Button
           color="#105476"
@@ -218,7 +356,7 @@ export default function CustomerPanMaster() {
         </Button>
       </Group>
 
-      {customerName && (
+      {primaryLegalName && (
         <Box
           mt="lg"
           p="sm"
@@ -229,76 +367,125 @@ export default function CustomerPanMaster() {
           }}
         >
           <Text size="xs" c="dimmed" fw={500} tt="uppercase">
-            Customer from PAN
+            Company from PAN
           </Text>
           <Text size="lg" fw={700} c="#105476" mt={4}>
-            {customerName}
+            {primaryLegalName}
           </Text>
-          {apiMessage && (
+          <Group gap="md" mt={6}>
+            <Text size="xs" c="dimmed">
+              Assign To: <strong>{assignedTo || "—"}</strong>
+            </Text>
+          </Group>
+          {searchMessage && (
             <Text size="xs" c="dimmed" mt={4}>
-              {apiMessage}
+              {searchMessage}
             </Text>
           )}
-          <Divider mt="sm" />
         </Box>
       )}
 
-      <Stack mt="xl" gap="sm">
-        {addresses.length === 0 ? (
-          <Text size="sm" c="dimmed">
-            No addresses found. Enter a PAN number and search to see matching addresses.
-          </Text>
-        ) : (
-          <Group gap="md" wrap="wrap" align="stretch">
-            {addresses.map((addr) => (
-              <Card
-                key={addr.id}
-                withBorder
-                padding="md"
-                radius="md"
-                shadow="xs"
-                style={{
-                  width: 400,
-                  minHeight: 160,
-                  borderColor: selectedIds.has(addr.id) ? "#105476" : "#e0e0e0",
-                  backgroundColor: selectedIds.has(addr.id) ? "#f5fbff" : "#ffffff",
-                  display: "flex",
-                  alignItems: "stretch",
-                }}
-              >
-                <Group align="flex-start" gap="sm" wrap="nowrap" style={{ width: "100%" }}>
-                  <Checkbox
-                    checked={selectedIds.has(addr.id)}
-                    onChange={() => toggleAddressSelection(addr.id)}
-                    mt={4}
-                  />
-                  <Box style={{ flex: 1, minHeight: 80 }}>
-                    <Text size="sm" fw={600} c="#105476">
-                      {addr.gst_id || "GST UIN not available"}
-                    </Text>
-                    <Text size="xs" c="dimmed" mt={2}>
-                      {addr.state || "State not available"}
-                      {addr.gst_registration_status
-                        ? ` • ${addr.gst_registration_status}`
-                        : ""}
-                    </Text>
-                    <Text size="sm" mt={6}>
-                      {addr.address || "Address not available"}
-                    </Text>
-                  </Box>
-                </Group>
-              </Card>
-            ))}
-          </Group>
-        )}
-      </Stack>
+      {records.length > 0 && (
+        <Card
+          withBorder
+          radius="md"
+          p={0}
+          mt="xl"
+          style={{ borderColor: "#e2e8f0", overflow: "hidden" }}
+        >
+          <ScrollArea.Autosize mah={480}>
+            <Table
+              striped
+              highlightOnHover
+              withTableBorder={false}
+              horizontalSpacing="md"
+              verticalSpacing="sm"
+            >
+              <Table.Thead style={{ background: "#f1f5f9" }}>
+                <Table.Tr>
+                  <Table.Th w={44}>
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all GSTIN rows"
+                    />
+                  </Table.Th>
+                  <Table.Th>GSTIN</Table.Th>
+                  <Table.Th>Company Name</Table.Th>
+                  <Table.Th>Location</Table.Th>
+                  <Table.Th>State</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {records.map((row) => {
+                  const selected = selectedGstins.has(row.gstin);
+                  return (
+                    <Table.Tr
+                      key={row.gstin}
+                      style={{
+                        background: selected ? "#f0f9ff" : undefined,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => toggleGstin(row.gstin)}
+                    >
+                      <Table.Td onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selected}
+                          onChange={() => toggleGstin(row.gstin)}
+                          aria-label={`Select ${row.gstin}`}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13} fw={600} c="#105476">
+                          {row.gstin}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13} fw={500} maw={280} lineClamp={2}>
+                          {row.legalName || "—"}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13}>
+                          {row.primaryAddress?.locality || "—"}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fz={13}>{row.primaryAddress?.state || "—"}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          size="sm"
+                          variant="light"
+                          color={row.active ? "green" : "gray"}
+                        >
+                          {row.status || (row.active ? "Active" : "Inactive")}
+                        </Badge>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea.Autosize>
+        </Card>
+      )}
 
-      <Group justify="flex-end" mt="xl">
-        <Button color="#105476" onClick={handleCreateCustomer} disabled={selectedIds.size === 0}>
-          Create Customer
-        </Button>
-      </Group>
+      {records.length > 0 && (
+        <Group justify="flex-end" mt="xl">
+          <Button
+            color="#105476"
+            onClick={handleCreateCustomers}
+            disabled={selectedGstins.size === 0}
+            loading={isCreating}
+          >
+            Create Customer{selectedGstins.size > 1 ? "s" : ""}
+            {selectedGstins.size > 0 ? ` (${selectedGstins.size})` : ""}
+          </Button>
+        </Group>
+      )}
     </Card>
   );
 }
-

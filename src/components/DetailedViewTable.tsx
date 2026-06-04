@@ -579,8 +579,11 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             const cellValue = row.original[key];
             const displayValue =
               typeof cellValue === "number"
-                ? cellValue.toLocaleString()
-                : cellValue;
+                ? formatPipelineNumber(cellValue)
+                : typeof cellValue === "string" &&
+                    !Number.isNaN(parseFloat(cellValue))
+                  ? formatPipelineNumber(parseFloat(cellValue))
+                  : cellValue;
             return (
               <Badge color={getBadgeColor()} size="md" variant="filled">
                 {displayValue}

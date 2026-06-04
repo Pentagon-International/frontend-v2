@@ -52,6 +52,7 @@ export default function BranchMonthlyBudget({
   endMonth,
 }: BranchMonthlyBudgetProps) {
   const {
+    formatAmount,
     formatBudgetCrL: formatCrL,
     formatBudgetFull: formatCurrencyFull,
     numberLocale,
@@ -360,13 +361,13 @@ export default function BranchMonthlyBudget({
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right">
-                          <Text fw={700} fz={13}>
-                            {formatCrL(actual)}
+                          <Text fw={700} fz={13} style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {formatAmount(actual)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right">
-                          <Text fw={600} fz={13} c="#475569">
-                            {formatCrL(budget)}
+                          <Text fw={600} fz={13} c="#475569" style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {formatAmount(budget)}
                           </Text>
                         </Table.Td>
                         <Table.Td ta="right">
