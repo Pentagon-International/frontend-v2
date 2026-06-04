@@ -30,6 +30,7 @@ import CallModeView from "../pages/masters/callmode-master/CallModeView";
 
 // Create Customer-PAN Master
 import CustomerPanMaster from "../pages/masters/customer-pan-master/CustomerPanMaster";
+import ApproveCustomerPanMaster from "../pages/masters/customer-pan-master/ApproveCustomerPanMaster";
 
 import MastersPage from "./masters/MastersPage";
 
@@ -200,6 +201,7 @@ export {
   CallModeEdit,
   CallModeView,
   CustomerPanMaster,
+  ApproveCustomerPanMaster,
   TermsOfShipment,
   NewTermsOfShipment,
   EditTermsOfShipment,

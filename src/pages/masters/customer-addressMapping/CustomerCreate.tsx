@@ -23,6 +23,7 @@ import {
   Textarea,
   ActionIcon,
   Center,
+  Divider,
   Loader,
 } from "@mantine/core";
 import { useForm, UseFormReturnType } from "@mantine/form";
@@ -901,23 +902,21 @@ const AddressCard = ({
   const isStateRequired = isIndiaAddressCountry(addressCountryValue);
 
   return (
-    <Card key={index} shadow="xs" padding="md">
-      <Stack gap="sm">
-        <Card withBorder radius="md" padding="md">
-          <Box
-            mb="sm"
-            px="sm"
-            py={6}
-            style={{
-              backgroundColor: "#F3F7FA",
-              border: "1px solid #D7E3ED",
-              borderRadius: 8,
-            }}
-          >
-            <Text size="sm" fw={600} c="#105476">
-              Address
-            </Text>
-          </Box>
+    <Card
+      withBorder
+      radius="md"
+      padding="lg"
+      style={{
+        borderColor: "#b8d4e8",
+        backgroundColor: "#ffffff",
+        boxShadow: "0 2px 8px rgba(16, 84, 118, 0.1)",
+      }}
+    >
+      <Stack gap="lg">
+        <Box>
+          <Text size="sm" fw={600} c="dimmed" mb="sm">
+            Address details
+          </Text>
           <Grid>
             <Grid.Col span={4}>
               <TextInput
@@ -1161,24 +1160,14 @@ const AddressCard = ({
               </>
             )}
           </Grid>
-        </Card>
+        </Box>
 
         {isIndiaUser && (
-          <Card withBorder radius="md" padding="md">
-            <Box
-              mb="sm"
-              px="sm"
-              py={6}
-              style={{
-                backgroundColor: "#F3F7FA",
-                border: "1px solid #D7E3ED",
-                borderRadius: 8,
-              }}
-            >
-              <Text size="sm" fw={600} c="#105476">
-                GST
-              </Text>
-            </Box>
+          <Box>
+            <Divider />
+            <Text size="sm" fw={600} c="dimmed" mb="sm" mt="md">
+              GST details
+            </Text>
             <Grid>
               <Grid.Col span={4}>
                 <Select
@@ -1406,25 +1395,24 @@ const AddressCard = ({
                   </Grid.Col>
                 </>
               )}
-
-              <Grid.Col span={12}>
-                <Group justify="right" mb="md">
-                  {canRemove && (
-                    <ActionIcon
-                      variant="light"
-                      color="red"
-                      onClick={() => onRemove(index)}
-                      disabled={isViewMode}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  )}
-                </Group>
-              </Grid.Col>
             </Grid>
-          </Card>
+          </Box>
         )}
       </Stack>
+
+      {canRemove && (
+        <Group justify="flex-end" mt="md">
+          <ActionIcon
+            variant="light"
+            color="red"
+            onClick={() => onRemove(index)}
+            disabled={isViewMode}
+            aria-label="Remove address"
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+      )}
     </Card>
   );
 };
@@ -3120,56 +3108,48 @@ function CustomerCreate() {
                   backgroundColor: "#F8F8F8",
                 }}
               >
-                <Box mt="md">
-                  <Card shadow="sm" padding="xs" radius="md">
-                    {/* <Text size="sm" fw={500}>
-                Address
-              </Text> */}
+                <Box mt="md" px="xs">
+                  <Stack gap="xl">
+                    {addressForm.values.addresses_data.map((_, index) => (
+                      <AddressCard
+                        key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
+                        index={index}
+                        isViewMode={isViewMode}
+                        isVendorMasterRoute={isVendorMasterRoute}
+                        isDubaiUser={isDubaiUser}
+                        isIndiaUser={isIndiaUser}
+                        addressForm={addressForm}
+                        countryOptions={countryOptions}
+                        selectedCountries={selectedCountries}
+                        getStateOptions={getStateOptions}
+                        getStateValue={getStateValue}
+                        cityOptions={cityOptions}
+                        getCityValue={getCityValue}
+                        handleCountryChange={handleCountryChange}
+                        handleStateChange={handleStateChange}
+                        handleCityChange={handleCityChange}
+                        handleCustomCityChange={handleCustomCityChange}
+                        handleCitySearch={handleCitySearch}
+                        handleClearCustomCity={handleClearCustomCity}
+                        customCities={customCities}
+                        citySearchValues={citySearchValues}
+                        onRemove={removeAddress}
+                        canRemove={addressForm.values.addresses_data.length > 1}
+                      />
+                    ))}
+                  </Stack>
 
-                    <Stack>
-                      {addressForm.values.addresses_data.map((_, index) => (
-                        <AddressCard
-                          key={`address-${addressForm.values.addresses_data[index]?.id ?? index}-${addressStateRestored}`}
-                          index={index}
-                          isViewMode={isViewMode}
-                          isVendorMasterRoute={isVendorMasterRoute}
-                          isDubaiUser={isDubaiUser}
-                          isIndiaUser={isIndiaUser}
-                          addressForm={addressForm}
-                          countryOptions={countryOptions}
-                          selectedCountries={selectedCountries}
-                          getStateOptions={getStateOptions}
-                          getStateValue={getStateValue}
-                          cityOptions={cityOptions}
-                          getCityValue={getCityValue}
-                          handleCountryChange={handleCountryChange}
-                          handleStateChange={handleStateChange}
-                          handleCityChange={handleCityChange}
-                          handleCustomCityChange={handleCustomCityChange}
-                          handleCitySearch={handleCitySearch}
-                          handleClearCustomCity={handleClearCustomCity}
-                          customCities={customCities}
-                          citySearchValues={citySearchValues}
-                          onRemove={removeAddress}
-                          canRemove={
-                            addressForm.values.addresses_data.length > 1
-                          }
-                        />
-                      ))}
-                    </Stack>
-
-                    <Group justify="right" mt="md">
-                      <Button
-                        variant="outline"
-                        leftSection={<IconPlus size={16} />}
-                        onClick={addAddress}
-                        disabled={isViewMode}
-                        color="#105476"
-                      >
-                        Add Address
-                      </Button>
-                    </Group>
-                  </Card>
+                  <Group justify="right" mt="xl">
+                    <Button
+                      variant="outline"
+                      leftSection={<IconPlus size={16} />}
+                      onClick={addAddress}
+                      disabled={isViewMode}
+                      color="#105476"
+                    >
+                      Add Address
+                    </Button>
+                  </Group>
                 </Box>
               </Box>
             </Tabs.Panel>

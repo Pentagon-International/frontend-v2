@@ -1,12 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Box,
   Button,
   Card,
   Checkbox,
   Group,
   ScrollArea,
-  Stack,
   Table,
   Text,
   TextInput,
@@ -89,11 +88,10 @@ function resolveLoggedInAssignTo(
   );
 }
 
-function buildCustomerPayload(
+function buildAddressEntry(
   record: AttestrGstinRecord,
   pan: string,
-  customerTypeCode: string,
-  assignedTo: string,
+  addressType: "Primary" | "Secondary",
 ) {
   const addr = record.primaryAddress ?? {};
   const addressLine = buildAddressLine(addr);
@@ -101,35 +99,73 @@ function buildCustomerPayload(
   const lng = Number(addr.longitude);
 
   return {
-    customer_name: record.legalName || record.tradeName || "",
+    customer_location: addr.district || addr.locality || "",
+    address_type: addressType,
+    address: addressLine,
+    city: addr.district || "",
+    state: addr.state || "",
+    country: "India",
+    pincode: addr.zip || "",
+    phone_no: DUMMY_PHONE,
+    mobile_no: DUMMY_PHONE,
+    email: DUMMY_EMAIL,
+    pan_no: record.pan || pan,
+    gst_id: record.gstin || "",
+    gst_registration_status: "Registered",
+    latitude: Number.isFinite(lat) ? lat : 0,
+    longitude: Number.isFinite(lng) ? lng : 0,
+  };
+}
+
+function buildCustomerPayload(
+  records: AttestrGstinRecord[],
+  pan: string,
+  customerTypeCode: string,
+  assignedTo: string,
+) {
+  const primary = records[0];
+  return {
+    customer_name: primary.legalName || primary.tradeName || "",
     customer_type_code: [customerTypeCode],
     term_code: "CREDIT",
     own_office: false,
     status: "ACTIVE",
     assigned_to: assignedTo,
-    addresses_data: [
-      {
-        customer_location: addr.locality || addr.district || "",
-        address_type: "Primary",
-        address: addressLine,
-        city: addr.locality || addr.district || "",
-        state: addr.state || "",
-        country: "India",
-        pincode: addr.zip || "",
-        phone_no: DUMMY_PHONE,
-        mobile_no: DUMMY_PHONE,
-        email: DUMMY_EMAIL,
-        pan_no: record.pan || pan,
-        gst_id: record.gstin || "",
-        gst_registration_status: record.status || "",
-        latitude: Number.isFinite(lat) ? lat : 0,
-        longitude: Number.isFinite(lng) ? lng : 0,
-      },
-    ],
+    addresses_data: records.map((record, index) =>
+      buildAddressEntry(
+        record,
+        pan,
+        index === 0 ? "Primary" : "Secondary",
+      ),
+    ),
   };
 }
 
+function extractApiErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return "Failed to create customer";
+}
+
+function formatCustomerCreateError(message: string): string {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("already exist") ||
+    lower.includes("already exists") ||
+    lower.includes("customer exist")
+  ) {
+    return "This customer already exists.";
+  }
+  return message;
+}
+
+const CUSTOMER_MASTER_PATH = "/master/customer";
+
 export default function CustomerPanMaster() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [panNumber, setPanNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -225,7 +261,163 @@ export default function CustomerPanMaster() {
       setRecords([]);
       setSearchMessage("");
 
-      const response = await searchGstinByPan(pan);
+      // const response = await searchGstinByPan(pan);
+      const response = {
+    "valid": true,
+    "message": null,
+    "records": [
+        {
+            "gstin": "27AAGCP4765J1ZY",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "01-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
+                "buildingName": "",
+                "floor": "204",
+                "street": "ANDHERI KURLA ROAD",
+                "locality": "Mumbai",
+                "district": "Mumbai Suburban",
+                "state": "Maharashtra",
+                "zip": "400059",
+                "latitude": "19.1124590000001",
+                "longitude": "72.8738440000001",
+                "nature": "Service Provision, Supplier of Services"
+            }
+        },
+        {
+            "gstin": "07AAGCP4765J1Z0",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "14-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "A-50",
+                "buildingName": "",
+                "floor": "GROUND FLOOR",
+                "street": "STREET NO 09,ROAD NO 4",
+                "locality": "MAHIPALPUR EXTENTION",
+                "district": "New Delhi",
+                "state": "Delhi",
+                "zip": "110037",
+                "latitude": "",
+                "longitude": "",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "33AAGCP4765J1Z5",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "26-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "OLD NO 6,",
+                "buildingName": "",
+                "floor": "NEW NO 15",
+                "street": "DR GOPALA MENON TOAD",
+                "locality": "KODAMBAKKAM",
+                "district": "Chennai",
+                "state": "Tamil Nadu",
+                "zip": "600024",
+                "latitude": "",
+                "longitude": "",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "27AAGCP4765J2ZX",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "01-04-2025",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Input Service Distributor (ISD)",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
+                "buildingName": "",
+                "floor": "204",
+                "street": "ANDHERI KURLA ROAD",
+                "locality": "Mumbai",
+                "district": "Mumbai Suburban",
+                "state": "Maharashtra",
+                "zip": "400059",
+                "latitude": "19.1113500000001",
+                "longitude": "72.869313",
+                "nature": "Recipient of Goods or Services"
+            }
+        },
+        {
+            "gstin": "29AAGCP4765J2ZT",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "26-12-2024",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "Building No.3",
+                "buildingName": "Srinidhi Envoy",
+                "floor": "1st Floor",
+                "street": "3A, 4th Cross",
+                "locality": "Bengaluru",
+                "district": "Bengaluru Urban",
+                "state": "Karnataka",
+                "zip": "560043",
+                "latitude": "13.010323",
+                "longitude": "77.659339",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "24AAGCP4765J1Z4",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "12-08-2022",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "Office No.10",
+                "buildingName": "Plot No.211, Ward 12-B",
+                "floor": "1st floor",
+                "street": "Shah Avenue-1",
+                "locality": "Gandhidham",
+                "district": "Kachchh",
+                "state": "Gujarat",
+                "zip": "370201",
+                "latitude": "23.061393",
+                "longitude": "70.126118",
+                "nature": "Supplier of Services"
+            }
+        }
+    ]
+};
 
       if (!response.valid) {
         ToastNotification({
@@ -267,7 +459,7 @@ export default function CustomerPanMaster() {
     if (!selected.length) {
       ToastNotification({
         type: "error",
-        message: "Please select at least one GST registration to create customers",
+        message: "Please select at least one GST registration to create a customer",
       });
       return;
     }
@@ -282,49 +474,32 @@ export default function CustomerPanMaster() {
     }
 
     setIsCreating(true);
-    let created = 0;
-    const failures: string[] = [];
 
-    for (const record of selected) {
-      try {
-        const payload = buildCustomerPayload(
-          record,
-          panNumber.trim().toUpperCase(),
-          customerTypeCode,
-          assignedTo,
-        );
-        await postAPICall(URL.customer, payload, API_HEADER);
-        created += 1;
-      } catch (error) {
-        const label = record.gstin || record.legalName;
-        const msg =
-          error instanceof Error ? error.message : "Create failed";
-        failures.push(`${label}: ${msg}`);
-      }
-    }
-
-    setIsCreating(false);
-
-    if (created > 0) {
+    try {
+      const payload = buildCustomerPayload(
+        selected,
+        panNumber.trim().toUpperCase(),
+        customerTypeCode,
+        assignedTo,
+      );
+      await postAPICall(URL.customer, payload, API_HEADER);
       ToastNotification({
         type: "success",
-        message: `Created ${created} customer${created === 1 ? "" : "s"} successfully.`,
+        message:
+          selected.length === 1
+            ? "Customer created successfully."
+            : `Customer created with ${selected.length} addresses.`,
       });
-      setSelectedGstins(new Set());
-    }
-
-    if (failures.length) {
+      navigate(CUSTOMER_MASTER_PATH, { state: { refreshData: true } });
+    } catch (error) {
       ToastNotification({
         type: "error",
-        message:
-          failures.length === selected.length
-            ? failures[0]
-            : `${failures.length} failed: ${failures[0]}`,
+        message: formatCustomerCreateError(extractApiErrorMessage(error)),
       });
+    } finally {
+      setIsCreating(false);
     }
   };
-
-  const primaryLegalName = records[0]?.legalName ?? "";
 
   return (
     <Card shadow="sm" padding="lg" radius="md">
@@ -356,33 +531,17 @@ export default function CustomerPanMaster() {
         </Button>
       </Group>
 
-      {primaryLegalName && (
-        <Box
-          mt="lg"
-          p="sm"
-          style={{
-            borderRadius: 8,
-            backgroundColor: "#f5fbff",
-            border: "1px solid #c5e4f5",
-          }}
-        >
-          <Text size="xs" c="dimmed" fw={500} tt="uppercase">
-            Company from PAN
+      {records.length > 0 && (
+        <Group gap="md" mt="md">
+          <Text size="xs" c="dimmed">
+            Assign To: <strong>{assignedTo || "—"}</strong>
           </Text>
-          <Text size="lg" fw={700} c="#105476" mt={4}>
-            {primaryLegalName}
-          </Text>
-          <Group gap="md" mt={6}>
-            <Text size="xs" c="dimmed">
-              Assign To: <strong>{assignedTo || "—"}</strong>
-            </Text>
-          </Group>
           {searchMessage && (
-            <Text size="xs" c="dimmed" mt={4}>
+            <Text size="xs" c="dimmed">
               {searchMessage}
             </Text>
           )}
-        </Box>
+        </Group>
       )}
 
       {records.length > 0 && (
@@ -398,7 +557,7 @@ export default function CustomerPanMaster() {
               striped
               highlightOnHover
               withTableBorder={false}
-              horizontalSpacing="md"
+              horizontalSpacing="lg"
               verticalSpacing="sm"
             >
               <Table.Thead style={{ background: "#f1f5f9" }}>
@@ -411,10 +570,13 @@ export default function CustomerPanMaster() {
                       aria-label="Select all GSTIN rows"
                     />
                   </Table.Th>
-                  <Table.Th>GSTIN</Table.Th>
-                  <Table.Th>Company Name</Table.Th>
-                  <Table.Th>Location</Table.Th>
+                  <Table.Th w={150}>GSTIN</Table.Th>
+                  <Table.Th pl={48} maw={320}>
+                    Company Name
+                  </Table.Th>
                   <Table.Th>State</Table.Th>
+                  <Table.Th>District</Table.Th>
+                  <Table.Th>Pin Code</Table.Th>
                   <Table.Th>Status</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -442,18 +604,21 @@ export default function CustomerPanMaster() {
                           {row.gstin}
                         </Text>
                       </Table.Td>
-                      <Table.Td>
-                        <Text fz={13} fw={500} maw={280} lineClamp={2}>
+                      <Table.Td pl={48}>
+                        <Text fz={13} fw={500} lineClamp={2}>
                           {row.legalName || "—"}
                         </Text>
                       </Table.Td>
                       <Table.Td>
+                        <Text fz={13}>{row.primaryAddress?.state || "—"}</Text>
+                      </Table.Td>
+                      <Table.Td>
                         <Text fz={13}>
-                          {row.primaryAddress?.locality || "—"}
+                          {row.primaryAddress?.district || "—"}
                         </Text>
                       </Table.Td>
                       <Table.Td>
-                        <Text fz={13}>{row.primaryAddress?.state || "—"}</Text>
+                        <Text fz={13}>{row.primaryAddress?.zip || "—"}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Badge
@@ -481,7 +646,7 @@ export default function CustomerPanMaster() {
             disabled={selectedGstins.size === 0}
             loading={isCreating}
           >
-            Create Customer{selectedGstins.size > 1 ? "s" : ""}
+            Create Customer
             {selectedGstins.size > 0 ? ` (${selectedGstins.size})` : ""}
           </Button>
         </Group>

@@ -10,6 +10,7 @@ import {
   IconUserHexagon,
   IconContainer,
   IconFileStack,
+  IconClipboardCheck,
   IconSitemap,
   IconBrandRedux,
   IconSquareRotated,
@@ -136,6 +137,10 @@ export default function MastersPage() {
           {
             icon: <IconFileStack size={28} color="#105476" />,
             label: "Create Customer-PAN",
+          },
+          {
+            icon: <IconClipboardCheck size={28} color="#105476" />,
+            label: "Approve Customers-PAN",
           },
         ],
       },
