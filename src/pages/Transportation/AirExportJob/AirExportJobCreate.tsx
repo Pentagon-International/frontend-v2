@@ -69,6 +69,12 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  formatHouseCargoChargeableForPayload,
+  formatHouseCargoWeightForPayload,
+  importHouseCargoWeightFromApi,
+  type HouseCargoWeightValue,
+} from "../../../utils/houseCargoChargeableWeight";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -151,9 +157,9 @@ type HAWBDetail = {
   shipment_terms_code?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
-    gross_weight: number | null;
-    volume: number | null;
-    chargeable_weight: number | null;
+    gross_weight: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight: HouseCargoWeightValue;
     haz: string;
   }>;
   charges?: Array<{
@@ -804,11 +810,13 @@ function AirExportJobCreate() {
                   ? house.cargo_details.map(
                       (cargo: Record<string, unknown>) => ({
                         no_of_packages: cargo.no_of_packages as number | null,
-                        gross_weight: cargo.gross_weight as number | null,
-                        volume: cargo.volume as number | null,
-                        chargeable_weight: cargo.chargeable_weight as
-                          | number
-                          | null,
+                        gross_weight: importHouseCargoWeightFromApi(
+                          cargo.gross_weight,
+                        ),
+                        volume: importHouseCargoWeightFromApi(cargo.volume),
+                        chargeable_weight: importHouseCargoWeightFromApi(
+                          cargo.chargeable_weight,
+                        ),
                         haz: cargo.haz ? String(cargo.haz) : "",
                       }),
                     )
@@ -2209,7 +2217,20 @@ function AirExportJobCreate() {
                 date: String(e.date ?? ""),
               }))
             : [],
-          cargo_details: hawb.cargo_details || [],
+          cargo_details: (hawb.cargo_details || []).map((c) => ({
+            ...(c.id != null && { id: Number(c.id) }),
+            no_of_packages: c.no_of_packages ?? 0,
+            gross_weight:
+              formatHouseCargoWeightForPayload(c.gross_weight) ?? "",
+            volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
+            chargeable_weight:
+              formatHouseCargoChargeableForPayload(
+                c.gross_weight,
+                c.volume,
+                "air",
+              ) ?? "",
+            haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
+          })),
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
                 ...(charge.id != null &&

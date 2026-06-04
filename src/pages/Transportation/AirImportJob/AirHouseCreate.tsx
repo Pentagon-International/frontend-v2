@@ -62,7 +62,8 @@ import {
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
   coerceHouseCargoWeightInput,
-  formatHouseCargoWeightDisplay,
+  formatHouseCargoChargeableDisplay,
+  formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
@@ -133,7 +134,7 @@ type HAWBDetailsForm = {
 type CargoDetail = {
   // container_number removed for Air HAWB
   no_of_packages: number | null;
-  gross_weight: number | null;
+  gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
   chargeable_weight: HouseCargoWeightValue;
   haz: string;
@@ -906,7 +907,9 @@ function HouseCreate() {
     ) {
       const mapped = cargoDetailsData.map((c) => {
         const no_of_packages = toNum(c.no_of_packages ?? rb.no_of_packages);
-        const gross_weight = toNum(c.gross_weight ?? rb.gross_weight);
+        const gross_weight = importHouseCargoWeightFromApi(
+          c.gross_weight ?? rb.gross_weight,
+        );
         const volumeFromRow = importHouseCargoWeightFromApi(
           c.volume ?? c.volume_weight ?? rb.volume_weight ?? rb.volume,
         );
@@ -929,7 +932,7 @@ function HouseCreate() {
       // Top-level cargo fields when cargo_details array absent
       const row = {
         no_of_packages: toNum(rb.no_of_packages),
-        gross_weight: toNum(rb.gross_weight),
+        gross_weight: importHouseCargoWeightFromApi(rb.gross_weight),
         volume: importHouseCargoWeightFromApi(rb.volume ?? rb.volume_weight),
         chargeable_weight: importHouseCargoWeightFromApi(
           rb.chargeable_volume ?? rb.chargeable_weight,
@@ -1181,11 +1184,7 @@ function HouseCreate() {
             !Number.isNaN(Number(cargo.no_of_packages))
               ? Number(cargo.no_of_packages)
               : null;
-          const gross_weight =
-            cargo.gross_weight != null &&
-            !Number.isNaN(Number(cargo.gross_weight))
-              ? Number(cargo.gross_weight)
-              : null;
+          const gross_weight = importHouseCargoWeightFromApi(cargo.gross_weight);
           const volume_weight_final = importHouseCargoWeightFromApi(cargo.volume);
           const chargeable_weight = importHouseCargoWeightFromApi(
             cargo.chargeable_weight,
@@ -2258,10 +2257,12 @@ function HouseCreate() {
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
       ...cargo,
-      gross_weight: roundToDecimals((cargo as any).gross_weight) ?? null,
+      gross_weight: formatHouseCargoWeightForPayload((cargo as any).gross_weight),
       volume: formatHouseCargoWeightForPayload((cargo as any).volume),
-      chargeable_weight: formatHouseCargoWeightForPayload(
-        (cargo as any).chargeable_weight,
+      chargeable_weight: formatHouseCargoChargeableForPayload(
+        (cargo as any).gross_weight,
+        (cargo as any).volume,
+        "air",
       ),
     }));
 
@@ -2485,10 +2486,12 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
-          gross_weight: cargo.gross_weight,
+          gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
-          chargeable_weight: formatHouseCargoWeightForPayload(
-            cargo.chargeable_weight,
+          chargeable_weight: formatHouseCargoChargeableForPayload(
+            cargo.gross_weight,
+            cargo.volume,
+            "air",
           ),
           haz: cargo.haz === "Yes",
         })),
@@ -3997,15 +4000,18 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
-                      decimalScale={2}
                       hideControls
-                      value={cargo.gross_weight || undefined}
+                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                      value={cargo.gross_weight ?? undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
                           {
                             ...updated[index],
-                            gross_weight: value as number | null,
+                            gross_weight: coerceHouseCargoWeightInput(
+                              value,
+                              cargo.gross_weight,
+                            ),
                           },
                           "air",
                         );
@@ -4021,6 +4027,22 @@ function HouseCreate() {
                           }
                           setCargoErrors(newErrors);
                         }
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        if (!raw) return;
+                        const updated = [...cargoDetails];
+                        updated[index] = withRecalculatedChargeableWeight(
+                          {
+                            ...updated[index],
+                            gross_weight: coerceHouseCargoWeightInput(
+                              raw,
+                              cargo.gross_weight,
+                            ),
+                          },
+                          "air",
+                        );
+                        setCargoDetails(updated);
                       }}
                       error={cargoErrors[index]?.gross_weight}
                     />
@@ -4080,8 +4102,10 @@ function HouseCreate() {
                     <FormTextInput
                       placeholder=""
                       format="normal"
-                      value={formatHouseCargoWeightDisplay(
-                        cargo.chargeable_weight,
+                      value={formatHouseCargoChargeableDisplay(
+                        cargo.gross_weight,
+                        cargo.volume,
+                        "air",
                       )}
                       readOnly
                       disabled

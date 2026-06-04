@@ -1,6 +1,6 @@
 import { roundToDecimals } from "./numberInputUtils";
 
-/** Max decimal places for volume and chargeable weight on house cargo rows. */
+/** Max decimal places for gross (KG), volume (CBM), and chargeable volume on ocean cargo. */
 export const HOUSE_CARGO_WEIGHT_DECIMALS = 3;
 
 export type HouseCargoWeightValue = number | string | null;
@@ -114,37 +114,17 @@ export function formatHouseCargoWeightForPayload(
   return formatHouseCargoWeightDisplay(coerced);
 }
 
-/**
- * Use the same stored representation as the winning source (volume or gross).
- */
-function resolveChargeableDisplayValue(
-  chargeableNum: number,
-  volume: HouseCargoWeightValue,
-  grossWeight: HouseCargoWeightValue,
-  volNum: number,
-  grossNum: number,
-  unit: HouseChargeableWeightUnit,
-): HouseCargoWeightValue {
-  const grossCbm = grossNum > 0 ? grossNum / 1000 : 0;
-  const volumeWins =
-    volNum > 0 &&
-    (unit === "ocean" ? volNum >= grossCbm : volNum >= grossNum);
-  const grossWins =
-    grossNum > 0 &&
-    (unit === "ocean" ? grossCbm > volNum : grossNum > volNum);
-
-  if (volumeWins) {
-    return volume ?? coerceHouseCargoWeightInput(chargeableNum);
-  }
-  if (grossWins) {
-    return grossWeight ?? coerceHouseCargoWeightInput(chargeableNum);
-  }
-  return coerceHouseCargoWeightInput(chargeableNum);
+/** Ocean: gross (KG) → CBM for chargeable when gross wins the max comparison. */
+function oceanGrossKgToCbm(grossWeight: HouseCargoWeightValue): HouseCargoWeightValue {
+  const grossNum = parseHouseCargoWeightInput(grossWeight);
+  if (grossNum === null || grossNum <= 0) return null;
+  return coerceHouseCargoWeightInput(grossNum / 1000);
 }
 
 /**
- * Ocean (CBM): chargeable = max(gross ÷ 1000, volume) — display matches winning field.
- * Air (KG): chargeable = max(gross, volume) — display matches winning field.
+ * Ocean: chargeable volume (CBM) = max(gross KG ÷ 1000, volume).
+ * When volume wins, use volume as entered; when gross wins, use gross ÷ 1000.
+ * Air: chargeable (KG) = max(gross, volume) — copy the winning field.
  */
 export function calculateHouseChargeableWeight(
   grossWeight: HouseCargoWeightValue,
@@ -156,32 +136,48 @@ export function calculateHouseChargeableWeight(
 
   if (!grossNum && !volNum) return null;
 
-  const chargeableNum =
-    unit === "ocean"
-      ? Math.max(grossNum ? grossNum / 1000 : 0, volNum)
-      : Math.max(grossNum, volNum);
+  if (unit === "ocean") {
+    const grossCbm = grossNum > 0 ? grossNum / 1000 : 0;
+    if (volNum > 0 && volNum >= grossCbm) return volume ?? null;
+    if (grossCbm > 0 && grossCbm > volNum) return oceanGrossKgToCbm(grossWeight);
+    return null;
+  }
 
-  if (chargeableNum <= 0) return null;
+  if (volNum > 0 && volNum >= grossNum) return volume ?? null;
+  if (grossNum > 0 && grossNum > volNum) return grossWeight ?? null;
+  return null;
+}
 
-  return resolveChargeableDisplayValue(
-    chargeableNum,
-    volume,
-    grossWeight,
-    volNum,
-    grossNum,
-    unit,
-  );
+/** UI: chargeable volume/weight from max comparison. */
+export function formatHouseCargoChargeableDisplay(
+  grossWeight: HouseCargoWeightValue,
+  volume: HouseCargoWeightValue,
+  unit: HouseChargeableWeightUnit,
+): string {
+  const source = calculateHouseChargeableWeight(grossWeight, volume, unit);
+  return formatHouseCargoWeightDisplay(source);
+}
+
+/** Payload: chargeable from max(gross÷1000, volume) on ocean. */
+export function formatHouseCargoChargeableForPayload(
+  grossWeight: HouseCargoWeightValue,
+  volume: HouseCargoWeightValue,
+  unit: HouseChargeableWeightUnit,
+): string | null {
+  const source = calculateHouseChargeableWeight(grossWeight, volume, unit);
+  if (source === null) return null;
+  return formatHouseCargoWeightForPayload(source);
 }
 
 export function withRecalculatedChargeableWeight<
   T extends {
-    gross_weight: HouseCargoWeightValue;
+    gross_weight?: HouseCargoWeightValue;
     volume: HouseCargoWeightValue;
     chargeable_weight: HouseCargoWeightValue;
   },
 >(cargo: T, unit: HouseChargeableWeightUnit): T {
   const chargeable = calculateHouseChargeableWeight(
-    cargo.gross_weight,
+    cargo.gross_weight ?? null,
     cargo.volume,
     unit,
   );
@@ -192,17 +188,34 @@ export function withRecalculatedChargeableWeight<
 }
 
 export function formatHouseCargoDetailWeightFields<
-  T extends { volume?: unknown; chargeable_weight?: unknown },
+  T extends {
+    gross_weight?: unknown;
+    volume?: unknown;
+    chargeable_weight?: unknown;
+  },
 >(
   cargo: T,
-): Omit<T, "volume" | "chargeable_weight"> & {
+  unit: HouseChargeableWeightUnit,
+): Omit<T, "gross_weight" | "volume" | "chargeable_weight"> & {
+  gross_weight: string | null;
   volume: string | null;
   chargeable_weight: string | null;
 } {
-  const { volume, chargeable_weight, ...rest } = cargo;
+  const {
+    gross_weight,
+    volume,
+    chargeable_weight: _chargeable,
+    ...rest
+  } = cargo;
+  void _chargeable;
   return {
     ...rest,
+    gross_weight: formatHouseCargoWeightForPayload(gross_weight),
     volume: formatHouseCargoWeightForPayload(volume),
-    chargeable_weight: formatHouseCargoWeightForPayload(chargeable_weight),
+    chargeable_weight: formatHouseCargoChargeableForPayload(
+      gross_weight as HouseCargoWeightValue,
+      volume as HouseCargoWeightValue,
+      unit,
+    ),
   };
 }

@@ -69,7 +69,12 @@ import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNotice
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { formatHouseCargoWeightForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  formatHouseCargoChargeableForPayload,
+  formatHouseCargoWeightForPayload,
+  importHouseCargoWeightFromApi,
+  type HouseCargoWeightValue,
+} from "../../../utils/houseCargoChargeableWeight";
 import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
@@ -179,9 +184,9 @@ type HAWBDetail = {
   cargo_details?: Array<{
     id?: number;
     no_of_packages: number | null;
-    gross_weight: number | null;
-    volume: number | null;
-    chargeable_weight: number | null;
+    gross_weight: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight: HouseCargoWeightValue;
     haz: string;
   }>;
   charges?: Array<{
@@ -1044,21 +1049,13 @@ function AirImportJobCreate() {
                   house.cargo_details && Array.isArray(house.cargo_details)
                     ? house.cargo_details.map(
                         (cargo: Record<string, unknown>) => {
-                          const gross =
-                            cargo.gross_weight != null &&
-                            !Number.isNaN(Number(cargo.gross_weight))
-                              ? Number(cargo.gross_weight)
-                              : null;
-                          const vol =
-                            cargo.volume != null &&
-                            !Number.isNaN(Number(cargo.volume))
-                              ? Number(cargo.volume)
-                              : null;
-                          const chargeable =
-                            cargo.chargeable_weight != null &&
-                            !Number.isNaN(Number(cargo.chargeable_weight))
-                              ? Number(cargo.chargeable_weight)
-                              : null;
+                          const gross = importHouseCargoWeightFromApi(
+                            cargo.gross_weight,
+                          );
+                          const vol = importHouseCargoWeightFromApi(cargo.volume);
+                          const chargeable = importHouseCargoWeightFromApi(
+                            cargo.chargeable_weight,
+                          );
                           const hazVal =
                             cargo.haz === true || cargo.haz === "true"
                               ? "Yes"
@@ -2742,10 +2739,15 @@ function AirImportJobCreate() {
           cargo_details: (hawb.cargo_details || []).map((c) => ({
             ...(c.id != null && { id: Number(c.id) }),
             no_of_packages: c.no_of_packages ?? 0,
-            gross_weight: c.gross_weight != null ? String(c.gross_weight) : "",
+            gross_weight:
+              formatHouseCargoWeightForPayload(c.gross_weight) ?? "",
             volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
             chargeable_weight:
-              formatHouseCargoWeightForPayload(c.chargeable_weight) ?? "",
+              formatHouseCargoChargeableForPayload(
+                c.gross_weight,
+                c.volume,
+                "air",
+              ) ?? "",
             haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
           })),
           mawb_charges: (() => {
