@@ -69,6 +69,7 @@ import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNotice
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatHouseCargoWeightForPayload } from "../../../utils/houseCargoChargeableWeight";
 import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
@@ -2742,9 +2743,9 @@ function AirImportJobCreate() {
             ...(c.id != null && { id: Number(c.id) }),
             no_of_packages: c.no_of_packages ?? 0,
             gross_weight: c.gross_weight != null ? String(c.gross_weight) : "",
-            volume: c.volume != null ? String(c.volume) : "",
+            volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
             chargeable_weight:
-              c.chargeable_weight != null ? String(c.chargeable_weight) : "",
+              formatHouseCargoWeightForPayload(c.chargeable_weight) ?? "",
             haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
           })),
           mawb_charges: (() => {

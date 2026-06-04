@@ -61,6 +61,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatHouseCargoWeightForPayload } from "../../../utils/houseCargoChargeableWeight";
 import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
@@ -2489,8 +2490,10 @@ function ExportJobCreate() {
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
             gross_weight: cargo.gross_weight,
-            volume: cargo.volume,
-            chargeable_weight: cargo.chargeable_weight,
+            volume: formatHouseCargoWeightForPayload(cargo.volume),
+            chargeable_weight: formatHouseCargoWeightForPayload(
+              cargo.chargeable_weight,
+            ),
             haz:
               cargo.haz !== null && cargo.haz !== undefined
                 ? typeof cargo.haz === "boolean"
