@@ -3513,497 +3513,502 @@ function ExportJobCreate() {
 
                 return (
                   <Box key={index}>
-                  <Grid>
-                    <Grid.Col span={2.4}>
-                      <Dropdown
-                        size="sm"
-                        label="Transport Type"
-                        required={requireRouting}
-                        placeholder="Select Transport Type"
-                        searchable
-                        clearable
-                        data={["AIR", "SEA", "ROAD", "RAIL"]}
-                        value={
-                          routingsForm.values.routings[index]?.transport_type ||
-                          null
-                        }
-                        onChange={(value) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.transport_type`,
-                            value || "",
-                          );
-                        }}
-                        error={
-                          routingsForm.errors[
-                            `routings.${index}.transport_type`
-                          ] as string
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SearchableSelect
-                        label="From"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        placeholder="Type from location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.from_code || null}
-                        displayValue={
-                          routing.from_name && routing.from_code
-                            ? `${routing.from_name} (${routing.from_code})`
-                            : routing.from_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.from_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
-                            routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              portName,
-                            );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              "",
-                            );
+                    <Grid>
+                      <Grid.Col span={2.4}>
+                        <Dropdown
+                          size="sm"
+                          label="Transport Type"
+                          required={requireRouting}
+                          placeholder="Select Transport Type"
+                          searchable
+                          clearable
+                          data={["AIR", "SEA", "ROAD", "RAIL"]}
+                          value={
+                            routingsForm.values.routings[index]
+                              ?.transport_type || null
                           }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routing.transport_type)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routing.transport_type,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SearchableSelect
-                        label="To"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        placeholder="Type to location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.to_code || null}
-                        displayValue={
-                          routing.to_name && routing.to_code
-                            ? `${routing.to_name} (${routing.to_code})`
-                            : routing.to_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.to_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
+                          onChange={(value) => {
                             routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              portName,
+                              `routings.${index}.transport_type`,
+                              value || "",
                             );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              "",
-                            );
+                          }}
+                          error={
+                            routingsForm.errors[
+                              `routings.${index}.transport_type`
+                            ] as string
                           }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routing.transport_type)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routing.transport_type,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "SEA" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Vessel"
-                            required
-                            placeholder="Enter vessel name"
-                            value={routing.vessel || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.vessel`,
-                                formattedValue,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.vessel`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Voyage Number"
-                            required
-                            placeholder="Enter voyage number"
-                            value={routing.voyage_number || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.voyage_number`,
-                                value,
-                              );
-                              // Also update flight_voyage_number for backward compatibility
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.voyage_number`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "AIR" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <SearchableSelect
-                            label="Carrier"
-                            required
-                            apiEndpoint={URL.carrier}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routing.transport_type)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routing.transport_type,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Flight Number"
-                            required
-                            placeholder="Enter flight number"
-                            value={routing.flight || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight`,
-                                value,
-                              );
-                              // Also update flight_voyage_number for backward compatibility
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.flight`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "ROAD" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <SearchableSelect
-                            label="Carrier"
-                            required
-                            apiEndpoint={URL.carrier}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routing.transport_type)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routing.transport_type,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Truck Number"
-                            required
-                            placeholder="Enter truck number"
-                            value={routing.truck_no || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.truck_no`,
-                                value,
-                              );
-                              // Also update flight_voyage_number for backward compatibility
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.truck_no`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "RAIL" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Carrier"
-                            required
-                            placeholder="Enter carrier name"
-                            value={routing.carrier_name || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                formattedValue,
-                              );
-                              // For Rail, carrier_code can be same as carrier_name or empty
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                formattedValue,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.carrier_name`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Rail Number"
-                            required
-                            placeholder="Enter rail number"
-                            value={routing.rail_no || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.rail_no`,
-                                value,
-                              );
-                              // Also update flight_voyage_number for backward compatibility
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.rail_no`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ETD"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.etd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.etd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ETA"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.eta`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.eta`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ATD"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.atd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.atd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ATA"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.ata`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.ata`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    {/* Remove button - IconTrash only */}
-                    {!isReadOnly && routingsForm.values.routings.length > 1 && (
-                      <Grid.Col span={0.5}>
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size="lg"
-                          onClick={() => removeRouting(index)}
-                          style={{ marginTop: "1.75rem" }}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
+                        />
                       </Grid.Col>
-                    )}
 
-                    {/* Add Routing button - Only at last routing row */}
-                    {!isReadOnly &&
-                      index === routingsForm.values.routings.length - 1 && (
-                        <Grid.Col span={0.5}>
-                          <ActionIcon
-                            // leftSection={<IconPlus size={16} />}
-                            size="lg"
-                            variant="light"
-                            color="#105476"
-                            onClick={addRouting}
-                            style={{ marginTop: "1.75rem" }}
-                          >
-                            <IconPlus size={16}></IconPlus>
-                            {/* Add Routing */}
-                          </ActionIcon>
-                          {/* <ActionIcon
+                      <Grid.Col span={2.4}>
+                        <SearchableSelect
+                          label="From"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          placeholder="Type from location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.from_code || null}
+                          displayValue={
+                            routing.from_name && routing.from_code
+                              ? `${routing.from_name} (${routing.from_code})`
+                              : routing.from_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.from_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routing.transport_type)
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    routing.transport_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SearchableSelect
+                          label="To"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          placeholder="Type to location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.to_code || null}
+                          displayValue={
+                            routing.to_name && routing.to_code
+                              ? `${routing.to_name} (${routing.to_code})`
+                              : routing.to_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.to_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routing.transport_type)
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    routing.transport_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      {/* Dynamic field labels based on transport type */}
+                      {routing.transport_type === "SEA" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Vessel"
+                              required
+                              placeholder="Enter vessel name"
+                              value={routing.vessel || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.vessel`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.vessel`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Voyage Number"
+                              required
+                              placeholder="Enter voyage number"
+                              value={routing.voyage_number || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.voyage_number`,
+                                  value,
+                                );
+                                // Also update flight_voyage_number for backward compatibility
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.voyage_number`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "AIR" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <SearchableSelect
+                              label="Carrier"
+                              required
+                              apiEndpoint={URL.carrier}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routing.transport_type)
+                                  ? {
+                                      transport_mode: getTransportMode(
+                                        routing.transport_type,
+                                      )!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Flight Number"
+                              required
+                              placeholder="Enter flight number"
+                              value={routing.flight || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight`,
+                                  value,
+                                );
+                                // Also update flight_voyage_number for backward compatibility
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.flight`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "ROAD" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <SearchableSelect
+                              label="Carrier"
+                              required
+                              apiEndpoint={URL.carrier}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routing.transport_type)
+                                  ? {
+                                      transport_mode: getTransportMode(
+                                        routing.transport_type,
+                                      )!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Truck Number"
+                              required
+                              placeholder="Enter truck number"
+                              value={routing.truck_no || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.truck_no`,
+                                  value,
+                                );
+                                // Also update flight_voyage_number for backward compatibility
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.truck_no`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "RAIL" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Carrier"
+                              required
+                              placeholder="Enter carrier name"
+                              value={routing.carrier_name || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  formattedValue,
+                                );
+                                // For Rail, carrier_code can be same as carrier_name or empty
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.carrier_name`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Rail Number"
+                              required
+                              placeholder="Enter rail number"
+                              value={routing.rail_no || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.rail_no`,
+                                  value,
+                                );
+                                // Also update flight_voyage_number for backward compatibility
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.rail_no`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ETD"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.etd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.etd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ETA"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.eta`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.eta`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ATD"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.atd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.atd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ATA"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.ata`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.ata`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      {/* Remove button - IconTrash only */}
+                      {!isReadOnly &&
+                        routingsForm.values.routings.length > 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              color="red"
+                              variant="light"
+                              size="lg"
+                              onClick={() => removeRouting(index)}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Grid.Col>
+                        )}
+
+                      {/* Add Routing button - Only at last routing row */}
+                      {!isReadOnly &&
+                        index === routingsForm.values.routings.length - 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              // leftSection={<IconPlus size={16} />}
+                              size="lg"
+                              variant="light"
+                              color="#105476"
+                              onClick={addRouting}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconPlus size={16}></IconPlus>
+                              {/* Add Routing */}
+                            </ActionIcon>
+                            {/* <ActionIcon
                             color="red"
                             variant="light"
                             size="lg"
@@ -4012,14 +4017,14 @@ function ExportJobCreate() {
                           >
                             <IconTrash size={16} />
                           </ActionIcon> */}
-                        </Grid.Col>
-                      )}
-                  </Grid>
+                          </Grid.Col>
+                        )}
+                    </Grid>
 
-                  {index < routingsForm.values.routings.length - 1 && (
-                    <Divider my="xl" />
-                  )}
-                </Box>
+                    {index < routingsForm.values.routings.length - 1 && (
+                      <Divider my="xl" />
+                    )}
+                  </Box>
                 );
               })}
             </Stack>
@@ -5270,7 +5275,10 @@ function ExportJobCreate() {
           Do you want to close it since the job is not saved
         </Text>
         <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
             Cancel
           </Button>
           <Button
