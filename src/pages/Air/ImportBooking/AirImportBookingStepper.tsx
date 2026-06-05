@@ -2755,13 +2755,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
-            gross_weight: roundToDecimals(cargo.gross_weight) || null,
-            volume_weight: roundToDecimals(cargo.volume_weight) || null,
+            gross_weight: roundToDecimals(cargo.gross_weight, 3) || null,
+            volume_weight: roundToDecimals(cargo.volume_weight, 3) || null,
             chargeable_weight:
-              roundToDecimals(cargo.chargeable_weight) || null,
-            volume: roundToDecimals(cargo.volume) || null,
+              roundToDecimals(cargo.chargeable_weight, 3) || null,
+            volume: roundToDecimals(cargo.volume, 3) || null,
             chargeable_volume:
-              roundToDecimals(cargo.chargeable_volume) || null,
+              roundToDecimals(cargo.chargeable_volume, 3) || null,
             container_type_code: cargo.container_type_code || null,
             no_of_containers: cargo.no_of_containers || null,
           };
@@ -5345,7 +5345,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="Enter gross weight"
                           required
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps(
                             "cargo_details.0.gross_weight",
                           )}
@@ -5356,7 +5356,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Volume Weight (kg)"
                           placeholder="Enter volume weight"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps(
                             "cargo_details.0.volume_weight",
                           )}
@@ -5367,7 +5367,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Chargeable Weight (kg)"
                           // placeholder="Auto-calculated"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           readOnly
                           {...form.getInputProps(
                             "cargo_details.0.chargeable_weight",
@@ -5395,7 +5395,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps(
                             "cargo_details.0.gross_weight",
                           )}
@@ -5406,7 +5406,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Volume (cbm)"
                           placeholder="Enter volume"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
@@ -5415,7 +5415,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Chargeable Volume (cbm)"
                           placeholder="Auto-calculated"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           readOnly
                           {...form.getInputProps(
                             "cargo_details.0.chargeable_volume",
@@ -5460,7 +5460,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                 label="Gross Weight (kg)"
                                 placeholder="Enter gross weight"
                                 min={0}
-                                decimalScale={2}
+                                decimalScale={3}
                                 {...form.getInputProps(
                                   `cargo_details.${cargoIndex}.gross_weight`,
                                 )}

@@ -5701,7 +5701,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps(
                             "cargo_details.0.gross_weight",
                           )}
@@ -5712,7 +5712,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           label="Volume Weight (kg)"
                           placeholder="Enter volume weight"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           {...form.getInputProps(
                             "cargo_details.0.volume_weight",
                           )}
@@ -5723,7 +5723,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           label="Chargeable Weight (kg)"
                           // placeholder="Auto-calculated"
                           min={0}
-                          decimalScale={2}
+                          decimalScale={3}
                           readOnly
                           {...form.getInputProps(
                             "cargo_details.0.chargeable_weight",
