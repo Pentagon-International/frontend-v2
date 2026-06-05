@@ -93,7 +93,9 @@ export default function ApproveCustomerPanMaster() {
             row.gstin,
             row.state,
             row.district,
+            row.pincode,
             row.assigned_to,
+            row.created_by,
           ]
             .filter(Boolean)
             .join(" ")
@@ -104,7 +106,7 @@ export default function ApproveCustomerPanMaster() {
 
     return filtered.map((row, index) => ({
       ...row,
-      sno: pageIndex * pageSize + index + 1,
+      sno: row.sno ?? pageIndex * pageSize + index + 1,
     }));
   }, [rawRows, debounced, pageIndex, pageSize]);
 
@@ -231,23 +233,33 @@ export default function ApproveCustomerPanMaster() {
         ),
       },
       {
-        accessorKey: "status",
-        header: "Status",
-        size: 120,
+        accessorKey: "approved",
+        header: "Approval Status",
+        size: 130,
         Cell: ({ row }) => {
-          const status = String(row.original.status ?? "PENDING").toUpperCase();
+          const approved = row.original.approved;
+          const label =
+            approved === true
+              ? "APPROVED"
+              : approved === false
+                ? "PENDING"
+                : "PENDING";
           const color =
-            status === "APPROVED"
-              ? "green"
-              : status === "REJECTED"
-                ? "red"
-                : "yellow";
+            approved === true ? "green" : approved === false ? "yellow" : "gray";
           return (
             <Badge color={color} size="sm" variant="light">
-              {status}
+              {label}
             </Badge>
           );
         },
+      },
+      {
+        accessorKey: "created_by",
+        header: "Created By",
+        size: 120,
+        Cell: ({ cell }) => (
+          <Text size="sm">{cell.getValue<string>() || "—"}</Text>
+        ),
       },
       {
         id: "actions",
@@ -493,6 +505,14 @@ export default function ApproveCustomerPanMaster() {
                   PAN:
                 </Text>{" "}
                 {pendingAction.row.pan_no || "—"}
+                <br />
+                <Text span fw={500}>
+                  GSTIN:
+                </Text>{" "}
+                {pendingAction.row.gstin ||
+                  (pendingAction.row.gstin_count
+                    ? `${pendingAction.row.gstin_count} GSTIN(s)`
+                    : "—")}
               </Text>
             </Box>
           )}

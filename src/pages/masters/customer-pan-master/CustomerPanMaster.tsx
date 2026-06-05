@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -162,10 +161,7 @@ function formatCustomerCreateError(message: string): string {
   return message;
 }
 
-const CUSTOMER_MASTER_PATH = "/master/customer";
-
 export default function CustomerPanMaster() {
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [panNumber, setPanNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -261,163 +257,7 @@ export default function CustomerPanMaster() {
       setRecords([]);
       setSearchMessage("");
 
-      // const response = await searchGstinByPan(pan);
-      const response = {
-    "valid": true,
-    "message": null,
-    "records": [
-        {
-            "gstin": "27AAGCP4765J1ZY",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "01-07-2017",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Regular",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
-                "buildingName": "",
-                "floor": "204",
-                "street": "ANDHERI KURLA ROAD",
-                "locality": "Mumbai",
-                "district": "Mumbai Suburban",
-                "state": "Maharashtra",
-                "zip": "400059",
-                "latitude": "19.1124590000001",
-                "longitude": "72.8738440000001",
-                "nature": "Service Provision, Supplier of Services"
-            }
-        },
-        {
-            "gstin": "07AAGCP4765J1Z0",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "14-07-2017",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Regular",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "A-50",
-                "buildingName": "",
-                "floor": "GROUND FLOOR",
-                "street": "STREET NO 09,ROAD NO 4",
-                "locality": "MAHIPALPUR EXTENTION",
-                "district": "New Delhi",
-                "state": "Delhi",
-                "zip": "110037",
-                "latitude": "",
-                "longitude": "",
-                "nature": "Supplier of Services"
-            }
-        },
-        {
-            "gstin": "33AAGCP4765J1Z5",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "26-07-2017",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Regular",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "OLD NO 6,",
-                "buildingName": "",
-                "floor": "NEW NO 15",
-                "street": "DR GOPALA MENON TOAD",
-                "locality": "KODAMBAKKAM",
-                "district": "Chennai",
-                "state": "Tamil Nadu",
-                "zip": "600024",
-                "latitude": "",
-                "longitude": "",
-                "nature": "Supplier of Services"
-            }
-        },
-        {
-            "gstin": "27AAGCP4765J2ZX",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "01-04-2025",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Input Service Distributor (ISD)",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
-                "buildingName": "",
-                "floor": "204",
-                "street": "ANDHERI KURLA ROAD",
-                "locality": "Mumbai",
-                "district": "Mumbai Suburban",
-                "state": "Maharashtra",
-                "zip": "400059",
-                "latitude": "19.1113500000001",
-                "longitude": "72.869313",
-                "nature": "Recipient of Goods or Services"
-            }
-        },
-        {
-            "gstin": "29AAGCP4765J2ZT",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "26-12-2024",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Regular",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "Building No.3",
-                "buildingName": "Srinidhi Envoy",
-                "floor": "1st Floor",
-                "street": "3A, 4th Cross",
-                "locality": "Bengaluru",
-                "district": "Bengaluru Urban",
-                "state": "Karnataka",
-                "zip": "560043",
-                "latitude": "13.010323",
-                "longitude": "77.659339",
-                "nature": "Supplier of Services"
-            }
-        },
-        {
-            "gstin": "24AAGCP4765J1Z4",
-            "active": true,
-            "pan": "AAGCP4765J",
-            "registered": "12-08-2022",
-            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
-            "status": "Active",
-            "type": "Regular",
-            "constitution": "Private Limited Company",
-            "primaryAddress": {
-                "type": "PRIMARY",
-                "building": "Office No.10",
-                "buildingName": "Plot No.211, Ward 12-B",
-                "floor": "1st floor",
-                "street": "Shah Avenue-1",
-                "locality": "Gandhidham",
-                "district": "Kachchh",
-                "state": "Gujarat",
-                "zip": "370201",
-                "latitude": "23.061393",
-                "longitude": "70.126118",
-                "nature": "Supplier of Services"
-            }
-        }
-    ]
-};
+      const response = await searchGstinByPan(pan);
 
       if (!response.valid) {
         ToastNotification({
@@ -482,15 +322,29 @@ export default function CustomerPanMaster() {
         customerTypeCode,
         assignedTo,
       );
-      await postAPICall(URL.customer, payload, API_HEADER);
+      const response = (await postAPICall(
+        URL.customerVerification,
+        payload,
+        API_HEADER,
+      )) as { message?: string } | null;
+
+      const apiMessage =
+        response &&
+        typeof response === "object" &&
+        typeof response.message === "string" &&
+        response.message.trim()
+          ? response.message.trim()
+          : null;
+
       ToastNotification({
         type: "success",
         message:
-          selected.length === 1
-            ? "Customer created successfully."
-            : `Customer created with ${selected.length} addresses.`,
+          apiMessage ??
+          (selected.length === 1
+            ? "Customer verification submitted successfully."
+            : `Customer verification submitted with ${selected.length} addresses.`),
       });
-      navigate(CUSTOMER_MASTER_PATH, { state: { refreshData: true } });
+      setSelectedGstins(new Set());
     } catch (error) {
       ToastNotification({
         type: "error",
