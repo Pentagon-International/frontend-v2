@@ -66,7 +66,9 @@ export function coerceHouseCargoWeightInput(
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    if (!PARTIAL_DECIMAL_PATTERN.test(trimmed)) return null;
+    if (!PARTIAL_DECIMAL_PATTERN.test(trimmed)) {
+      return previous ?? null;
+    }
     return trimmed;
   }
   const num = roundToDecimals(value, HOUSE_CARGO_WEIGHT_DECIMALS);
