@@ -1488,8 +1488,15 @@ function CustomerCreate() {
   const userBranches = useAuthStore((s) => s.user?.branches);
   const isKenyaUser = useMemo(() => {
     const defaultBranch = userBranches?.find((b) => b.is_default);
-    return String(defaultBranch?.branch_code ?? "").toUpperCase() === "KE";
-  }, [userBranches]);
+    const byBranch =
+      String(defaultBranch?.branch_code ?? "").toUpperCase() === "KE";
+    const byCountry =
+      String(userCountry?.country_code ?? "").toUpperCase() === "KE" ||
+      String(userCountry?.country_name ?? "")
+        .toUpperCase()
+        .includes("KENYA");
+    return byBranch || byCountry;
+  }, [userBranches, userCountry]);
   const isIndiaUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
     String(userCountry?.country_name ?? "")
@@ -1506,11 +1513,6 @@ function CustomerCreate() {
     String(userCountry?.country_name ?? "")
       .toLowerCase()
       .includes("dubai");
-  const isKenyaUser =
-    String(userCountry?.country_code ?? "").toUpperCase() === "KE" ||
-    String(userCountry?.country_name ?? "")
-      .toUpperCase()
-      .includes("KENYA");
   const isChinaUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "CN" ||
     String(userCountry?.country_name ?? "").toUpperCase() === "CHINA";
