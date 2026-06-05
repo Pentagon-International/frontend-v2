@@ -392,19 +392,47 @@ const addressItemSchema = yup.object({
     .max(180, "Longitude must be between -180 and 180"),
 });
 
-const addressValidationSchema = yup.object({
-  addresses_data: yup
-    .array()
-    .of(addressItemSchema)
-    .min(1, "At least one address is required"),
-});
+// const addressValidationSchema = yup.object({
+//   addresses_data: yup
+//     .array()
+//     .of(addressItemSchema)
+//     .min(1, "At least one address is required"),
+// });
 
-function buildAddressValidationSchema(isIndiaUser: boolean) {
+function buildKenyaOptionalContactFields() {
+  return {
+    mobile_no: yup.string().optional(),
+    email: yup
+      .string()
+      .trim()
+      .optional()
+      .test(
+        "valid-email-if-present",
+        "Please enter a valid email address",
+        (v) => !v || yup.string().email().isValidSync(v),
+      )
+      .max(100, "Email must not exceed 100 characters"),
+  };
+}
+
+function buildAddressValidationSchema(
+  isIndiaUser: boolean,
+  isKenyaUser = false,
+) {
+  const baseItemSchema = isKenyaUser
+    ? addressItemSchema.shape(buildKenyaOptionalContactFields())
+    : addressItemSchema;
+
   if (!isIndiaUser) {
-    return addressValidationSchema;
+    return yup.object({
+      addresses_data: yup
+        .array()
+        .of(baseItemSchema)
+        .min(1, "At least one address is required"),
+    });
   }
 
-  const indianAddressItemSchema = addressItemSchema.shape({
+  const indianAddressItemSchema = baseItemSchema.shape({
     gst_registration_status: yup
       .string()
       .required("GST Registration Status is required")
@@ -1114,7 +1142,7 @@ const AddressCard = ({
             <Grid.Col span={4}>
               <TextInput
                 label="Mobile Number"
-                withAsterisk
+                withAsterisk={!isKenyaUser}
                 placeholder="Enter mobile number"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(
@@ -1126,7 +1154,7 @@ const AddressCard = ({
             <Grid.Col span={4}>
               <TextInput
                 label="Email Id"
-                withAsterisk
+                withAsterisk={!isKenyaUser}
                 placeholder="Enter email address"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.email`)}
@@ -1457,6 +1485,11 @@ function CustomerCreate() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const userCountry = useAuthStore((s) => s.user?.country);
+  const userBranches = useAuthStore((s) => s.user?.branches);
+  const isKenyaUser = useMemo(() => {
+    const defaultBranch = userBranches?.find((b) => b.is_default);
+    return String(defaultBranch?.branch_code ?? "").toUpperCase() === "KE";
+  }, [userBranches]);
   const isIndiaUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
     String(userCountry?.country_name ?? "")
@@ -1834,7 +1867,7 @@ function CustomerCreate() {
     },
     validate: isViewMode
       ? undefined
-      : yupResolver(buildAddressValidationSchema(isIndiaUser)),
+      : yupResolver(buildAddressValidationSchema(isIndiaUser, isKenyaUser)),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,

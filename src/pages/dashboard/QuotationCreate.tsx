@@ -2031,8 +2031,8 @@ function QuotationCreate({
                       cargo.container_type || cargo.container_type_code,
                     no_of_containers: Number(cargo.no_of_containers) || 0,
                     gross_weight: cargo.gross_weight
-                      ? Number(cargo.gross_weight).toFixed(2)
-                      : "0.00",
+                      ? Number(cargo.gross_weight).toFixed(3)
+                      : "0.000",
                   }));
                   console.log(
                     "Mapped FCL details:",
@@ -2049,14 +2049,14 @@ function QuotationCreate({
                 servicePayload.no_of_packages =
                   Number(cargo.no_of_packages) || 0;
                 servicePayload.gross_weight = cargo.gross_weight
-                  ? Number(cargo.gross_weight).toFixed(2)
-                  : "0.00";
+                  ? Number(cargo.gross_weight).toFixed(3)
+                  : "0.000";
                 servicePayload.volume_weight = cargo.volume_weight
-                  ? Number(cargo.volume_weight).toFixed(2)
-                  : "0.00";
+                  ? Number(cargo.volume_weight).toFixed(3)
+                  : "0.000";
                 servicePayload.chargeable_weight = cargo.chargable_weight
-                  ? Number(cargo.chargable_weight).toFixed(2)
-                  : "0.00";
+                  ? Number(cargo.chargable_weight).toFixed(3)
+                  : "0.000";
               } else if (
                 serviceDetail.service === "LCL" &&
                 serviceDetail.cargo_details
@@ -2065,14 +2065,14 @@ function QuotationCreate({
                 servicePayload.no_of_packages =
                   Number(cargo.no_of_packages) || 0;
                 servicePayload.gross_weight = cargo.gross_weight
-                  ? Number(cargo.gross_weight).toFixed(2)
-                  : "0.00";
+                  ? Number(cargo.gross_weight).toFixed(3)
+                  : "0.000";
                 servicePayload.volume = cargo.volume
-                  ? Number(cargo.volume).toFixed(1)
-                  : "0.0";
+                  ? Number(cargo.volume).toFixed(3)
+                  : "0.000";
                 servicePayload.chargeable_volume = cargo.chargable_volume
-                  ? Number(cargo.chargable_volume).toFixed(1)
-                  : "0.0";
+                  ? Number(cargo.chargable_volume).toFixed(3)
+                  : "0.000";
               }
 
               console.log("Final service payload:", servicePayload);

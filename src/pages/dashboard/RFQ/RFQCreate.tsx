@@ -609,7 +609,7 @@ function buildExpandedRfqServicePayloadsWithContext(
               no_of_containers: Math.trunc(
                 Number(cargoRow.no_of_containers) || 0
               ),
-              gross_weight: roundToDecimals(cargoRow.gross_weight, 2) ?? 0,
+              gross_weight: roundToDecimals(cargoRow.gross_weight, 3) ?? 0,
             };
             if (cargoRow.id) {
               fclDetail.id = cargoRow.id;
@@ -623,11 +623,11 @@ function buildExpandedRfqServicePayloadsWithContext(
           Number(cargoRow.no_of_packages) || 0
         );
         servicePayload.gross_weight =
-          roundToDecimals(cargoRow.gross_weight, 2) ?? 0;
+          roundToDecimals(cargoRow.gross_weight, 3) ?? 0;
         servicePayload.volume_weight =
-          roundToDecimals(cargoRow.volume_weight, 2) ?? 0;
+          roundToDecimals(cargoRow.volume_weight, 3) ?? 0;
         servicePayload.chargeable_weight =
-          roundToDecimals(cargoRow.chargable_weight, 2) ?? 0;
+          roundToDecimals(cargoRow.chargable_weight, 3) ?? 0;
         const dimUnit = serviceDetail.dimension_unit || "";
         const dimRows = Array.isArray(serviceDetail.diemensions)
           ? serviceDetail.diemensions
@@ -659,7 +659,7 @@ function buildExpandedRfqServicePayloadsWithContext(
           Number(cargoRow.no_of_packages) || 0
         );
         servicePayload.gross_weight =
-          roundToDecimals(cargoRow.gross_weight, 2) ?? 0;
+          roundToDecimals(cargoRow.gross_weight, 3) ?? 0;
         servicePayload.volume = roundToDecimals(cargoRow.volume, 3) ?? 0;
         servicePayload.chargeable_volume =
           roundToDecimals(cargoRow.chargable_volume, 3) ?? 0;
@@ -1072,11 +1072,11 @@ const serviceFormSchema = yup.object({
                     .min(0.01, "Must be greater than 0")
                     .test(
                       "decimal-places",
-                      "Maximum 2 decimal places allowed",
+                      "Maximum 3 decimal places allowed",
                       (value) => {
                         if (value === undefined || value === null) return true;
                         const decimalPart = String(value).split(".")[1];
-                        return !decimalPart || decimalPart.length <= 2;
+                        return !decimalPart || decimalPart.length <= 3;
                       }
                     )
                     .test(
@@ -1109,11 +1109,11 @@ const serviceFormSchema = yup.object({
                     .min(0.01, "Must be greater than 0")
                     .test(
                       "decimal-places",
-                      "Maximum 2 decimal places allowed",
+                      "Maximum 3 decimal places allowed",
                       (value) => {
                         if (value === undefined || value === null) return true;
                         const decimalPart = String(value).split(".")[1];
-                        return !decimalPart || decimalPart.length <= 2;
+                        return !decimalPart || decimalPart.length <= 3;
                       }
                     )
                     .test(
@@ -2148,10 +2148,10 @@ function RFQCreate() {
             } else {
               // Check decimal places
               const decimalPart = String(cargo.gross_weight).split(".")[1];
-              if (decimalPart && decimalPart.length > 2) {
+              if (decimalPart && decimalPart.length > 3) {
                 serviceForm.setFieldError(
                   `service_details.${serviceIndex}.cargo_details.0.gross_weight`,
-                  "Maximum 2 decimal places allowed"
+                  "Maximum 3 decimal places allowed"
                 );
                 hasCargoErrors = true;
               } else {
@@ -2197,10 +2197,10 @@ function RFQCreate() {
             } else {
               // Check decimal places
               const decimalPart = String(cargo.volume_weight).split(".")[1];
-              if (decimalPart && decimalPart.length > 2) {
+              if (decimalPart && decimalPart.length > 3) {
                 serviceForm.setFieldError(
                   `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
-                  "Maximum 2 decimal places allowed"
+                  "Maximum 3 decimal places allowed"
                 );
                 hasCargoErrors = true;
               } else {
@@ -2349,10 +2349,10 @@ function RFQCreate() {
                   const decimalPart = String(fclCargo.gross_weight).split(
                     "."
                   )[1];
-                  if (decimalPart && decimalPart.length > 2) {
+                  if (decimalPart && decimalPart.length > 3) {
                     serviceForm.setFieldError(
                       `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`,
-                      "Maximum 2 decimal places allowed"
+                      "Maximum 3 decimal places allowed"
                     );
                     hasCargoErrors = true;
                   } else {
@@ -7397,7 +7397,7 @@ function RFQCreate() {
                                           label="Gross Weight (kg)"
                                           min={0.01}
                                           withAsterisk
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           {...serviceForm.getInputProps(
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                           )}
@@ -7412,7 +7412,7 @@ function RFQCreate() {
                                           label="Volume Weight (kg)"
                                           min={0.01}
                                           withAsterisk
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           disabled={hasValidDimensions(
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -7472,7 +7472,7 @@ function RFQCreate() {
                                           withAsterisk
                                           min={0}
                                           readOnly
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           value={
                                             serviceForm.values.service_details[
                                               serviceIndex
@@ -8067,7 +8067,7 @@ function RFQCreate() {
                                           label="Gross Weight (kg)"
                                           min={0.01}
                                           withAsterisk
-                                          decimalScale={2}
+                                          decimalScale={3}
                                           {...serviceForm.getInputProps(
                                             `service_details.${serviceIndex}.cargo_details.0.gross_weight`
                                           )}
@@ -8796,7 +8796,7 @@ function RFQCreate() {
                                                   withAsterisk
                                                   placeholder="Enter gross weight"
                                                   min={0.01}
-                                                  decimalScale={2}
+                                                  decimalScale={3}
                                                   {...serviceForm.getInputProps(
                                                     `service_details.${serviceIndex}.cargo_details.${cargoIndex}.gross_weight`
                                                   )}
