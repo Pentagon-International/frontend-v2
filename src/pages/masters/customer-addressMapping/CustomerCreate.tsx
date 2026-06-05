@@ -845,6 +845,8 @@ const AddressCard = ({
   isVendorMasterRoute,
   isDubaiUser,
   isIndiaUser,
+  isKenyaUser,
+  isChinaUser,
   addressForm,
   countryOptions,
   selectedCountries,
@@ -868,6 +870,8 @@ const AddressCard = ({
   isVendorMasterRoute: boolean;
   isDubaiUser: boolean;
   isIndiaUser: boolean;
+  isKenyaUser: boolean;
+  isChinaUser: boolean;
   addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
   countryOptions: { value: string; label: string }[];
   selectedCountries: Record<number, string>;
@@ -1158,6 +1162,20 @@ const AddressCard = ({
                   />
                 </Grid.Col>
               </>
+            )}
+            {(isKenyaUser || isChinaUser) && (
+              <Grid.Col span={4}>
+                <TextInput
+                  label={isKenyaUser ? "PIN Number" : "TIN Number"}
+                  placeholder={
+                    isKenyaUser ? "Enter PIN number" : "Enter TIN number"
+                  }
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.gst_id`,
+                  )}
+                />
+              </Grid.Col>
             )}
           </Grid>
         </Box>
@@ -1455,6 +1473,14 @@ function CustomerCreate() {
     String(userCountry?.country_name ?? "")
       .toLowerCase()
       .includes("dubai");
+  const isKenyaUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "KE" ||
+    String(userCountry?.country_name ?? "")
+      .toUpperCase()
+      .includes("KENYA");
+  const isChinaUser =
+    String(userCountry?.country_code ?? "").toUpperCase() === "CN" ||
+    String(userCountry?.country_name ?? "").toUpperCase() === "CHINA";
   const [selectedCountries, setSelectedCountries] = useState<
     Record<number, string>
   >({});
@@ -3118,6 +3144,8 @@ function CustomerCreate() {
                         isVendorMasterRoute={isVendorMasterRoute}
                         isDubaiUser={isDubaiUser}
                         isIndiaUser={isIndiaUser}
+                        isKenyaUser={isKenyaUser}
+                        isChinaUser={isChinaUser}
                         addressForm={addressForm}
                         countryOptions={countryOptions}
                         selectedCountries={selectedCountries}
