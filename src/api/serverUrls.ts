@@ -17,8 +17,10 @@ export const URL = {
   customer: "customer_master/customer-master/",
   allCustomers: "customer_master/conditional-list/",
   customerFilter: "filter/customer_master/customer-master/",
-  /** Pending PAN customers for approval — update when backend path is confirmed. */
-  customerPanPendingList: "customer_master/customer-pan/pending/",
+  customerVerification: "customer-verification/",
+  customerVerificationFilter: "filter/customer-verification/",
+  customerVerificationRelatedCustomers:
+    "customer-verification/related-customers/",
   transporter: "customer_master/customer-master/transporter/",
   consignee: "customer_master/customer-master/consignee/",
   agent: "customer_master/customer-master/agent/",

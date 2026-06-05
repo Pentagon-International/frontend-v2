@@ -269,6 +269,27 @@ function computeChargeLineTotals(charge: {
   };
 }
 
+function getQuoteCurrencyRoeFromCharges(
+  quoteCurrency: string,
+  chargeList: Array<{ currency_country_code?: string; roe?: string | number }>,
+): number {
+  const normalizedQuote = quoteCurrency.trim().toUpperCase();
+  if (!normalizedQuote) return 1;
+
+  for (const charge of chargeList) {
+    const chargeCurrency = String(charge.currency_country_code ?? "")
+      .trim()
+      .toUpperCase();
+    if (chargeCurrency !== normalizedQuote) continue;
+
+    const roe = parseFloat(String(charge.roe ?? ""));
+    if (!Number.isNaN(roe) && roe > 0) return roe;
+    return 1;
+  }
+
+  return 1;
+}
+
 type CurrencyItem = {
   code: string;
   name: string;
@@ -2688,6 +2709,22 @@ function QuotationCreate({
     );
     return match ? match.code : null;
   }, [user?.country?.country_code, currencyData]);
+
+  const quoteCurrencyCode =
+    quotationForm.values.quote_currency_country_code || "";
+  const normalizedQuoteCurrency = quoteCurrencyCode.trim().toUpperCase();
+  const normalizedLocalCurrency = (userCurrencyCode ?? "").trim().toUpperCase();
+  const showQuoteCurrencyProfit = Boolean(
+    normalizedQuoteCurrency &&
+      normalizedLocalCurrency &&
+      normalizedQuoteCurrency !== normalizedLocalCurrency,
+  );
+  const quoteCurrencyRoe = getQuoteCurrencyRoeFromCharges(
+    quoteCurrencyCode,
+    charges,
+  );
+  const profitInQuoteCurrency =
+    quoteCurrencyRoe > 0 ? profit / quoteCurrencyRoe : profit;
 
   // Auto-set currency based on user's country code - for each service
   useEffect(() => {
@@ -5644,10 +5681,29 @@ function QuotationCreate({
                       <Grid.Col span={7.5} />
 
                       <Grid.Col span={1} ml={10}>
-                        Profit=
+                        Profit
+                        {userCurrencyCode ? ` (${userCurrencyCode})` : ""}=
                       </Grid.Col>
                       <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
                     </Grid>
+                    {showQuoteCurrencyProfit && (
+                      <Grid
+                        mt={4}
+                        style={{
+                          fontWeight: 600,
+                          color: profitInQuoteCurrency >= 0 ? "green" : "red",
+                        }}
+                      >
+                        <Grid.Col span={7.5} />
+                        <Grid.Col span={1} ml={10}>
+                          Profit ({normalizedQuoteCurrency})=
+                        </Grid.Col>
+                        <Grid.Col span={1}>
+                          {" "}
+                          {profitInQuoteCurrency.toFixed(2)}
+                        </Grid.Col>
+                      </Grid>
+                    )}
                   </Stack>
                 </Box>
               </Box>
@@ -6882,10 +6938,29 @@ function QuotationCreate({
                   >
                     <Grid.Col span={7.5} />
                     <Grid.Col span={1} ml={10}>
-                      Profit=
+                      Profit
+                      {userCurrencyCode ? ` (${userCurrencyCode})` : ""}=
                     </Grid.Col>
                     <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
                   </Grid>
+                  {showQuoteCurrencyProfit && (
+                    <Grid
+                      mt={4}
+                      style={{
+                        fontWeight: 600,
+                        color: profitInQuoteCurrency >= 0 ? "green" : "red",
+                      }}
+                    >
+                      <Grid.Col span={7.5} />
+                      <Grid.Col span={1} ml={10}>
+                        Profit ({normalizedQuoteCurrency})=
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        {" "}
+                        {profitInQuoteCurrency.toFixed(2)}
+                      </Grid.Col>
+                    </Grid>
+                  )}
                 </Stack>
               </Box>
             </Box>

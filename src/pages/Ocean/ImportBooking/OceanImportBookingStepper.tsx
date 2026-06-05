@@ -58,6 +58,19 @@ import useAuthStore from "../../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  buildOceanBookingCargoWeightPayload,
+  buildOceanBookingContainerWeightPayload,
+  calculateHouseChargeableWeight,
+  coerceHouseCargoWeightInput,
+  formatHouseCargoWeightDisplay,
+  HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
+  houseCargoWeightValuesEqual,
+  importHouseCargoWeightFromApi,
+  isPositiveHouseCargoWeight,
+  sumOceanBookingContainerGrossKg,
+  type HouseCargoWeightValue,
+} from "../../../utils/houseCargoChargeableWeight";
 import { commonSearchAPI } from "../../../service/searchApi";
 
 interface ImportShipmentStepperProps {
@@ -81,20 +94,20 @@ interface ContainerDetail {
   id?: number;
   container_no?: string;
   no_of_packages?: string;
-  gross_weight?: string;
-  volume?: string;
-  chargeable_weight?: string;
+  gross_weight?: HouseCargoWeightValue;
+  volume?: HouseCargoWeightValue;
+  chargeable_weight?: HouseCargoWeightValue;
 }
 
 interface CargoDetail {
   // Common fields
   id?: number;
   no_of_packages?: number;
-  gross_weight?: number;
-  volume_weight?: number;
-  chargeable_weight?: number;
-  volume?: number;
-  chargeable_volume?: number;
+  gross_weight?: HouseCargoWeightValue;
+  volume_weight?: HouseCargoWeightValue;
+  chargeable_weight?: HouseCargoWeightValue;
+  volume?: HouseCargoWeightValue;
+  chargeable_volume?: HouseCargoWeightValue;
 
   // FCL specific fields
   container_type_code?: string;
@@ -398,11 +411,11 @@ const validationSchema = yup.object({
   cargo_details: yup.array().of(
     yup.object({
       no_of_packages: yup.number().nullable(),
-      gross_weight: yup.number().nullable(),
-      volume_weight: yup.number().nullable(),
-      chargeable_weight: yup.number().nullable(),
-      volume: yup.number().nullable(),
-      chargeable_volume: yup.number().nullable(),
+      gross_weight: yup.mixed().nullable(),
+      volume_weight: yup.mixed().nullable(),
+      chargeable_weight: yup.mixed().nullable(),
+      volume: yup.mixed().nullable(),
+      chargeable_volume: yup.mixed().nullable(),
       container_type_code: yup.string().nullable(),
       container_no: yup
         .string()
@@ -1178,21 +1191,15 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               no_of_packages: cargo.no_of_packages
                 ? Number(cargo.no_of_packages)
                 : undefined,
-              gross_weight: cargo.gross_weight
-                ? parseFloat(String(cargo.gross_weight))
-                : undefined,
-              volume_weight: cargo.volume_weight
-                ? parseFloat(String(cargo.volume_weight))
-                : undefined,
-              chargeable_weight: cargo.chargeable_weight
-                ? parseFloat(String(cargo.chargeable_weight))
-                : undefined,
-              volume: cargo.volume
-                ? parseFloat(String(cargo.volume))
-                : undefined,
-              chargeable_volume: cargo.chargeable_volume
-                ? parseFloat(String(cargo.chargeable_volume))
-                : undefined,
+              gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
+              volume_weight: importHouseCargoWeightFromApi(cargo.volume_weight),
+              chargeable_weight: importHouseCargoWeightFromApi(
+                cargo.chargeable_weight,
+              ),
+              volume: importHouseCargoWeightFromApi(cargo.volume),
+              chargeable_volume: importHouseCargoWeightFromApi(
+                cargo.chargeable_volume,
+              ),
               container_type_code: cargo.container_type_code
                 ? String(cargo.container_type_code)
                 : undefined,
@@ -1212,13 +1219,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       no_of_packages: c.no_of_packages
                         ? String(c.no_of_packages)
                         : undefined,
-                      gross_weight: c.gross_weight
-                        ? String(c.gross_weight)
-                        : undefined,
-                      volume: c.volume ? String(c.volume) : undefined,
-                      chargeable_weight: c.chargeable_weight
-                        ? String(c.chargeable_weight)
-                        : undefined,
+                      gross_weight: importHouseCargoWeightFromApi(
+                        c.gross_weight,
+                      ),
+                      volume: importHouseCargoWeightFromApi(c.volume),
+                      chargeable_weight: importHouseCargoWeightFromApi(
+                        c.chargeable_weight,
+                      ),
                     }),
                   )
                 : [],
@@ -2850,17 +2857,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.routed]);
 
-  // Calculate chargeable volume for LCL service
-  const calculateChargeableVolume = useCallback(
-    (grossWeight: number | null, volume: number | null): number => {
-      if (!grossWeight && !volume) return 0;
-      const grossWeightInCbm = grossWeight ? grossWeight / 1000 : 0;
-      const volumeInCbm = volume || 0;
-      return Math.max(grossWeightInCbm, volumeInCbm);
-    },
-    [],
-  );
-
   // Calculate chargeable weight for AIR service (max of gross weight and volume weight)
   const calculateChargeableWeight = useCallback(
     (grossWeight: number | null, volumeWeight: number | null): number => {
@@ -2878,23 +2874,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     if (!cargo) return;
 
     if (form.values.service === "LCL") {
-      const grossWeight = Number(cargo.gross_weight) || null;
-      const volume = Number(cargo.volume) || null;
-
-      if (grossWeight || volume) {
-        const gw = grossWeight ? grossWeight / 1000 : 0;
-        const vol = volume || 0;
-        const chargeableWeight = Math.max(gw, vol);
-        if (cargo.chargeable_weight !== chargeableWeight) {
-          form.setFieldValue(
-            "cargo_details.0.chargeable_weight",
-            chargeableWeight,
-          );
-        }
-      } else {
-        if (cargo.chargeable_weight !== null) {
-          form.setFieldValue("cargo_details.0.chargeable_weight", null);
-        }
+      const chargeable = calculateHouseChargeableWeight(
+        cargo.gross_weight ?? null,
+        cargo.volume ?? null,
+        "ocean",
+      );
+      const nextChargeable = isPositiveHouseCargoWeight(chargeable)
+        ? chargeable
+        : null;
+      if (
+        !houseCargoWeightValuesEqual(cargo.chargeable_weight, nextChargeable)
+      ) {
+        form.setFieldValue("cargo_details.0.chargeable_weight", nextChargeable);
       }
       // Clear chargeable volume when service is LCL
       if (cargo.chargeable_volume !== null) {
@@ -3070,15 +3061,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         cargo_details: form.values.cargo_details.map((cargo) => {
+          const weights = buildOceanBookingCargoWeightPayload(
+            cargo,
+            form.values.service,
+            "chargeable_weight",
+          );
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
-            gross_weight: roundToDecimals(cargo.gross_weight) || null,
-            volume_weight: roundToDecimals(cargo.volume_weight) || null,
-            chargeable_weight:
-              roundToDecimals(cargo.chargeable_weight) || null,
-            volume: roundToDecimals(cargo.volume) || null,
-            chargeable_volume:
-              roundToDecimals(cargo.chargeable_volume) || null,
+            ...weights,
             container_type_code: cargo.container_type_code || null,
             container_no: cargo.container_no || null,
             no_of_containers: cargo.no_of_containers || null,
@@ -3092,10 +3082,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               const containerPayload: Record<string, unknown> = {
                 container_no: c.container_no || null,
                 no_of_packages: c.no_of_packages || null,
-                gross_weight: roundToDecimals(c.gross_weight) || null,
-                volume: roundToDecimals(c.volume) || null,
-                chargeable_weight:
-                  roundToDecimals(c.chargeable_weight) || null,
+                ...buildOceanBookingContainerWeightPayload(c),
               };
               if (c.id != null && c.id !== undefined) {
                 containerPayload.id =
@@ -3180,8 +3167,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             cost_per_unit:
               roundToDecimals(parseFloat(charge.cost_per_unit)) || 0,
             total_cost: roundToDecimals(parseFloat(charge.total_cost)) || 0,
-            total_sell:
-              roundToDecimals(parseFloat(charge.total_sell)) || 0,
+            total_sell: roundToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -5932,30 +5918,65 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
                           min={0}
-                          decimalScale={2}
-                          {...form.getInputProps(
-                            "cargo_details.0.gross_weight",
-                          )}
+                          hideControls
+                          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                          value={
+                            form.values.cargo_details[0]?.gross_weight ??
+                            undefined
+                          }
+                          onChange={(value) => {
+                            const gw = coerceHouseCargoWeightInput(
+                              value,
+                              form.values.cargo_details[0]?.gross_weight,
+                            );
+                            form.setFieldValue(
+                              "cargo_details.0.gross_weight",
+                              gw,
+                            );
+                          }}
+                          onBlur={(e) => {
+                            const raw = e.currentTarget.value
+                              .replace(/,/g, "")
+                              .trim();
+                            if (!raw) return;
+                            form.setFieldValue(
+                              "cargo_details.0.gross_weight",
+                              coerceHouseCargoWeightInput(
+                                raw,
+                                form.values.cargo_details[0]?.gross_weight,
+                              ),
+                            );
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={2}>
-                        <FormNumberInput
+                        <FormTextInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
-                          min={0}
-                          decimalScale={2}
-                          {...form.getInputProps("cargo_details.0.volume")}
+                          format="normal"
+                          value={formatHouseCargoWeightDisplay(
+                            form.values.cargo_details[0]?.volume ?? null,
+                          )}
+                          onChange={(e) => {
+                            form.setFieldValue(
+                              "cargo_details.0.volume",
+                              coerceHouseCargoWeightInput(
+                                e.currentTarget.value.replace(/,/g, ""),
+                                form.values.cargo_details[0]?.volume,
+                              ),
+                            );
+                          }}
                         />
                       </Grid.Col>
                       <Grid.Col span={2}>
-                        <FormNumberInput
+                        <FormTextInput
                           label="Chargeable Weight (cbm)"
                           placeholder="Auto-calculated"
-                          min={0}
-                          decimalScale={2}
+                          format="normal"
                           readOnly
-                          {...form.getInputProps(
-                            "cargo_details.0.chargeable_weight",
+                          value={formatHouseCargoWeightDisplay(
+                            form.values.cargo_details[0]?.chargeable_weight ??
+                              null,
                           )}
                           styles={{
                             input: {
@@ -6069,15 +6090,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                         );
                                       }
                                     } else if (count < existing.length) {
-                                      let total = 0;
-                                      for (let i = 0; i < count; i++) {
-                                        total +=
-                                          parseFloat(
-                                            String(
-                                              existing[i]?.gross_weight || "0",
-                                            ),
-                                          ) || 0;
-                                      }
+                                      const kept = existing.slice(0, count);
                                       for (
                                         let i = existing.length - 1;
                                         i >= count;
@@ -6090,8 +6103,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                       }
                                       form.setFieldValue(
                                         `cargo_details.${cargoIndex}.gross_weight`,
-                                        parseFloat(total.toFixed(2)) ||
-                                          undefined,
+                                        sumOceanBookingContainerGrossKg(kept),
                                       );
                                     }
                                     if (count === 0) {
@@ -6112,10 +6124,22 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                 <FormNumberInput
                                   placeholder="Enter gross weight"
                                   min={0}
-                                  decimalScale={2}
-                                  {...form.getInputProps(
-                                    `cargo_details.${cargoIndex}.gross_weight`,
-                                  )}
+                                  hideControls
+                                  {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                                  value={
+                                    form.values.cargo_details[cargoIndex]
+                                      ?.gross_weight ?? undefined
+                                  }
+                                  onChange={(value) => {
+                                    form.setFieldValue(
+                                      `cargo_details.${cargoIndex}.gross_weight`,
+                                      coerceHouseCargoWeightInput(
+                                        value,
+                                        form.values.cargo_details[cargoIndex]
+                                          ?.gross_weight,
+                                      ),
+                                    );
+                                  }}
                                 />
                               </Grid.Col>
                               <Grid.Col span={2.5}>
@@ -6211,54 +6235,91 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                           />
                                         </Grid.Col>
                                         <Grid.Col span={2.4}>
-                                          <FormTextInput
+                                          <FormNumberInput
                                             placeholder="Enter gross weight"
-                                            {...form.getInputProps(
-                                              `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
-                                            )}
-                                            onChange={(e) => {
-                                              const val = e.currentTarget.value;
+                                            min={0}
+                                            hideControls
+                                            {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                                            value={
+                                              form.values.cargo_details[
+                                                cargoIndex
+                                              ]?.containers?.[cIdx]
+                                                ?.gross_weight ?? undefined
+                                            }
+                                            onChange={(value) => {
+                                              const gw =
+                                                coerceHouseCargoWeightInput(
+                                                  value,
+                                                  form.values.cargo_details[
+                                                    cargoIndex
+                                                  ]?.containers?.[cIdx]
+                                                    ?.gross_weight,
+                                                );
+                                              const vol =
+                                                form.values.cargo_details[
+                                                  cargoIndex
+                                                ]?.containers?.[cIdx]?.volume ??
+                                                null;
+                                              const chargeable =
+                                                calculateHouseChargeableWeight(
+                                                  gw,
+                                                  vol,
+                                                  "ocean",
+                                                );
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
-                                                val,
+                                                gw,
                                               );
-                                              const rawGw =
-                                                parseFloat(val) || 0;
-                                              const gw = rawGw / 1000;
-                                              const vol =
-                                                parseFloat(
-                                                  String(
-                                                    form.values.cargo_details[
-                                                      cargoIndex
-                                                    ]?.containers?.[cIdx]
-                                                      ?.volume || "0",
-                                                  ),
-                                                ) || 0;
-                                              const newCw = Math.max(gw, vol);
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
-                                                newCw.toFixed(2),
+                                                isPositiveHouseCargoWeight(
+                                                  chargeable,
+                                                )
+                                                  ? chargeable
+                                                  : undefined,
                                               );
                                               const containers =
                                                 form.values.cargo_details[
                                                   cargoIndex
                                                 ]?.containers || [];
-                                              let total = 0;
-                                              containers.forEach((c, i) => {
-                                                if (i === cIdx) {
-                                                  total += rawGw;
-                                                } else {
-                                                  total +=
-                                                    parseFloat(
-                                                      String(
-                                                        c.gross_weight || "0",
-                                                      ),
-                                                    ) || 0;
-                                                }
-                                              });
+                                              const nextContainers =
+                                                containers.map((c, i) =>
+                                                  i === cIdx
+                                                    ? {
+                                                        ...c,
+                                                        gross_weight: gw,
+                                                        chargeable_weight:
+                                                          isPositiveHouseCargoWeight(
+                                                            chargeable,
+                                                          )
+                                                            ? chargeable
+                                                            : undefined,
+                                                      }
+                                                    : c,
+                                                );
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.gross_weight`,
-                                                parseFloat(total.toFixed(2)),
+                                                sumOceanBookingContainerGrossKg(
+                                                  nextContainers,
+                                                ),
+                                              );
+                                            }}
+                                            onBlur={(e) => {
+                                              const raw = e.currentTarget.value
+                                                .replace(/,/g, "")
+                                                .trim();
+                                              if (!raw) return;
+                                              const gw =
+                                                coerceHouseCargoWeightInput(
+                                                  raw,
+                                                  form.values.cargo_details[
+                                                    cargoIndex
+                                                  ]?.containers?.[cIdx]
+                                                    ?.gross_weight,
+                                                );
+                                              form.setFieldValue(
+                                                `cargo_details.${cargoIndex}.containers.${cIdx}.gross_weight`,
+                                                gw,
                                               );
                                             }}
                                           />
@@ -6266,30 +6327,46 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                         <Grid.Col span={2.4}>
                                           <FormTextInput
                                             placeholder="Enter volume"
-                                            {...form.getInputProps(
-                                              `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
+                                            format="normal"
+                                            value={formatHouseCargoWeightDisplay(
+                                              form.values.cargo_details[
+                                                cargoIndex
+                                              ]?.containers?.[cIdx]?.volume ??
+                                                null,
                                             )}
                                             onChange={(e) => {
-                                              const val = e.currentTarget.value;
+                                              const vol =
+                                                coerceHouseCargoWeightInput(
+                                                  e.currentTarget.value.replace(
+                                                    /,/g,
+                                                    "",
+                                                  ),
+                                                  form.values.cargo_details[
+                                                    cargoIndex
+                                                  ]?.containers?.[cIdx]?.volume,
+                                                );
+                                              const gw =
+                                                form.values.cargo_details[
+                                                  cargoIndex
+                                                ]?.containers?.[cIdx]
+                                                  ?.gross_weight ?? null;
+                                              const chargeable =
+                                                calculateHouseChargeableWeight(
+                                                  gw,
+                                                  vol,
+                                                  "ocean",
+                                                );
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.volume`,
-                                                val,
+                                                vol,
                                               );
-                                              const vol = parseFloat(val) || 0;
-                                              const rawGw =
-                                                parseFloat(
-                                                  String(
-                                                    form.values.cargo_details[
-                                                      cargoIndex
-                                                    ]?.containers?.[cIdx]
-                                                      ?.gross_weight || "0",
-                                                  ),
-                                                ) || 0;
-                                              const gw = rawGw / 1000;
-                                              const newCw = Math.max(gw, vol);
                                               form.setFieldValue(
                                                 `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
-                                                newCw.toFixed(2),
+                                                isPositiveHouseCargoWeight(
+                                                  chargeable,
+                                                )
+                                                  ? chargeable
+                                                  : undefined,
                                               );
                                             }}
                                           />
@@ -6297,9 +6374,13 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                         <Grid.Col span={2.4}>
                                           <FormTextInput
                                             placeholder="Auto-calculated"
+                                            format="normal"
                                             readOnly
-                                            {...form.getInputProps(
-                                              `cargo_details.${cargoIndex}.containers.${cIdx}.chargeable_weight`,
+                                            value={formatHouseCargoWeightDisplay(
+                                              form.values.cargo_details[
+                                                cargoIndex
+                                              ]?.containers?.[cIdx]
+                                                ?.chargeable_weight ?? null,
                                             )}
                                             styles={{
                                               input: {

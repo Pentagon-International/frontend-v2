@@ -16,11 +16,16 @@ function houseCargoWeightNumberToString(num: number): string {
   return String(num);
 }
 
-/** Load from API/edit data — keep string decimals when the API sends them. */
+/** Load from API/edit data — keep string literals (e.g. 32.100); never force 2 dp. */
 export function importHouseCargoWeightFromApi(
   value: unknown,
 ): HouseCargoWeightValue {
   if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (PARTIAL_DECIMAL_PATTERN.test(trimmed)) return trimmed;
+  }
   return coerceHouseCargoWeightInput(value as string | number);
 }
 
@@ -116,11 +121,75 @@ export function formatHouseCargoWeightForPayload(
   return formatHouseCargoWeightDisplay(coerced);
 }
 
+/** Minimum ocean chargeable weight (CBM) after max(gross÷1000, volume) calculation. */
+export const OCEAN_CHARGEABLE_WEIGHT_MIN = 1;
+
 /** Ocean: gross (KG) → CBM for chargeable when gross wins the max comparison. */
 function oceanGrossKgToCbm(grossWeight: HouseCargoWeightValue): HouseCargoWeightValue {
   const grossNum = parseHouseCargoWeightInput(grossWeight);
   if (grossNum === null || grossNum <= 0) return null;
   return coerceHouseCargoWeightInput(grossNum / 1000);
+}
+
+/** Ocean chargeable CBM: values below 1 are raised to 1. */
+export function applyOceanChargeableWeightMinimum(
+  value: HouseCargoWeightValue,
+): HouseCargoWeightValue {
+  const num = parseHouseCargoWeightInput(value);
+  if (num === null || num <= 0) return value;
+  if (num < OCEAN_CHARGEABLE_WEIGHT_MIN) {
+    return coerceHouseCargoWeightInput(OCEAN_CHARGEABLE_WEIGHT_MIN);
+  }
+  return value;
+}
+
+/** Charge unit CBM / CBM(S) — used to auto-fill no_of_unit from chargeable weight. */
+export function isCbmsChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  const normalize = (value: string) =>
+    value.trim().toUpperCase().replace(/\s/g, "");
+  const normalizedCode = normalize(unitCode);
+  const normalizedLabel = normalize(unitLabel ?? "");
+  return (
+    normalizedCode === "CBM" ||
+    normalizedCode === "CBMS" ||
+    normalizedCode === "CBM(S)" ||
+    normalizedLabel === "CBM" ||
+    normalizedLabel === "CBMS" ||
+    normalizedLabel === "CBM(S)"
+  );
+}
+
+export function sumHouseOceanChargeableWeight(
+  cargoList: Array<{
+    gross_weight?: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight?: HouseCargoWeightValue;
+  }>,
+): number | null {
+  let total = 0;
+  let hasValue = false;
+
+  for (const cargo of cargoList) {
+    const fromStored = parseHouseCargoWeightInput(cargo.chargeable_weight);
+    const value =
+      fromStored ??
+      parseHouseCargoWeightInput(
+        calculateHouseChargeableWeight(
+          cargo.gross_weight ?? null,
+          cargo.volume,
+          "ocean",
+        ),
+      );
+    if (value !== null && value > 0) {
+      total += value;
+      hasValue = true;
+    }
+  }
+
+  return hasValue ? total : null;
 }
 
 /**
@@ -140,8 +209,12 @@ export function calculateHouseChargeableWeight(
 
   if (unit === "ocean") {
     const grossCbm = grossNum > 0 ? grossNum / 1000 : 0;
-    if (volNum > 0 && volNum >= grossCbm) return volume ?? null;
-    if (grossCbm > 0 && grossCbm > volNum) return oceanGrossKgToCbm(grossWeight);
+    if (volNum > 0 && volNum >= grossCbm) {
+      return applyOceanChargeableWeightMinimum(volume ?? null);
+    }
+    if (grossCbm > 0 && grossCbm > volNum) {
+      return applyOceanChargeableWeightMinimum(oceanGrossKgToCbm(grossWeight));
+    }
     return null;
   }
 
@@ -187,6 +260,108 @@ export function withRecalculatedChargeableWeight<
     ...cargo,
     chargeable_weight: isPositiveHouseCargoWeight(chargeable) ? chargeable : null,
   };
+}
+
+export type OceanBookingLclChargeableKey =
+  | "chargeable_weight"
+  | "chargeable_volume";
+
+/** Ocean booking cargo row weights for API (preserves user-entered decimals). */
+export function buildOceanBookingCargoWeightPayload(
+  cargo: {
+    gross_weight?: unknown;
+    volume?: unknown;
+    volume_weight?: unknown;
+    chargeable_weight?: unknown;
+    chargeable_volume?: unknown;
+  },
+  service: string,
+  lclChargeableKey: OceanBookingLclChargeableKey,
+): {
+  gross_weight: string | null;
+  volume: string | null;
+  volume_weight: string | null;
+  chargeable_weight: string | null;
+  chargeable_volume: string | null;
+} {
+  const gross = cargo.gross_weight as HouseCargoWeightValue;
+  const volume = cargo.volume as HouseCargoWeightValue;
+  const volumeWeight = cargo.volume_weight as HouseCargoWeightValue;
+  const oceanChargeable = formatHouseCargoChargeableForPayload(
+    gross,
+    volume,
+    "ocean",
+  );
+  const airChargeable = formatHouseCargoChargeableForPayload(
+    gross,
+    volumeWeight,
+    "air",
+  );
+
+  let chargeable_weight: string | null;
+  let chargeable_volume: string | null;
+
+  const storedChargeableWeight =
+    cargo.chargeable_weight as HouseCargoWeightValue;
+  const storedChargeableVolume =
+    cargo.chargeable_volume as HouseCargoWeightValue;
+
+  if (service === "AIR") {
+    chargeable_weight = airChargeable;
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  } else if (service === "LCL" && lclChargeableKey === "chargeable_volume") {
+    chargeable_volume = oceanChargeable;
+    chargeable_weight =
+      formatHouseCargoWeightForPayload(storedChargeableWeight);
+  } else if (service === "LCL") {
+    chargeable_weight = oceanChargeable;
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  } else {
+    chargeable_weight =
+      formatHouseCargoWeightForPayload(storedChargeableWeight);
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  }
+
+  return {
+    gross_weight: formatHouseCargoWeightForPayload(gross),
+    volume: formatHouseCargoWeightForPayload(volume),
+    volume_weight: formatHouseCargoWeightForPayload(volumeWeight),
+    chargeable_weight,
+    chargeable_volume,
+  };
+}
+
+/** FCL nested container row weights for ocean booking payload. */
+export function buildOceanBookingContainerWeightPayload(c: {
+  gross_weight?: unknown;
+  volume?: unknown;
+}): {
+  gross_weight: string | null;
+  volume: string | null;
+  chargeable_weight: string | null;
+} {
+  const gross = c.gross_weight as HouseCargoWeightValue;
+  const volume = c.volume as HouseCargoWeightValue;
+  return {
+    gross_weight: formatHouseCargoWeightForPayload(gross),
+    volume: formatHouseCargoWeightForPayload(volume),
+    chargeable_weight: formatHouseCargoChargeableForPayload(gross, volume, "ocean"),
+  };
+}
+
+/** Sum container gross (KG) for FCL header gross_weight field. */
+export function sumOceanBookingContainerGrossKg(
+  containers: Array<{ gross_weight?: HouseCargoWeightValue }>,
+): HouseCargoWeightValue {
+  const total = containers.reduce(
+    (sum, c) => sum + (parseHouseCargoWeightInput(c.gross_weight) ?? 0),
+    0,
+  );
+  if (total <= 0) return null;
+  return coerceHouseCargoWeightInput(total);
 }
 
 export function formatHouseCargoDetailWeightFields<

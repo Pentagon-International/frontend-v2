@@ -54,6 +54,7 @@ import {
 } from "../../components";
 import useAuthStore from "../../store/authStore";
 import { toTitleCase } from "../../utils/textFormatter";
+import { formatCoordinateForPayload } from "../../utils/numberInputUtils";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -1009,10 +1010,16 @@ function CallEntryNew() {
 
   const schema = yup.object().shape({
     customer: yup.string().required("Company Name is required"),
-    call_date: yup.string().required("Date is required"),
+    call_date: yup
+      .string()
+      .trim()
+      .required("Date is required"),
     call_mode: yup.string().required("Call Mode is required"),
     call_summary: yup.string().required("Call Summary is required"),
-    followup_date: yup.string().required("Follow Up Date is required"),
+    followup_date: yup
+      .string()
+      .trim()
+      .required("Follow Up Date is required"),
     followup_action: yup.string().required("Follow Up Action is required"),
   });
 
@@ -1331,8 +1338,8 @@ function CallEntryNew() {
           expected_profit: values.expected_profit
             ? parseFloat(values.expected_profit)
             : 0,
-          latitude: values.latitude,
-          longitude: values.longitude,
+          latitude: formatCoordinateForPayload(values.latitude),
+          longitude: formatCoordinateForPayload(values.longitude),
           status: finalStatus,
           id: parseInt(callEntryId), // ID used for URL construction by putAPICall
         };
@@ -1356,7 +1363,16 @@ function CallEntryNew() {
         });
       } else {
         // Create mode: Use POST request
-        response = await postAPICall(URL.callEntry, values as any, API_HEADER);
+        const createPayload = {
+          ...values,
+          latitude: formatCoordinateForPayload(values.latitude),
+          longitude: formatCoordinateForPayload(values.longitude),
+        };
+        response = await postAPICall(
+          URL.callEntry,
+          createPayload as any,
+          API_HEADER,
+        );
         console.log("callentry response---", response);
 
         if (response && typeof response === "object" && "id" in response) {
@@ -3523,14 +3539,13 @@ function CallEntryNew() {
                         callEntryForm.values.call_date &&
                         callEntryForm.values.call_date.trim() !== ""
                           ? dayjs(callEntryForm.values.call_date).toDate()
-                          : new Date()
+                          : null
                       }
                       onChange={(date) => {
                         const formatted = date
                           ? dayjs(date).format("YYYY-MM-DD")
                           : "";
                         callEntryForm.setFieldValue("call_date", formatted);
-                        console.log("formatted=", formatted);
                       }}
                       error={callEntryForm.errors.call_date}
                       valueFormat="YYYY-MM-DD"
@@ -3642,16 +3657,13 @@ function CallEntryNew() {
                         callEntryForm.values.followup_date &&
                         callEntryForm.values.followup_date.trim() !== ""
                           ? dayjs(callEntryForm.values.followup_date).toDate()
-                          : new Date()
+                          : null
                       }
                       onChange={(date) => {
-                        console.log("date=", date);
                         const formatted = date
                           ? dayjs(date).format("YYYY-MM-DD")
                           : "";
-                        console.log("formatted=", formatted);
                         callEntryForm.setFieldValue("followup_date", formatted);
-                        console.log("followup_date date=", formatted);
                       }}
                       error={callEntryForm.errors.followup_date}
                       valueFormat="YYYY-MM-DD"
