@@ -16,11 +16,16 @@ function houseCargoWeightNumberToString(num: number): string {
   return String(num);
 }
 
-/** Load from API/edit data — keep string decimals when the API sends them. */
+/** Load from API/edit data — keep string literals (e.g. 32.100); never force 2 dp. */
 export function importHouseCargoWeightFromApi(
   value: unknown,
 ): HouseCargoWeightValue {
   if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (PARTIAL_DECIMAL_PATTERN.test(trimmed)) return trimmed;
+  }
   return coerceHouseCargoWeightInput(value as string | number);
 }
 
@@ -191,6 +196,108 @@ export function withRecalculatedChargeableWeight<
   };
 }
 
+export type OceanBookingLclChargeableKey =
+  | "chargeable_weight"
+  | "chargeable_volume";
+
+/** Ocean booking cargo row weights for API (preserves user-entered decimals). */
+export function buildOceanBookingCargoWeightPayload(
+  cargo: {
+    gross_weight?: unknown;
+    volume?: unknown;
+    volume_weight?: unknown;
+    chargeable_weight?: unknown;
+    chargeable_volume?: unknown;
+  },
+  service: string,
+  lclChargeableKey: OceanBookingLclChargeableKey,
+): {
+  gross_weight: string | null;
+  volume: string | null;
+  volume_weight: string | null;
+  chargeable_weight: string | null;
+  chargeable_volume: string | null;
+} {
+  const gross = cargo.gross_weight as HouseCargoWeightValue;
+  const volume = cargo.volume as HouseCargoWeightValue;
+  const volumeWeight = cargo.volume_weight as HouseCargoWeightValue;
+  const oceanChargeable = formatHouseCargoChargeableForPayload(
+    gross,
+    volume,
+    "ocean",
+  );
+  const airChargeable = formatHouseCargoChargeableForPayload(
+    gross,
+    volumeWeight,
+    "air",
+  );
+
+  let chargeable_weight: string | null;
+  let chargeable_volume: string | null;
+
+  const storedChargeableWeight =
+    cargo.chargeable_weight as HouseCargoWeightValue;
+  const storedChargeableVolume =
+    cargo.chargeable_volume as HouseCargoWeightValue;
+
+  if (service === "AIR") {
+    chargeable_weight = airChargeable;
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  } else if (service === "LCL" && lclChargeableKey === "chargeable_volume") {
+    chargeable_volume = oceanChargeable;
+    chargeable_weight =
+      formatHouseCargoWeightForPayload(storedChargeableWeight);
+  } else if (service === "LCL") {
+    chargeable_weight = oceanChargeable;
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  } else {
+    chargeable_weight =
+      formatHouseCargoWeightForPayload(storedChargeableWeight);
+    chargeable_volume =
+      formatHouseCargoWeightForPayload(storedChargeableVolume);
+  }
+
+  return {
+    gross_weight: formatHouseCargoWeightForPayload(gross),
+    volume: formatHouseCargoWeightForPayload(volume),
+    volume_weight: formatHouseCargoWeightForPayload(volumeWeight),
+    chargeable_weight,
+    chargeable_volume,
+  };
+}
+
+/** FCL nested container row weights for ocean booking payload. */
+export function buildOceanBookingContainerWeightPayload(c: {
+  gross_weight?: unknown;
+  volume?: unknown;
+}): {
+  gross_weight: string | null;
+  volume: string | null;
+  chargeable_weight: string | null;
+} {
+  const gross = c.gross_weight as HouseCargoWeightValue;
+  const volume = c.volume as HouseCargoWeightValue;
+  return {
+    gross_weight: formatHouseCargoWeightForPayload(gross),
+    volume: formatHouseCargoWeightForPayload(volume),
+    chargeable_weight: formatHouseCargoChargeableForPayload(gross, volume, "ocean"),
+  };
+}
+
+/** Sum container gross (KG) for FCL header gross_weight field. */
+export function sumOceanBookingContainerGrossKg(
+  containers: Array<{ gross_weight?: HouseCargoWeightValue }>,
+): HouseCargoWeightValue {
+  const total = containers.reduce(
+    (sum, c) => sum + (parseHouseCargoWeightInput(c.gross_weight) ?? 0),
+    0,
+  );
+  if (total <= 0) return null;
+  return coerceHouseCargoWeightInput(total);
+}
+
 export function formatHouseCargoDetailWeightFields<
   T extends { volume?: unknown; chargeable_weight?: unknown },
 >(
@@ -202,7 +309,12 @@ export function formatHouseCargoDetailWeightFields<
   const { volume, chargeable_weight, ...rest } = cargo;
   return {
     ...rest,
+    gross_weight: formatHouseCargoWeightForPayload(gross_weight),
     volume: formatHouseCargoWeightForPayload(volume),
-    chargeable_weight: formatHouseCargoWeightForPayload(chargeable_weight),
+    chargeable_weight: formatHouseCargoChargeableForPayload(
+      gross_weight as HouseCargoWeightValue,
+      volume as HouseCargoWeightValue,
+      unit,
+    ),
   };
 }
