@@ -2386,8 +2386,8 @@ console.log("currentQuotation: ", currentQuotation);
 
   const generateQuotationPDF = async (rowData: any) => {
     try {
-      // Get country from user store or localStorage
-      const country = user?.country || null;
+      // Logo/country: use default branch country (e.g. US) when set, else user country
+      const country = defaultBranch?.country ?? user?.country ?? null;
       setPreviewOpen(true);
       const userCurrency = await getUserCurrencyCode(
         user?.country?.country_code

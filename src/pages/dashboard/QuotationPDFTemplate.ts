@@ -209,7 +209,11 @@ const getBranchInfo = (branchName: string, country?: any) => {
       address:
         "C-408, Titanium Business Park Beside Makarba Under Bridge Off Corporate Road, Makarba,Ahmedabad – 380058",
     };
-  } else if (branchNameUpper.includes("NEW YORK")) {
+  } else if (
+    // branchNameUpper.includes("NEW YORK") ||
+    branchNameUpper.includes("UNITED STATES") ||
+    branchNameUpper.includes("USA")
+  ) {
     return {
       name: "PENTAGON PRIME AMERICAS INC",
       address: "8400 NW 33rd STREET, SUITE 310, MIAMI FL 33178",
@@ -233,6 +237,99 @@ const getBranchInfo = (branchName: string, country?: any) => {
     name: "",
     address: "",
   };
+};
+
+const isUnitedStatesBranch = (
+  branchName: string,
+  country?: { country_code?: string },
+): boolean => {
+  const branchNameUpper = (branchName || "").toUpperCase();
+  const countryCode = (country?.country_code || "").toUpperCase();
+  return (
+    branchNameUpper.includes("UNITED STATES") ||
+    branchNameUpper.includes("NEW YORK") ||
+    branchNameUpper.includes("USA") ||
+    countryCode === "US"
+  );
+};
+
+/** Fit image inside max box without stretching. */
+const fitLogoInBox = (
+  naturalWidth: number,
+  naturalHeight: number,
+  maxWidth: number,
+  maxHeight: number,
+): { width: number; height: number } => {
+  if (!naturalWidth || !naturalHeight) {
+    return { width: maxWidth, height: maxHeight };
+  }
+  const aspect = naturalWidth / naturalHeight;
+  let width = maxWidth;
+  let height = width / aspect;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * aspect;
+  }
+  return { width, height };
+};
+
+const probeImageDimensions = (
+  src: string,
+): Promise<{ naturalWidth: number; naturalHeight: number }> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () =>
+      resolve({
+        naturalWidth: img.naturalWidth || 200,
+        naturalHeight: img.naturalHeight || 80,
+      });
+    img.onerror = () => resolve({ naturalWidth: 200, naturalHeight: 80 });
+    img.src = src;
+  });
+
+/** US quotation logo: branch CDN when available, else bundled asset; keeps aspect ratio. */
+const loadUsQuotationLogo = async (
+  defaultBranch: { logo_url?: string } | null | undefined,
+  maxWidth: number,
+  maxHeight: number,
+): Promise<{ src: string; width: number; height: number; format: "PNG" | "JPEG" }> => {
+  const toSizedLogo = async (
+    src: string,
+    format: "PNG" | "JPEG",
+  ): Promise<{ src: string; width: number; height: number; format: "PNG" | "JPEG" }> => {
+    const { naturalWidth, naturalHeight } = await probeImageDimensions(src);
+    const fitted = fitLogoInBox(
+      naturalWidth,
+      naturalHeight,
+      maxWidth,
+      maxHeight,
+    );
+    return { src, width: fitted.width, height: fitted.height, format };
+  };
+
+  if (defaultBranch?.logo_url) {
+    try {
+      const response = await fetch(defaultBranch.logo_url);
+      if (response.ok) {
+        const blob = await response.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const format: "PNG" | "JPEG" =
+          blob.type.includes("jpeg") || dataUrl.includes("jpeg")
+            ? "JPEG"
+            : "PNG";
+        return toSizedLogo(dataUrl, format);
+      }
+    } catch {
+      /* fall through to bundled */
+    }
+  }
+
+  return toSizedLogo(pentagonPrimeAmericas, "PNG");
 };
 
 const getExchangeRates = (data: any) => {
@@ -374,12 +471,10 @@ export const generateNewQuotationPDF = async (
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 10;
     let yPos = 10;
-    // Get branch info
     const branchName = defaultBranch?.branch_name || "CHENNAI";
-    const branchInfo = getBranchInfo(branchName, country);
-
-    // Get logo based on country and company
-    const logoImage = getLogoByCountry(country);
+    const logoCountry = defaultBranch?.country || country;
+    const branchInfo = getBranchInfo(branchName, logoCountry);
+    const isUsPdf = isUnitedStatesBranch(branchName, logoCountry);
 
     // Approval URL - get from environment variable
     const baseApprovalUrl = window.location.origin;
@@ -408,26 +503,35 @@ export const generateNewQuotationPDF = async (
     const headerStartY = yPos;
 
     // ===== RIGHT SIDE: Company section height calculation =====
-    // Logo dimensions - maintain aspect ratio with defined size
-    const logoMaxWidth = rightHalfWidth * 0.8; // Use 60% of right half width
+    const logoMaxWidth = rightHalfWidth * 0.8;
+    const logoMaxHeight = 12;
 
-    const logoMaxHeight = 12; // Fixed max height
-
-    // Default logo dimensions (will maintain aspect ratio)
-    // Most logos are roughly 2:1 to 3:1 width:height ratio
-    // We'll use a reasonable default and let jsPDF handle the actual aspect ratio
+    let logoImage: string | null = getLogoByCountry(logoCountry);
     let logoWidth = logoMaxWidth;
     let logoHeight = logoMaxHeight;
+    let logoFormat: "PNG" | "JPEG" = "PNG";
 
-    // Adjust to maintain reasonable aspect ratio (prefer wider logos)
-    // If calculated height exceeds max, constrain by height
-    const defaultAspectRatio = 2.5; // width:height ratio
-    const calculatedHeight = logoWidth / defaultAspectRatio;
-    if (calculatedHeight > logoMaxHeight) {
-      logoHeight = logoMaxHeight;
-      logoWidth = logoHeight * defaultAspectRatio + 20;
+    if (isUsPdf) {
+      const usLogoMaxWidth = rightHalfWidth - 2;
+      const usLogoMaxHeight = 22;
+      const usLogo = await loadUsQuotationLogo(
+        defaultBranch,
+        usLogoMaxWidth,
+        usLogoMaxHeight,
+      );
+      logoImage = usLogo.src;
+      logoWidth = usLogo.width;
+      logoHeight = usLogo.height;
+      logoFormat = usLogo.format;
     } else {
-      logoHeight = calculatedHeight;
+      const defaultAspectRatio = 2.5;
+      const calculatedHeight = logoWidth / defaultAspectRatio;
+      if (calculatedHeight > logoMaxHeight) {
+        logoHeight = logoMaxHeight;
+        logoWidth = logoHeight * defaultAspectRatio + 20;
+      } else {
+        logoHeight = calculatedHeight;
+      }
     }
 
     // Company name width (full width of right half)
@@ -534,7 +638,14 @@ export const generateNewQuotationPDF = async (
 
         const logoY = rightYPos;
 
-        doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight);
+        doc.addImage(
+          logoImage,
+          isUsPdf ? logoFormat : "PNG",
+          logoX,
+          logoY,
+          logoWidth,
+          logoHeight,
+        );
         rightYPos += logoHeight + 3; // Move down after logo with gap
       }
     } catch (error) {

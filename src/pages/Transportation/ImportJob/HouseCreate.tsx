@@ -63,7 +63,8 @@ import {
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
   coerceHouseCargoWeightInput,
-  formatHouseCargoWeightDisplay,
+  formatHouseCargoChargeableDisplay,
+  formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
@@ -143,7 +144,7 @@ type CargoDetail = {
   container_number: string; // UI field - used to select container
   container_id?: number | string; // Container ID for edit mode (from container_details)
   no_of_packages: number | null;
-  gross_weight: number | null;
+  gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
   chargeable_weight: HouseCargoWeightValue;
   haz: boolean | null;
@@ -594,7 +595,7 @@ function HouseCreate() {
               container_number: containerNumber,
               container_id: containerId,
               no_of_packages: cargo.no_of_packages as number | null,
-              gross_weight: cargo.gross_weight as number | null,
+              gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
               chargeable_weight: importHouseCargoWeightFromApi(
                 cargo.chargeable_weight,
@@ -1165,7 +1166,9 @@ function HouseCreate() {
               c.no_of_containers ??
               rb.no_of_packages,
           ),
-          gross_weight: toNum(cn.gross_weight ?? c.gross_weight ?? rb.gross_weight),
+          gross_weight: importHouseCargoWeightFromApi(
+            cn.gross_weight ?? c.gross_weight ?? rb.gross_weight,
+          ),
           volume: toNum(
             cn.volume ?? c.volume ?? c.volume_weight ?? rb.volume ?? rb.volume_weight,
           ),
@@ -1189,7 +1192,9 @@ function HouseCreate() {
               no_of_packages: toNum(
                 c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
               ),
-              gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
+              gross_weight: importHouseCargoWeightFromApi(
+                c.gross_weight ?? rb.gross_weight,
+              ),
               volume: toNum(c.volume ?? c.volume_weight ?? rb.volume),
               chargeable_weight: toNum(
                 c.chargeable_weight ??
@@ -1215,7 +1220,9 @@ function HouseCreate() {
           no_of_packages: toNum(
             cn.no_of_packages ?? c.no_of_packages ?? rb.no_of_packages,
           ),
-          gross_weight: toNum(cn.gross_weight ?? c.gross_weight ?? rb.gross_weight),
+          gross_weight: importHouseCargoWeightFromApi(
+            cn.gross_weight ?? c.gross_weight ?? rb.gross_weight,
+          ),
           volume:
             toNum(cn.volume) ??
             toNum(c.volume) ??
@@ -1240,7 +1247,9 @@ function HouseCreate() {
               no_of_packages: toNum(
                 c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
               ),
-              gross_weight: toNum(c.gross_weight ?? rb.gross_weight),
+              gross_weight: importHouseCargoWeightFromApi(
+                c.gross_weight ?? rb.gross_weight,
+              ),
               volume:
                 toNum(c.volume) ??
                 toNum(c.volume_weight) ??
@@ -1258,7 +1267,7 @@ function HouseCreate() {
       const row = {
         container_number: "",
         no_of_packages: toNum(rb.no_of_packages),
-        gross_weight: toNum(rb.gross_weight),
+        gross_weight: importHouseCargoWeightFromApi(rb.gross_weight),
         volume: toNum(rb.volume) ?? toNum(rb.volume_weight),
         chargeable_weight:
           toNum(rb.chargeable_volume) ?? toNum(rb.chargeable_weight),
@@ -2069,7 +2078,6 @@ function HouseCreate() {
         no_of_packages,
         gross_weight,
         volume,
-        chargeable_weight,
         haz,
       } = cargo as any;
 
@@ -2092,9 +2100,13 @@ function HouseCreate() {
             : null;
       const basePayload: Record<string, unknown> = {
         no_of_packages: no_of_packages ?? null,
-        gross_weight: roundToDecimals(gross_weight) ?? null,
+        gross_weight: formatHouseCargoWeightForPayload(gross_weight),
         volume: formatHouseCargoWeightForPayload(volume),
-        chargeable_weight: formatHouseCargoWeightForPayload(chargeable_weight),
+        chargeable_weight: formatHouseCargoChargeableForPayload(
+          gross_weight,
+          volume,
+          "ocean",
+        ),
         haz: hazValue,
       };
 
@@ -2489,10 +2501,12 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
-          gross_weight: cargo.gross_weight,
+          gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
-          chargeable_weight: formatHouseCargoWeightForPayload(
-            cargo.chargeable_weight,
+          chargeable_weight: formatHouseCargoChargeableForPayload(
+            cargo.gross_weight,
+            cargo.volume,
+            "ocean",
           ),
           haz: cargo.haz === true,
         })),
@@ -4207,14 +4221,17 @@ function HouseCreate() {
                       placeholder="Enter Gross Weight"
                       min={0}
                       hideControls
-                      decimalScale={2}
-                      value={cargo.gross_weight || undefined}
+                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                      value={cargo.gross_weight ?? undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
                           {
                             ...updated[index],
-                            gross_weight: value as number | null,
+                            gross_weight: coerceHouseCargoWeightInput(
+                              value,
+                              cargo.gross_weight,
+                            ),
                           },
                           "ocean",
                         );
@@ -4230,6 +4247,22 @@ function HouseCreate() {
                           }
                           setCargoErrors(newErrors);
                         }
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        if (!raw) return;
+                        const updated = [...cargoDetails];
+                        updated[index] = withRecalculatedChargeableWeight(
+                          {
+                            ...updated[index],
+                            gross_weight: coerceHouseCargoWeightInput(
+                              raw,
+                              cargo.gross_weight,
+                            ),
+                          },
+                          "ocean",
+                        );
+                        setCargoDetails(updated);
                       }}
                       error={cargoErrors[index]?.gross_weight}
                     />
@@ -4289,8 +4322,10 @@ function HouseCreate() {
                     <FormTextInput
                       placeholder=""
                       format="normal"
-                      value={formatHouseCargoWeightDisplay(
-                        cargo.chargeable_weight,
+                      value={formatHouseCargoChargeableDisplay(
+                        cargo.gross_weight,
+                        cargo.volume,
+                        "ocean",
                       )}
                       readOnly
                       disabled

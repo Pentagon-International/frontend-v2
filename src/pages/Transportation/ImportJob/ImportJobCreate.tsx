@@ -59,7 +59,12 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { formatHouseCargoWeightForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  formatHouseCargoChargeableForPayload,
+  formatHouseCargoWeightForPayload,
+  importHouseCargoWeightFromApi,
+  type HouseCargoWeightValue,
+} from "../../../utils/houseCargoChargeableWeight";
 import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
@@ -353,9 +358,9 @@ type HousingDetail = {
     container_no?: number | string;
     container_id?: number | null;
     no_of_packages: number | null;
-    gross_weight: number | null;
-    volume: number | null;
-    chargeable_weight: number | null;
+    gross_weight: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight: HouseCargoWeightValue;
     haz: boolean | null;
   }>;
   charges?: Array<{
@@ -1040,11 +1045,13 @@ function ImportJobCreate() {
                             : Number(cargo.container_id)
                           : undefined,
                         no_of_packages: cargo.no_of_packages as number | null,
-                        gross_weight: cargo.gross_weight as number | null,
-                        volume: cargo.volume as number | null,
-                        chargeable_weight: cargo.chargeable_weight as
-                          | number
-                          | null,
+                        gross_weight: importHouseCargoWeightFromApi(
+                          cargo.gross_weight,
+                        ),
+                        volume: importHouseCargoWeightFromApi(cargo.volume),
+                        chargeable_weight: importHouseCargoWeightFromApi(
+                          cargo.chargeable_weight,
+                        ),
                         haz:
                           cargo.haz !== null && cargo.haz !== undefined
                             ? typeof cargo.haz === "boolean"
@@ -3070,10 +3077,12 @@ function ImportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
-            gross_weight: roundToDecimals(cargo.gross_weight) ?? null,
+            gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
             volume: formatHouseCargoWeightForPayload(cargo.volume),
-            chargeable_weight: formatHouseCargoWeightForPayload(
-              cargo.chargeable_weight,
+            chargeable_weight: formatHouseCargoChargeableForPayload(
+              cargo.gross_weight,
+              cargo.volume,
+              "ocean",
             ),
             haz:
               cargo.haz !== null && cargo.haz !== undefined

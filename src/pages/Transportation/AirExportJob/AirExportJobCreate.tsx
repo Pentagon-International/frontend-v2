@@ -69,6 +69,12 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  formatHouseCargoChargeableForPayload,
+  formatHouseCargoWeightForPayload,
+  importHouseCargoWeightFromApi,
+  type HouseCargoWeightValue,
+} from "../../../utils/houseCargoChargeableWeight";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -151,9 +157,9 @@ type HAWBDetail = {
   shipment_terms_code?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
-    gross_weight: number | null;
-    volume: number | null;
-    chargeable_weight: number | null;
+    gross_weight: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight: HouseCargoWeightValue;
     haz: string;
   }>;
   charges?: Array<{
@@ -220,30 +226,32 @@ const mawbDetailsSchema = yup.object({
   is_direct: yup.boolean().required(),
   // Destination Agent is required when "Direct" is No (false).
   // When "Direct" is Yes (true), Destination Agent becomes optional.
-  agent_code: yup.string().test(
-    "agent_code-required-when-direct-false",
-    "Destination Agent is required",
-    function (value) {
-      const parent = this.parent as { is_direct?: boolean };
-      const isDirect = parent.is_direct === true;
+  agent_code: yup
+    .string()
+    .test(
+      "agent_code-required-when-direct-false",
+      "Destination Agent is required",
+      function (value) {
+        const parent = this.parent as { is_direct?: boolean };
+        const isDirect = parent.is_direct === true;
 
-      if (isDirect) return true;
+        if (isDirect) return true;
 
-      if (value == null) {
-        return this.createError({
-          message: "Destination Agent is required",
-        });
-      }
+        if (value == null) {
+          return this.createError({
+            message: "Destination Agent is required",
+          });
+        }
 
-      if (String(value).trim() === "") {
-        return this.createError({
-          message: "Destination Agent is required",
-        });
-      }
+        if (String(value).trim() === "") {
+          return this.createError({
+            message: "Destination Agent is required",
+          });
+        }
 
-      return true;
-    },
-  ),
+        return true;
+      },
+    ),
   origin_code: yup.string().required("Origin is required"),
   destination_code: yup.string().required("Destination is required"),
   etd: yup.date().required("ETD is required"),
@@ -445,9 +453,10 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
-      is_direct: parseBoolean(
-        jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
-      ) || false,
+      is_direct:
+        parseBoolean(
+          jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
+        ) || false,
       agent_code:
         jobData?.agent_code ||
         jobData?.origin_agent ||
@@ -624,10 +633,8 @@ function AirExportJobCreate() {
             agent_name: savedMawbDetailsFromState.agent_name || "",
             origin_code: savedMawbDetailsFromState.origin_code || "",
             origin_name: savedMawbDetailsFromState.origin_name || "",
-            destination_code:
-              savedMawbDetailsFromState.destination_code || "",
-            destination_name:
-              savedMawbDetailsFromState.destination_name || "",
+            destination_code: savedMawbDetailsFromState.destination_code || "",
+            destination_name: savedMawbDetailsFromState.destination_name || "",
             etd: savedMawbDetailsFromState.etd || null,
             eta: savedMawbDetailsFromState.eta || null,
             atd: savedMawbDetailsFromState.atd || null,
@@ -636,10 +643,7 @@ function AirExportJobCreate() {
 
           if (savedMawbDetailsFromState.agent_data) {
             originAgentDataRef.current =
-              savedMawbDetailsFromState.agent_data as Record<
-                string,
-                unknown
-              >;
+              savedMawbDetailsFromState.agent_data as Record<string, unknown>;
           }
         }
 
@@ -738,7 +742,9 @@ function AirExportJobCreate() {
                 : "",
               trade: house.trade ? String(house.trade) : "",
               agent_name: house.agent_name ? String(house.agent_name) : "",
-              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_address: house.agent_address
+                ? String(house.agent_address)
+                : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
@@ -766,18 +772,28 @@ function AirExportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
-              notify_customer1_name: (house.notify1_customer_name ??
-                house.notify_customer1_name)
-                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
-                : "",
-              notify_customer1_address: (house.notify1_customer_address ??
+              notify_customer1_name:
+                (house.notify1_customer_name ?? house.notify_customer1_name)
+                  ? String(
+                      house.notify1_customer_name ??
+                        house.notify_customer1_name,
+                    )
+                  : "",
+              notify_customer1_address:
+                (house.notify1_customer_address ??
                 house.notify_customer1_address)
-                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
-                : "",
-              notify_customer1_email: (house.notify1_customer_email ??
-                house.notify_customer1_email)
-                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
-                : "",
+                  ? String(
+                      house.notify1_customer_address ??
+                        house.notify_customer1_address,
+                    )
+                  : "",
+              notify_customer1_email:
+                (house.notify1_customer_email ?? house.notify_customer1_email)
+                  ? String(
+                      house.notify1_customer_email ??
+                        house.notify_customer1_email,
+                    )
+                  : "",
               notify2_customer_name: house.notify2_customer_name
                 ? String(house.notify2_customer_name)
                 : "",
@@ -804,11 +820,13 @@ function AirExportJobCreate() {
                   ? house.cargo_details.map(
                       (cargo: Record<string, unknown>) => ({
                         no_of_packages: cargo.no_of_packages as number | null,
-                        gross_weight: cargo.gross_weight as number | null,
-                        volume: cargo.volume as number | null,
-                        chargeable_weight: cargo.chargeable_weight as
-                          | number
-                          | null,
+                        gross_weight: importHouseCargoWeightFromApi(
+                          cargo.gross_weight,
+                        ),
+                        volume: importHouseCargoWeightFromApi(cargo.volume),
+                        chargeable_weight: importHouseCargoWeightFromApi(
+                          cargo.chargeable_weight,
+                        ),
                         haz: cargo.haz ? String(cargo.haz) : "",
                       }),
                     )
@@ -888,7 +906,9 @@ function AirExportJobCreate() {
                       sell_local_amount: toNum(
                         charge.sell_local_amount ?? charge.local_amount,
                       ),
-                      unit_cost: toNum(charge.unit_cost ?? charge.cost_per_unit),
+                      unit_cost: toNum(
+                        charge.unit_cost ?? charge.cost_per_unit,
+                      ),
                       total_cost: toNum(charge.total_cost),
                       cost_local_amount: toNum(charge.cost_local_amount),
                     };
@@ -912,9 +932,15 @@ function AirExportJobCreate() {
             (routing: Record<string, unknown>) => {
               return {
                 ...(routing.id != null && { id: Number(routing.id) }),
-                transport_type: String(routing.transport_type ?? "").toUpperCase(),
-                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
-                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                transport_type: String(
+                  routing.transport_type ?? "",
+                ).toUpperCase(),
+                from_code: String(
+                  routing.from_port_code ?? routing.from_code ?? "",
+                ),
+                from_name: String(
+                  routing.from_port_name ?? routing.from_name ?? "",
+                ),
                 to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
                 to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
@@ -956,9 +982,15 @@ function AirExportJobCreate() {
             (routing: Record<string, unknown>) => {
               return {
                 ...(routing.id != null && { id: Number(routing.id) }),
-                transport_type: String(routing.transport_type ?? "").toUpperCase(),
-                from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
-                from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+                transport_type: String(
+                  routing.transport_type ?? "",
+                ).toUpperCase(),
+                from_code: String(
+                  routing.from_port_code ?? routing.from_code ?? "",
+                ),
+                from_name: String(
+                  routing.from_port_name ?? routing.from_name ?? "",
+                ),
                 to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
                 to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
                 etd:
@@ -992,7 +1024,10 @@ function AirExportJobCreate() {
           routingsForm.setValues({ routings: mappedRoutings });
           routingStateInitializedRef.current = true;
         }
-        console.log("✅ Routings initialized - Form values after setValues:", routingsForm.values);
+        console.log(
+          "✅ Routings initialized - Form values after setValues:",
+          routingsForm.values,
+        );
         // Note: Container Details are not used for Air Export Jobs
 
         // Populate Estimates (master level) from jobData if exists
@@ -1047,9 +1082,12 @@ function AirExportJobCreate() {
               total_cost: toNum(e.total_cost),
             };
           });
-          console.log("🧾 [AIR_EXPORT_JOB] mappedEstimates (before setValues)", {
-            mappedEstimates,
-          });
+          console.log(
+            "🧾 [AIR_EXPORT_JOB] mappedEstimates (before setValues)",
+            {
+              mappedEstimates,
+            },
+          );
 
           // Hard replace estimates list (avoid partial merges on array items)
           const sanitizedEstimates = mappedEstimates.map((row) => ({
@@ -1074,9 +1112,12 @@ function AirExportJobCreate() {
             sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
           );
 
-          console.log("🧾 [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied", {
-            sanitizedEstimates,
-          });
+          console.log(
+            "🧾 [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied",
+            {
+              sanitizedEstimates,
+            },
+          );
         }
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
@@ -1268,16 +1309,21 @@ function AirExportJobCreate() {
       if (!rowHasAnyValue(e)) continue;
 
       const missing: Array<{ key: keyof typeof e; label: string }> = [];
-      if (e.charge_id == null) missing.push({ key: "charge_id", label: "Charge" });
+      if (e.charge_id == null)
+        missing.push({ key: "charge_id", label: "Charge" });
       if (!String(e.pp_cc ?? "").trim())
         missing.push({ key: "pp_cc", label: "Prepaid / Collect" });
-      if (!String(e.unit_id ?? "").trim()) missing.push({ key: "unit_id", label: "Unit" });
-      if (e.no_of_unit == null) missing.push({ key: "no_of_unit", label: "No of Unit" });
+      if (!String(e.unit_id ?? "").trim())
+        missing.push({ key: "unit_id", label: "Unit" });
+      if (e.no_of_unit == null)
+        missing.push({ key: "no_of_unit", label: "No of Unit" });
       if (!String(e.currency_id ?? "").trim())
         missing.push({ key: "currency_id", label: "Currency" });
       if (e.roe == null) missing.push({ key: "roe", label: "ROE" });
-      if (e.cost_per_unit == null) missing.push({ key: "cost_per_unit", label: "Cost / Unit" });
-      if (e.total_cost == null) missing.push({ key: "total_cost", label: "Total Cost" });
+      if (e.cost_per_unit == null)
+        missing.push({ key: "cost_per_unit", label: "Cost / Unit" });
+      if (e.total_cost == null)
+        missing.push({ key: "total_cost", label: "Total Cost" });
 
       if (missing.length > 0) {
         missing.forEach((m) => {
@@ -1561,8 +1607,10 @@ function AirExportJobCreate() {
 
           // Update origin agent data ref if available in location state
           if (savedMawbDetails.agent_data) {
-            originAgentDataRef.current =
-              savedMawbDetails.agent_data as Record<string, unknown>;
+            originAgentDataRef.current = savedMawbDetails.agent_data as Record<
+              string,
+              unknown
+            >;
           }
 
           // Track that we've restored from this state
@@ -1608,8 +1656,12 @@ function AirExportJobCreate() {
           (routing: Record<string, unknown>) => ({
             ...(routing.id != null && { id: Number(routing.id) }),
             transport_type: String(routing.transport_type ?? "").toUpperCase(),
-            from_code: String(routing.from_port_code ?? routing.from_code ?? ""),
-            from_name: String(routing.from_port_name ?? routing.from_name ?? ""),
+            from_code: String(
+              routing.from_port_code ?? routing.from_code ?? "",
+            ),
+            from_name: String(
+              routing.from_port_name ?? routing.from_name ?? "",
+            ),
             to_code: String(routing.to_port_code ?? routing.to_code ?? ""),
             to_name: String(routing.to_port_name ?? routing.to_name ?? ""),
             etd:
@@ -2177,7 +2229,9 @@ function AirExportJobCreate() {
           notify1_customer_name:
             hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
           notify1_customer_address:
-            hawb.notify1_customer_address ?? hawb.notify_customer1_address ?? "",
+            hawb.notify1_customer_address ??
+            hawb.notify_customer1_address ??
+            "",
           notify1_customer_email:
             hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
           notify2_customer_name: hawb.notify2_customer_name ?? "",
@@ -2209,7 +2263,20 @@ function AirExportJobCreate() {
                 date: String(e.date ?? ""),
               }))
             : [],
-          cargo_details: hawb.cargo_details || [],
+          cargo_details: (hawb.cargo_details || []).map((c) => ({
+            ...(c.id != null && { id: Number(c.id) }),
+            no_of_packages: c.no_of_packages ?? 0,
+            gross_weight:
+              formatHouseCargoWeightForPayload(c.gross_weight) ?? "",
+            volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
+            chargeable_weight:
+              formatHouseCargoChargeableForPayload(
+                c.gross_weight,
+                c.volume,
+                "air",
+              ) ?? "",
+            haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
+          })),
           mawb_charges: hawb.charges
             ? hawb.charges.map((charge) => ({
                 ...(charge.id != null &&
@@ -2226,12 +2293,20 @@ function AirExportJobCreate() {
                   ? String(charge.currency_id)
                   : "",
                 roe: roundToDecimals(charge.roe) || null,
-                amount_per_unit: roundToDecimals(charge.amount_per_unit) || null,
+                amount_per_unit:
+                  roundToDecimals(charge.amount_per_unit) || null,
                 amount: roundToDecimals(charge.amount) || null,
-                sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? roundToDecimals(charge.local_amount) ?? null,
-                unit_cost: roundToDecimals(charge.unit_cost) ?? roundToDecimals(charge.cost_per_unit) ?? null,
+                sell_local_amount:
+                  roundToDecimals(charge.sell_local_amount) ??
+                  roundToDecimals(charge.local_amount) ??
+                  null,
+                unit_cost:
+                  roundToDecimals(charge.unit_cost) ??
+                  roundToDecimals(charge.cost_per_unit) ??
+                  null,
                 total_cost: roundToDecimals(charge.total_cost) ?? null,
-                cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
+                cost_local_amount:
+                  roundToDecimals(charge.cost_local_amount) ?? null,
               }))
             : [],
         })),
@@ -2559,9 +2634,8 @@ function AirExportJobCreate() {
                     onClick={() => {
                       navigate("/job-ledger", {
                         state: {
-                          jobId:
-                            jobData?.job_id,
-                            service_name: "Air Export",
+                          jobId: jobData?.job_id,
+                          service_name: "Air Export",
                         },
                       });
                     }}
@@ -2619,7 +2693,6 @@ function AirExportJobCreate() {
                   >
                     Payment Request
                   </Menu.Item> */}
-
                 </Menu.Dropdown>
               </Menu>
             )}
@@ -2740,7 +2813,10 @@ function AirExportJobCreate() {
                     // Store customer_code as value (for API payload)
                     mawbDetailsForm.setFieldValue("agent_code", value || "");
                     // Store customer_name for display
-                    mawbDetailsForm.setFieldValue("agent_name", selectedData?.label || "");
+                    mawbDetailsForm.setFieldValue(
+                      "agent_name",
+                      selectedData?.label || "",
+                    );
 
                     console.log("🔍 MAWB Destination Agent Selected:", {
                       agentCode: value,
@@ -2893,7 +2969,7 @@ function AirExportJobCreate() {
                   size="sm"
                 />
               </Grid.Col>
-              
+
               <Grid.Col span={3}>
                 <Radio.Group
                   label="Direct"
@@ -3037,504 +3113,508 @@ function AirExportJobCreate() {
                     routing.eta != null,
                 );
                 return (
-                <Box key={`${index}-${formInitializedKey}`}>
-                  <Grid>
-                    <Grid.Col span={2.5}>
-                      <Dropdown
-                        label="Transport Type"
-                        required={requireRouting}
-                        placeholder="Select Transport Type"
-                        searchable
-                        clearable
-                        data={["AIR", "SEA", "ROAD", "RAIL"]}
-                        value={
-                          routingsForm.values.routings[index]?.transport_type ||
-                          null
-                        }
-                        onChange={(value) => {
-                          const oldTransportType =
-                            routingsForm.values.routings[index]?.transport_type;
-                          routingsForm.setFieldValue(
-                            `routings.${index}.transport_type`,
-                            value || "",
-                          );
-                          // Clear carrier when transport type changes
-                          if (oldTransportType !== value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.carrier_code`,
-                              "",
-                            );
-                            routingsForm.setFieldValue(
-                              `routings.${index}.carrier_name`,
-                              "",
-                            );
-                            // Clear transport-type-specific fields
-                            routingsForm.setFieldValue(
-                              `routings.${index}.vessel`,
-                              "",
-                            );
-                            routingsForm.setFieldValue(
-                              `routings.${index}.flight`,
-                              "",
-                            );
-                            routingsForm.setFieldValue(
-                              `routings.${index}.voyage_number`,
-                              "",
-                            );
-                            routingsForm.setFieldValue(
-                              `routings.${index}.truck_no`,
-                              "",
-                            );
-                            routingsForm.setFieldValue(
-                              `routings.${index}.rail_no`,
-                              "",
-                            );
+                  <Box key={`${index}-${formInitializedKey}`}>
+                    <Grid>
+                      <Grid.Col span={2.5}>
+                        <Dropdown
+                          label="Transport Type"
+                          required={requireRouting}
+                          placeholder="Select Transport Type"
+                          searchable
+                          clearable
+                          data={["AIR", "SEA", "ROAD", "RAIL"]}
+                          value={
+                            routingsForm.values.routings[index]
+                              ?.transport_type || null
                           }
-                        }}
-                        error={
-                          routingsForm.errors[
-                            `routings.${index}.transport_type`
-                          ] as string
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.5}>
-                      <SearchableSelect
-                        label="From"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        placeholder="Type from location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.from_code || null}
-                        displayValue={
-                          routing.from_name && routing.from_code
-                            ? `${routing.from_name} (${routing.from_code})`
-                            : routing.from_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.from_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
+                          onChange={(value) => {
+                            const oldTransportType =
+                              routingsForm.values.routings[index]
+                                ?.transport_type;
                             routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              portName,
+                              `routings.${index}.transport_type`,
+                              value || "",
                             );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              "",
-                            );
-                          }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routingTransportType)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routingTransportType,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.5}>
-                      <SearchableSelect
-                        label="To"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        placeholder="Type to location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.to_code || null}
-                        displayValue={
-                          routing.to_name && routing.to_code
-                            ? `${routing.to_name} (${routing.to_code})`
-                            : routing.to_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.to_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
-                            routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              portName,
-                            );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              "",
-                            );
-                          }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routingTransportType)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routingTransportType,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    {/* Dynamic field labels based on transport type */}
-                    {routingTransportType === "SEA" && (
-                      <>
-                        <Grid.Col span={2}>
-                          <SearchableSelect
-                            label="Carrier"
-                            apiEndpoint={URL.carrier}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
+                            // Clear carrier when transport type changes
+                            if (oldTransportType !== value) {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
-                                value || "",
+                                "",
                               );
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
+                                "",
                               );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routingTransportType)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routingTransportType,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-
-                        <Grid.Col span={2}>
-                          <FormTextInput
-                            label="Vessel"
-                            placeholder="Enter vessel name"
-                            value={routing.vessel || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
+                              // Clear transport-type-specific fields
                               routingsForm.setFieldValue(
                                 `routings.${index}.vessel`,
-                                formattedValue,
+                                "",
                               );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.vessel`
-                              ] as string
+                              routingsForm.setFieldValue(
+                                `routings.${index}.flight`,
+                                "",
+                              );
+                              routingsForm.setFieldValue(
+                                `routings.${index}.voyage_number`,
+                                "",
+                              );
+                              routingsForm.setFieldValue(
+                                `routings.${index}.truck_no`,
+                                "",
+                              );
+                              routingsForm.setFieldValue(
+                                `routings.${index}.rail_no`,
+                                "",
+                              );
                             }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <FormTextInput
-                            label="Voyage Number"
-                            placeholder="Enter voyage number"
-                            {...routingsForm.getInputProps(
-                              `routings.${index}.voyage_number`,
-                            )}
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routingTransportType === "AIR" && (
-                      <>
-                        <Grid.Col span={2}>
-                          <SearchableSelect
-                            label="Carrier"
-                            apiEndpoint={URL.carrier}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routingTransportType)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routingTransportType,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <FormTextInput
-                            label="Flight Number"
-                            placeholder="Enter flight number"
-                            {...routingsForm.getInputProps(
-                              `routings.${index}.flight`,
-                            )}
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routingTransportType === "ROAD" && (
-                      <>
-                        <Grid.Col span={2}>
-                          <SearchableSelect
-                            label="Carrier"
-                            apiEndpoint={URL.carrier}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routingTransportType)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routingTransportType,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <FormTextInput
-                            label="Truck Number"
-                            placeholder="Enter truck number"
-                            {...routingsForm.getInputProps(
-                              `routings.${index}.truck_no`,
-                            )}
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routingTransportType === "RAIL" && (
-                      <>
-                        <Grid.Col span={2}>
-                          <FormTextInput
-                            label="Carrier"
-                            placeholder="Enter carrier name"
-                            value={routing.carrier_name || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                formattedValue,
-                              );
-                              // For Rail, carrier_code can be same as carrier_name or empty
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                formattedValue,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.carrier_name`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.5}>
-                          <FormTextInput
-                            label="Rail Number"
-                            placeholder="Enter rail number"
-                            {...routingsForm.getInputProps(
-                              `routings.${index}.rail_no`,
-                            )}
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    <Grid.Col span={2.5}>
-                      <SingleDateInput
-                        label="ETD"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.etd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.etd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.5}>
-                      <SingleDateInput
-                        label="ETA"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.eta`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.eta`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.5}>
-                      <SingleDateInput
-                        label="ATD"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.atd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.atd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.5}>
-                      <SingleDateInput
-                        label="ATA"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.ata`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.ata`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    {/* Remove button - IconTrash only */}
-                    {!isReadOnly && routingsForm.values.routings.length > 1 && (
-                      <Grid.Col span={0.5}>
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size="lg"
-                          onClick={() => removeRouting(index)}
-                          style={{ marginTop: "1.75rem" }}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
+                          }}
+                          error={
+                            routingsForm.errors[
+                              `routings.${index}.transport_type`
+                            ] as string
+                          }
+                        />
                       </Grid.Col>
-                    )}
 
-                    {/* Add Routing button - Only at last routing row */}
-                    {!isReadOnly &&
-                      index === routingsForm.values.routings.length - 1 && (
-                        <Grid.Col span={0.5}>
-                          <ActionIcon
-                            size="lg"
-                            variant="light"
-                            color="#105476"
-                            onClick={addRouting}
-                            style={{ marginTop: "1.75rem" }}
-                          >
-                            <IconPlus size={16}></IconPlus>
-                          </ActionIcon>
-                        </Grid.Col>
+                      <Grid.Col span={2.5}>
+                        <SearchableSelect
+                          label="From"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          placeholder="Type from location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.from_code || null}
+                          displayValue={
+                            routing.from_name && routing.from_code
+                              ? `${routing.from_name} (${routing.from_code})`
+                              : routing.from_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.from_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routingTransportType)
+                              ? {
+                                  transport_mode:
+                                    getTransportMode(routingTransportType)!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.5}>
+                        <SearchableSelect
+                          label="To"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          placeholder="Type to location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.to_code || null}
+                          displayValue={
+                            routing.to_name && routing.to_code
+                              ? `${routing.to_name} (${routing.to_code})`
+                              : routing.to_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.to_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routingTransportType)
+                              ? {
+                                  transport_mode:
+                                    getTransportMode(routingTransportType)!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      {/* Dynamic field labels based on transport type */}
+                      {routingTransportType === "SEA" && (
+                        <>
+                          <Grid.Col span={2}>
+                            <SearchableSelect
+                              label="Carrier"
+                              apiEndpoint={URL.carrier}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routingTransportType)
+                                  ? {
+                                      transport_mode:
+                                        getTransportMode(routingTransportType)!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+
+                          <Grid.Col span={2}>
+                            <FormTextInput
+                              label="Vessel"
+                              placeholder="Enter vessel name"
+                              value={routing.vessel || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.vessel`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.vessel`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.5}>
+                            <FormTextInput
+                              label="Voyage Number"
+                              placeholder="Enter voyage number"
+                              {...routingsForm.getInputProps(
+                                `routings.${index}.voyage_number`,
+                              )}
+                            />
+                          </Grid.Col>
+                        </>
                       )}
-                  </Grid>
 
-                  {index < routingsForm.values.routings.length - 1 && (
-                    <Divider my="xl" />
-                  )}
-                </Box>
-              )})}
+                      {routingTransportType === "AIR" && (
+                        <>
+                          <Grid.Col span={2}>
+                            <SearchableSelect
+                              label="Carrier"
+                              apiEndpoint={URL.carrier}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routingTransportType)
+                                  ? {
+                                      transport_mode:
+                                        getTransportMode(routingTransportType)!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.5}>
+                            <FormTextInput
+                              label="Flight Number"
+                              placeholder="Enter flight number"
+                              {...routingsForm.getInputProps(
+                                `routings.${index}.flight`,
+                              )}
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routingTransportType === "ROAD" && (
+                        <>
+                          <Grid.Col span={2}>
+                            <SearchableSelect
+                              label="Carrier"
+                              apiEndpoint={URL.carrier}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routingTransportType)
+                                  ? {
+                                      transport_mode:
+                                        getTransportMode(routingTransportType)!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.5}>
+                            <FormTextInput
+                              label="Truck Number"
+                              placeholder="Enter truck number"
+                              {...routingsForm.getInputProps(
+                                `routings.${index}.truck_no`,
+                              )}
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routingTransportType === "RAIL" && (
+                        <>
+                          <Grid.Col span={2}>
+                            <FormTextInput
+                              label="Carrier"
+                              placeholder="Enter carrier name"
+                              value={routing.carrier_name || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  formattedValue,
+                                );
+                                // For Rail, carrier_code can be same as carrier_name or empty
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.carrier_name`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.5}>
+                            <FormTextInput
+                              label="Rail Number"
+                              placeholder="Enter rail number"
+                              {...routingsForm.getInputProps(
+                                `routings.${index}.rail_no`,
+                              )}
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      <Grid.Col span={2.5}>
+                        <SingleDateInput
+                          label="ETD"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.etd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.etd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.5}>
+                        <SingleDateInput
+                          label="ETA"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.eta`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.eta`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.5}>
+                        <SingleDateInput
+                          label="ATD"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.atd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.atd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.5}>
+                        <SingleDateInput
+                          label="ATA"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.ata`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.ata`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      {/* Remove button - IconTrash only */}
+                      {!isReadOnly &&
+                        routingsForm.values.routings.length > 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              color="red"
+                              variant="light"
+                              size="lg"
+                              onClick={() => removeRouting(index)}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Grid.Col>
+                        )}
+
+                      {/* Add Routing button - Only at last routing row */}
+                      {!isReadOnly &&
+                        index === routingsForm.values.routings.length - 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              size="lg"
+                              variant="light"
+                              color="#105476"
+                              onClick={addRouting}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconPlus size={16}></IconPlus>
+                            </ActionIcon>
+                          </Grid.Col>
+                        )}
+                    </Grid>
+
+                    {index < routingsForm.values.routings.length - 1 && (
+                      <Divider my="xl" />
+                    )}
+                  </Box>
+                );
+              })}
             </Stack>
           </Box>
         </Tabs.Panel>
@@ -3553,103 +3633,103 @@ function AirExportJobCreate() {
                     color="#105476"
                     size="sm"
                     onClick={() => {
-                    const toStr = (v: unknown) => String(v ?? "").trim();
-                    const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                    if (!jobId) {
-                      ToastNotification({
-                        type: "error",
-                        message:
-                          "Job ID not found for Supplier Invoice prefill.",
-                      });
-                      return;
-                    }
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                      if (!jobId) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Job ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
 
-                    const estimates = estimatesForm.values.estimates ?? [];
-                    const estimateCharges = estimates
-                      .map((e) => ({
-                        shipment_no: jobId,
-                        charge_id: e.charge_id ?? null,
-                        charge_name: e.charge_name ?? "",
-                        currency_id: e.currency_id ?? null,
-                        roe: e.roe ?? null,
-                        amount: e.total_cost ?? null,
-                        supplier_code: toStr(e.supplier_code),
-                        supplier_name: toStr(e.supplier_name),
-                      }))
-                      .filter(
-                        (c) =>
-                          toStr((c as any).shipment_no) &&
-                          (c as any).charge_id != null &&
-                          (c as any).amount != null &&
-                          (c as any).amount !== "" &&
-                          (toStr((c as any).supplier_code) ||
-                            toStr((c as any).supplier_name)),
-                      );
+                      const estimates = estimatesForm.values.estimates ?? [];
+                      const estimateCharges = estimates
+                        .map((e) => ({
+                          shipment_no: jobId,
+                          charge_id: e.charge_id ?? null,
+                          charge_name: e.charge_name ?? "",
+                          currency_id: e.currency_id ?? null,
+                          roe: e.roe ?? null,
+                          amount: e.total_cost ?? null,
+                          supplier_code: toStr(e.supplier_code),
+                          supplier_name: toStr(e.supplier_name),
+                        }))
+                        .filter(
+                          (c) =>
+                            toStr((c as any).shipment_no) &&
+                            (c as any).charge_id != null &&
+                            (c as any).amount != null &&
+                            (c as any).amount !== "" &&
+                            (toStr((c as any).supplier_code) ||
+                              toStr((c as any).supplier_name)),
+                        );
 
-                    const houseCharges = (hawbDetails ?? [])
-                      .flatMap((h) => {
-                        const rec = h as unknown as Record<string, unknown>;
-                        const shipmentNo = toStr((rec as any).shipment_id);
-                        const chargesArr = Array.isArray((rec as any).charges)
-                          ? ((rec as any).charges as unknown[])
-                          : Array.isArray((rec as any).mawb_charges)
-                            ? ((rec as any).mawb_charges as unknown[])
-                            : [];
-                        return chargesArr
-                          .map((c) => {
-                            const cr = c as Record<string, unknown>;
-                            return {
-                              shipment_no: shipmentNo,
-                              charge_id:
-                                cr.charge_id != null
-                                  ? Number(cr.charge_id)
-                                  : null,
-                              charge_name: toStr(cr.charge_name),
-                              currency_id:
-                                (cr as any).currency_id ??
-                                (cr as any).currency ??
-                                null,
-                              roe: (cr as any).roe ?? null,
-                              amount:
-                                (cr as any).total_cost ??
-                                (cr as any).cost_local_amount ??
-                                (cr as any).amount ??
-                                null,
-                              supplier_code: toStr((cr as any).supplier_code),
-                              supplier_name: toStr((cr as any).supplier_name),
-                            };
-                          })
-                          .filter(
-                            (x) =>
-                              toStr((x as any).shipment_no) &&
-                              (x as any).charge_id != null &&
-                              (x as any).amount != null &&
-                              (x as any).amount !== "" &&
-                              (toStr((x as any).supplier_code) ||
-                                toStr((x as any).supplier_name)),
-                          );
-                      })
-                      .filter(Boolean);
+                      const houseCharges = (hawbDetails ?? [])
+                        .flatMap((h) => {
+                          const rec = h as unknown as Record<string, unknown>;
+                          const shipmentNo = toStr((rec as any).shipment_id);
+                          const chargesArr = Array.isArray((rec as any).charges)
+                            ? ((rec as any).charges as unknown[])
+                            : Array.isArray((rec as any).mawb_charges)
+                              ? ((rec as any).mawb_charges as unknown[])
+                              : [];
+                          return chargesArr
+                            .map((c) => {
+                              const cr = c as Record<string, unknown>;
+                              return {
+                                shipment_no: shipmentNo,
+                                charge_id:
+                                  cr.charge_id != null
+                                    ? Number(cr.charge_id)
+                                    : null,
+                                charge_name: toStr(cr.charge_name),
+                                currency_id:
+                                  (cr as any).currency_id ??
+                                  (cr as any).currency ??
+                                  null,
+                                roe: (cr as any).roe ?? null,
+                                amount:
+                                  (cr as any).total_cost ??
+                                  (cr as any).cost_local_amount ??
+                                  (cr as any).amount ??
+                                  null,
+                                supplier_code: toStr((cr as any).supplier_code),
+                                supplier_name: toStr((cr as any).supplier_name),
+                              };
+                            })
+                            .filter(
+                              (x) =>
+                                toStr((x as any).shipment_no) &&
+                                (x as any).charge_id != null &&
+                                (x as any).amount != null &&
+                                (x as any).amount !== "" &&
+                                (toStr((x as any).supplier_code) ||
+                                  toStr((x as any).supplier_name)),
+                            );
+                        })
+                        .filter(Boolean);
 
-                    const charges = [...estimateCharges, ...houseCharges];
-                    if (charges.length === 0) {
-                      ToastNotification({
-                        type: "error",
-                        message:
-                          "No charges found in Estimates/House charges to prefill.",
-                      });
-                      return;
-                    }
+                      const charges = [...estimateCharges, ...houseCharges];
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "No charges found in Estimates/House charges to prefill.",
+                        });
+                        return;
+                      }
 
-                    navigate("/supplier-invoice/create", {
-                      state: {
-                        prefillSupplierInvoiceFromJob: {
-                          source: "air-import-job",
-                          job_id: jobId,
-                          charges,
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: jobId,
+                            charges,
+                          },
                         },
-                      },
-                    });
+                      });
                     }}
                   >
                     Create Supplier Invoice
@@ -3669,69 +3749,69 @@ function AirExportJobCreate() {
                     },
                   }}
                   onClick={() => {
-                  const estimates = estimatesForm.values.estimates ?? [];
-                  const chargesFromEstimates = estimates
-                    .filter(
-                      (e) =>
-                        e.charge_id != null ||
-                        (e.charge_name && e.charge_name.trim() !== ""),
-                    )
-                    .map((e) => ({
-                      charge_id: e.charge_id,
-                      charge_name: e.charge_name ?? "",
-                      segment: "",
-                      job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                      sub_job: "",
-                      cn_r: "",
-                      currency: e.currency_code ?? "",
-                      currency_id: e.currency_id ?? "",
-                      roe: e.roe,
-                      unit_code: e.unit_code ?? "",
-                      unit_id: e.unit_id ?? "",
-                      no_of_unit: e.no_of_unit,
-                      amount_per_unit: e.cost_per_unit,
-                      amount: e.total_cost,
-                      amount_in_local:
-                        e.total_cost != null && e.roe != null
-                          ? Math.round(e.total_cost * e.roe * 100) / 100
-                          : e.total_cost,
-                      tax_code: "",
-                      tax: "false",
-                    }));
-                  const firstSupplier =
-                    estimates.find(
-                      (e) =>
-                        String(e.supplier_code ?? "").trim() !== "" ||
-                        String(e.supplier_name ?? "").trim() !== "",
-                    ) ?? null;
-                  navigate("/payment-request/create", {
-                    state: {
-                      serviceType: "AIR",
-                      chargesFromEstimates:
-                        chargesFromEstimates.length > 0
-                          ? chargesFromEstimates
-                          : undefined,
-                      supplier:
-                        firstSupplier != null
-                          ? {
-                              supplier_code: String(
-                                firstSupplier.supplier_code ?? "",
-                              ),
-                              supplier_name: String(
-                                firstSupplier.supplier_name ?? "",
-                              ),
-                            }
-                          : null,
-                      job_reference_1:
-                        jobData?.job_id != null
-                          ? String(jobData.job_id)
-                          : jobData?.id != null
-                            ? String(jobData.id)
-                            : "",
-                      ...(jobData && { job: jobData }),
-                    },
-                  });
-                }}
+                    const estimates = estimatesForm.values.estimates ?? [];
+                    const chargesFromEstimates = estimates
+                      .filter(
+                        (e) =>
+                          e.charge_id != null ||
+                          (e.charge_name && e.charge_name.trim() !== ""),
+                      )
+                      .map((e) => ({
+                        charge_id: e.charge_id,
+                        charge_name: e.charge_name ?? "",
+                        segment: "",
+                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                        sub_job: "",
+                        cn_r: "",
+                        currency: e.currency_code ?? "",
+                        currency_id: e.currency_id ?? "",
+                        roe: e.roe,
+                        unit_code: e.unit_code ?? "",
+                        unit_id: e.unit_id ?? "",
+                        no_of_unit: e.no_of_unit,
+                        amount_per_unit: e.cost_per_unit,
+                        amount: e.total_cost,
+                        amount_in_local:
+                          e.total_cost != null && e.roe != null
+                            ? Math.round(e.total_cost * e.roe * 100) / 100
+                            : e.total_cost,
+                        tax_code: "",
+                        tax: "false",
+                      }));
+                    const firstSupplier =
+                      estimates.find(
+                        (e) =>
+                          String(e.supplier_code ?? "").trim() !== "" ||
+                          String(e.supplier_name ?? "").trim() !== "",
+                      ) ?? null;
+                    navigate("/payment-request/create", {
+                      state: {
+                        serviceType: "AIR",
+                        chargesFromEstimates:
+                          chargesFromEstimates.length > 0
+                            ? chargesFromEstimates
+                            : undefined,
+                        supplier:
+                          firstSupplier != null
+                            ? {
+                                supplier_code: String(
+                                  firstSupplier.supplier_code ?? "",
+                                ),
+                                supplier_name: String(
+                                  firstSupplier.supplier_name ?? "",
+                                ),
+                              }
+                            : null,
+                        job_reference_1:
+                          jobData?.job_id != null
+                            ? String(jobData.job_id)
+                            : jobData?.id != null
+                              ? String(jobData.id)
+                              : "",
+                        ...(jobData && { job: jobData }),
+                      },
+                    });
+                  }}
                 >
                   Create PRQ
                 </Button>
@@ -4505,7 +4585,10 @@ function AirExportJobCreate() {
           Do you want to close it since the job is not saved
         </Text>
         <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
             Cancel
           </Button>
           <Button

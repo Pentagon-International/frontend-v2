@@ -61,7 +61,8 @@ import {
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
   coerceHouseCargoWeightInput,
-  formatHouseCargoWeightDisplay,
+  formatHouseCargoChargeableDisplay,
+  formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
@@ -129,7 +130,7 @@ type HAWBDetailsForm = {
 type CargoDetail = {
   // container_number removed for Air HAWB
   no_of_packages: number | null;
-  gross_weight: number | null;
+  gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
   chargeable_weight: HouseCargoWeightValue;
   haz: string;
@@ -888,7 +889,7 @@ function HouseCreate() {
       const loadedCargoDetails = editData.cargo_details.map(
         (cargo: Record<string, unknown>) => ({
           no_of_packages: cargo.no_of_packages as number | null,
-          gross_weight: cargo.gross_weight as number | null,
+          gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
           volume: importHouseCargoWeightFromApi(cargo.volume),
           chargeable_weight: importHouseCargoWeightFromApi(
             cargo.chargeable_weight,
@@ -2040,10 +2041,12 @@ function HouseCreate() {
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
       ...cargo,
-      gross_weight: roundToDecimals((cargo as any).gross_weight) ?? null,
+      gross_weight: formatHouseCargoWeightForPayload((cargo as any).gross_weight),
       volume: formatHouseCargoWeightForPayload((cargo as any).volume),
-      chargeable_weight: formatHouseCargoWeightForPayload(
-        (cargo as any).chargeable_weight,
+      chargeable_weight: formatHouseCargoChargeableForPayload(
+        (cargo as any).gross_weight,
+        (cargo as any).volume,
+        "air",
       ),
     }));
 
@@ -2192,10 +2195,12 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
-          gross_weight: cargo.gross_weight,
+          gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
-          chargeable_weight: formatHouseCargoWeightForPayload(
-            cargo.chargeable_weight,
+          chargeable_weight: formatHouseCargoChargeableForPayload(
+            cargo.gross_weight,
+            cargo.volume,
+            "air",
           ),
           haz: cargo.haz === "Yes",
         })),
@@ -3791,14 +3796,17 @@ function HouseCreate() {
                       min={0}
                       withAsterisk
                       hideControls
-                      decimalScale={2}
-                      value={cargo.gross_weight || undefined}
+                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                      value={cargo.gross_weight ?? undefined}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
                           {
                             ...updated[index],
-                            gross_weight: value as number | null,
+                            gross_weight: coerceHouseCargoWeightInput(
+                              value,
+                              cargo.gross_weight,
+                            ),
                           },
                           "air",
                         );
@@ -3814,6 +3822,22 @@ function HouseCreate() {
                           }
                           setCargoErrors(newErrors);
                         }
+                      }}
+                      onBlur={(e) => {
+                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        if (!raw) return;
+                        const updated = [...cargoDetails];
+                        updated[index] = withRecalculatedChargeableWeight(
+                          {
+                            ...updated[index],
+                            gross_weight: coerceHouseCargoWeightInput(
+                              raw,
+                              cargo.gross_weight,
+                            ),
+                          },
+                          "air",
+                        );
+                        setCargoDetails(updated);
                       }}
                       error={cargoErrors[index]?.gross_weight}
                     />
@@ -3874,8 +3898,10 @@ function HouseCreate() {
                     <FormTextInput
                       placeholder=""
                       format="normal"
-                      value={formatHouseCargoWeightDisplay(
-                        cargo.chargeable_weight,
+                      value={formatHouseCargoChargeableDisplay(
+                        cargo.gross_weight,
+                        cargo.volume,
+                        "air",
                       )}
                       readOnly
                       disabled
