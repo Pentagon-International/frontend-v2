@@ -8,12 +8,26 @@ export type CustomerPanApprovalAddress = {
   customer_location?: string | null;
   address_type?: string | null;
   address?: string | null;
+  msme?: boolean;
+  msme_no?: string | null;
   city?: string | null;
   state?: string | null;
   country?: string | null;
   pincode?: string | null;
+  phone_no?: string | null;
+  mobile_no?: string | null;
+  email?: string | null;
   pan_no?: string | null;
+  pan_aadhaar_link?: boolean;
+  Itr_filed?: string | null;
+  tds_threshold_flag?: boolean;
+  gst_registration_status?: string | null;
+  tan_no?: string | null;
   gst_id?: string | null;
+  arn_no?: string | null;
+  uin_no?: string | null;
+  composite_regular?: string | null;
+  sez?: boolean;
 };
 
 export type CustomerPanApprovalRow = {
@@ -37,13 +51,35 @@ export type CustomerPanApprovalRow = {
   customer_code?: string | null;
   customer_types?: unknown[];
   addresses_data?: CustomerPanApprovalAddress[];
-  /** Flattened from primary address for table display */
-  pan_no?: string;
-  gstin?: string;
+  /** Derived summaries for list display */
+  address_count?: number;
   gstin_count?: number;
-  state?: string;
-  district?: string;
-  pincode?: string;
+  pan_count?: number;
+};
+
+export type CustomerPanApprovalFilters = {
+  customer_name?: string;
+  term_code?: string;
+  status?: string;
+};
+
+export type RelatedCustomer = {
+  id: number;
+  customer_code?: string;
+  customer_name?: string;
+  status?: string;
+  city?: string;
+  address?: string;
+  email?: string | null;
+  phone_no?: string | null;
+};
+
+export type RelatedCustomersResponse = {
+  success?: boolean;
+  message?: string | null;
+  search_name?: string;
+  total?: number;
+  data?: RelatedCustomer[];
 };
 
 export type CustomerPanApprovalListResponse = {
@@ -57,38 +93,33 @@ export type CustomerPanApprovalListResponse = {
   data?: CustomerPanApprovalRow[];
 };
 
-function getPrimaryAddress(
-  record: CustomerPanApprovalRow,
-): CustomerPanApprovalAddress | undefined {
-  const addresses = record.addresses_data;
-  if (!Array.isArray(addresses) || addresses.length === 0) return undefined;
-
-  const primary = addresses.find(
-    (addr) => String(addr.address_type ?? "").trim().toLowerCase() === "primary",
-  );
-  return primary ?? addresses[0];
-}
-
 export function normalizeCustomerPanApprovalRow(
   record: CustomerPanApprovalRow,
 ): CustomerPanApprovalRow {
-  const primary = getPrimaryAddress(record);
-  const gstinList = (record.addresses_data ?? [])
+  const addresses = record.addresses_data ?? [];
+  const gstinList = addresses
     .map((addr) => String(addr.gst_id ?? "").trim())
     .filter(Boolean);
   const uniqueGstins = [...new Set(gstinList)];
+  const panList = addresses
+    .map((addr) => String(addr.pan_no ?? "").trim())
+    .filter(Boolean);
+  const uniquePans = [...new Set(panList)];
 
   return {
     ...record,
-    pan_no: String(primary?.pan_no ?? record.pan_no ?? "").trim(),
-    gstin: uniqueGstins[0] ?? String(record.gstin ?? "").trim(),
-    gstin_count: uniqueGstins.length || record.gstin_count,
-    state: String(primary?.state ?? record.state ?? "").trim(),
-    district: String(
-      primary?.customer_location ?? primary?.city ?? record.district ?? "",
-    ).trim(),
-    pincode: String(primary?.pincode ?? record.pincode ?? "").trim(),
+    address_count: addresses.length,
+    gstin_count: uniqueGstins.length,
+    pan_count: uniquePans.length,
   };
+}
+
+export function formatCustomerPanDisplayValue(
+  value: unknown,
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }
 
 function normalizeListResponse(
@@ -130,19 +161,48 @@ function normalizeListResponse(
   return { rows: [], total: 0, paginationTotal: 1 };
 }
 
+function buildCustomerPanApprovalFiltersPayload(
+  filters?: CustomerPanApprovalFilters,
+): Record<string, string> {
+  const payload: Record<string, string> = {};
+
+  const customerName = String(filters?.customer_name ?? "").trim();
+  const termCode = String(filters?.term_code ?? "").trim();
+  const status = String(filters?.status ?? "").trim();
+
+  if (customerName) payload.customer_name = customerName;
+  if (termCode) payload.term_code = termCode;
+  if (status) payload.status = status;
+
+  return payload;
+}
+
 export async function fetchCustomerPanPendingList(
   index: number,
   limit: number,
+  filters?: CustomerPanApprovalFilters,
 ): Promise<{
   rows: CustomerPanApprovalRow[];
   total: number;
   paginationTotal: number;
 }> {
+  const filtersPayload = buildCustomerPanApprovalFiltersPayload(filters);
   const response = await apiCallProtected.post(
     `${URL.customerVerificationFilter}?index=${index}&limit=${limit}`,
-    { filters: { approved: false } },
+    { filters: filtersPayload },
   );
   return normalizeListResponse(response, limit);
+}
+
+export async function fetchRelatedCustomers(
+  customerName: string,
+): Promise<RelatedCustomersResponse> {
+  const response = await postAPICall(
+    URL.customerVerificationRelatedCustomers,
+    { customer_name: customerName },
+    API_HEADER,
+  );
+  return (response ?? {}) as RelatedCustomersResponse;
 }
 
 export async function approveCustomerPan(id: number): Promise<unknown> {

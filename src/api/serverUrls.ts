@@ -19,6 +19,8 @@ export const URL = {
   customerFilter: "filter/customer_master/customer-master/",
   customerVerification: "customer-verification/",
   customerVerificationFilter: "filter/customer-verification/",
+  customerVerificationRelatedCustomers:
+    "customer-verification/related-customers/",
   transporter: "customer_master/customer-master/transporter/",
   consignee: "customer_master/customer-master/consignee/",
   agent: "customer_master/customer-master/agent/",
