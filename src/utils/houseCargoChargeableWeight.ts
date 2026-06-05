@@ -119,11 +119,75 @@ export function formatHouseCargoWeightForPayload(
   return formatHouseCargoWeightDisplay(coerced);
 }
 
+/** Minimum ocean chargeable weight (CBM) after max(gross÷1000, volume) calculation. */
+export const OCEAN_CHARGEABLE_WEIGHT_MIN = 1;
+
 /** Ocean: gross (KG) → CBM for chargeable when gross wins the max comparison. */
 function oceanGrossKgToCbm(grossWeight: HouseCargoWeightValue): HouseCargoWeightValue {
   const grossNum = parseHouseCargoWeightInput(grossWeight);
   if (grossNum === null || grossNum <= 0) return null;
   return coerceHouseCargoWeightInput(grossNum / 1000);
+}
+
+/** Ocean chargeable CBM: values below 1 are raised to 1. */
+export function applyOceanChargeableWeightMinimum(
+  value: HouseCargoWeightValue,
+): HouseCargoWeightValue {
+  const num = parseHouseCargoWeightInput(value);
+  if (num === null || num <= 0) return value;
+  if (num < OCEAN_CHARGEABLE_WEIGHT_MIN) {
+    return coerceHouseCargoWeightInput(OCEAN_CHARGEABLE_WEIGHT_MIN);
+  }
+  return value;
+}
+
+/** Charge unit CBM / CBM(S) — used to auto-fill no_of_unit from chargeable weight. */
+export function isCbmsChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  const normalize = (value: string) =>
+    value.trim().toUpperCase().replace(/\s/g, "");
+  const normalizedCode = normalize(unitCode);
+  const normalizedLabel = normalize(unitLabel ?? "");
+  return (
+    normalizedCode === "CBM" ||
+    normalizedCode === "CBMS" ||
+    normalizedCode === "CBM(S)" ||
+    normalizedLabel === "CBM" ||
+    normalizedLabel === "CBMS" ||
+    normalizedLabel === "CBM(S)"
+  );
+}
+
+export function sumHouseOceanChargeableWeight(
+  cargoList: Array<{
+    gross_weight?: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight?: HouseCargoWeightValue;
+  }>,
+): number | null {
+  let total = 0;
+  let hasValue = false;
+
+  for (const cargo of cargoList) {
+    const fromStored = parseHouseCargoWeightInput(cargo.chargeable_weight);
+    const value =
+      fromStored ??
+      parseHouseCargoWeightInput(
+        calculateHouseChargeableWeight(
+          cargo.gross_weight ?? null,
+          cargo.volume,
+          "ocean",
+        ),
+      );
+    if (value !== null && value > 0) {
+      total += value;
+      hasValue = true;
+    }
+  }
+
+  return hasValue ? total : null;
 }
 
 /**
@@ -143,8 +207,12 @@ export function calculateHouseChargeableWeight(
 
   if (unit === "ocean") {
     const grossCbm = grossNum > 0 ? grossNum / 1000 : 0;
-    if (volNum > 0 && volNum >= grossCbm) return volume ?? null;
-    if (grossCbm > 0 && grossCbm > volNum) return oceanGrossKgToCbm(grossWeight);
+    if (volNum > 0 && volNum >= grossCbm) {
+      return applyOceanChargeableWeightMinimum(volume ?? null);
+    }
+    if (grossCbm > 0 && grossCbm > volNum) {
+      return applyOceanChargeableWeightMinimum(oceanGrossKgToCbm(grossWeight));
+    }
     return null;
   }
 

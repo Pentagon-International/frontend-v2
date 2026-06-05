@@ -59,6 +59,7 @@ import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
+  HOUSE_CARGO_WEIGHT_DECIMALS,
   HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
@@ -66,6 +67,8 @@ import {
   formatHouseCargoChargeableDisplay,
   formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
+  isCbmsChargeUnit,
+  sumHouseOceanChargeableWeight,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
@@ -688,6 +691,12 @@ function HouseCreate() {
   const editIndex = location.state?.editIndex;
   const editData = location.state?.editData;
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const isLclShipment = useMemo(
+    () =>
+      String(location.state?.mblDetails?.service ?? "").toUpperCase() ===
+      "LCL",
+    [location.state?.mblDetails?.service],
+  );
 
   useEffect(() => {
     if (!isEditMode && active === 4) setActive(0);
@@ -1223,6 +1232,38 @@ function HouseCreate() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumes, calculateChargeableWeight]);
+
+  const cargoChargeableWeights = cargoDetails
+    .map((c) => c.chargeable_weight)
+    .join(",");
+
+  // LCL only: when CBM(S) unit is selected, keep no_of_unit in sync with chargeable weight
+  useEffect(() => {
+    if (!isLclShipment) return;
+
+    const chargeableTotal = sumHouseOceanChargeableWeight(cargoDetails);
+    if (chargeableTotal === null) return;
+
+    const updatedCharges = chargesForm.values.charges.map((charge) => {
+      if (!isCbmsChargeUnit(charge.unit_code)) return charge;
+      if (charge.no_of_unit === chargeableTotal) return charge;
+      return { ...charge, no_of_unit: chargeableTotal };
+    });
+
+    const hasChanges = updatedCharges.some(
+      (charge, index) =>
+        charge.no_of_unit !== chargesForm.values.charges[index]?.no_of_unit,
+    );
+    if (hasChanges) {
+      chargesForm.setValues({ charges: updatedCharges });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cargoChargeableWeights,
+    cargoGrossWeights,
+    cargoVolumes,
+    isLclShipment,
+  ]);
 
   // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
   const chargeCurrencyIds = chargesForm.values.charges
@@ -1996,7 +2037,9 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
+      no_of_unit:
+        roundToDecimals(charge.no_of_unit, HOUSE_CARGO_WEIGHT_DECIMALS) ??
+        null,
       roe: roundToDecimals(charge.roe) ?? null,
       amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
       amount: roundToDecimals(charge.amount) ?? null,
@@ -4603,6 +4646,13 @@ function HouseCreate() {
                           unitUpper === "DOC"
                         ) {
                           noOfUnit = 1;
+                        } else if (
+                          isLclShipment &&
+                          isCbmsChargeUnit(unitCode, unitOpt?.label)
+                        ) {
+                          noOfUnit =
+                            sumHouseOceanChargeableWeight(cargoDetails) ??
+                            charge.no_of_unit;
                         }
                         if (noOfUnit !== charge.no_of_unit) {
                           chargesForm.setFieldValue(
@@ -4681,8 +4731,8 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
-                      decimalScale={0}
                       hideControls
+                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                       value={
                         chargesForm.values.charges[index].no_of_unit ??
                         undefined
