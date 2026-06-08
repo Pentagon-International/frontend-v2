@@ -415,69 +415,79 @@ function QuotationApprovalPublic() {
                 </Group>
               </Stack>
 
-              <Stack gap={6} align="center">
-                <Group justify="center" gap="lg" align="center" wrap="nowrap">
-                  <Box style={{ width: 220, flexShrink: 0 }}>
-                    <SingleDateInput
-                      label={shipmentDateLabel}
-                      placeholder={`Select ${shipmentDateLabel}`}
-                      value={shipmentDate}
-                      onChange={(date) => {
-                        setShipmentDate(date);
-                        if (shipmentDateError) setShipmentDateError("");
-                      }}
-                      withAsterisk
-                      size="md"
-                      allowDeselection={false}
-                      styles={{
-                        input: {
-                          borderColor: shipmentDateError ? "#fa5252" : undefined,
-                        },
-                      }}
-                    />
-                  </Box>
-                  <Button
-                    size="lg"
-                    color="green"
-                    leftSection={<IconCheck size={20} />}
-                    onClick={() => handleApproval("GAINED")}
-                    loading={approvalLoading && isApproved}
-                    disabled={approvalLoading || isApproved}
-                    title="Click to approve this quotation"
-                    style={{ flexShrink: 0 }}
-                  >
-                    Accept Quotation
-                  </Button>
-
-                  <Button
-                    size="lg"
-                    color="red"
-                    variant="outline"
-                    leftSection={<IconX size={20} />}
-                    onClick={() => handleApproval("LOST")}
-                    loading={approvalLoading && isRejected}
-                    disabled={approvalLoading || !remarks.trim()}
-                    title={
-                      !remarks.trim()
-                        ? "Please enter remarks before rejecting"
-                        : ""
-                    }
-                    style={{ flexShrink: 0 }}
-                  >
-                    Reject Quotation
-                  </Button>
-                </Group>
+              <Box
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(200px, 220px) auto auto",
+                  columnGap: 16,
+                  rowGap: 4,
+                  alignItems: "end",
+                  justifyContent: "center",
+                  width: "100%",
+                }}
+              >
+                <Box style={{ gridColumn: 1, gridRow: 1, minWidth: 0 }}>
+                  <SingleDateInput
+                    label={shipmentDateLabel}
+                    placeholder={`Select ${shipmentDateLabel}`}
+                    value={shipmentDate}
+                    onChange={(date) => {
+                      setShipmentDate(date);
+                      if (shipmentDateError) setShipmentDateError("");
+                    }}
+                    withAsterisk
+                    size="md"
+                    allowDeselection={false}
+                    styles={{
+                      input: {
+                        borderColor: shipmentDateError ? "#fa5252" : undefined,
+                      },
+                    }}
+                  />
+                </Box>
+                <Button
+                  size="lg"
+                  color="green"
+                  leftSection={<IconCheck size={20} />}
+                  onClick={() => handleApproval("GAINED")}
+                  loading={approvalLoading && isApproved}
+                  disabled={approvalLoading || isApproved}
+                  title="Click to approve this quotation"
+                  style={{ gridColumn: 2, gridRow: 1, flexShrink: 0 }}
+                >
+                  Accept Quotation
+                </Button>
+                <Button
+                  size="lg"
+                  color="red"
+                  variant="outline"
+                  leftSection={<IconX size={20} />}
+                  onClick={() => handleApproval("LOST")}
+                  loading={approvalLoading && isRejected}
+                  disabled={approvalLoading || !remarks.trim()}
+                  title={
+                    !remarks.trim()
+                      ? "Please enter remarks before rejecting"
+                      : ""
+                  }
+                  style={{ gridColumn: 3, gridRow: 1, flexShrink: 0 }}
+                >
+                  Reject Quotation
+                </Button>
                 <Text
                   size="xs"
                   c="red"
-                  ta="center"
-                  mih={18}
                   lh={1.35}
-                  style={{ visibility: shipmentDateError ? "visible" : "hidden" }}
+                  mih={32}
+                  style={{
+                    gridColumn: 1,
+                    gridRow: 2,
+                    visibility: shipmentDateError ? "visible" : "hidden",
+                  }}
                 >
                   {shipmentDateError || "\u00a0"}
                 </Text>
-              </Stack>
+              </Box>
             </Stack>
           ) : (
             <Stack gap="sm">

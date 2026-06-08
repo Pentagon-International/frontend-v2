@@ -91,6 +91,8 @@ const GRID_COLUMN_GAP = 4;
 
 /** Max width of striped bar track (values carry precision) */
 const BAR_TRACK_W = 64;
+const BAR_VALUE_COL_W = 68;
+const BAR_COLUMN_GAP = 4;
 
 const BAR_H = 16;
 
@@ -146,16 +148,24 @@ function ValueAndCompactBar({
   return (
     <Box
       style={{
-        display: "grid",
-        gridTemplateColumns: `minmax(0, 1fr) ${BAR_TRACK_W}px`,
-        columnGap: 4,
-        alignItems: "center",
         width: "100%",
         minWidth: 0,
+        display: "flex",
+        justifyContent: "center",
       }}
     >
-      <Text style={BAR_VALUE_LABEL}>{valueLabel}</Text>
-      <Box style={{ width: BAR_TRACK_W, minWidth: 0 }}>{children}</Box>
+      <Box
+        style={{
+          display: "grid",
+          gridTemplateColumns: `${BAR_VALUE_COL_W}px ${BAR_TRACK_W}px`,
+          columnGap: BAR_COLUMN_GAP,
+          alignItems: "center",
+          flexShrink: 0,
+        }}
+      >
+        <Text style={BAR_VALUE_LABEL}>{valueLabel}</Text>
+        <Box style={{ width: BAR_TRACK_W, minWidth: 0 }}>{children}</Box>
+      </Box>
     </Box>
   );
 }
