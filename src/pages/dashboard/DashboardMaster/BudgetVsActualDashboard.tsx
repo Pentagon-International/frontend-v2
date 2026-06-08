@@ -357,15 +357,15 @@ export default function BudgetVsActualDashboard() {
     <Box
       bg="#F8F9FA"
       mx={{ base: -12, sm: -16, lg: -24 }}
-
       mih={400}
+      pb={{ base: 36, sm: 44 }}
       style={{
         fontFamily: ERP_FONT_SANS,
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",
       }}
     >
-      <Stack gap={10}>
+      <Stack gap={10} pb={8}>
         <ERPListToolbar
           bleed={false}
           leading={
@@ -636,7 +636,10 @@ export default function BudgetVsActualDashboard() {
         )}
 
         {!isLoading && (
-          <Grid gutter={{ base: 8, sm: 10 }} style={{ paddingLeft: 10, paddingRight: 10 }}>
+          <Grid
+            gutter={{ base: 8, sm: 10 }}
+            style={{ paddingLeft: 10, paddingRight: 10, paddingBottom: 12 }}
+          >
             <Grid.Col span={{ base: 12, xl: 7 }}>
               <Card
                 radius={8}
@@ -948,7 +951,7 @@ export default function BudgetVsActualDashboard() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, xl: 5 }}>
-              <Stack gap={10}>
+              <Stack gap={10} pb={4}>
                 <Card
                   radius={8}
                   p={{ base: 10, sm: 12 }}
@@ -974,7 +977,7 @@ export default function BudgetVsActualDashboard() {
 
                 <Card
                   radius={8}
-                  p={{ base: 10, sm: 12 }}
+                  p={{ base: "10px 12px 15px", sm: "12px 14px 18px" }}
                   withBorder
                   style={{
                     borderColor: "#E9ECEF",
@@ -982,7 +985,7 @@ export default function BudgetVsActualDashboard() {
                     boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
                   }}
                 >
-                  <Group gap={8} mb={10} wrap="wrap" align="baseline">
+                  <Group gap={8} mb={14} pb={3} wrap="wrap" align="baseline">
                     <Text fw={700} fz={14} c="#111827" style={{ lineHeight: 1.2 }}>
                       By Mode · YTD
                     </Text>
@@ -990,7 +993,7 @@ export default function BudgetVsActualDashboard() {
                       Marker = budget target
                     </Text>
                   </Group>
-                  <Stack gap={isCompact ? 10 : 12}>
+                  <Stack gap={isCompact ? 11 : 13} pb={2}>
                     {byMode.map((row: any) => {
                       const budget = toNumber(row.budget);
                       const actual = toNumber(row.actual);
