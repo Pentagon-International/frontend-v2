@@ -654,11 +654,12 @@ function HouseCreate() {
                 "",
             ).trim();
             const currencyCode = String(
-              charge.currency ??
-                currencyDetails?.currency_code ??
-                (charge.currency_details as Record<string, unknown>)
-                  ?.currency_code ??
-                "",
+              currencyDetails?.currency_code ??
+                charge.currency_code ??
+                (charge.currency != null &&
+                !/^\d+$/.test(String(charge.currency))
+                  ? charge.currency
+                  : ""),
             ).trim();
 
             const toNum = (v: unknown): number | null => {

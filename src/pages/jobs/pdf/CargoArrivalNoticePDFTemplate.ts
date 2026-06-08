@@ -39,6 +39,111 @@ const formatDateForDisplay = (dateString: any) => {
   return formatDate(dateString);
 };
 
+const isNumericId = (value: unknown): boolean => {
+  if (value == null || value === "") return false;
+  return /^\d+$/.test(String(value).trim());
+};
+
+// Prefer currency code from details; ocean API may store numeric ID in charge.currency
+const getChargeCurrencyCode = (charge: Record<string, unknown>): string => {
+  const currencyDetails = charge.currency_details as
+    | { currency_code?: string; code?: string }
+    | undefined;
+
+  const codeFromDetails =
+    currencyDetails?.currency_code ||
+    currencyDetails?.code ||
+    charge.currency_code;
+  if (codeFromDetails) return String(codeFromDetails).trim();
+
+  const currency = charge.currency;
+  if (currency == null || currency === "") return "";
+  if (isNumericId(currency)) return "";
+
+  return String(currency).trim();
+};
+
+const drawCenteredTableHeader = (
+  doc: jsPDF,
+  text: string,
+  x: number,
+  colWidth: number,
+  y: number
+) => {
+  doc.text(text, x + colWidth / 2, y, { align: "center" });
+};
+
+const drawCenteredTableCell = (
+  doc: jsPDF,
+  text: string,
+  x: number,
+  colWidth: number,
+  y: number,
+  cellPadX: number
+) => {
+  const lines = doc.splitTextToSize(text || "", colWidth - 2 * cellPadX);
+  doc.text(lines.length > 0 ? lines : [""], x + colWidth / 2, y, {
+    align: "center",
+  });
+};
+
+// Body text — same as freight certificate paragraph ("This is to inform you...")
+const CAN_BODY_FONT_SIZE = 9;
+const CAN_SECTION_TITLE_FONT_SIZE = 9;
+const CAN_TABLE_HEADER_H = 7;
+const CAN_TABLE_ROW_H = 6;
+const CAN_TABLE_CELL_Y_OFFSET = 4;
+const CAN_TABLE_HEADER_TEXT_Y_OFFSET = 4.8;
+const CAN_LINE_SPACING = 5.5;
+const CAN_COMMODITY_LINE_HEIGHT = 4.5;
+const CAN_NOTES_LINE_SPACING = 5;
+const CAN_SECTION_TITLE_TO_CONTENT_GAP = 4;
+
+type CanKeyValueColumnLayout = {
+  keyStartX: number;
+  valueStartX: number;
+  valueMaxWidth: number;
+};
+
+const getCanKeyValueColumnLayout = (
+  doc: jsPDF,
+  pageWidth: number,
+  margin: number,
+  boxPadding: number,
+  rightHalfStart: number,
+  keyLabels: string[]
+): CanKeyValueColumnLayout => {
+  const keyStartX = rightHalfStart + boxPadding;
+  const rightColumnEndX = pageWidth - margin - boxPadding;
+  const maxKeyWidth = keyLabels.reduce(
+    (max, label) => Math.max(max, doc.getTextWidth(label)),
+    0
+  );
+  const valueStartX = keyStartX + maxKeyWidth + 1.5;
+  const valueMaxWidth = Math.max(8, rightColumnEndX - valueStartX);
+
+  return { keyStartX, valueStartX, valueMaxWidth };
+};
+
+const drawCanKeyValueRow = (
+  doc: jsPDF,
+  key: string,
+  valueLines: string | string[],
+  layout: CanKeyValueColumnLayout,
+  y: number
+): number => {
+  const lines = Array.isArray(valueLines)
+    ? valueLines
+    : doc.splitTextToSize(valueLines || "", layout.valueMaxWidth);
+
+  doc.text(key, layout.keyStartX, y);
+  doc.text(lines.length > 0 ? lines : [""], layout.valueStartX, y, {
+    maxWidth: layout.valueMaxWidth,
+  });
+
+  return Math.max(1, lines.length) * CAN_LINE_SPACING;
+};
+
 // Helper function to get logo based on country and company
 const getLogoByCountry = (country: any): string | null => {
   try {
@@ -92,6 +197,12 @@ const getLogoByCountry = (country: any): string | null => {
     ) {
       return pentagonPrimeChina;
     }
+    if (
+      countryName.includes("KENYA") ||
+      countryCode === "KE"
+    ) {
+      return primeLogo;
+    }
     return primeLogo;
   } catch (error) {
     console.error("Error getting logo by country:", error);
@@ -99,8 +210,42 @@ const getLogoByCountry = (country: any): string | null => {
   }
 };
 
+const KENYA_CAN_BRANCH_INFO = {
+  name: "PENTAGON PRIME KENYA CO LIMITED",
+  address:
+    "OFFICE NO. S9-08, MTC BUILDING (AMBALAL HOUSE), 9TH FLOOR, SOUTH TOWER, NKRUMAH ROAD, P.O.BOX 2050-80100,MOMBASA,KENYA.",
+  tel: "",
+  email: "",
+  pan: "",
+  gstn: "",
+  isKenya: true,
+} as const;
+
+const isKenyaCountry = (country?: any): boolean => {
+  let countryName = "";
+  let countryCode = "";
+
+  if (country) {
+    countryName = (country.country_name || "").toUpperCase();
+    countryCode = (country.country_code || "").toUpperCase();
+  } else {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      countryName = (user?.country?.country_name || "").toUpperCase();
+      countryCode = (user?.country?.country_code || "").toUpperCase();
+    }
+  }
+
+  return countryName.includes("KENYA") || countryCode === "KE";
+};
+
 // Helper function to get branch info
 const getBranchInfo = (branchName: string, country?: any) => {
+  if (isKenyaCountry(country)) {
+    return { ...KENYA_CAN_BRANCH_INFO };
+  }
+
   const branchNameUpper = branchName?.toUpperCase() || "";
 
   let companyName = "";
@@ -243,8 +388,8 @@ const addFooter = (
   );
 };
 
-// Helper function to add header to an existing page (for continuation pages)
-const addHeaderToExistingPage = (
+// Helper function to draw logo + company header (aligned like Delivery Order PDF)
+const drawCanHeaderSection = (
   doc: jsPDF,
   pageWidth: number,
   margin: number,
@@ -252,46 +397,58 @@ const addHeaderToExistingPage = (
   branchInfo: any,
   logoImage: string | null
 ): number => {
-  let yPos = 5;
-  const headerStartY = yPos;
+  const headerStartY = 5;
   const headerHeight = 25;
-  let logoEndX = 0;
+  const logoWidth = 50;
+  const logoHeight = 12;
+  const logoX = margin + 5;
+  let companyInfoX = margin + 5;
+  let companyY = headerStartY + boxPadding + 3;
 
-  // Logo (left side)
   if (logoImage) {
     try {
-      const logoWidth = 50;
-      const logoHeight = 12;
-      const logoX = margin + 5;
       const logoY = headerStartY + (headerHeight - logoHeight) / 2;
-      doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight, undefined, "FAST");
-      logoEndX = logoWidth + logoX;
+      doc.addImage(
+        logoImage,
+        "PNG",
+        logoX,
+        logoY,
+        logoWidth,
+        logoHeight,
+        undefined,
+        "FAST"
+      );
+      companyInfoX = logoX + logoWidth + 5;
+      companyY = logoY + 1;
     } catch (error) {
-      console.warn("Could not load logo from URL, continuing without logo:", error);
+      console.warn("Could not load logo image, continuing without logo:", error);
     }
   }
 
-  // Company Name and Address (right side)
-  const companyInfoX = logoEndX + 5;
-  let companyY = headerStartY + boxPadding + 3;
+  const isKenya = Boolean(branchInfo.isKenya);
+  const companyNameFontSize = isKenya ? 11 : 9;
+  const companyAddressFontSize = isKenya ? 9 : 7;
+  const companyNameLineHeight = isKenya ? 4.8 : 4;
+  const companyAddressLineHeight = isKenya ? 4.2 : 3.5;
+  const companyTextWidth = pageWidth - companyInfoX - margin - 5;
 
-  doc.setFontSize(9);
+  doc.setFontSize(companyNameFontSize);
   doc.setFont("helvetica", "bold");
   const companyNameLines = doc.splitTextToSize(
     branchInfo.name || "",
-    (pageWidth - 2 * margin) / 2
+    companyTextWidth
   );
   doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyNameLines.length * 4;
+  companyY += companyNameLines.length * companyNameLineHeight;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(companyAddressFontSize);
   const companyAddressLines = doc.splitTextToSize(
     branchInfo.address || "",
-    (pageWidth - 2 * margin) / 2 - 15
+    companyTextWidth
   );
   doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyAddressLines.length * 3.5;
+  companyY += companyAddressLines.length * companyAddressLineHeight;
 
   if (branchInfo.tel) {
     doc.text(`Telephone: ${branchInfo.tel}`, companyInfoX, companyY);
@@ -305,7 +462,7 @@ const addHeaderToExistingPage = (
 
   const infoLine = [
     branchInfo.pan ? `PAN NO: ${branchInfo.pan}` : "",
-    branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : ""
+    branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : "",
   ]
     .filter(Boolean)
     .join("    ");
@@ -315,31 +472,100 @@ const addHeaderToExistingPage = (
     companyY += 3.5;
   }
 
-  yPos = headerStartY + headerHeight + 5;
+  return Math.max(headerStartY + headerHeight + 5, companyY + 3);
+};
 
-  // Document Title
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text(
-    "CARGO ARRIVAL NOTICE / PROFORMA INVOICE",
-    pageWidth / 2,
-    yPos,
-    { align: "center" }
+const CAN_DOCUMENT_TITLE = "CARGO ARRIVAL NOTICE / PROFORMA INVOICE";
+
+type CanPageLayout = {
+  headerEndY: number;
+  boxStartY: number;
+  boxX: number;
+  boxWidth: number;
+  fixedBoxEndY: number;
+  contentY: number;
+};
+
+// Shared page setup: logo + company header, optional title, optional border
+const setupCanPageLayout = (
+  doc: jsPDF,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+  boxPadding: number,
+  footerHeight: number,
+  branchInfo: any,
+  logoImage: string | null,
+  options?: { includeTitle?: boolean; includeBorder?: boolean; contentAtBoxTop?: boolean }
+): CanPageLayout => {
+  const includeTitle = options?.includeTitle !== false;
+  const includeBorder = options?.includeBorder !== false;
+  const contentAtBoxTop = options?.contentAtBoxTop === true;
+
+  const headerEndY = drawCanHeaderSection(
+    doc,
+    pageWidth,
+    margin,
+    boxPadding,
+    branchInfo, 
+    logoImage
   );
-  yPos += 8;
 
-  // ===== FIXED PAGE BORDER BOX (Same on all pages) =====
+  let yPos = headerEndY;
+
+  if (includeTitle) {
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text(CAN_DOCUMENT_TITLE, pageWidth / 2, yPos, { align: "center" });
+    yPos += 8;
+  }
+
+  const boxX = margin;
+  const boxWidth = pageWidth - 2 * margin;
+  const boxStartY = includeTitle ? yPos : headerEndY;
+  const fixedBoxEndY = pageHeight - footerHeight;
+
+  if (includeBorder) {
+    drawPageBorder(doc, boxX, boxStartY, fixedBoxEndY, boxWidth);
+  }
+
+  const contentY = includeBorder
+    ? contentAtBoxTop
+      ? boxStartY
+      : boxStartY + boxPadding
+    : headerEndY + 5;
+
+  return {
+    headerEndY,
+    boxStartY,
+    boxX,
+    boxWidth,
+    fixedBoxEndY,
+    contentY,
+  };
+};
+
+// Helper function to add header to an existing page (for continuation pages)
+const addHeaderToExistingPage = (
+  doc: jsPDF,
+  pageWidth: number,
+  margin: number,
+  boxPadding: number,
+  branchInfo: any,
+  logoImage: string | null
+): number => {
   const pageHeight = doc.internal.pageSize.getHeight();
-  const footerHeight = 15;
-  const fixedBoxStartY = yPos; // After title
-  const fixedBoxEndY = pageHeight - footerHeight; // Before footer
-  const fixedBoxWidth = pageWidth - 2 * margin;
-
-  // Draw the fixed border box
-  drawPageBorder(doc, margin, fixedBoxStartY, fixedBoxEndY, fixedBoxWidth);
-
-  // Return the Y position after title inside the border (where content should start)
-  return yPos + boxPadding;
+  const layout = setupCanPageLayout(
+    doc,
+    pageWidth,
+    pageHeight,
+    margin,
+    boxPadding,
+    15,
+    branchInfo,
+    logoImage
+  );
+  return layout.contentY;
 };
 
 // Helper function to create a new page with header and border setup
@@ -353,104 +579,23 @@ const createNewPage = (
 ): { yPos: number; boxStartY: number; boxX: number; boxWidth: number } => {
   doc.addPage();
 
-  let yPos = 5;
-  const boxX = margin;
-
-  // Header section (same as first page)
-  const headerStartY = yPos;
-  const headerHeight = 25;
-  let logoEndX = 0;
-
-  // Logo (left side)
-  if (logoImage) {
-    try {
-      const logoWidth = 50;
-      const logoHeight = 12;
-      const logoX = margin + 5;
-      const logoY = headerStartY + (headerHeight - logoHeight) / 2;
-      doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight, undefined, "FAST");
-      logoEndX = logoWidth + logoX;
-    } catch (error) {
-      console.error("Error adding logo:", error);
-    }
-  }
-
-  // Company Name and Address (right side)
-  const companyInfoX = logoEndX + 5;
-  let companyY = headerStartY + boxPadding + 3;
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  const companyNameLines = doc.splitTextToSize(
-    branchInfo.name || "",
-    (pageWidth - 2 * margin) / 2
-  );
-  doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyNameLines.length * 4;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  const companyAddressLines = doc.splitTextToSize(
-    branchInfo.address || "",
-    (pageWidth - 2 * margin) / 2 - 15
-  );
-  doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyAddressLines.length * 3.5;
-
-  if (branchInfo.tel) {
-    doc.text(`Telephone: ${branchInfo.tel}`, companyInfoX, companyY);
-    companyY += 3.5;
-  }
-
-  if (branchInfo.email) {
-    doc.text(`Email: ${branchInfo.email}`, companyInfoX, companyY);
-    companyY += 3.5;
-  }
-
-  const infoLine = [
-    branchInfo.pan ? `PAN NO: ${branchInfo.pan}` : "",
-    branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : ""
-  ]
-    .filter(Boolean)
-    .join("    ");
-
-  if (infoLine) {
-    doc.text(infoLine, companyInfoX, companyY);
-    companyY += 3.5;
-  }
-
-  yPos = headerStartY + headerHeight + 5;
-
-  // Document Title
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text(
-    "CARGO ARRIVAL NOTICE / PROFORMA INVOICE",
-    pageWidth / 2,
-    yPos,
-    { align: "center" }
-  );
-  yPos += 8;
-
-  // ===== FIXED PAGE BORDER BOX (Same on all pages) =====
   const pageHeight = doc.internal.pageSize.getHeight();
-  const footerHeight = 15;
-  const fixedBoxStartY = yPos; // After title
-  const fixedBoxEndY = pageHeight - footerHeight; // Before footer
-  const fixedBoxWidth = pageWidth - 2 * margin;
-  const boxXPos = margin;
-
-  // Draw the fixed border box
-  drawPageBorder(doc, boxXPos, fixedBoxStartY, fixedBoxEndY, fixedBoxWidth);
-
-  // Content starts after title inside the border
-  const boxContentY = yPos + boxPadding;
+  const layout = setupCanPageLayout(
+    doc,
+    pageWidth,
+    pageHeight,
+    margin,
+    boxPadding,
+    15,
+    branchInfo,
+    logoImage
+  );
 
   return {
-    yPos: boxContentY,
-    boxStartY: fixedBoxStartY,
-    boxX: boxXPos,
-    boxWidth: fixedBoxWidth,
+    yPos: layout.contentY,
+    boxStartY: layout.boxStartY,
+    boxX: layout.boxX,
+    boxWidth: layout.boxWidth,
   };
 };
 
@@ -537,95 +682,23 @@ export const generateCargoArrivalNoticePDF = (
     doc.setLineWidth(0.3);
     doc.setDrawColor(0, 0, 0);
 
-    // ===== HEADER SECTION =====
-    const headerStartY = yPos;
-    const headerHeight = 25;
-    let logoEndX = 0;
-
-    // Logo (left side)
-    if (logoImage) {
-      try {
-        const logoWidth = 50;
-        const logoHeight = 12;
-        const logoX = margin + 5;
-        const logoY = headerStartY + (headerHeight - logoHeight) / 2;
-        doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight, undefined, "FAST");
-        logoEndX = logoWidth + logoX;
-      } catch (error) {
-        console.warn("Could not load logo from URL, continuing without logo:", error);
-      }
-    }
-
-    // Company Name and Address (right side)
-    const companyInfoX = logoEndX + 5;
-    let companyY = headerStartY + boxPadding + 3;
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    const companyNameLines = doc.splitTextToSize(
-      branchInfo.name || "",
-      (pageWidth - 2 * margin) / 2
+    // ===== HEADER + TITLE + BORDER (same layout as continuation pages) =====
+    const firstPageLayout = setupCanPageLayout(
+      doc,
+      pageWidth,
+      pageHeight,
+      margin,
+      boxPadding,
+      footerHeight,
+      branchInfo,
+      logoImage,
+      { contentAtBoxTop: true }
     );
-    doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
-    companyY += companyNameLines.length * 4;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    const companyAddressLines = doc.splitTextToSize(
-      branchInfo.address || "",
-      (pageWidth - 2 * margin) / 2 - 15
-    );
-    doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
-    companyY += companyAddressLines.length * 3.5;
-
-    if (branchInfo.tel) {
-      doc.text(`Telephone: ${branchInfo.tel}`, companyInfoX, companyY);
-      companyY += 3.5;
-    }
-
-    if (branchInfo.email) {
-      doc.text(`Email: ${branchInfo.email}`, companyInfoX, companyY);
-      companyY += 3.5;
-    }
-
-    const infoLine = [
-      branchInfo.pan ? `PAN NO: ${branchInfo.pan}` : "",
-      branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : ""
-    ]
-      .filter(Boolean)
-      .join("    ");
-
-    if (infoLine) {
-      doc.text(infoLine, companyInfoX, companyY);
-      companyY += 3.5;
-    }
-
-    yPos = headerStartY + headerHeight + 5;
-
-    // ===== DOCUMENT TITLE SECTION =====
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      "CARGO ARRIVAL NOTICE / PROFORMA INVOICE",
-      pageWidth / 2,
-      yPos,
-      { align: "center" }
-    );
-    yPos += 8;
-
-    // ===== FIXED PAGE BORDER BOX (Same on all pages) =====
-    // Calculate fixed box dimensions - same on every page
-    const fixedBoxStartY = yPos; // After title
-    const fixedBoxEndY = pageHeight - footerHeight; // Before footer
-    let boxX = margin;
-    let boxWidth = pageWidth - 2 * margin;
-    
-    // Draw the fixed border box on first page
-    drawPageBorder(doc, boxX, fixedBoxStartY, fixedBoxEndY, boxWidth);
-    
-    // Content starts inside the box
-    let boxStartY = fixedBoxStartY;
-    yPos = fixedBoxStartY;
+    const fixedBoxEndY = firstPageLayout.fixedBoxEndY;
+    let boxX = firstPageLayout.boxX;
+    let boxWidth = firstPageLayout.boxWidth;
+    let boxStartY = firstPageLayout.boxStartY;
+    yPos = firstPageLayout.contentY;
 
     // ===== COMBINED TWO COLUMN LAYOUT (Like Quotation PDF) =====
     const midLine = pageWidth / 2;
@@ -635,7 +708,7 @@ export const generateCargoArrivalNoticePDF = (
     const sectionStartY = yPos; // Start inside the fixed border
 
     // Calculate heights for left column sections
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.setFont("helvetica", "normal");
     
     const notifyNameLines = doc.splitTextToSize(notifyName || "", leftHalfWidth - 2 * boxPadding);
@@ -653,8 +726,7 @@ export const generateCargoArrivalNoticePDF = (
     const hasConsignee = consigneeName || consigneeAddress || consigneeEmail;
     const hasNotify = notifyName || notifyAddress || notifyEmail;
     
-    // Increased line spacing for better readability
-    const lineSpacing = 4.5;
+    const lineSpacing = CAN_LINE_SPACING;
     
     let leftColumnHeight = boxPadding + 3; // Matches drawing: leftYPos = sectionStartY + boxPadding + 3
     // Consignee section (first)
@@ -677,23 +749,51 @@ export const generateCargoArrivalNoticePDF = (
     if (shipperAddress) leftColumnHeight += Math.max(1, shipperAddressLines.length) * lineSpacing;
     leftColumnHeight += 4; // Bottom padding
 
-    // Calculate heights for right column sections
-    const jobRefNoLines = doc.splitTextToSize(jobRefNo || "", rightHalfWidth - 2 * boxPadding - 30);
-    const invoiceRefLines = doc.splitTextToSize(invoiceRef || "", rightHalfWidth - 2 * boxPadding - 30);
-    const dateLines = doc.splitTextToSize(formatDateForDisplay(createdAt) || "", rightHalfWidth - 2 * boxPadding - 15);
-    const fromLines = doc.splitTextToSize(createdBy || "", rightHalfWidth - 2 * boxPadding - 15);
-    const igmInfoLines = doc.splitTextToSize(igmInfo || "", rightHalfWidth - 2 * boxPadding - 20);
-    
+    const houseBillLabel = isOceanImport ? "HBL:" : "HAWB:";
+    const masterBillLabel = isOceanImport ? "MBL:" : "MAWB:";
+    const rightColumnKeyLabels = [
+      "Job Ref No:",
+      "Date:",
+      "Invoice Ref:",
+      "From:",
+      "IGM No:",
+      houseBillLabel,
+      masterBillLabel,
+      "Booking No:",
+      "Carrier:",
+      "POL:",
+      "POD:",
+      "Final Dest:",
+      "Arrival date:",
+      "FDC ETA:",
+    ];
+    const rightColumnLayout = getCanKeyValueColumnLayout(
+      doc,
+      pageWidth,
+      margin,
+      boxPadding,
+      rightHalfStart,
+      rightColumnKeyLabels
+    );
+    const { valueMaxWidth: rightValueMaxWidth } = rightColumnLayout;
+
     const hawbInfo = hawbNumber && hawbCreatedAt ? `${hawbNumber}/${hawbCreatedAt}` : (hawbNumber || hawbCreatedAt || "");
     const mawbInfo = mawbNumber && mawbCreatedAt ? `${mawbNumber}/${mawbCreatedAt}` : (mawbNumber || mawbCreatedAt || "");
-    const hawbInfoLines = doc.splitTextToSize(hawbInfo, rightHalfWidth - 2 * boxPadding - 25);
-    const mawbInfoLines = doc.splitTextToSize(mawbInfo, rightHalfWidth - 2 * boxPadding - 25);
-    const bookingNoLines = doc.splitTextToSize(bookingNo || "", rightHalfWidth - 2 * boxPadding - 25);
-    const carrierNameLines = doc.splitTextToSize(carrierName || "", rightHalfWidth - 2 * boxPadding - 20);
-    const originNameLines = doc.splitTextToSize(originName || "", rightHalfWidth - 2 * boxPadding - 15);
-    const destinationNameLines = doc.splitTextToSize(destinationName || "", rightHalfWidth - 2 * boxPadding - 25);
-    const etaLines = doc.splitTextToSize(eta || "", rightHalfWidth - 2 * boxPadding - 25);
-    const cargoLocationLines = doc.splitTextToSize(cargoLocation || "", rightHalfWidth - 2 * boxPadding - 30);
+
+    // Calculate heights for right column sections (wrap within right margin)
+    const jobRefNoLines = doc.splitTextToSize(jobRefNo || "", rightValueMaxWidth);
+    const invoiceRefLines = doc.splitTextToSize(invoiceRef || "", rightValueMaxWidth);
+    const dateLines = doc.splitTextToSize(formatDateForDisplay(createdAt) || "", rightValueMaxWidth);
+    const fromLines = doc.splitTextToSize(createdBy || "", rightValueMaxWidth);
+    const igmInfoLines = doc.splitTextToSize(igmInfo || "", rightValueMaxWidth);
+    const hawbInfoLines = doc.splitTextToSize(hawbInfo, rightValueMaxWidth);
+    const mawbInfoLines = doc.splitTextToSize(mawbInfo, rightValueMaxWidth);
+    const bookingNoLines = doc.splitTextToSize(bookingNo || "", rightValueMaxWidth);
+    const carrierNameLines = doc.splitTextToSize(carrierName || "", rightValueMaxWidth);
+    const originNameLines = doc.splitTextToSize(originName || "", rightValueMaxWidth);
+    const destinationNameLines = doc.splitTextToSize(destinationName || "", rightValueMaxWidth);
+    const etaLines = doc.splitTextToSize(eta || "", rightValueMaxWidth);
+    const cargoLocationLines = doc.splitTextToSize(cargoLocation || "", rightValueMaxWidth);
     
     let rightColumnHeight = 4; // Top padding (matches drawing: sectionStartY + boxPadding ≈ +3)
     // Invoice/Job Details section
@@ -705,7 +805,7 @@ export const generateCargoArrivalNoticePDF = (
     rightColumnHeight += Math.max(1, igmInfoLines.length) * lineSpacing;
     rightColumnHeight += 6; // Separator: +1 spacing + line + +5 after (matches drawing)
     // Shipment Details section
-    rightColumnHeight += 4; // Title
+    rightColumnHeight += 4 + CAN_SECTION_TITLE_TO_CONTENT_GAP; // Title + gap before key-values
     rightColumnHeight += Math.max(1, hawbInfoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, mawbInfoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, bookingNoLines.length) * lineSpacing;
@@ -755,12 +855,12 @@ export const generateCargoArrivalNoticePDF = (
     // Consignee section (first) - only show if consignee data is available
     if (hasConsignee) {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
+      doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
       doc.text("To:", margin + boxPadding, leftYPos);
       leftYPos += 4;
       
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
       if (consigneeName) {
         doc.text(consigneeNameLines, margin + boxPadding, leftYPos);
         leftYPos += consigneeNameLines.length * 4.5;
@@ -785,12 +885,12 @@ export const generateCargoArrivalNoticePDF = (
     // Notify Party section (second) - only show if notify data is available
     // if (hasNotify) {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
+      doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
       doc.text("Notify:", margin + boxPadding, leftYPos);
       leftYPos += 4;
       
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
       if (notifyName) {
         doc.text(notifyNameLines, margin + boxPadding, leftYPos);
         leftYPos += notifyNameLines.length * 4.5;
@@ -812,12 +912,12 @@ export const generateCargoArrivalNoticePDF = (
     
     // Shipper section
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     doc.text("Shipper:", margin + boxPadding, leftYPos);
     leftYPos += 4;
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     if (shipperName) {
       doc.text(shipperNameLines, margin + boxPadding, leftYPos);
       leftYPos += shipperNameLines.length * 4.5;
@@ -832,41 +932,30 @@ export const generateCargoArrivalNoticePDF = (
     
     // Invoice/Job Details section
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     // doc.text("Invoice/Job Details:", rightHalfStart + boxPadding, rightYPos);
     rightYPos += 4;
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    
-    // Fixed key column width for alignment
-    const keyColumnWidth = 35;
-    const valueStartX = rightHalfStart + boxPadding + keyColumnWidth;
-    
-    // Job Ref No: MAWB number-(hyphen) HAWB number
-    doc.text("Job Ref No:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(jobRefNoLines, valueStartX, rightYPos);
-    rightYPos += Math.max(1, jobRefNoLines.length) * 4.5;
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
 
-    // Date: created_at
-    doc.text("Date:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(dateLines, valueStartX, rightYPos);
-    rightYPos += Math.max(1, dateLines.length) * 4.5;
-
-    // Invoice Ref: MAWB + HAWB (concatenation)
-    doc.text("Invoice Ref:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(invoiceRefLines, valueStartX, rightYPos);
-    rightYPos += Math.max(1, invoiceRefLines.length) * 4.5;
-
-    // From: created_by
-    doc.text("From:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(fromLines, valueStartX, rightYPos);
-    rightYPos += Math.max(1, fromLines.length) * 4.5;
-
-    // IGM No: IGM No / IGM Date
-    doc.text("IGM No:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(igmInfoLines, valueStartX, rightYPos);
-    rightYPos += Math.max(1, igmInfoLines.length) * 4.5;
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Job Ref No:",
+      jobRefNoLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(doc, "Date:", dateLines, rightColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Invoice Ref:",
+      invoiceRefLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(doc, "From:", fromLines, rightColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(doc, "IGM No:", igmInfoLines, rightColumnLayout, rightYPos);
     
     // Draw horizontal line after Invoice/Job Details
     rightYPos += 1;
@@ -875,63 +964,64 @@ export const generateCargoArrivalNoticePDF = (
     
     // Shipment Details section
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     doc.text("Shipment Details:", rightHalfStart + boxPadding, rightYPos);
-    rightYPos += 4;
-    
+    rightYPos += 4 + CAN_SECTION_TITLE_TO_CONTENT_GAP;
+
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
 
-    // Fixed key column width for alignment (same as Invoice/Job Details)
-    const shipmentKeyColumnWidth = 35;
-    const shipmentValueStartX = rightHalfStart + boxPadding + shipmentKeyColumnWidth;
-
-    // HAWB/HBL: HAWB/HBL No/created at (date)
-    const houseBillLabel = isOceanImport ? "HBL:" : "HAWB:";
-    doc.text(houseBillLabel, rightHalfStart + boxPadding, rightYPos);
-    doc.text(hawbInfoLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, hawbInfoLines.length) * 4.5;
-
-    // MAWB/MBL: MAWB/MBL No/ created at (date)
-    const masterBillLabel = isOceanImport ? "MBL:" : "MAWB:";
-    doc.text(masterBillLabel, rightHalfStart + boxPadding, rightYPos);
-    doc.text(mawbInfoLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, mawbInfoLines.length) * 4.5;
-
-    // Booking No:
-    doc.text("Booking No:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(bookingNoLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, bookingNoLines.length) * 4.5;
-
-    // Carrier: carrier_name
-    doc.text("Carrier:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(carrierNameLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, carrierNameLines.length) * 4.5;
-
-    // POL: origin_name
-    doc.text("POL:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(originNameLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, originNameLines.length) * 4.5;
-
-    // POD: destination_name
-    doc.text("POD:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(destinationNameLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, destinationNameLines.length) * 4.5;
-
-    // Final Dest: destination_name
-    doc.text("Final Dest:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(destinationNameLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, destinationNameLines.length) * 4.5;
-
-    // Arrival date: eta
-    doc.text("Arrival date:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(etaLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, etaLines.length) * 4.5;
-
-    // FDC ETA: eta
-    doc.text("FDC ETA:", rightHalfStart + boxPadding, rightYPos);
-    doc.text(etaLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, etaLines.length) * 4.5;
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      houseBillLabel,
+      hawbInfoLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      masterBillLabel,
+      mawbInfoLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Booking No:",
+      bookingNoLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Carrier:",
+      carrierNameLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(doc, "POL:", originNameLines, rightColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "POD:",
+      destinationNameLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Final Dest:",
+      destinationNameLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Arrival date:",
+      etaLines,
+      rightColumnLayout,
+      rightYPos
+    );
+    rightYPos += drawCanKeyValueRow(doc, "FDC ETA:", etaLines, rightColumnLayout, rightYPos);
 
     // Cargo Location:
     // doc.text("Cargo Location:", rightHalfStart + boxPadding, rightYPos);
@@ -964,7 +1054,7 @@ export const generateCargoArrivalNoticePDF = (
     sectionY = yPos;
     
     // Cargo table setup
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     const cargoHeaders = [
       "Commodity",
       "No of Pcs",
@@ -982,8 +1072,8 @@ export const generateCargoArrivalNoticePDF = (
           Math.round(cargoTableW * 0.16) +
           Math.round(cargoTableW * 0.19)),
     ];
-    const cargoHeaderH = 6;
-    const cargoRowH = 5;
+    const cargoHeaderH = CAN_TABLE_HEADER_H;
+    const cargoRowH = CAN_TABLE_ROW_H;
     const cellPadX = 1.6;
 
     // Section title strip (absolute position — rect starts at sectionY)
@@ -991,9 +1081,9 @@ export const generateCargoArrivalNoticePDF = (
     doc.setDrawColor(170, 170, 170);
     doc.rect(cargoTableX, sectionY, cargoTableW, cargoHeaderH, "FD");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.setTextColor(30, 30, 30);
-    doc.text("CARGO DETAILS", cargoTableX + cellPadX, sectionY + 4.2);
+    doc.text("CARGO DETAILS", cargoTableX + cellPadX, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
     doc.setTextColor(0, 0, 0);
     sectionY += cargoHeaderH;
 
@@ -1007,12 +1097,7 @@ export const generateCargoArrivalNoticePDF = (
     doc.setTextColor(40, 40, 40);
     cargoHeaders.forEach((header, index) => {
       const w = cargoColWidths[index];
-      const isNumericHeader = index > 0;
-      if (isNumericHeader) {
-        doc.text(header, xPos + cellPadX, sectionY + 4.2);
-      } else {
-        doc.text(header, xPos + cellPadX, sectionY + 4.2);
-      }
+      drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
       if (index < cargoHeaders.length - 1) {
         doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
       }
@@ -1055,12 +1140,20 @@ export const generateCargoArrivalNoticePDF = (
       // Render commodity text page-segment by page-segment so long text never overflows the page
       while (lineIdx < safeCommodityLines.length) {
         // How many commodity lines fit in remaining space on this page?
-        // Row height for N lines = N * 3.5 + 1.5  →  N ≤ (space - 1.5) / 3.5
+        // Row height for N lines = N * lineHeight + padding
         const pageSpaceAvailable = fixedBoxEndY - bottomBorderPadding - sectionY;
-        let maxLinesHere = Math.max(1, Math.floor((pageSpaceAvailable - 1.5) / 3.5));
+        let maxLinesHere = Math.max(
+          1,
+          Math.floor(
+            (pageSpaceAvailable - 1.5) / CAN_COMMODITY_LINE_HEIGHT
+          )
+        );
         let linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
         let segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
-        let segmentRowH = Math.max(cargoRowH, Math.ceil(linesThisRow * 3.5 + 1.5));
+        let segmentRowH = Math.max(
+          cargoRowH,
+          Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5)
+        );
 
         // If this segment does not fit, break to a new page
         if (needsNewPage(sectionY, segmentRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
@@ -1075,7 +1168,7 @@ export const generateCargoArrivalNoticePDF = (
           boxWidth = newPageInfo.boxWidth;
 
           // Redraw column header on new page
-          doc.setFontSize(7);
+          doc.setFontSize(CAN_BODY_FONT_SIZE);
           doc.setFillColor(235, 235, 235);
           doc.setDrawColor(170, 170, 170);
           doc.rect(cargoTableX, sectionY, cargoTableW, cargoHeaderH, "FD");
@@ -1084,12 +1177,7 @@ export const generateCargoArrivalNoticePDF = (
           doc.setTextColor(40, 40, 40);
           cargoHeaders.forEach((header, index) => {
             const w = cargoColWidths[index];
-            const isNumericHeader = index > 0;
-            if (isNumericHeader) {
-              doc.text(header, xPos + cellPadX, sectionY + 4.2);
-            } else {
-              doc.text(header, xPos + cellPadX, sectionY + 4.2);
-            }
+            drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
             if (index < cargoHeaders.length - 1) {
               doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
             }
@@ -1101,10 +1189,16 @@ export const generateCargoArrivalNoticePDF = (
 
           // Recalculate for the new (full) page
           const newPageSpace = fixedBoxEndY - bottomBorderPadding - sectionY;
-          maxLinesHere = Math.max(1, Math.floor((newPageSpace - 1.5) / 3.5));
+          maxLinesHere = Math.max(
+            1,
+            Math.floor((newPageSpace - 1.5) / CAN_COMMODITY_LINE_HEIGHT)
+          );
           linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
           segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
-          segmentRowH = Math.max(cargoRowH, Math.ceil(linesThisRow * 3.5 + 1.5));
+          segmentRowH = Math.max(
+            cargoRowH,
+            Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5)
+          );
         }
 
         // Draw this segment's row background
@@ -1112,8 +1206,10 @@ export const generateCargoArrivalNoticePDF = (
         doc.setDrawColor(190, 190, 190);
         doc.rect(cargoTableX, sectionY, cargoTableW, segmentRowH, "FD");
 
-        // Commodity text — top-aligned so all lines in this segment are visible
-        doc.text(segmentLines, cargoTableX + cellPadX, sectionY + 3.5);
+        // Commodity text — center-aligned within column
+        doc.text(segmentLines, cargoTableX + cargoColWidths[0] / 2, sectionY + CAN_TABLE_CELL_Y_OFFSET, {
+          align: "center",
+        });
 
         // Column separator after commodity column
         doc.line(cargoTableX + cargoColWidths[0], sectionY, cargoTableX + cargoColWidths[0], sectionY + segmentRowH);
@@ -1127,8 +1223,7 @@ export const generateCargoArrivalNoticePDF = (
             { val: charWeight, w: cargoColWidths[2] },
             { val: grossWeight, w: cargoColWidths[3] },
           ].forEach(({ val, w }, i, arr) => {
-            const textW = doc.getTextWidth(val);
-            doc.text(val, numX + w - cellPadX - textW, numericY);
+            drawCenteredTableCell(doc, val, numX, w, numericY, cellPadX);
             if (i < arr.length - 1) {
               doc.line(numX + w, sectionY, numX + w, sectionY + segmentRowH);
             }
@@ -1153,14 +1248,15 @@ export const generateCargoArrivalNoticePDF = (
       doc.setDrawColor(220, 220, 220);
       doc.rect(cargoTableX, sectionY, cargoTableW, cargoRowH, "FD");
       xPos = cargoTableX;
-      const placeholderRow = [commodityDescription || "{commodity_description}", "{no_of_packages}", "{chargeable_weight}", "{gross_weight}"];
+      const placeholderRow = [
+        commodityDescription || "",
+        "",
+        "",
+        "",
+      ];
       placeholderRow.forEach((cell, index) => {
         const w = cargoColWidths[index];
-        if (index === 0) doc.text(cell, xPos + cellPadX, sectionY + 3.5);
-        else {
-          const textW = doc.getTextWidth(String(cell));
-          doc.text(String(cell), xPos + w - cellPadX - textW, sectionY + 3.5);
-        }
+        drawCenteredTableCell(doc, String(cell), xPos, w, sectionY + CAN_TABLE_CELL_Y_OFFSET, cellPadX);
         if (index < placeholderRow.length - 1) {
           doc.line(
             xPos + w,
@@ -1201,7 +1297,7 @@ export const generateCargoArrivalNoticePDF = (
     }
 
     // Charges table setup
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     const chargesHeaders = ["Charges", "Currency", "Units", "Per unit", "ROE", "Amt"];
     const chargesTableX = margin + boxPadding;
     const chargesTableW = pageWidth - 2 * margin - 2 * boxPadding;
@@ -1218,17 +1314,17 @@ export const generateCargoArrivalNoticePDF = (
           Math.round(chargesTableW * 0.14) +
           Math.round(chargesTableW * 0.10)),
     ];
-    const chargesHeaderH = 6;
-    const chargesRowH = 5;
+    const chargesHeaderH = CAN_TABLE_HEADER_H;
+    const chargesRowH = CAN_TABLE_ROW_H;
 
     // Section title strip (absolute position — rect starts at sectionY)
     doc.setFillColor(215, 215, 215);
     doc.setDrawColor(170, 170, 170);
     doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.setTextColor(30, 30, 30);
-    doc.text("CHARGES", chargesTableX + cellPadX, sectionY + 4.2);
+    doc.text("CHARGES", chargesTableX + cellPadX, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
     doc.setTextColor(0, 0, 0);
     sectionY += chargesHeaderH;
 
@@ -1242,12 +1338,7 @@ export const generateCargoArrivalNoticePDF = (
     doc.setTextColor(40, 40, 40);
     chargesHeaders.forEach((header, index) => {
       const w = chargesColWidths[index];
-      const isNumericChargesHeader = index >= 2;
-      if (isNumericChargesHeader) {
-        doc.text(header, xPos + cellPadX, sectionY + 4.2);
-      } else {
-        doc.text(header, xPos + cellPadX, sectionY + 4.2);
-      }
+      drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
       if (index < chargesHeaders.length - 1) {
         doc.line(
           xPos + w,
@@ -1269,7 +1360,7 @@ export const generateCargoArrivalNoticePDF = (
       charges.forEach((charge: any, rowIdx: number) => {
         // Pre-calculate row data and dynamic height before the page-break check
         const chargeName = charge.charge_name || "";
-        const currency = charge.currency_details?.currency_code || charge.currency || "";
+        const currency = getChargeCurrencyCode(charge);
         const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
         const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
         const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
@@ -1277,7 +1368,10 @@ export const generateCargoArrivalNoticePDF = (
         const chargeNameCellText = doc.splitTextToSize(chargeName || "", chargesColWidths[0] - 2 * cellPadX);
         const numChargeNameLines = Math.max(1, chargeNameCellText.length);
         // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)
-        const dynamicChargesRowH = Math.max(chargesRowH, numChargeNameLines * 3 + 2);
+        const dynamicChargesRowH = Math.max(
+          chargesRowH,
+          numChargeNameLines * CAN_COMMODITY_LINE_HEIGHT + 2
+        );
 
         // Check if we need a new page for each row
         if (needsNewPage(sectionY, dynamicChargesRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
@@ -1295,7 +1389,7 @@ export const generateCargoArrivalNoticePDF = (
           boxWidth = newPageInfo.boxWidth;
           
           // Redraw table header on new page (absolute position)
-          doc.setFontSize(7);
+          doc.setFontSize(CAN_BODY_FONT_SIZE);
           doc.setFillColor(235, 235, 235);
           doc.setDrawColor(170, 170, 170);
           doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
@@ -1304,12 +1398,7 @@ export const generateCargoArrivalNoticePDF = (
           doc.setTextColor(40, 40, 40);
           chargesHeaders.forEach((header, index) => {
             const w = chargesColWidths[index];
-            const isNumericChargesHeader = index >= 2;
-            if (isNumericChargesHeader) {
-              doc.text(header, xPos + cellPadX, sectionY + 4.2);
-            } else {
-              doc.text(header, xPos + cellPadX, sectionY + 4.2);
-            }
+            drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
             if (index < chargesHeaders.length - 1) {
               doc.line(
                 xPos + w,
@@ -1335,17 +1424,14 @@ export const generateCargoArrivalNoticePDF = (
         const chargeRowData = [chargeName, currency, units, perUnit, roe, amount];
         chargeRowData.forEach((cell, index) => {
           const w = chargesColWidths[index];
-          const cellText = doc.splitTextToSize(cell || "", w - 2 * cellPadX);
-          const isNumericCol = index >= 2; // Units..Amt
-
-          const txt =
-            Array.isArray(cellText) && cellText.length > 0 ? String(cellText[0]) : "";
-          if (isNumericCol) {
-            const textW = doc.getTextWidth(txt);
-            doc.text(txt, xPos + w - cellPadX - textW, sectionY + 3.5);
-          } else {
-            doc.text(cellText, xPos + cellPadX, sectionY + 3.5);
-          }
+          drawCenteredTableCell(
+            doc,
+            String(cell ?? ""),
+            xPos,
+            w,
+            sectionY + CAN_TABLE_CELL_Y_OFFSET,
+            cellPadX
+          );
 
           // Column separators span the full dynamic row height
           if (index < chargeRowData.length - 1) {
@@ -1366,15 +1452,8 @@ export const generateCargoArrivalNoticePDF = (
       doc.setDrawColor(220, 220, 220);
       doc.rect(chargesTableX, sectionY, chargesTableW, chargesRowH, "FD");
       xPos = chargesTableX;
-      const placeholderCharge = ["{charge_name}", "{currency}", "{no_of_unit}", "{amount_per_unit}", "{roe}", "{amount}"];
-      placeholderCharge.forEach((cell, index) => {
-        const w = chargesColWidths[index];
-        if (index < 2) doc.text(String(cell), xPos + cellPadX, sectionY + 3.5);
-        else {
-          const textW = doc.getTextWidth(String(cell));
-          doc.text(String(cell), xPos + w - cellPadX - textW, sectionY + 3.5);
-        }
-        if (index < placeholderCharge.length - 1) {
+      chargesColWidths.forEach((w, index) => {
+        if (index < chargesColWidths.length - 1) {
           doc.line(
             xPos + w,
             sectionY,
@@ -1395,7 +1474,7 @@ export const generateCargoArrivalNoticePDF = (
 
     // ===== NOTES SECTION (separate from boxes) =====
     // Check if we need a new page before notes
-    const notesLineSpacing = 4;
+    const notesLineSpacing = CAN_NOTES_LINE_SPACING;
     const notesWidth = pageWidth - 2 * margin - 2 * boxPadding;
     const estimatedNotesHeight = 30;
     
@@ -1415,12 +1494,12 @@ export const generateCargoArrivalNoticePDF = (
     }
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     doc.text("Note:", margin + boxPadding, yPos);
     yPos += 10;
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     
     if (notes.length > 0) {
       notes.forEach((note: string) => {
@@ -1453,73 +1532,26 @@ export const generateCargoArrivalNoticePDF = (
     // ===== FREIGHT CERTIFICATE SECTION (Only for Air Import) =====
     // Note: Ocean Import doesn't have freight certificate
     
-    // Always start certificate on a new page
+    // Always start certificate on a new page (same logo + company header as other pages)
     doc.addPage();
-    yPos = 10;
-
-    // Certificate header (similar to main header but simpler)
-    const certHeaderStartY = yPos;
-    const certHeaderHeight = 25;
-    const certHeaderCenterX = pageWidth / 2;
-
-    // Logo      
-    if (logoImage) {
-    
-      try {
-        const logoWidth = 50;
-        const logoHeight = 12;
-        const logoX = certHeaderCenterX - 70;
-        const logoY = certHeaderStartY + (certHeaderHeight - logoHeight) / 2;
-        doc.addImage(logoImage, "PNG", logoX, logoY, logoWidth, logoHeight);
-      } catch (error) {
-        console.error("Error adding logo:", error);
-      }
-    }
-
-    // Company Name and Address (right side)
-    const certCompanyInfoX = certHeaderCenterX - 15;
-    let certCompanyY = certHeaderStartY + 3;
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    const certCompanyNameLines = doc.splitTextToSize(branchInfo.name, (pageWidth - 2 * margin) / 2);
-    doc.text(certCompanyNameLines, certCompanyInfoX, certCompanyY, { align: "left" });
-    certCompanyY += certCompanyNameLines.length * 4;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    const certCompanyAddressLines = doc.splitTextToSize(branchInfo.address, (pageWidth - 2 * margin) / 2 - 15);
-    doc.text(certCompanyAddressLines, certCompanyInfoX, certCompanyY, { align: "left" });
-    certCompanyY += certCompanyAddressLines.length * 3.5;
-
-    if (branchInfo.tel) {
-      doc.text(`Tel ${branchInfo.tel}`, certCompanyInfoX, certCompanyY);
-      certCompanyY += 3.5;
-    }
-
-    if (branchInfo.email) {
-      doc.text(`Email :- ${branchInfo.email}`, certCompanyInfoX, certCompanyY);
-      certCompanyY += 3.5;
-    }
-
-    const certInfoLine = [
-      branchInfo.pan ? `PAN NO: ${branchInfo.pan}` : "",
-      branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : ""
-    ]
-      .filter(Boolean)
-      .join("    ");
-
-    if (certInfoLine) {
-      doc.text(certInfoLine, certCompanyInfoX, certCompanyY);
-      certCompanyY += 3.5;
-    }
-
-
-    yPos = certHeaderStartY + certHeaderHeight + 10;
+    currentPage++;
+    totalPages++;
+    const certPageLayout = setupCanPageLayout(
+      doc,
+      pageWidth,
+      pageHeight,
+      margin,
+      boxPadding,
+      footerHeight,
+      branchInfo,
+      logoImage,
+      { includeTitle: false, includeBorder: false }
+    );
+    yPos = certPageLayout.contentY;
 
     // "TO WHOM SO EVER IT MAY CONCERN"
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.text("TO WHOM SO EVER IT MAY CONCERN", pageWidth / 2, yPos, { align: "center" });
     yPos += 8;
 
@@ -1531,7 +1563,7 @@ export const generateCargoArrivalNoticePDF = (
 
     // Certificate body text
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     
     // Get HAWB/HBL number (for air import only - supports both Air and Ocean terminology)
     const hawbForCert = hawbData?.hawb_no || hawbData?.hawb_number || hawbData?.hbl_number || "";
@@ -1553,7 +1585,7 @@ export const generateCargoArrivalNoticePDF = (
     // Get FRT value
     let frtValue = "";
     if (freightCharge) {
-      const currency = (freightCharge as any).currency_details?.currency_code || (freightCharge as any).currency || "";
+      const currency = getChargeCurrencyCode(freightCharge as Record<string, unknown>);
       const amount = freightCharge.amount !== null && freightCharge.amount !== undefined ? String(freightCharge.amount) : "";
       frtValue = currency && amount ? `${currency} ${amount}` : "";
     }
@@ -1561,7 +1593,7 @@ export const generateCargoArrivalNoticePDF = (
     // Get EXW value
     let exwValue = "";
     if (exWorksCharge) {
-      const currency = (exWorksCharge as any).currency_details?.currency_code || (exWorksCharge as any).currency || "";
+      const currency = getChargeCurrencyCode(exWorksCharge as Record<string, unknown>);
       const amount = exWorksCharge.amount !== null && exWorksCharge.amount !== undefined ? String(exWorksCharge.amount) : "";
       exwValue = currency && amount ? `${currency} ${amount}` : "";
     }
@@ -1593,7 +1625,7 @@ export const generateCargoArrivalNoticePDF = (
     yPos += 10;
     const rightSideX = pageWidth - margin - 5;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(CAN_BODY_FONT_SIZE);
     
     // Get company name without the branch suffix in parentheses for cleaner display
     const companyNameForCert = branchInfo.name.replace(/\s*\([^)]*\)\s*$/, "").trim();

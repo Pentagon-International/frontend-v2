@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import useAuthStore from "../../../store/authStore";
 import {
   ActionIcon,
   Badge,
@@ -388,6 +390,12 @@ function CustomerPanAddressDetails({
 }
 
 export default function ApproveCustomerPanMaster() {
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const hasCustomerApprovalScreen = Boolean(
+    user?.screen_permissions?.customer_approval_screen
+  );
+
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -736,12 +744,22 @@ export default function ApproveCustomerPanMaster() {
 
   const tableLoading = isLoading || isFetching;
 
+  useEffect(() => {
+    if (!hasCustomerApprovalScreen) {
+      navigate("/master", { replace: true });
+    }
+  }, [hasCustomerApprovalScreen, navigate]);
+
+  if (!hasCustomerApprovalScreen) {
+    return null;
+  }
+
   return (
     <>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
           <Text size="md" fw={600} c="#105476">
-            Approve Customer PAN
+            Approve Customers
           </Text>
 
           <Button
@@ -924,8 +942,8 @@ export default function ApproveCustomerPanMaster() {
         onClose={() => !isSubmittingAction && setPendingAction(null)}
         title={
           pendingAction?.type === "approve"
-            ? "Approve Customer PAN"
-            : "Reject Customer PAN"
+            ? "Approve Customer"
+            : "Reject Customer"
         }
         centered
         size="lg"

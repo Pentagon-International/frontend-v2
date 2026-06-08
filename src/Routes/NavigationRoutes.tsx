@@ -580,7 +580,7 @@ const NavigationRoutes = () => {
           <Route path="callmode-master-view" element={<CallModeView />} />
           <Route path="create-customer-pan" element={<CustomerPanMaster />} />
           <Route
-            path="approve-customers-pan"
+            path="approve-customers"
             element={<ApproveCustomerPanMaster />}
           />
           <Route path="terms-of-shipment" element={<TermsOfShipment />} />

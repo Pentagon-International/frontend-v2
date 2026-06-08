@@ -55,6 +55,7 @@ interface Branch {
 interface ScreenPermissions {
   quotation_approval?: boolean;
   include_quotation_body?: boolean;
+  customer_approval_screen?: boolean;
 }
 
 interface User {

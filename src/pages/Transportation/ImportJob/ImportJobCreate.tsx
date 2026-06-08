@@ -1093,7 +1093,21 @@ function ImportJobCreate() {
                         charge.currency_id != null
                           ? String(charge.currency_id)
                           : "",
-                      currency: charge.currency ? String(charge.currency) : "",
+                      currency: (() => {
+                        const cd = charge.currency_details as
+                          | { currency_code?: string }
+                          | undefined;
+                        const code =
+                          cd?.currency_code ?? charge.currency_code;
+                        if (code) return String(code);
+                        if (
+                          charge.currency != null &&
+                          !/^\d+$/.test(String(charge.currency))
+                        ) {
+                          return String(charge.currency);
+                        }
+                        return "";
+                      })(),
                       roe:
                         charge.roe != null
                           ? typeof charge.roe === "string"
@@ -1159,24 +1173,18 @@ function ImportJobCreate() {
                                   )
                                 : "";
 
-                          // Handle currency: can be in charge.currency or charge.currency_details.currency_code
-                          const currencyCode = charge.currency
-                            ? String(charge.currency)
-                            : (
-                                  charge.currency_details as Record<
-                                    string,
-                                    unknown
-                                  >
-                                )?.currency_code
-                              ? String(
-                                  (
-                                    charge.currency_details as Record<
-                                      string,
-                                      unknown
-                                    >
-                                  ).currency_code,
-                                )
-                              : "";
+                          // Prefer currency code from details (charge.currency may be numeric ID)
+                          const currencyDetailsForCode = charge.currency_details as
+                            | { currency_code?: string }
+                            | undefined;
+                          const currencyCode = String(
+                            currencyDetailsForCode?.currency_code ??
+                              charge.currency_code ??
+                              (charge.currency != null &&
+                              !/^\d+$/.test(String(charge.currency))
+                                ? charge.currency
+                                : ""),
+                          ).trim();
 
                           // Handle roe: can be string or number
                           const roeValue =

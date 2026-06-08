@@ -28,9 +28,14 @@ import {
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
+import useAuthStore from "../../store/authStore";
 
 export default function MastersPage() {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const hasCustomerApprovalScreen = Boolean(
+    user?.screen_permissions?.customer_approval_screen
+  );
 
   const formatRoute = (label: string) => label.toLowerCase().replace(/\s+/g, "-");
 
@@ -138,10 +143,14 @@ export default function MastersPage() {
             icon: <IconFileStack size={28} color="#105476" />,
             label: "Create Customer-PAN",
           },
-          {
-            icon: <IconClipboardCheck size={28} color="#105476" />,
-            label: "Approve Customers-PAN",
-          },
+          ...(hasCustomerApprovalScreen
+            ? [
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Approve Customers",
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -182,7 +191,7 @@ export default function MastersPage() {
         ],
       },
     ],
-    [hasManagerOrStaffAccess]
+    [hasManagerOrStaffAccess, hasCustomerApprovalScreen]
   );
 
   // function onClick() {
