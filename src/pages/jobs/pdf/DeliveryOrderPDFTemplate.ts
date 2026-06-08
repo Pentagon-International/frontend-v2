@@ -93,12 +93,63 @@ const getLogoByCountry = (country: any): string | null => {
     ) {
       return pentagonPrimeChina;
     }
+    if (
+      countryName.includes("KENYA") ||
+      countryCode === "KE"
+    ) {
+      return primeLogo;
+    }
     return primeLogo;
   } catch (error) {
     console.error("Error getting logo by country:", error);
     return primeLogo;
   }
 }
+
+const getUserCountry = () => {
+  try {
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    const user = JSON.parse(userStr);
+    return user?.country ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const KENYA_DO_BRANCH_INFO = {
+  name: "PENTAGON PRIME KENYA CO LIMITED",
+  address:
+    "OFFICE NO. S9-08, MTC BUILDING (AMBALAL HOUSE), 9TH FLOOR, SOUTH TOWER, NKRUMAH ROAD, P.O.BOX 2050-80100,MOMBASA,KENYA.",
+  tel: "",
+  email: "",
+  pan: "",
+  gstn: "",
+  isKenya: true,
+} as const;
+
+/** Inner box content typography (keys + values) */
+const DO_INNER_FONT_SIZE = 9;
+const DO_INNER_TEXT_LINE_HEIGHT = 5;
+const DO_INNER_ROW_HEIGHT = 8;
+
+const isKenyaCountry = (country: any): boolean => {
+  let countryName = "";
+  let countryCode = "";
+
+  if (country) {
+    countryName = (country.country_name || "").toUpperCase();
+    countryCode = (country.country_code || "").toUpperCase();
+  } else {
+    const resolved = getUserCountry();
+    if (resolved) {
+      countryName = (resolved.country_name || "").toUpperCase();
+      countryCode = (resolved.country_code || "").toUpperCase();
+    }
+  }
+
+  return countryName.includes("KENYA") || countryCode === "KE";
+};
 
 // Helper function to draw header section
 const drawHeaderSection = (
@@ -112,16 +163,17 @@ const drawHeaderSection = (
   const yPos = 5;
   const headerStartY = yPos;
   const headerHeight = 25;
-  let logoEndX = margin + 5;
-  
-  // Logo (left side)
+  const logoWidth = 50;
+  const logoHeight = 12;
+  const logoX = margin + 5;
+  let companyInfoX = margin + 5;
+  let companyY = headerStartY + boxPadding + 3;
+
+  // Logo before company name (left side)
   if (logoImage) {
     try {
-      const logoWidth = 50;
-      const logoHeight = 12;
-      const logoX = margin + 5;
       const logoY = headerStartY + (headerHeight - logoHeight) / 2;
-      
+
       doc.addImage(
         logoImage,
         "PNG",
@@ -132,33 +184,38 @@ const drawHeaderSection = (
         undefined,
         "FAST"
       );
-      logoEndX = logoWidth + logoX;
+      companyInfoX = logoX + logoWidth + 5;
+      companyY = logoY + 1;
     } catch (error) {
-      console.warn("Could not load logo from URL, continuing without logo:", error);
+      console.warn("Could not load logo image, continuing without logo:", error);
     }
   }
 
-  // Company Name and Address (right side)
-  const companyInfoX = logoEndX + 5;
-  let companyY = headerStartY + boxPadding + 3;
+  // Company name and address (to the right of logo)
+  const isKenya = Boolean(branchInfo.isKenya);
+  const companyNameFontSize = isKenya ? 11 : 9;
+  const companyAddressFontSize = isKenya ? 9 : 7;
+  const companyNameLineHeight = isKenya ? 4.8 : 4;
+  const companyAddressLineHeight = isKenya ? 4.2 : 3.5;
+  const companyTextWidth = pageWidth - companyInfoX - margin - 5;
 
-  doc.setFontSize(9);
+  doc.setFontSize(companyNameFontSize);
   doc.setFont("helvetica", "bold");
   const companyNameLines = doc.splitTextToSize(
     branchInfo.name || "",
-    (pageWidth - 2 * margin) / 1.5
+    companyTextWidth
   );
   doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyNameLines.length * 4;
+  companyY += companyNameLines.length * companyNameLineHeight;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(companyAddressFontSize);
   const companyAddressLines = doc.splitTextToSize(
     branchInfo.address || "",
-    (pageWidth - 2 * margin) / 2 - 15
+    companyTextWidth
   );
   doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
-  companyY += companyAddressLines.length * 3.5;
+  companyY += companyAddressLines.length * companyAddressLineHeight;
 
   if (branchInfo.tel) {
     doc.text(`Telephone: ${branchInfo.tel}`, companyInfoX, companyY);
@@ -182,7 +239,7 @@ const drawHeaderSection = (
     companyY += 3.5;
   }
 
-  return headerStartY + headerHeight + 5;
+  return Math.max(headerStartY + headerHeight + 5, companyY + 3);
 };
 
 // Helper function to draw footer section
@@ -192,10 +249,6 @@ const drawFooterSection = (
   pageHeight: number,
   margin: number,
   boxPadding: number,
-  leftColumnX: number,
-  doNumber: string,
-  todayDate: string,
-  jobInfo: any
 ) => {
   const currentPage = doc.getCurrentPageInfo().pageNumber;
   const totalPages = doc.getNumberOfPages();
@@ -203,9 +256,6 @@ const drawFooterSection = (
   
   doc.setFontSize(6);
   doc.setFont("helvetica", "normal");
-
-  const referenceText = `Ref: ${doNumber || ""} on ${todayDate} by ${jobInfo?.created_by || ""}`;
-  doc.text(referenceText, leftColumnX, footerY);
 
   doc.text(
     `Page ${currentPage} of ${totalPages}`,
@@ -216,7 +266,11 @@ const drawFooterSection = (
 };
 
 // Helper function to get branch info
-const getBranchInfo = () => {
+const getBranchInfo = (country?: any) => {
+  if (isKenyaCountry(country)) {
+    return { ...KENYA_DO_BRANCH_INFO };
+  }
+
   try {
     const userStr = localStorage.getItem("user");
     if (!userStr) {
@@ -227,7 +281,8 @@ const getBranchInfo = () => {
         email: "",
         pan: "",
         gstn: "",
-        logo_url: ""
+        logo_url: "",
+        isKenya: false,
       };
     }
 
@@ -246,7 +301,8 @@ const getBranchInfo = () => {
         email: "",
         pan: "",
         gstn: "",
-        logo_url:""
+        logo_url: "",
+        isKenya: false,
       };
     }
 
@@ -258,6 +314,7 @@ const getBranchInfo = () => {
       pan: defaultBranch?.pan || "",
       gstn: defaultBranch?.gstn || "",
       logo_url: defaultBranch?.logo_url || "",
+      isKenya: false,
     };
   } catch (error) {
     console.error("Error reading branch details from localStorage", error);
@@ -268,6 +325,7 @@ const getBranchInfo = () => {
       email: "",
       pan: "",
       gstn: "",
+      isKenya: false,
     };
   }
 };
@@ -307,7 +365,7 @@ const createPageLayout = (
   doc.rect(boxX, fixedBoxStartY, fixedBoxWidth, fixedBoxEndY - fixedBoxStartY);
 
   // Draw footer section
-  drawFooterSection(doc, pageWidth, pageHeight, margin, boxPadding, leftColumnX, doNumber, todayDate, jobInfo);
+  drawFooterSection(doc, pageWidth, pageHeight, margin, boxPadding);
 
   // Return structure matching createNewPage
   return {
@@ -342,9 +400,10 @@ export const generateDeliveryOrderPDF = (
     const footerHeight = 15;
     const bottomBorderPadding = 5; // Padding inside border at bottom
 
-    // Get branch info (same approach as CargoArrivalNoticePDFTemplate.ts)
-    const branchInfo = getBranchInfo();
-    const logoImage = branchInfo?.logo_url;
+    // Get branch info and country-specific logo (Kenya uses prime.png from assets)
+    const country = getUserCountry();
+    const branchInfo = getBranchInfo(country);
+    const logoImage = getLogoByCountry(country);
 
     // Extract data from jobData (consol_details) and housingData (housing_details)
     // jobData contains: igm_no, igm_date, vessel_name, voyage_number, mbl_number, mbl_date, eta, etc.
@@ -466,7 +525,7 @@ export const generateDeliveryOrderPDF = (
     // leftColumnX and rightColumnX already defined above
 
     // Attention to
-    doc.setFontSize(7);
+    doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "bold");
     doc.text("Attention to:", leftColumnX, boxContentY);
     doc.setFont("helvetica", "normal");
@@ -477,7 +536,7 @@ export const generateDeliveryOrderPDF = (
     if (attentionToLines.length > 0) {
       doc.text(attentionToLines, leftColumnX + 20, boxContentY);
     }
-    boxContentY += Math.max(attentionToLines.length * 4, 10);
+    boxContentY += Math.max(attentionToLines.length * DO_INNER_TEXT_LINE_HEIGHT, 12);
 
     // DO No and Date (right side)
     doc.setFont("helvetica", "bold");
@@ -495,10 +554,10 @@ export const generateDeliveryOrderPDF = (
     // ===== KEY-VALUE PAIRS SECTION =====
     const labelWidth = 45;
     const valueStartX = leftColumnX + labelWidth;
-    const lineHeight = 6;
+    const lineHeight = DO_INNER_ROW_HEIGHT;
     let currentY = boxContentY;
 
-    doc.setFontSize(7);
+    doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "normal");
 
     // Please deliver to
@@ -510,7 +569,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(deliverToLines, valueStartX, currentY);
-    currentY += Math.max(deliverToLines.length * 4, lineHeight);
+    currentY += Math.max(deliverToLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Consignee
     doc.setFont("helvetica", "bold");
@@ -521,7 +580,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(consigneeLines, valueStartX, currentY);
-    currentY += Math.max(consigneeLines.length * 4, lineHeight);
+    currentY += Math.max(consigneeLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Importer Code/Type
     const importerInfo = [importerCode, importerType].filter(Boolean).join(" / ");
@@ -540,7 +599,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(notifyLines, valueStartX, currentY);
-    currentY += Math.max(notifyLines.length * 4, lineHeight);
+    currentY += Math.max(notifyLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // CHA
     doc.setFont("helvetica", "bold");
@@ -551,7 +610,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(chaLines, valueStartX, currentY);
-    currentY += Math.max(chaLines.length * 4, lineHeight);
+    currentY += Math.max(chaLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Vessel/Voyage
     doc.setFont("helvetica", "bold");
@@ -562,7 +621,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(vesselLines, valueStartX, currentY);
-    currentY += Math.max(vesselLines.length * 4, lineHeight);
+    currentY += Math.max(vesselLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // O.Bill of Lading
     doc.setFont("helvetica", "bold");
@@ -573,7 +632,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(obillLines, valueStartX, currentY);
-    currentY += Math.max(obillLines.length * 4, lineHeight);
+    currentY += Math.max(obillLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // H.Bill of Lading
     doc.setFont("helvetica", "bold");
@@ -584,7 +643,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(hbillLines, valueStartX, currentY);
-    currentY += Math.max(hbillLines.length * 4, lineHeight);
+    currentY += Math.max(hbillLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Load Port HBL
     doc.setFont("helvetica", "bold");
@@ -609,7 +668,7 @@ export const generateDeliveryOrderPDF = (
       pageWidth - valueStartX - margin - boxPadding
     );
     doc.text(igmLines, valueStartX, currentY);
-    currentY += Math.max(igmLines.length * 4, lineHeight);
+    currentY += Math.max(igmLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Unstuff Place
     doc.setFont("helvetica", "bold");
@@ -644,7 +703,7 @@ export const generateDeliveryOrderPDF = (
     const containerDetails = jobData?.containerDetails || [];
     
     // Check if we need a new page before the table
-    const estimatedTableHeight = cargoDetails.length > 0 ? Math.min(cargoDetails.length * 6 + 15, 100) : 0;
+    const estimatedTableHeight = cargoDetails.length > 0 ? Math.min(cargoDetails.length * DO_INNER_ROW_HEIGHT + 15, 100) : 0;
     const fixedBoxEndY = pageHeight - footerHeight; // Before footer
     if (cargoDetails.length > 0 && needsNewPage(currentY, estimatedTableHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
@@ -706,7 +765,7 @@ export const generateDeliveryOrderPDF = (
         theme: "grid",
       
         styles: {
-          fontSize: 7,
+          fontSize: DO_INNER_FONT_SIZE,
           cellPadding: 2,
           fillColor: [255, 255, 255],
           textColor: 0,
@@ -785,7 +844,7 @@ export const generateDeliveryOrderPDF = (
       boxWidth = newPageInfo.boxWidth;
     }
 
-    doc.setFontSize(7);
+    doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "bold");
     doc.text("Marks & Nos:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
@@ -795,7 +854,7 @@ export const generateDeliveryOrderPDF = (
     );
     
     // Check if marks will fit on current page
-    const marksHeight = marksLines.length * 4;
+    const marksHeight = marksLines.length * DO_INNER_TEXT_LINE_HEIGHT;
     if (needsNewPage(currentY, marksHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
       doc.addPage();
@@ -812,14 +871,14 @@ export const generateDeliveryOrderPDF = (
     }
     
     doc.text(marksLines, valueStartX - 20, currentY);
-    currentY += Math.max(marksLines.length * 4, lineHeight);
+    currentY += Math.max(marksLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Check if we need a new page before Description
     const descLines = doc.splitTextToSize(
       commodityDescription || "",
       pageWidth - leftColumnX - margin - boxPadding
     );
-    const descHeight = descLines.length * 4;
+    const descHeight = descLines.length * DO_INNER_TEXT_LINE_HEIGHT;
     
     if (needsNewPage(currentY, descHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
       // Create new page with layout
@@ -837,7 +896,7 @@ export const generateDeliveryOrderPDF = (
     
     // Handle description text that might span multiple pages
     descLines.forEach((line: string) => {
-      if (needsNewPage(currentY, 4, fixedBoxEndY, bottomBorderPadding)) {
+      if (needsNewPage(currentY, DO_INNER_TEXT_LINE_HEIGHT, fixedBoxEndY, bottomBorderPadding)) {
         // Create new page with layout
         doc.addPage();
         const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
@@ -847,7 +906,7 @@ export const generateDeliveryOrderPDF = (
         boxWidth = newPageInfo.boxWidth;
       }
       doc.text(line, valueStartX - 20, currentY);
-      currentY += 4;
+      currentY += DO_INNER_TEXT_LINE_HEIGHT;
     });
     
     if (descLines.length === 0) {
@@ -869,14 +928,22 @@ export const generateDeliveryOrderPDF = (
       boxWidth = newPageInfo.boxWidth;
     }
 
-    doc.setFontSize(7);
+    doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "normal");
 
-    const note1 = "Dear Sir,";
-    const note2 = "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.";
-    const note3 = `For ${branchInfo.name || ""}`;
-
-    const notes = [note1, note2, note3];
+    const deliverToName = (pleaseDeliverTo || "").trim();
+    const notes = branchInfo.isKenya
+      ? [
+          "Dear Sir,",
+          `With reference to the above shipment, we request you to issue the Delivery Order to "${deliverToName}" against collection of your necessary charges.`,
+          "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
+          `For ${branchInfo.name || ""}`,
+        ]
+      : [
+          "Dear Sir,",
+          "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.",
+          `For ${branchInfo.name || ""}`,
+        ];
     notes.forEach((note) => {
       if (note) {
         const noteLines = doc.splitTextToSize(
@@ -885,7 +952,7 @@ export const generateDeliveryOrderPDF = (
         );
         noteLines.forEach((line: string) => {
           // Check if we need a new page for each line
-          if (needsNewPage(currentY, 4, fixedBoxEndY, bottomBorderPadding)) {
+          if (needsNewPage(currentY, DO_INNER_TEXT_LINE_HEIGHT, fixedBoxEndY, bottomBorderPadding)) {
             // Create new page with layout
             doc.addPage();
             const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
@@ -895,14 +962,27 @@ export const generateDeliveryOrderPDF = (
             boxWidth = newPageInfo.boxWidth;
           }
           doc.text(line, leftColumnX, currentY);
-          currentY += 4;
+          currentY += DO_INNER_TEXT_LINE_HEIGHT;
         });
         currentY += 2;
       }
     });
+    const disclaimerY = currentY + 5;
+    doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "bold");
-    doc.text("THIS IS A COMPUTER GENERATED DOCUMENT AND DOES NOT REQUIRE A SIGNATURE", pageWidth / 2, currentY + 5 , { align: "center"} )
+    doc.text(
+      "THIS IS A COMPUTER GENERATED DOCUMENT AND DOES NOT REQUIRE A SIGNATURE",
+      pageWidth / 2,
+      disclaimerY,
+      { align: "center" }
+    );
     doc.setFont("helvetica", "normal");
+    doc.text(
+      "This Delivery order is subjected to the terms and conditions of the relative B/L",
+      pageWidth / 2,
+      disclaimerY + DO_INNER_TEXT_LINE_HEIGHT + 2,
+      { align: "center" }
+    );
 
     // Generate blob URL
     const pdfBlob = doc.output("blob");

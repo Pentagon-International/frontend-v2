@@ -188,6 +188,13 @@ export interface CustomerOutstandingVsOverdueFilters {
    * Dashboard tile: POST `{ company }` only with `?index=0&limit=5` (summary + first page slice).
    */
   summaryCard?: boolean;
+  /** Summary header card filters — sent as `true` in POST body when active. */
+  overdue?: boolean;
+  days_1_30?: boolean;
+  days_31_60?: boolean;
+  days_61_90?: boolean;
+  days_90_180?: boolean;
+  days_180_plus?: boolean;
 }
 
 export interface CallEntryItem {
@@ -888,6 +895,12 @@ export const getCustomerOutstandingVsOverdueData = async (
       if (filters.search && filters.search.trim()) {
         payload.search = filters.search.trim();
       }
+      if (filters.overdue === true) payload.overdue = true;
+      if (filters.days_1_30 === true) payload.days_1_30 = true;
+      if (filters.days_31_60 === true) payload.days_31_60 = true;
+      if (filters.days_61_90 === true) payload.days_61_90 = true;
+      if (filters.days_90_180 === true) payload.days_90_180 = true;
+      if (filters.days_180_plus === true) payload.days_180_plus = true;
     }
 
     const response = await postAPICall(url, payload);

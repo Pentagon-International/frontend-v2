@@ -127,42 +127,31 @@ const BUCKET_TOP_COLORS = [
   "#991B1B",
 ] as const;
 
-/** Summary-card → table column mapping used for click-sort/filter. */
-type ColumnSortBucket = "OVERDUE" | "1-30" | "31-60" | "61-90" | "90-180" | "180+";
+/** Summary header card → API payload key (sent as `true` when card is active). */
+type BucketFilterKey =
+  | "overdue"
+  | "days_1_30"
+  | "days_31_60"
+  | "days_61_90"
+  | "days_90_180"
+  | "days_180_plus";
 
-function summaryLabelToSortBucket(label: string): ColumnSortBucket | null {
+function summaryLabelToBucketFilterKey(label: string): BucketFilterKey | null {
   switch (label) {
     case "OVERDUE":
-      return "OVERDUE";
+      return "overdue";
     case "1-30 DAYS":
-      return "1-30";
+      return "days_1_30";
     case "31-60 DAYS":
-      return "31-60";
+      return "days_31_60";
     case "61-90 DAYS":
-      return "61-90";
+      return "days_61_90";
     case "90-180 DAYS":
-      return "90-180";
+      return "days_90_180";
     case "180+ DAYS":
-      return "180+";
+      return "days_180_plus";
     default:
       return null;
-  }
-}
-
-function rowBucketNumeric(row: CustomerOutstandingVsOverdueItem, bucket: ColumnSortBucket): number {
-  switch (bucket) {
-    case "OVERDUE":
-      return toNumber(row.overdue);
-    case "1-30":
-      return toNumber(row.days_1_30);
-    case "31-60":
-      return toNumber(row.days_31_60);
-    case "61-90":
-      return toNumber(row.days_61_90 ?? row.days_61_plus);
-    case "90-180":
-      return toNumber(row.days_90_180);
-    case "180+":
-      return toNumber(row.days_180_plus);
   }
 }
 
@@ -323,8 +312,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     },
     [amountCountryCode, amountSymbol],
   );
-  /** When set, table shows only rows with that bucket > 0, sorted by that column descending. */
-  const [activeSortBucket, setActiveSortBucket] = useState<ColumnSortBucket | null>(null);
+  /** When set, refetches with the matching bucket key set to `true` in the API payload. */
+  const [activeBucketFilter, setActiveBucketFilter] = useState<BucketFilterKey | null>(null);
   const [emailRow, setEmailRow] = useState<CustomerOutstandingVsOverdueItem | null>(null);
 
   const [drawerOpened, setDrawerOpened] = useState(false);
@@ -357,6 +346,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         ...(filters.customer_name && { customer_name: filters.customer_name }),
         ...(filters.risk && { risk: filters.risk }),
         ...(committedSearch?.trim() && { search: committedSearch.trim() }),
+        ...(activeBucketFilter && { [activeBucketFilter]: true }),
       });
       setResponse(data);
     } catch (err) {
@@ -375,6 +365,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     filters.salesman,
     index,
     committedSearch,
+    activeBucketFilter,
   ]);
 
   const closeDrawer = useCallback(() => {
@@ -464,15 +455,6 @@ export default function CustomerOutstandingVsOverdueDashboard() {
 
   const summary = response?.summary;
   const rows = useMemo(() => response?.data || [], [response]);
-  const displayRows = useMemo(() => {
-    if (!activeSortBucket) return rows;
-    return [...rows]
-      .filter((r) => rowBucketNumeric(r, activeSortBucket) > 0)
-      .sort(
-        (a, b) =>
-          rowBucketNumeric(b, activeSortBucket) - rowBucketNumeric(a, activeSortBucket)
-      );
-  }, [rows, activeSortBucket]);
   const total = response?.total || 0;
   const currentPage = Math.floor(index / PAGE_SIZE) + 1;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -527,9 +509,10 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   }, [summary]);
 
   const handleBucketCardClick = (label: string) => {
-    const bucket = summaryLabelToSortBucket(label);
-    if (!bucket) return;
-    setActiveSortBucket((prev) => (prev === bucket ? null : bucket));
+    const bucketKey = summaryLabelToBucketFilterKey(label);
+    if (!bucketKey) return;
+    setIndex(0);
+    setActiveBucketFilter((prev) => (prev === bucketKey ? null : bucketKey));
   };
 
   const selectInputStyles = {
@@ -601,7 +584,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                       setAggregateBySalespersonList(next);
                       setIndex(0);
                       setResponse(null);
-                      setActiveSortBucket(null);
+                      setActiveBucketFilter(null);
                       setIsLoading(true);
                     }}
                     styles={{
@@ -741,8 +724,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
 
         <Group gap={8} wrap="nowrap" style={{ overflowX: "auto", paddingBottom: 2, paddingLeft: 10, paddingRight: 10 }}>
           {bucketCards.map((card, idx) => {
-            const sortBucket = summaryLabelToSortBucket(card.label);
-            const isActive = sortBucket !== null && activeSortBucket === sortBucket;
+            const bucketKey = summaryLabelToBucketFilterKey(card.label);
+            const isActive = bucketKey !== null && activeBucketFilter === bucketKey;
             return (
               <Box
                 key={card.label}
@@ -999,7 +982,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {isLoading && !response ? (
+                {isLoading ? (
                   <Table.Tr>
                     <Table.Td colSpan={10}>
                       <Group justify="center" py="md">
@@ -1011,20 +994,14 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   <Table.Tr>
                     <Table.Td colSpan={10}>
                       <Text ta="center" py="sm" size="sm" c={enquiryConversionColors.subHeading}>
-                        No records found
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : displayRows.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={10}>
-                      <Text ta="center" py="sm" size="sm" c={enquiryConversionColors.subHeading}>
-                        No customers with an amount in this bucket on this page.
+                        {activeBucketFilter
+                          ? "No customers with an amount in this bucket on this page."
+                          : "No records found"}
                       </Text>
                     </Table.Td>
                   </Table.Tr>
                 ) : (
-                  displayRows.map((row: CustomerOutstandingVsOverdueItem) => {
+                  rows.map((row: CustomerOutstandingVsOverdueItem) => {
                     const days61_90 = toNumber(row.days_61_90 ?? row.days_61_plus);
                     const riskUpper = String(row.risk || "LOW").toUpperCase();
                     const days90_180 = toNumber(row.days_90_180);

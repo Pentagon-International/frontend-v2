@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import {
   Box,
   Center,
-  Group,
   Loader,
   Stack,
   Text,
@@ -145,24 +144,19 @@ function ValueAndCompactBar({
   children: React.ReactNode;
 }) {
   return (
-    <Group
-      gap={4}
-      justify="center"
-      align="center"
-      wrap="nowrap"
-      style={{ width: "100%", minWidth: 0 }}
+    <Box
+      style={{
+        display: "grid",
+        gridTemplateColumns: `minmax(0, 1fr) ${BAR_TRACK_W}px`,
+        columnGap: 4,
+        alignItems: "center",
+        width: "100%",
+        minWidth: 0,
+      }}
     >
       <Text style={BAR_VALUE_LABEL}>{valueLabel}</Text>
-      <Box
-        style={{
-          width: BAR_TRACK_W,
-          flex: "0 0 auto",
-          maxWidth: "100%",
-        }}
-      >
-        {children}
-      </Box>
-    </Group>
+      <Box style={{ width: BAR_TRACK_W, minWidth: 0 }}>{children}</Box>
+    </Box>
   );
 }
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
+  Box,
   Card,
   Text,
   Button,
@@ -15,7 +16,8 @@ import {
   Textarea,
 } from "@mantine/core";
 import { IconCheck, IconX, IconAlertCircle } from "@tabler/icons-react";
-import { ToastNotification } from "../../components";
+import dayjs from "dayjs";
+import { SingleDateInput, ToastNotification } from "../../components";
 import { URL } from "../../api/serverUrls";
 import { apiCall } from "../../api/axios";
 import { postAPICall } from "../../service/postApiCall";
@@ -48,7 +50,13 @@ function QuotationApprovalPublic() {
   const [isRejected, setIsRejected] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [remarksError, setRemarksError] = useState("");
+  const [shipmentDate, setShipmentDate] = useState<Date | null>(null);
+  const [shipmentDateError, setShipmentDateError] = useState("");
   const [apiMessage, setApiMessage] = useState("");
+
+  const isExportShipment =
+    quotations[0]?.trade?.trim().toLowerCase() === "export";
+  const shipmentDateLabel = isExportShipment ? "ETD" : "ETA";
 
   useEffect(() => {
     if (quotationId) {
@@ -99,16 +107,37 @@ function QuotationApprovalPublic() {
       return;
     }
 
+    if (action === "GAINED" && !shipmentDate) {
+      const dateErrorMessage = `Please fill ${shipmentDateLabel} before clicking the accept quotation button.`;
+      setShipmentDateError(dateErrorMessage);
+      ToastNotification({
+        type: "error",
+        message: dateErrorMessage,
+      });
+      return;
+    }
+
     setRemarksError("");
+    setShipmentDateError("");
 
     try {
       setApprovalLoading(true);
+
+      const formattedShipmentDate =
+        shipmentDate && dayjs(shipmentDate).isValid()
+          ? dayjs(shipmentDate).format("YYYY-MM-DD")
+          : null;
 
       const payload = {
         quotation_id: parseInt(quotationId!),
         status: action,
         pulse_id: user?.pulse_id || "",
         ...(action === "LOST" && { remark: remarks.trim() }),
+        ...(action === "GAINED" &&
+          formattedShipmentDate &&
+          (isExportShipment
+            ? { etd: formattedShipmentDate }
+            : { eta: formattedShipmentDate })),
       };
 
       console.log(payload);
@@ -386,36 +415,69 @@ function QuotationApprovalPublic() {
                 </Group>
               </Stack>
 
-              <Group justify="center" gap="lg">
-                <Button
-                  size="lg"
-                  color="green"
-                  leftSection={<IconCheck size={20} />}
-                  onClick={() => handleApproval("GAINED")}
-                  loading={approvalLoading && isApproved}
-                  disabled={approvalLoading || isApproved}
-                  title="Click to approve this quotation"
-                >
-                  Accept Quotation
-                </Button>
+              <Stack gap={6} align="center">
+                <Group justify="center" gap="lg" align="center" wrap="nowrap">
+                  <Box style={{ width: 220, flexShrink: 0 }}>
+                    <SingleDateInput
+                      label={shipmentDateLabel}
+                      placeholder={`Select ${shipmentDateLabel}`}
+                      value={shipmentDate}
+                      onChange={(date) => {
+                        setShipmentDate(date);
+                        if (shipmentDateError) setShipmentDateError("");
+                      }}
+                      withAsterisk
+                      size="md"
+                      allowDeselection={false}
+                      styles={{
+                        input: {
+                          borderColor: shipmentDateError ? "#fa5252" : undefined,
+                        },
+                      }}
+                    />
+                  </Box>
+                  <Button
+                    size="lg"
+                    color="green"
+                    leftSection={<IconCheck size={20} />}
+                    onClick={() => handleApproval("GAINED")}
+                    loading={approvalLoading && isApproved}
+                    disabled={approvalLoading || isApproved}
+                    title="Click to approve this quotation"
+                    style={{ flexShrink: 0 }}
+                  >
+                    Accept Quotation
+                  </Button>
 
-                <Button
-                  size="lg"
-                  color="red"
-                  variant="outline"
-                  leftSection={<IconX size={20} />}
-                  onClick={() => handleApproval("LOST")}
-                  loading={approvalLoading && isRejected}
-                  disabled={approvalLoading || !remarks.trim()}
-                  title={
-                    !remarks.trim()
-                      ? "Please enter remarks before rejecting"
-                      : ""
-                  }
+                  <Button
+                    size="lg"
+                    color="red"
+                    variant="outline"
+                    leftSection={<IconX size={20} />}
+                    onClick={() => handleApproval("LOST")}
+                    loading={approvalLoading && isRejected}
+                    disabled={approvalLoading || !remarks.trim()}
+                    title={
+                      !remarks.trim()
+                        ? "Please enter remarks before rejecting"
+                        : ""
+                    }
+                    style={{ flexShrink: 0 }}
+                  >
+                    Reject Quotation
+                  </Button>
+                </Group>
+                <Text
+                  size="xs"
+                  c="red"
+                  ta="center"
+                  mih={18}
+                  lh={1.35}
+                  style={{ visibility: shipmentDateError ? "visible" : "hidden" }}
                 >
-                  Reject Quotation
-                </Button>
-              </Group>
+                  {shipmentDateError || "\u00a0"}
+                </Text>
+              </Stack>
             </Stack>
           ) : (
             <Stack gap="sm">
