@@ -68,7 +68,9 @@ import {
   formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
   isCbmsChargeUnit,
-  sumHouseOceanChargeableWeight,
+  noOfUnitValuesEqual,
+  parseNoOfUnitForPayload,
+  resolveOceanCbmsNoOfUnit,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
@@ -1395,12 +1397,12 @@ function HouseCreate() {
   useEffect(() => {
     if (!isLclShipment) return;
 
-    const chargeableTotal = sumHouseOceanChargeableWeight(cargoDetails);
+    const chargeableTotal = resolveOceanCbmsNoOfUnit(cargoDetails);
     if (chargeableTotal === null) return;
 
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       if (!isCbmsChargeUnit(charge.unit_code)) return charge;
-      if (charge.no_of_unit === chargeableTotal) return charge;
+      if (noOfUnitValuesEqual(charge.no_of_unit, chargeableTotal)) return charge;
       return { ...charge, no_of_unit: chargeableTotal };
     });
 
@@ -2205,9 +2207,7 @@ function HouseCreate() {
       unit_code: charge.unit_code,
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
-      no_of_unit:
-        roundToDecimals(charge.no_of_unit, HOUSE_CARGO_WEIGHT_DECIMALS) ??
-        null,
+      no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
       roe: roundToDecimals(charge.roe) ?? null,
       amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
       amount: roundToDecimals(charge.amount) ?? null,
@@ -4855,7 +4855,7 @@ function HouseCreate() {
                           isCbmsChargeUnit(unitCode, unitOpt?.label)
                         ) {
                           noOfUnit =
-                            sumHouseOceanChargeableWeight(cargoDetails) ??
+                            resolveOceanCbmsNoOfUnit(cargoDetails) ??
                             charge.no_of_unit;
                         }
                         if (noOfUnit !== charge.no_of_unit)

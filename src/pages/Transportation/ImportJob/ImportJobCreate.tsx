@@ -63,6 +63,7 @@ import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
   importHouseCargoWeightFromApi,
+  parseNoOfUnitForPayload,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
 import {
@@ -3135,10 +3136,7 @@ function ImportJobCreate() {
                   : charge.currency != null
                     ? Number(charge.currency)
                     : null,
-              no_of_unit:
-                charge.no_of_unit != null
-                  ? roundToDecimals(charge.no_of_unit as number | string)
-                  : null,
+              no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
               roe: roundToDecimals(charge.roe as number | string) ?? null,
               amount_per_unit:
                 roundToDecimals(charge.amount_per_unit as number | string) ??
@@ -3216,7 +3214,7 @@ function ImportJobCreate() {
             charge_id: e.charge_id,
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
-            no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
+            no_of_unit: parseNoOfUnitForPayload(e.no_of_unit),
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundToDecimals(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,

@@ -35,6 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
+import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -2348,13 +2349,14 @@ function InvoiceReverse() {
                             form.setFieldValue(
                               `charges.${index}.no_of_unit`,
                               typeof v === "number"
-                                ? v
+                                ? parseNoOfUnitForPayload(v)
                                 : v === ""
                                   ? null
-                                  : parseFloat(String(v)) || null,
+                                  : parseNoOfUnitForPayload(String(v)),
                             )
                           }
                           min={0}
+                          decimalScale={3}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}

@@ -52,6 +52,7 @@ import useAuthStore from "../../../store/authStore";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
+import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 
 // Fetch functions
 
@@ -1543,12 +1544,7 @@ function InvoiceCreate({
             const currency_id =
               rawCurrencyId != null ? String(rawCurrencyId) : "";
 
-            const noOfUnit =
-              charge.no_of_unit != null
-                ? typeof charge.no_of_unit === "number"
-                  ? charge.no_of_unit
-                  : parseFloat(charge.no_of_unit)
-                : null;
+            const noOfUnit = parseNoOfUnitForPayload(charge.no_of_unit);
             const amountPerUnit =
               charge.amount_per_unit != null
                 ? typeof charge.amount_per_unit === "number"
@@ -1927,12 +1923,7 @@ function InvoiceCreate({
                         return opt?.value ?? "";
                       })(),
                 unit_code: c.unit_code ?? "",
-                no_of_unit:
-                  c.no_of_unit != null
-                    ? typeof c.no_of_unit === "string"
-                      ? parseFloat(c.no_of_unit)
-                      : c.no_of_unit
-                    : null,
+                no_of_unit: parseNoOfUnitForPayload(c.no_of_unit),
                 currency_id:
                   c.currency_id != null && String(c.currency_id).trim() !== ""
                     ? String(c.currency_id)
@@ -3213,12 +3204,7 @@ function InvoiceCreate({
         // After POST, display charges exactly as returned by API.
         if (response.charges && Array.isArray(response.charges)) {
           const mappedCharges: ChargeItem[] = response.charges.map((c) => {
-            const noOfUnit =
-              c.no_of_unit != null
-                ? typeof c.no_of_unit === "string"
-                  ? parseFloat(c.no_of_unit)
-                  : c.no_of_unit
-                : null;
+            const noOfUnit = parseNoOfUnitForPayload(c.no_of_unit);
             const roe =
               c.roe != null
                 ? typeof c.roe === "string"
@@ -4479,12 +4465,14 @@ function InvoiceCreate({
                         placeholder="No of Unit"
                         min={0}
                         hideControls
+                        decimalScale={3}
                         // disabled={isReadOnly}
-                        allowDecimal={false}
                         readOnly={isReadOnly}
-                        value={charge.no_of_unit || undefined}
+                        value={charge.no_of_unit ?? undefined}
                         onChange={(value) => {
-                          const noOfUnit = value as number | null;
+                          const noOfUnit = parseNoOfUnitForPayload(
+                            value as number | null
+                          );
                           const currentCharge = form.values.charges[index];
                           let amount = currentCharge.amount;
                           let amountInLocal = currentCharge.amount_in_local;

@@ -162,6 +162,59 @@ export function isCbmsChargeUnit(
   );
 }
 
+/** Parse no_of_unit without rounding (preserves 1–3 dp as entered). */
+export function parseNoOfUnitForPayload(
+  value: string | number | null | undefined,
+): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const num =
+    typeof value === "string" ? parseFloat(value.trim()) : Number(value);
+  if (!Number.isFinite(num)) return null;
+  return num;
+}
+
+export function noOfUnitValuesEqual(
+  a: string | number | null | undefined,
+  b: string | number | null | undefined,
+): boolean {
+  if (a === b) return true;
+  const aNum = parseNoOfUnitForPayload(a);
+  const bNum = parseNoOfUnitForPayload(b);
+  if (aNum === null && bNum === null) return true;
+  if (aNum === null || bNum === null) return false;
+  return aNum === bNum;
+}
+
+/**
+ * LCL ocean: no_of_unit for CBM(S) from chargeable weight (CBM) — no rounding.
+ */
+export function resolveOceanCbmsNoOfUnit(
+  cargoList: Array<{
+    gross_weight?: HouseCargoWeightValue;
+    volume: HouseCargoWeightValue;
+    chargeable_weight?: HouseCargoWeightValue;
+  }>,
+): number | null {
+  if (cargoList.length === 0) return null;
+
+  if (cargoList.length === 1) {
+    const cargo = cargoList[0];
+    const stored = parseHouseCargoWeightInput(cargo.chargeable_weight);
+    if (stored !== null && stored > 0) return stored;
+    const calculated = parseHouseCargoWeightInput(
+      calculateHouseChargeableWeight(
+        cargo.gross_weight ?? null,
+        cargo.volume,
+        "ocean",
+      ),
+    );
+    return calculated !== null && calculated > 0 ? calculated : null;
+  }
+
+  const total = sumHouseOceanChargeableWeight(cargoList);
+  return total !== null && total > 0 ? total : null;
+}
+
 export function sumHouseOceanChargeableWeight(
   cargoList: Array<{
     gross_weight?: HouseCargoWeightValue;
