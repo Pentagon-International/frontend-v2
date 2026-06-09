@@ -1431,6 +1431,32 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     },
   });
 
+  const { data: unitDataRaw = [] } = useQuery({
+    queryKey: ["unitMaster"],
+    queryFn: fetchUnitMaster,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const unitOptions = useMemo(
+    () => buildBookingUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    setCharges((prev) =>
+      mapBookingChargesWithUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      ) ?? prev,
+    );
+  }, [unitOptions, form.values.service, form.values.cargo_details]);
+
   // Debug: Log the final form values
   console.log("Final form initialValues:", form.values);
   console.log(
@@ -2016,33 +2042,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     isEditMode,
     user?.full_name,
   ]);
-
-  // Unit master query - fetch with empty payload
-  const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster"],
-    queryFn: fetchUnitMaster,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
-  });
-
-  const unitOptions = useMemo(
-    () => buildBookingUnitOptions(unitDataRaw),
-    [unitDataRaw],
-  );
-
-  useEffect(() => {
-    if (!unitOptions.length) return;
-    setCharges((prev) =>
-      mapBookingChargesWithUnits(
-        prev,
-        form.values.service,
-        form.values.cargo_details,
-        unitOptions,
-      ) ?? prev,
-    );
-  }, [unitOptions, form.values.service, form.values.cargo_details]);
 
   // quotation_primary_id when creating from quotation page (for filter-gained API)
   const quotationPrimaryId = initialData?.quotation_primary_id

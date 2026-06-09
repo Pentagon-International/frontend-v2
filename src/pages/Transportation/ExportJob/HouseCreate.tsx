@@ -67,10 +67,13 @@ import {
   formatHouseCargoChargeableDisplay,
   formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
-  isCbmsChargeUnit,
-  noOfUnitValuesEqual,
+  applyJobChargeUnitChange,
+  buildBookingCargoNoOfUnitsSyncKey,
+  buildJobUnitOptions,
+  mapJobChargesWithUnits,
   parseNoOfUnitForPayload,
-  resolveOceanCbmsNoOfUnit,
+  syncJobChargesWithCargoNoOfUnits,
+  toBookingCargoForNoOfUnits,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
@@ -700,6 +703,11 @@ function HouseCreate() {
     [location.state?.mblDetails?.service],
   );
 
+  const jobService = useMemo(
+    () => String(location.state?.mblDetails?.service ?? "").toUpperCase(),
+    [location.state?.mblDetails?.service],
+  );
+
   useEffect(() => {
     if (!isEditMode && active === 4) setActive(0);
   }, [active, isEditMode]);
@@ -921,7 +929,32 @@ function HouseCreate() {
             };
           },
         );
-        chargesForm.setValues({ charges: mappedCharges });
+        const editCargoForCharges = toBookingCargoForNoOfUnits(
+          (
+            (editData.cargo_details as Array<Record<string, unknown>>) ?? []
+          ).map((cargo) => ({
+            gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
+            volume: importHouseCargoWeightFromApi(cargo.volume),
+            chargeable_weight: importHouseCargoWeightFromApi(
+              cargo.chargeable_weight,
+            ),
+            no_of_packages: cargo.no_of_packages as number | string | null,
+          })),
+        );
+        const editService = String(
+          (editData as { service?: string }).service ??
+            location.state?.mblDetails?.service ??
+            jobService,
+        ).toUpperCase();
+        chargesForm.setValues({
+          charges:
+            mapJobChargesWithUnits(
+              mappedCharges,
+              editService,
+              editCargoForCharges,
+              buildJobUnitOptions(unitArr),
+            ) ?? mappedCharges,
+        });
       }
 
       // Set shipper_code and consignee_code if available in editData
@@ -1235,38 +1268,6 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumes, calculateChargeableWeight]);
 
-  const cargoChargeableWeights = cargoDetails
-    .map((c) => c.chargeable_weight)
-    .join(",");
-
-  // LCL only: when CBM(S) unit is selected, keep no_of_unit in sync with chargeable weight
-  useEffect(() => {
-    if (!isLclShipment) return;
-
-    const chargeableTotal = resolveOceanCbmsNoOfUnit(cargoDetails);
-    if (chargeableTotal === null) return;
-
-    const updatedCharges = chargesForm.values.charges.map((charge) => {
-      if (!isCbmsChargeUnit(charge.unit_code)) return charge;
-      if (noOfUnitValuesEqual(charge.no_of_unit, chargeableTotal)) return charge;
-      return { ...charge, no_of_unit: chargeableTotal };
-    });
-
-    const hasChanges = updatedCharges.some(
-      (charge, index) =>
-        charge.no_of_unit !== chargesForm.values.charges[index]?.no_of_unit,
-    );
-    if (hasChanges) {
-      chargesForm.setValues({ charges: updatedCharges });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    cargoChargeableWeights,
-    cargoGrossWeights,
-    cargoVolumes,
-    isLclShipment,
-  ]);
-
   // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
   const chargeCurrencyIds = chargesForm.values.charges
     .map((c) => c.currency_id)
@@ -1443,24 +1444,48 @@ function HouseCreate() {
     });
   }, [currencyData]);
 
-  // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
-  const unitOptions = useMemo(() => {
-    if (!Array.isArray(unitDataRaw)) return [];
-    const data = unitDataRaw as {
-      id?: number;
-      unit_code?: string;
-      unit_name?: string;
-      name?: string;
-    }[];
-    return data.map((item) => {
-      const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
-      const id = item.id != null ? String(item.id) : "";
-      return {
-        value: id || String(item.unit_code ?? ""),
-        label: label || String(item.unit_code ?? ""),
-      };
-    });
-  }, [unitDataRaw]);
+  const unitOptions = useMemo(
+    () => buildJobUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  const bookingCargoForCharges = useMemo(
+    () => toBookingCargoForNoOfUnits(cargoDetails),
+    [cargoDetails],
+  );
+
+  const cargoNoOfUnitsSyncKey = useMemo(
+    () => buildBookingCargoNoOfUnitsSyncKey(jobService, bookingCargoForCharges),
+    [jobService, bookingCargoForCharges],
+  );
+
+  useEffect(() => {
+    if (!jobService || !unitOptions.length) return;
+    const updated = syncJobChargesWithCargoNoOfUnits(
+      chargesForm.values.charges,
+      jobService,
+      bookingCargoForCharges,
+      unitOptions,
+    );
+    if (updated) {
+      chargesForm.setValues({ charges: updated });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargoNoOfUnitsSyncKey, jobService, unitOptions]);
+
+  useEffect(() => {
+    if (!unitOptions.length || !jobService) return;
+    const updated = mapJobChargesWithUnits(
+      chargesForm.values.charges,
+      jobService,
+      bookingCargoForCharges,
+      unitOptions,
+    );
+    if (updated) {
+      chargesForm.setValues({ charges: updated });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitOptions, jobService, bookingCargoForCharges]);
 
   // Format container numbers from location state into dropdown options
   const containerNumberOptions = useMemo(() => {
@@ -4613,53 +4638,25 @@ function HouseCreate() {
                       value={charge.unit_id || null}
                       onChange={(value) => {
                         const unitId = value ?? "";
-                        const unitOpt = unitOptions.find(
-                          (o) => o.value === unitId,
+                        const updated = applyJobChargeUnitChange(
+                          charge,
+                          unitId,
+                          unitOptions,
+                          jobService,
+                          bookingCargoForCharges,
                         );
-                        const unitItem = Array.isArray(unitDataRaw)
-                          ? (
-                              unitDataRaw as {
-                                id?: number;
-                                unit_code?: string;
-                              }[]
-                            ).find(
-                              (u) =>
-                                String(u.id) === unitId ||
-                                u.unit_code === unitId,
-                            )
-                          : null;
-                        const unitCode =
-                          unitItem?.unit_code ?? unitOpt?.label ?? "";
                         chargesForm.setFieldValue(
                           `charges.${index}.unit_id`,
-                          unitId,
+                          updated.unit_id ?? "",
                         );
                         chargesForm.setFieldValue(
                           `charges.${index}.unit_code`,
-                          unitCode,
+                          updated.unit_code ?? "",
                         );
-                        const unitUpper = unitCode.toUpperCase();
-                        let noOfUnit = charge.no_of_unit;
-                        if (
-                          unitUpper === "SHIPMENT" ||
-                          unitUpper === "SHPT" ||
-                          unitUpper === "DOC"
-                        ) {
-                          noOfUnit = 1;
-                        } else if (
-                          isLclShipment &&
-                          isCbmsChargeUnit(unitCode, unitOpt?.label)
-                        ) {
-                          noOfUnit =
-                            resolveOceanCbmsNoOfUnit(cargoDetails) ??
-                            charge.no_of_unit;
-                        }
-                        if (noOfUnit !== charge.no_of_unit) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.no_of_unit`,
-                            noOfUnit,
-                          );
-                        }
+                        chargesForm.setFieldValue(
+                          `charges.${index}.no_of_unit`,
+                          updated.no_of_unit ?? null,
+                        );
                       }}
                     />
                   </Grid.Col>

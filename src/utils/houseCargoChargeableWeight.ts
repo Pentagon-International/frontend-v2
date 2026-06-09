@@ -615,6 +615,241 @@ export function normalizeBookingChargesUnitCodes<
   return mapBookingChargesWithUnits(charges, "", [], unitOptions);
 }
 
+export type JobUnitMasterRow = {
+  id?: number;
+  unit_code?: string;
+  unit_name?: string;
+  name?: string;
+  status?: string;
+};
+
+export type JobUnitOption = {
+  value: string;
+  label: string;
+  unit_code: string;
+};
+
+export type JobChargeForNoOfUnits = {
+  unit_id?: string;
+  unit_code?: string;
+  no_of_unit?: number | null;
+};
+
+/** Job unit dropdown: all ACTIVE rows — value = unit id, label = unit_name. */
+export function buildJobUnitOptions(unitDataRaw: unknown[]): JobUnitOption[] {
+  if (!Array.isArray(unitDataRaw)) return [];
+
+  return (unitDataRaw as JobUnitMasterRow[])
+    .filter((row) => {
+      if (row.status && row.status !== "ACTIVE") return false;
+      const id = row.id != null ? String(row.id) : "";
+      const code = String(row.unit_code ?? "").trim();
+      return Boolean(id || code);
+    })
+    .map((row) => {
+      const unit_code = String(row.unit_code ?? "").trim();
+      const label = String(row.unit_name ?? row.name ?? unit_code).trim();
+      const id = row.id != null ? String(row.id) : "";
+      return {
+        value: id || unit_code,
+        label: label || unit_code,
+        unit_code: unit_code || label,
+      };
+    });
+}
+
+export function toBookingCargoForNoOfUnits(
+  cargoDetails: Array<{
+    gross_weight?: HouseCargoWeightValue;
+    volume?: HouseCargoWeightValue;
+    volume_weight?: HouseCargoWeightValue;
+    chargeable_weight?: HouseCargoWeightValue;
+    chargeable_volume?: HouseCargoWeightValue;
+    container_type?: string;
+    container_type_code?: string;
+    container_code?: string;
+    no_of_containers?: number | string | null;
+    no_of_packages?: number | string | null;
+  }>,
+): BookingCargoForNoOfUnits[] {
+  return cargoDetails.map((cargo) => ({
+    gross_weight: cargo.gross_weight,
+    volume: cargo.volume,
+    volume_weight: cargo.volume_weight,
+    chargeable_weight: cargo.chargeable_weight,
+    chargeable_volume: cargo.chargeable_volume,
+    container_type: cargo.container_type ?? cargo.container_code,
+    container_type_code: cargo.container_type_code ?? cargo.container_code,
+    no_of_containers: cargo.no_of_containers ?? cargo.no_of_packages,
+  }));
+}
+
+function findJobUnitOption(
+  unitOptions: JobUnitOption[],
+  unitId: string,
+): JobUnitOption | undefined {
+  return unitOptions.find((option) => option.value === unitId);
+}
+
+function resolveJobUnitCodeFromOption(
+  unitOpt: JobUnitOption | undefined,
+): string {
+  if (!unitOpt) return "";
+  return unitOpt.unit_code || unitOpt.label || "";
+}
+
+function isJobChargeNoOfUnitEmpty(
+  value: number | null | undefined,
+): boolean {
+  return value === null || value === undefined;
+}
+
+function resolveJobChargeNoOfUnitNumber(
+  unitCode: string,
+  unitLabel: string | undefined,
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+): number | null {
+  const resolved = resolveBookingChargeNoOfUnits(
+    unitCode,
+    unitLabel,
+    service,
+    cargoDetails,
+  );
+  if (resolved === null || resolved === "") return null;
+  return parseNoOfUnitForPayload(resolved);
+}
+
+/** Job charges: apply unit selection and auto-fill no_of_unit from cargo. */
+export function applyJobChargeUnitChange<T extends JobChargeForNoOfUnits>(
+  charge: T,
+  unitId: string,
+  unitOptions: JobUnitOption[],
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+): T {
+  const unitOpt = findJobUnitOption(unitOptions, unitId);
+  const unitCode = resolveJobUnitCodeFromOption(unitOpt);
+  const nextNoOfUnit = resolveJobChargeNoOfUnitNumber(
+    unitCode,
+    unitOpt?.label,
+    service,
+    cargoDetails,
+  );
+
+  return {
+    ...charge,
+    unit_id: unitId,
+    unit_code: unitCode,
+    no_of_unit: nextNoOfUnit,
+  };
+}
+
+/** Map job charges from API/edit: resolve unit_id and auto-fill empty no_of_unit. */
+export function mapJobChargesWithUnits<T extends JobChargeForNoOfUnits>(
+  charges: T[],
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  unitOptions: JobUnitOption[],
+): T[] | null {
+  if (!charges.length) return null;
+
+  let hasChanges = false;
+  const updated = charges.map((charge) => {
+    let next = { ...charge };
+
+    if ((!next.unit_id || !String(next.unit_id).trim()) && next.unit_code) {
+      const codeUpper = String(next.unit_code).trim().toUpperCase();
+      const byCode = unitOptions.find(
+        (option) =>
+          option.unit_code.toUpperCase() === codeUpper ||
+          option.label.trim().toUpperCase() === codeUpper,
+      );
+      if (byCode) {
+        hasChanges = true;
+        next = {
+          ...next,
+          unit_id: byCode.value,
+          unit_code: byCode.unit_code,
+        };
+      }
+    } else if (next.unit_id && unitOptions.length) {
+      const unitOpt = findJobUnitOption(unitOptions, String(next.unit_id));
+      const unitCode = resolveJobUnitCodeFromOption(unitOpt);
+      if (unitCode && unitCode !== next.unit_code) {
+        hasChanges = true;
+        next = { ...next, unit_code: unitCode };
+      }
+    }
+
+    const unitOpt = next.unit_id
+      ? findJobUnitOption(unitOptions, String(next.unit_id))
+      : undefined;
+    const unitCode =
+      next.unit_code || resolveJobUnitCodeFromOption(unitOpt) || "";
+
+    if (
+      unitCode &&
+      service &&
+      isJobChargeNoOfUnitEmpty(next.no_of_unit)
+    ) {
+      const resolved = resolveJobChargeNoOfUnitNumber(
+        unitCode,
+        unitOpt?.label,
+        service,
+        cargoDetails,
+      );
+      if (resolved !== null) {
+        hasChanges = true;
+        next = { ...next, no_of_unit: resolved };
+      }
+    }
+
+    return next;
+  });
+
+  return hasChanges ? updated : null;
+}
+
+/** Keep job charge rows in sync when cargo-derived units change. */
+export function syncJobChargesWithCargoNoOfUnits<
+  T extends JobChargeForNoOfUnits,
+>(
+  charges: T[],
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  unitOptions: JobUnitOption[],
+): T[] | null {
+  let hasChanges = false;
+  const updated = charges.map((charge) => {
+    if (!charge.unit_id && !charge.unit_code) return charge;
+    const unitOpt = charge.unit_id
+      ? findJobUnitOption(unitOptions, String(charge.unit_id))
+      : undefined;
+    const unitCode =
+      charge.unit_code || resolveJobUnitCodeFromOption(unitOpt) || "";
+    if (!unitCode) return charge;
+
+    const nextNoOfUnit = resolveJobChargeNoOfUnitNumber(
+      unitCode,
+      unitOpt?.label,
+      service,
+      cargoDetails,
+    );
+    if (nextNoOfUnit === null) return charge;
+    if (noOfUnitValuesEqual(charge.no_of_unit, nextNoOfUnit)) return charge;
+
+    hasChanges = true;
+    return {
+      ...charge,
+      unit_code: unitCode,
+      no_of_unit: nextNoOfUnit,
+    };
+  });
+
+  return hasChanges ? updated : null;
+}
+
 export function buildBookingCargoNoOfUnitsSyncKey(
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],

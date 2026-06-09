@@ -64,6 +64,12 @@ import {
   formatHouseCargoChargeableDisplay,
   formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
+  applyJobChargeUnitChange,
+  buildBookingCargoNoOfUnitsSyncKey,
+  buildJobUnitOptions,
+  mapJobChargesWithUnits,
+  syncJobChargesWithCargoNoOfUnits,
+  toBookingCargoForNoOfUnits,
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
@@ -1160,24 +1166,58 @@ function HouseCreate() {
     });
   }, [currencyData]);
 
-  // Format unit data: value = id, label = unit_name or unit_code (for payload we send unit_id)
-  const unitOptions = useMemo(() => {
-    if (!Array.isArray(unitDataRaw)) return [];
-    const data = unitDataRaw as {
-      id?: number;
-      unit_code?: string;
-      unit_name?: string;
-      name?: string;
-    }[];
-    return data.map((item) => {
-      const label = item.unit_name ?? item.name ?? item.unit_code ?? "";
-      const id = item.id != null ? String(item.id) : "";
-      return {
-        value: id || String(item.unit_code ?? ""),
-        label: label || String(item.unit_code ?? ""),
-      };
-    });
-  }, [unitDataRaw]);
+  const jobService = "AIR";
+
+  const unitOptions = useMemo(
+    () => buildJobUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  const bookingCargoForCharges = useMemo(
+    () =>
+      toBookingCargoForNoOfUnits(
+        cargoDetails.map((cargo) => ({
+          gross_weight: cargo.gross_weight,
+          volume: cargo.volume,
+          volume_weight: cargo.volume,
+          chargeable_weight: cargo.chargeable_weight,
+        })),
+      ),
+    [cargoDetails],
+  );
+
+  const cargoNoOfUnitsSyncKey = useMemo(
+    () => buildBookingCargoNoOfUnitsSyncKey(jobService, bookingCargoForCharges),
+    [bookingCargoForCharges],
+  );
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    const updated = syncJobChargesWithCargoNoOfUnits(
+      chargesForm.values.charges,
+      jobService,
+      bookingCargoForCharges,
+      unitOptions,
+    );
+    if (updated) {
+      chargesForm.setValues({ charges: updated });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargoNoOfUnitsSyncKey, unitOptions]);
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    const updated = mapJobChargesWithUnits(
+      chargesForm.values.charges,
+      jobService,
+      bookingCargoForCharges,
+      unitOptions,
+    );
+    if (updated) {
+      chargesForm.setValues({ charges: updated });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitOptions, bookingCargoForCharges]);
 
   // Debounced shipment-party search for Consignee (export flow)
   const debouncedConsigneeSearch = useDebouncedCallback(
@@ -1520,7 +1560,29 @@ function HouseCreate() {
       },
     );
     if (loadedCharges.length > 0) {
-      chargesForm.setValues({ charges: loadedCharges });
+      const editCargoForCharges = toBookingCargoForNoOfUnits(
+        (
+          (editData.cargo_details as Array<Record<string, unknown>>) ?? []
+        ).map((cargo) => ({
+          gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
+          volume: importHouseCargoWeightFromApi(cargo.volume ?? cargo.volume_weight),
+          volume_weight: importHouseCargoWeightFromApi(
+            cargo.volume_weight ?? cargo.volume,
+          ),
+          chargeable_weight: importHouseCargoWeightFromApi(
+            cargo.chargeable_weight,
+          ),
+        })),
+      );
+      chargesForm.setValues({
+        charges:
+          mapJobChargesWithUnits(
+            loadedCharges,
+            jobService,
+            editCargoForCharges,
+            buildJobUnitOptions(unitArr),
+          ) ?? loadedCharges,
+      });
       chargesIdsResolvedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4334,30 +4396,25 @@ function HouseCreate() {
                       value={charge.unit_id || null}
                       onChange={(value) => {
                         const unitId = value ?? "";
-                        const selectedUnit = unitOptions.find(
-                          (o) => o.value === unitId,
+                        const updated = applyJobChargeUnitChange(
+                          charge,
+                          unitId,
+                          unitOptions,
+                          jobService,
+                          bookingCargoForCharges,
                         );
-                        const labelUpper = (
-                          selectedUnit?.label ?? ""
-                        ).toUpperCase();
-                        let noOfUnit = charge.no_of_unit;
-                        if (
-                          labelUpper === "SHIPMENT" ||
-                          labelUpper === "SHPT" ||
-                          labelUpper === "DOC"
-                        ) {
-                          noOfUnit = 1;
-                        }
                         chargesForm.setFieldValue(
                           `charges.${index}.unit_id`,
-                          unitId,
+                          updated.unit_id ?? "",
                         );
-                        if (noOfUnit !== charge.no_of_unit) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.no_of_unit`,
-                            noOfUnit,
-                          );
-                        }
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_code`,
+                          updated.unit_code ?? "",
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.no_of_unit`,
+                          updated.no_of_unit ?? null,
+                        );
                       }}
                     />
                   </Grid.Col>
