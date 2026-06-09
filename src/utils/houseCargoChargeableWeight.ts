@@ -143,23 +143,76 @@ export function applyOceanChargeableWeightMinimum(
   return value;
 }
 
-/** Charge unit CBM / CBM(S) — used to auto-fill no_of_unit from chargeable weight. */
+function normalizeChargeUnitToken(value: string): string {
+  return value.trim().toUpperCase().replace(/\s/g, "");
+}
+
+function chargeUnitTokens(unitCode: string, unitLabel?: string): string[] {
+  const tokens = new Set<string>();
+  if (unitCode.trim()) tokens.add(normalizeChargeUnitToken(unitCode));
+  if (unitLabel?.trim()) tokens.add(normalizeChargeUnitToken(unitLabel));
+  return [...tokens];
+}
+
+function hasChargeUnitToken(
+  unitCode: string,
+  unitLabel: string | undefined,
+  ...candidates: string[]
+): boolean {
+  const tokens = chargeUnitTokens(unitCode, unitLabel);
+  const normalizedCandidates = candidates.map(normalizeChargeUnitToken);
+  return tokens.some((token) => normalizedCandidates.includes(token));
+}
+
+export function isShipmentOrDocChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  return hasChargeUnitToken(
+    unitCode,
+    unitLabel,
+    "SHIPMENT",
+    "SHPT",
+    "DOC",
+  );
+}
+
+export function isWmChargeUnit(unitCode: string, unitLabel?: string): boolean {
+  return hasChargeUnitToken(
+    unitCode,
+    unitLabel,
+    "W/M",
+    "WM",
+    "WEIGHT/MEASUREMENT",
+    "WEIGHTMEASUREMENT",
+  );
+}
+
+/** Plain CBM (volume) — not W/M or CBM(S)/CBMS variants. */
+export function isPlainCbmChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  if (isWmChargeUnit(unitCode, unitLabel)) return false;
+  if (isCbmsChargeUnit(unitCode, unitLabel)) return false;
+  return hasChargeUnitToken(unitCode, unitLabel, "CBM");
+}
+
+/** Charge unit CBM(S) / CBMS — auto-fill from chargeable CBM, not raw volume. */
 export function isCbmsChargeUnit(
   unitCode: string,
   unitLabel?: string,
 ): boolean {
-  const normalize = (value: string) =>
-    value.trim().toUpperCase().replace(/\s/g, "");
-  const normalizedCode = normalize(unitCode);
-  const normalizedLabel = normalize(unitLabel ?? "");
-  return (
-    normalizedCode === "CBM" ||
-    normalizedCode === "CBMS" ||
-    normalizedCode === "CBM(S)" ||
-    normalizedLabel === "CBM" ||
-    normalizedLabel === "CBMS" ||
-    normalizedLabel === "CBM(S)"
+  return hasChargeUnitToken(
+    unitCode,
+    unitLabel,
+    "CBMS",
+    "CBM(S)",
   );
+}
+
+export function isKgChargeUnit(unitCode: string, unitLabel?: string): boolean {
+  return hasChargeUnitToken(unitCode, unitLabel, "KG");
 }
 
 /** Parse no_of_unit without rounding (preserves 1–3 dp as entered). */
@@ -185,8 +238,465 @@ export function noOfUnitValuesEqual(
   return aNum === bNum;
 }
 
+export type OceanBookingCargoForCbms = {
+  gross_weight?: HouseCargoWeightValue;
+  volume?: HouseCargoWeightValue;
+  volume_weight?: HouseCargoWeightValue;
+  chargeable_weight?: HouseCargoWeightValue;
+  chargeable_volume?: HouseCargoWeightValue;
+};
+
+export type BookingCargoForNoOfUnits = OceanBookingCargoForCbms & {
+  container_type_code?: string;
+  container_type?: string;
+  no_of_containers?: number | string | null;
+};
+
+function formatBookingNoOfUnitsValue(
+  value: HouseCargoWeightValue | number | string | null | undefined,
+): string | number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const imported = importHouseCargoWeightFromApi(value);
+  return imported === null ? null : imported;
+}
+
+function resolvePrimaryBookingCargo(
+  cargoDetails: BookingCargoForNoOfUnits[],
+): BookingCargoForNoOfUnits {
+  return cargoDetails[0] ?? {};
+}
+
+function resolveLclChargeableVolumeSource(
+  cargo: BookingCargoForNoOfUnits,
+): HouseCargoWeightValue {
+  if (isPositiveHouseCargoWeight(cargo.chargeable_volume)) {
+    return cargo.chargeable_volume ?? null;
+  }
+  return calculateHouseChargeableWeight(
+    cargo.gross_weight ?? null,
+    cargo.volume ?? null,
+    "ocean",
+  );
+}
+
+function resolveAirChargeableWeightSource(
+  cargo: BookingCargoForNoOfUnits,
+): HouseCargoWeightValue {
+  if (isPositiveHouseCargoWeight(cargo.chargeable_weight)) {
+    return cargo.chargeable_weight ?? null;
+  }
+  return calculateHouseChargeableWeight(
+    cargo.gross_weight ?? null,
+    cargo.volume_weight ?? null,
+    "air",
+  );
+}
+
+function resolveSingleOceanBookingLclCbmsSource(
+  cargo: OceanBookingCargoForCbms,
+): HouseCargoWeightValue {
+  if (isPositiveHouseCargoWeight(cargo.chargeable_volume)) {
+    return cargo.chargeable_volume ?? null;
+  }
+  if (isPositiveHouseCargoWeight(cargo.chargeable_weight)) {
+    return cargo.chargeable_weight ?? null;
+  }
+  const calculated = calculateHouseChargeableWeight(
+    cargo.gross_weight ?? null,
+    cargo.volume ?? null,
+    "ocean",
+  );
+  return isPositiveHouseCargoWeight(calculated) ? calculated : null;
+}
+
+/** Sum LCL chargeable CBM across cargo rows (volume field preferred, then weight). */
+export function sumOceanBookingLclChargeableCbm(
+  cargoList: OceanBookingCargoForCbms[],
+): number | null {
+  let total = 0;
+  let hasValue = false;
+
+  for (const cargo of cargoList) {
+    const value = parseHouseCargoWeightInput(
+      resolveSingleOceanBookingLclCbmsSource(cargo),
+    );
+    if (value !== null && value > 0) {
+      total += value;
+      hasValue = true;
+    }
+  }
+
+  return hasValue ? total : null;
+}
+
 /**
- * LCL ocean: no_of_unit for CBM(S) from chargeable weight (CBM) — no rounding.
+ * LCL ocean booking: no_of_units for CBM(S) from chargeable volume/weight — preserves decimals.
+ */
+export function getOceanBookingLclCbmsNoOfUnitForCharge(
+  cargoList: OceanBookingCargoForCbms[],
+): string | number | null {
+  if (cargoList.length === 0) return null;
+
+  if (cargoList.length === 1) {
+    const source = resolveSingleOceanBookingLclCbmsSource(cargoList[0]);
+    if (source === null || source === "") return null;
+    return source;
+  }
+
+  const total = sumOceanBookingLclChargeableCbm(cargoList);
+  return total === null ? null : total;
+}
+
+export function formatBookingNoOfUnitsForPayload(
+  value: string | number | null | undefined,
+): number | null {
+  return parseNoOfUnitForPayload(value);
+}
+
+/**
+ * Resolve booking charge no_of_units from service, unit, and cargo — mirrors quotation logic.
+ * Returns null when the unit should not auto-fill from cargo.
+ */
+export function resolveBookingChargeNoOfUnits(
+  unitCode: string,
+  unitLabel: string | undefined,
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+): string | number | null {
+  if (!unitCode.trim() || !service) return null;
+
+  if (isShipmentOrDocChargeUnit(unitCode, unitLabel)) {
+    return 1;
+  }
+
+  const primaryCargo = resolvePrimaryBookingCargo(cargoDetails);
+
+  if (service === "AIR") {
+    if (isKgChargeUnit(unitCode, unitLabel)) {
+      return formatBookingNoOfUnitsValue(
+        resolveAirChargeableWeightSource(primaryCargo),
+      );
+    }
+    return null;
+  }
+
+  if (service === "LCL") {
+    if (isWmChargeUnit(unitCode, unitLabel)) {
+      return formatBookingNoOfUnitsValue(
+        resolveLclChargeableVolumeSource(primaryCargo),
+      );
+    }
+    if (isCbmsChargeUnit(unitCode, unitLabel)) {
+      return getOceanBookingLclCbmsNoOfUnitForCharge(cargoDetails);
+    }
+    if (isPlainCbmChargeUnit(unitCode, unitLabel)) {
+      return formatBookingNoOfUnitsValue(primaryCargo.volume);
+    }
+    return null;
+  }
+
+  if (service === "FCL") {
+    const unitTokens = chargeUnitTokens(unitCode, unitLabel);
+    const matchingCargo = cargoDetails.find((cargo) => {
+      const containerCode = normalizeChargeUnitToken(
+        String(cargo.container_type_code || cargo.container_type || ""),
+      );
+      return containerCode && unitTokens.includes(containerCode);
+    });
+    if (matchingCargo?.no_of_containers != null) {
+      return formatBookingNoOfUnitsValue(matchingCargo.no_of_containers);
+    }
+  }
+
+  return null;
+}
+
+export type BookingUnitOption = { value: string; label: string };
+
+type UnitMasterRow = {
+  unit_code?: string;
+  unit_name?: string;
+  service_type?: string;
+  status?: string;
+};
+
+/** Booking unit dropdown: all ACTIVE rows from unit master API — value = unit_code, label = unit_name. */
+export function buildBookingUnitOptions(
+  unitDataRaw: unknown[],
+): BookingUnitOption[] {
+  if (!Array.isArray(unitDataRaw)) return [];
+
+  return unitDataRaw
+    .filter((item) => {
+      const row = item as UnitMasterRow;
+      if (row.status && row.status !== "ACTIVE") return false;
+      return Boolean(String(row.unit_code || "").trim());
+    })
+    .map((item) => {
+      const row = item as UnitMasterRow;
+      return {
+        value: String(row.unit_code || ""),
+        label: row.unit_name || row.unit_code || "",
+      };
+    });
+}
+
+/**
+ * Map a quotation/API unit value to booking dropdown value (unit_code).
+ * Quotation stores unit_code; booking displays unit_name but matches by unit_code.
+ */
+export function resolveBookingUnitCode(
+  unitValue: string,
+  unitOptions: BookingUnitOption[],
+): string {
+  const trimmed = (unitValue ?? "").trim();
+  if (!trimmed) return "";
+  if (!unitOptions.length) return trimmed;
+
+  const exact = unitOptions.find((option) => option.value === trimmed);
+  if (exact) return exact.value;
+
+  const upper = trimmed.toUpperCase();
+  const byUpperValue = unitOptions.find(
+    (option) => option.value.toUpperCase() === upper,
+  );
+  if (byUpperValue) return byUpperValue.value;
+
+  const byUpperLabel = unitOptions.find(
+    (option) => option.label.trim().toUpperCase() === upper,
+  );
+  if (byUpperLabel) return byUpperLabel.value;
+
+  const token = normalizeChargeUnitToken(trimmed);
+  const byToken = unitOptions.find(
+    (option) =>
+      normalizeChargeUnitToken(option.value) === token ||
+      normalizeChargeUnitToken(option.label) === token,
+  );
+  if (byToken) return byToken.value;
+
+  return trimmed;
+}
+
+export function formatBookingChargeNoOfUnitsField(
+  value: string | number | null | undefined,
+): string | number {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  const num = parseFloat(trimmed);
+  return Number.isFinite(num) ? trimmed : "";
+}
+
+/** Booking charges: set no_of_units when unit changes. */
+export function applyBookingChargeUnitSelection(
+  unitCode: string,
+  unitLabel: string | undefined,
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  currentNoOfUnits: string | number,
+): string | number {
+  const resolved = resolveBookingChargeNoOfUnits(
+    unitCode,
+    unitLabel,
+    service,
+    cargoDetails,
+  );
+  if (resolved !== null && resolved !== "") {
+    return resolved;
+  }
+  return currentNoOfUnits;
+}
+
+/** Apply unit selection on a charge row: resolve unit_code and set default no_of_units. */
+export function applyBookingChargeUnitChange<
+  T extends BookingChargeForNoOfUnitsSync,
+>(
+  charge: T,
+  rawUnitValue: string,
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  unitOptions: BookingUnitOption[],
+): T {
+  const unitCode = resolveBookingUnitCode(rawUnitValue, unitOptions);
+  if (!unitCode) {
+    return recalcBookingChargeLineTotals({
+      ...charge,
+      unit: "",
+      no_of_units: "",
+    });
+  }
+
+  const unitOpt = unitOptions.find((option) => option.value === unitCode);
+  const nextNoOfUnits = applyBookingChargeUnitSelection(
+    unitCode,
+    unitOpt?.label,
+    service,
+    cargoDetails,
+    "",
+  );
+
+  return recalcBookingChargeLineTotals({
+    ...charge,
+    unit: unitCode,
+    no_of_units: formatBookingChargeNoOfUnitsField(nextNoOfUnits),
+  });
+}
+
+function isBookingChargeNoOfUnitsEmpty(
+  value: string | number | null | undefined,
+): boolean {
+  return (
+    value === "" || value === null || value === undefined
+  );
+}
+
+/**
+ * Map quotation/booking charges: resolve unit to unit_code from master options,
+ * and auto-fill no_of_units from cargo when the field is empty.
+ */
+export function mapBookingChargesWithUnits<
+  T extends BookingChargeForNoOfUnitsSync,
+>(
+  charges: T[],
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  unitOptions: BookingUnitOption[],
+): T[] | null {
+  if (!charges.length) return null;
+
+  let hasChanges = false;
+  const updated = charges.map((charge) => {
+    let next = charge;
+
+    if (next.unit && unitOptions.length) {
+      const unitCode = resolveBookingUnitCode(next.unit, unitOptions);
+      if (unitCode && unitCode !== next.unit) {
+        hasChanges = true;
+        next = { ...next, unit: unitCode };
+      }
+    }
+
+    if (
+      next.unit &&
+      service &&
+      isBookingChargeNoOfUnitsEmpty(next.no_of_units)
+    ) {
+      const unitCode = resolveBookingUnitCode(next.unit, unitOptions);
+      const unitOpt = unitOptions.find((option) => option.value === unitCode);
+      const resolved = resolveBookingChargeNoOfUnits(
+        unitCode,
+        unitOpt?.label,
+        service,
+        cargoDetails,
+      );
+      if (resolved !== null && resolved !== "") {
+        hasChanges = true;
+        next = recalcBookingChargeLineTotals({
+          ...next,
+          unit: unitCode || next.unit,
+          no_of_units: formatBookingChargeNoOfUnitsField(resolved),
+        });
+      }
+    }
+
+    return next;
+  });
+
+  return hasChanges ? updated : null;
+}
+
+/** @deprecated Use mapBookingChargesWithUnits */
+export function normalizeBookingChargesUnitCodes<
+  T extends BookingChargeForNoOfUnitsSync,
+>(charges: T[], unitOptions: BookingUnitOption[]): T[] | null {
+  return mapBookingChargesWithUnits(charges, "", [], unitOptions);
+}
+
+export function buildBookingCargoNoOfUnitsSyncKey(
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+): string {
+  if (!cargoDetails.length) return `${service}:empty`;
+  if (service === "FCL") {
+    return `${service}:${cargoDetails
+      .map(
+        (cargo) =>
+          `${cargo.container_type_code ?? ""}:${cargo.container_type ?? ""}:${cargo.no_of_containers ?? ""}`,
+      )
+      .join("|")}`;
+  }
+  return `${service}:${cargoDetails
+    .map(
+      (cargo) =>
+        `${cargo.chargeable_volume ?? ""}:${cargo.chargeable_weight ?? ""}:${cargo.volume ?? ""}:${cargo.volume_weight ?? ""}:${cargo.gross_weight ?? ""}`,
+    )
+    .join("|")}`;
+}
+
+export type BookingChargeForNoOfUnitsSync = {
+  unit: string;
+  no_of_units: string | number;
+  sell_per_unit?: string | number;
+  cost_per_unit?: string | number;
+  roe?: string | number;
+  total_sell?: string;
+  total_cost?: string;
+};
+
+function recalcBookingChargeLineTotals<T extends BookingChargeForNoOfUnitsSync>(
+  charge: T,
+): T {
+  const noOfUnits = parseFloat(String(charge.no_of_units)) || 0;
+  const sellPerUnit = parseFloat(String(charge.sell_per_unit)) || 0;
+  const costPerUnit = parseFloat(String(charge.cost_per_unit)) || 0;
+  const roe = parseFloat(String(charge.roe)) || 1;
+  return {
+    ...charge,
+    total_sell: (sellPerUnit * roe * noOfUnits).toFixed(2),
+    total_cost: (costPerUnit * roe * noOfUnits).toFixed(2),
+  };
+}
+
+/** Keep charge rows in sync when cargo-derived units change (KG, W/M, CBM, CBM(S), FCL containers). */
+export function syncBookingChargesWithCargoNoOfUnits<
+  T extends BookingChargeForNoOfUnitsSync,
+>(
+  charges: T[],
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  unitOptions: Array<{ value: string; label: string }>,
+): T[] | null {
+  let hasChanges = false;
+  const updated = charges.map((charge) => {
+    if (!charge.unit) return charge;
+    const unitCode = resolveBookingUnitCode(charge.unit, unitOptions);
+    const unitOpt = unitOptions.find((option) => option.value === unitCode);
+    const nextNoOfUnits = resolveBookingChargeNoOfUnits(
+      unitCode,
+      unitOpt?.label,
+      service,
+      cargoDetails,
+    );
+    if (unitCode !== charge.unit) {
+      hasChanges = true;
+      charge = { ...charge, unit: unitCode };
+    }
+    if (nextNoOfUnits === null) return charge;
+    if (noOfUnitValuesEqual(charge.no_of_units, nextNoOfUnits)) return charge;
+    hasChanges = true;
+    return recalcBookingChargeLineTotals({
+      ...charge,
+      no_of_units: nextNoOfUnits,
+    });
+  });
+  return hasChanges ? updated : null;
+}
+
+/**
+ * LCL ocean job: no_of_unit for CBM(S) from chargeable weight (CBM) — no rounding.
  */
 export function resolveOceanCbmsNoOfUnit(
   cargoList: Array<{
@@ -440,8 +950,10 @@ export function formatHouseCargoDetailWeightFields<
   void _chargeable;
   return {
     ...rest,
-    gross_weight: formatHouseCargoWeightForPayload(gross_weight),
-    volume: formatHouseCargoWeightForPayload(volume),
+    gross_weight: formatHouseCargoWeightForPayload(
+      gross_weight as HouseCargoWeightValue,
+    ),
+    volume: formatHouseCargoWeightForPayload(volume as HouseCargoWeightValue),
     chargeable_weight: formatHouseCargoChargeableForPayload(
       gross_weight as HouseCargoWeightValue,
       volume as HouseCargoWeightValue,

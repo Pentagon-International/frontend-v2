@@ -60,7 +60,10 @@ function OceanExportBookingCreate() {
       // Stepper 1 fields
       customer_code: enquiryData.customer_code || "",
       customer_name: enquiryData.customer_name || "",
-      service: (serviceDetails.service as string) || (quotationData.service_type as string) || "", // FCL or LCL from quotation
+      service:
+        (serviceDetails.service as string) ||
+        (quotationData.service_type as string) ||
+        "", // FCL or LCL from quotation
       origin_code: serviceDetails.origin_code_read || "",
       origin_name: serviceDetails.origin_name || "",
       destination_code: serviceDetails.destination_code_read || "",
@@ -139,9 +142,7 @@ function OceanExportBookingCreate() {
         quotationData.cargo_details.length > 0
           ? (quotationData.cargo_details as Array<Record<string, unknown>>).map(
               (cargo: Record<string, unknown>) => ({
-                id: cargo.id
-                  ? Number(cargo.id)
-                  : undefined,
+                id: cargo.id ? Number(cargo.id) : undefined,
                 no_of_packages: cargo.no_of_packages
                   ? Number(cargo.no_of_packages)
                   : undefined,
@@ -166,7 +167,7 @@ function OceanExportBookingCreate() {
                 no_of_containers: cargo.no_of_containers
                   ? Number(cargo.no_of_containers)
                   : undefined,
-              })
+              }),
             )
           : [
               {
@@ -174,10 +175,13 @@ function OceanExportBookingCreate() {
                 no_of_packages: serviceDetails.no_of_packages || undefined,
                 gross_weight: serviceDetails.gross_weight || undefined,
                 volume_weight: serviceDetails.volume_weight || undefined,
-                chargeable_weight: serviceDetails.chargeable_weight || undefined,
+                chargeable_weight:
+                  serviceDetails.chargeable_weight || undefined,
                 volume: serviceDetails.volume || undefined,
-                chargeable_volume: serviceDetails.chargeable_volume || undefined,
-                container_type_code: serviceDetails.container_type_code || undefined,
+                chargeable_volume:
+                  serviceDetails.chargeable_volume || undefined,
+                container_type_code:
+                  serviceDetails.container_type_code || undefined,
                 no_of_containers: serviceDetails.no_of_containers || undefined,
               },
             ],
@@ -198,14 +202,17 @@ function OceanExportBookingCreate() {
 
       // Stepper 5 - Quotation Details
       quotation_id: quotationData.quotation_id || "",
-      quotation_primary_id: (data as { quotation_primary_id?: number }).quotation_primary_id ?? quotationData.id,
+      quotation_primary_id:
+        (data as { quotation_primary_id?: number }).quotation_primary_id ??
+        quotationData.id,
       quotation_charges: quotationData.charges || [],
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
               charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
-              currency_country_code: c.currency || c.currency_country_code || "",
+              currency_country_code:
+                c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",
               unit: c.unit || "",
               no_of_units: c.no_of_units ?? "",
@@ -214,7 +221,7 @@ function OceanExportBookingCreate() {
               cost_per_unit: c.cost_per_unit ?? "",
               total_cost: c.total_cost ?? "",
               total_sell: c.total_sell ?? "",
-            })
+            }),
           )
         : [],
     };
@@ -228,7 +235,7 @@ function OceanExportBookingCreate() {
   console.log("OceanExportBookingCreate - bookingData:", bookingData);
   console.log(
     "OceanExportBookingCreate - mappedBookingData:",
-    mappedBookingData
+    mappedBookingData,
   );
 
   const [active, setActive] = useState(0);
@@ -236,7 +243,10 @@ function OceanExportBookingCreate() {
   const [isFetchingBooking, setIsFetchingBooking] = useState(false);
   const [isEditFormReady, setIsEditFormReady] = useState(false);
 
-  const handleEditFormPopulated = useCallback(() => setIsEditFormReady(true), []);
+  const handleEditFormPopulated = useCallback(
+    () => setIsEditFormReady(true),
+    [],
+  );
   useEffect(() => {
     if (!isEditMode || !jobData) setIsEditFormReady(false);
   }, [isEditMode, jobData]);
@@ -272,11 +282,15 @@ function OceanExportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (response?.success && bookingItem) {
           navigate("/SeaExport/export-booking/edit", {
             state: { job: bookingItem },
@@ -298,7 +312,7 @@ function OceanExportBookingCreate() {
         setIsFetchingBooking(false);
       }
     },
-    [navigate]
+    [navigate],
   );
 
   // When navigated from Customer Service dashboard with bookingId only - fetch and show booking
@@ -311,30 +325,46 @@ function OceanExportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (!cancelled && response?.success && bookingItem) {
           navigate("/SeaExport/export-booking/edit", {
-            state: { job: bookingItem, returnTo: location.state?.returnTo, viewMode: location.state?.viewMode },
+            state: {
+              job: bookingItem,
+              returnTo: location.state?.returnTo,
+              viewMode: location.state?.viewMode,
+            },
             replace: true,
           });
         } else if (!cancelled) {
-          ToastNotification({ type: "error", message: "Failed to load booking data." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking data.",
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching booking:", error);
-          ToastNotification({ type: "error", message: "Failed to load booking. Please try again." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking. Please try again.",
+          });
         }
       } finally {
         if (!cancelled) setIsFetchingBooking(false);
       }
     };
     fetchAndReplace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [location.state?.bookingId, location.state?.job, navigate]);
 
   const showLoader =

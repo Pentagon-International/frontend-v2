@@ -116,6 +116,11 @@ export default function Dropdown({
     onSearchChangeProp?.(val);
 
     if (!val.trim()) {
+      // Mantine can emit an empty search on unmount/sync; do not clear the
+      // selected value unless the user was actively searching.
+      if (!isSearchMode) {
+        return;
+      }
       setSelectedItem(null);
       setIsSearchMode(false);
       setActiveIndex(-1);

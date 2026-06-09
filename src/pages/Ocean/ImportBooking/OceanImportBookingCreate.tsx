@@ -54,7 +54,10 @@ function OceanImportBookingCreate() {
       // Stepper 1 fields
       customer_code: enquiryData.customer_code || "",
       customer_name: enquiryData.customer_name || "",
-      service: (serviceDetails.service as string) || (quotationData.service_type as string) || "", // FCL or LCL from quotation
+      service:
+        (serviceDetails.service as string) ||
+        (quotationData.service_type as string) ||
+        "", // FCL or LCL from quotation
       origin_code: serviceDetails.origin_code_read || "",
       origin_name: serviceDetails.origin_name || "",
       destination_code: serviceDetails.destination_code_read || "",
@@ -161,31 +164,31 @@ function OceanImportBookingCreate() {
                 no_of_containers: cargo.no_of_containers
                   ? Number(cargo.no_of_containers)
                   : undefined,
-              })
+              }),
             )
           : serviceDetails.service === "FCL" &&
               serviceDetails.fcl_details &&
               Array.isArray(serviceDetails.fcl_details)
-            ? (serviceDetails.fcl_details as Array<Record<string, unknown>>).map(
-                (fcl: Record<string, unknown>) => ({
-                  no_of_packages: undefined,
-                  gross_weight: fcl.gross_weight
-                    ? Number(fcl.gross_weight)
+            ? (
+                serviceDetails.fcl_details as Array<Record<string, unknown>>
+              ).map((fcl: Record<string, unknown>) => ({
+                no_of_packages: undefined,
+                gross_weight: fcl.gross_weight
+                  ? Number(fcl.gross_weight)
+                  : undefined,
+                volume_weight: undefined,
+                chargeable_weight: undefined,
+                volume: undefined,
+                chargeable_volume: undefined,
+                container_type_code: fcl.container_type_code
+                  ? String(fcl.container_type_code)
+                  : fcl.container_type
+                    ? String(fcl.container_type)
                     : undefined,
-                  volume_weight: undefined,
-                  chargeable_weight: undefined,
-                  volume: undefined,
-                  chargeable_volume: undefined,
-                  container_type_code: fcl.container_type_code
-                    ? String(fcl.container_type_code)
-                    : fcl.container_type
-                      ? String(fcl.container_type)
-                      : undefined,
-                  no_of_containers: fcl.no_of_containers
-                    ? Number(fcl.no_of_containers)
-                    : undefined,
-                })
-              )
+                no_of_containers: fcl.no_of_containers
+                  ? Number(fcl.no_of_containers)
+                  : undefined,
+              }))
             : [
                 {
                   no_of_packages: serviceDetails.no_of_packages || undefined,
@@ -198,7 +201,8 @@ function OceanImportBookingCreate() {
                     serviceDetails.chargeable_volume || undefined,
                   container_type_code:
                     serviceDetails.container_type_code || undefined,
-                  no_of_containers: serviceDetails.no_of_containers || undefined,
+                  no_of_containers:
+                    serviceDetails.no_of_containers || undefined,
                 },
               ],
 
@@ -222,14 +226,17 @@ function OceanImportBookingCreate() {
 
       // Stepper 5 - Quotation Details and rate_details for prefilling charges
       quotation_id: quotationData.quotation_id || "",
-      quotation_primary_id: (data as { quotation_primary_id?: number }).quotation_primary_id ?? quotationData.id,
+      quotation_primary_id:
+        (data as { quotation_primary_id?: number }).quotation_primary_id ??
+        quotationData.id,
       quotation_charges: quotationData.charges || [],
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
               charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
-              currency_country_code: c.currency || c.currency_country_code || "",
+              currency_country_code:
+                c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",
               unit: c.unit || "",
               no_of_units: c.no_of_units ?? "",
@@ -238,7 +245,7 @@ function OceanImportBookingCreate() {
               cost_per_unit: c.cost_per_unit ?? "",
               total_cost: c.total_cost ?? "",
               total_sell: c.total_sell ?? "",
-            })
+            }),
           )
         : [],
     };
@@ -267,7 +274,10 @@ function OceanImportBookingCreate() {
   const [isFetchingBooking, setIsFetchingBooking] = useState(false);
   const [isEditFormReady, setIsEditFormReady] = useState(false);
 
-  const handleEditFormPopulated = useCallback(() => setIsEditFormReady(true), []);
+  const handleEditFormPopulated = useCallback(
+    () => setIsEditFormReady(true),
+    [],
+  );
   useEffect(() => {
     if (!isEditMode || !jobData) setIsEditFormReady(false);
   }, [isEditMode, jobData]);
@@ -303,11 +313,15 @@ function OceanImportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (response?.success && bookingItem) {
           navigate("/SeaExport/import-booking/edit", {
             state: { job: bookingItem },
@@ -329,7 +343,7 @@ function OceanImportBookingCreate() {
         setIsFetchingBooking(false);
       }
     },
-    [navigate]
+    [navigate],
   );
 
   // When navigated from Customer Service Import dashboard with bookingId only - fetch and show booking
@@ -342,30 +356,46 @@ function OceanImportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (!cancelled && response?.success && bookingItem) {
           navigate("/SeaExport/import-booking/edit", {
-            state: { job: bookingItem, returnTo: location.state?.returnTo, viewMode: location.state?.viewMode },
+            state: {
+              job: bookingItem,
+              returnTo: location.state?.returnTo,
+              viewMode: location.state?.viewMode,
+            },
             replace: true,
           });
         } else if (!cancelled) {
-          ToastNotification({ type: "error", message: "Failed to load booking data." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking data.",
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching booking:", error);
-          ToastNotification({ type: "error", message: "Failed to load booking. Please try again." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking. Please try again.",
+          });
         }
       } finally {
         if (!cancelled) setIsFetchingBooking(false);
       }
     };
     fetchAndReplace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [location.state?.bookingId, location.state?.job, navigate]);
 
   const showLoader =
