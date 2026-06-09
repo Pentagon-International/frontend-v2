@@ -36,6 +36,7 @@ import {
   BookingMasterListTable,
   DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS,
   getBookingRowPW,
+  getBookingRowAirVolume,
   ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
@@ -116,6 +117,7 @@ type ImportShipmentData = {
   destination_name: string;
   destination_code_read: string;
   customer_service_name: string;
+  job_no?: string | null;
   status?: string;
   freight?: string;
   routed?: string;
@@ -165,6 +167,7 @@ type ImportShipmentData = {
     no_of_containers: number;
     no_of_packages?: number;
     gross_weight: string;
+    volume_weight?: string | number | null;
   }>;
   routing_details?: Array<{
     move_type: string;
@@ -306,6 +309,8 @@ function airImportRowToTableModel(
     originCode: r.origin_code_read || r.origin_code || "",
     destCode: r.destination_code_read || r.destination_code || "",
     status: r.status,
+    job_no: r.job_no?.trim() ?? "",
+    volume: getBookingRowAirVolume(r.cargo_details),
     mawb,
     flight,
     pieces: pw.pieces,

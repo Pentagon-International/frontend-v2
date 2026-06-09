@@ -67,7 +67,13 @@ import {
   HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
   houseCargoWeightValuesEqual,
   importHouseCargoWeightFromApi,
+  applyBookingChargeUnitChange,
+  buildBookingCargoNoOfUnitsSyncKey,
+  buildBookingUnitOptions,
+  mapBookingChargesWithUnits,
   isPositiveHouseCargoWeight,
+  parseNoOfUnitForPayload,
+  syncBookingChargesWithCargoNoOfUnits,
   sumOceanBookingContainerGrossKg,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
@@ -995,18 +1001,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }));
   }, [currencyData]);
 
-  // Memoized unit options
-  const unitOptions = useMemo(() => {
-    if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string; unit_name?: string };
-      return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_name || "",
-      };
-    });
-  }, [unitDataRaw]);
-
   const updateCharge = (
     index: number,
     field: string,
@@ -1017,10 +1011,21 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
+          if (field === "unit") {
+            return applyBookingChargeUnitChange(
+              updatedCharge,
+              String(value),
+              form.values.service,
+              form.values.cargo_details,
+              unitOptions,
+            );
+          }
+
           // Calculate totals when relevant fields change (row-level)
           // Formula: sell_per_unit * roe * no_of_units
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "sell_per_unit" ||
             field === "roe"
           ) {
@@ -1036,6 +1041,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           // Formula: cost_per_unit * roe * no_of_units
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "cost_per_unit" ||
             field === "roe"
           ) {
@@ -1489,6 +1495,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
+
+  const unitOptions = useMemo(
+    () => buildBookingUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    setCharges((prev) =>
+      mapBookingChargesWithUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      ) ?? prev,
+    );
+  }, [unitOptions, form.values.service, form.values.cargo_details]);
 
   const emptyRoutingDetailRow = useMemo<RoutingDetail>(
     () => ({
@@ -2255,9 +2278,23 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
         }),
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
-  }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
+  }, [
+    isFromQuotationFlow,
+    quotationsData,
+    onQuotationAlreadyBooked,
+    unitOptions,
+    form.values.service,
+    form.values.cargo_details,
+  ]);
 
   const debouncedShipperSearch = useDebouncedCallback(async (term: string) => {
     const query = term.trim();
@@ -2503,7 +2540,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         total_cost: charge.total_cost != null ? String(charge.total_cost) : "",
         total_sell: charge.total_sell != null ? String(charge.total_sell) : "",
       }));
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
     if (jobData.shipment_terms_code && jobData.shipment_terms_name) {
       form.setFieldValue(
@@ -2788,7 +2832,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           };
         },
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, initialData, jobData]);
@@ -2937,6 +2988,29 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   useEffect(() => {
     debouncedUpdateChargeableValues();
   }, [cargoValuesKey, debouncedUpdateChargeableValues]);
+
+  const cargoNoOfUnitsSyncKey = useMemo(
+    () =>
+      buildBookingCargoNoOfUnitsSyncKey(
+        form.values.service,
+        form.values.cargo_details,
+      ),
+    [form.values.service, form.values.cargo_details],
+  );
+
+  useEffect(() => {
+    if (!form.values.service) return;
+
+    setCharges((prev) => {
+      const updated = syncBookingChargesWithCargoNoOfUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      );
+      return updated ?? prev;
+    });
+  }, [cargoNoOfUnitsSyncKey, form.values.service, unitOptions]);
 
   const handleSubmit = async () => {
     try {
@@ -3160,7 +3234,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             currency_country_code: charge.currency_country_code,
             roe: roundToDecimals(parseFloat(charge.roe)) || 1,
             unit: charge.unit,
-            no_of_units: roundToDecimals(parseFloat(charge.no_of_units)) || 0,
+            no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
               roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
             min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
@@ -6737,7 +6811,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   : "",
                               }),
                             );
-                            setCharges(mappedCharges);
+                            setCharges(
+                              mapBookingChargesWithUnits(
+                                mappedCharges,
+                                form.values.service,
+                                form.values.cargo_details,
+                                unitOptions,
+                              ) ?? mappedCharges,
+                            );
                           }
                         }
                       }}
@@ -6904,9 +6985,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="Select Unit"
                           searchable
                           value={charge.unit}
-                          onChange={(value) =>
-                            updateCharge(index, "unit", value || "")
-                          }
+                          onChange={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
+                          onOptionSubmit={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
                           data={unitOptions}
                           size="xs"
                         />
@@ -6914,7 +6998,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="0"
-                          decimalScale={0}
+                          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                           value={charge.no_of_units}
                           onChange={(val) =>
                             updateCharge(index, "no_of_units", val ?? "")

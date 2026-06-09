@@ -63,7 +63,13 @@ import {
   HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
   houseCargoWeightValuesEqual,
   importHouseCargoWeightFromApi,
+  applyBookingChargeUnitChange,
+  buildBookingCargoNoOfUnitsSyncKey,
+  buildBookingUnitOptions,
+  mapBookingChargesWithUnits,
   isPositiveHouseCargoWeight,
+  parseNoOfUnitForPayload,
+  syncBookingChargesWithCargoNoOfUnits,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
 import { commonSearchAPI } from "../../../service/searchApi";
@@ -666,6 +672,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Memoized props to prevent unnecessary extra API calls in SearchableSelect.
   const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+  const customerSearchFields = useMemo(
+    () => ["customer_code", "customer_name"],
+    [],
+  );
+  const customerDisplayFormat = useCallback(
+    (item: Record<string, unknown>) => ({
+      value: String(item.customer_code),
+      label: String(item.customer_name),
+    }),
+    [],
+  );
   const portDisplayFormat = useCallback(
     (item: Record<string, unknown>) => ({
       value: String(item.port_code),
@@ -953,10 +970,21 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
+          if (field === "unit") {
+            return applyBookingChargeUnitChange(
+              updatedCharge,
+              String(value),
+              form.values.service,
+              form.values.cargo_details,
+              unitOptions,
+            );
+          }
+
           // Calculate total_sell when relevant fields change (row-level)
           // Formula: sell_per_unit * roe * no_of_units
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "sell_per_unit" ||
             field === "roe"
           ) {
@@ -973,6 +1001,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           // Formula: cost_per_unit * roe * no_of_units
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "cost_per_unit" ||
             field === "roe"
           ) {
@@ -1401,6 +1430,32 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
+
+  const { data: unitDataRaw = [] } = useQuery({
+    queryKey: ["unitMaster"],
+    queryFn: fetchUnitMaster,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const unitOptions = useMemo(
+    () => buildBookingUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    setCharges((prev) =>
+      mapBookingChargesWithUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      ) ?? prev,
+    );
+  }, [unitOptions, form.values.service, form.values.cargo_details]);
 
   // Debug: Log the final form values
   console.log("Final form initialValues:", form.values);
@@ -1988,16 +2043,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     user?.full_name,
   ]);
 
-  // Unit master query - fetch with empty payload
-  const { data: unitDataRaw = [] } = useQuery({
-    queryKey: ["unitMaster"],
-    queryFn: fetchUnitMaster,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
-  });
-
   // quotation_primary_id when creating from quotation page (for filter-gained API)
   const quotationPrimaryId = initialData?.quotation_primary_id
     ? Number(initialData.quotation_primary_id)
@@ -2114,9 +2159,23 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
         }),
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
-  }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
+  }, [
+    isFromQuotationFlow,
+    quotationsData,
+    onQuotationAlreadyBooked,
+    unitOptions,
+    form.values.service,
+    form.values.cargo_details,
+  ]);
 
   // Track which job we've populated from - run only once per job to avoid overwriting user edits
   const debouncedConsigneeSearch = useDebouncedCallback(
@@ -2476,7 +2535,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         total_cost: charge.total_cost != null ? String(charge.total_cost) : "",
         total_sell: charge.total_sell != null ? String(charge.total_sell) : "",
       }));
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
     if (jobData.shipment_terms_code && jobData.shipment_terms_name) {
       form.setFieldValue(
@@ -2490,18 +2556,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form excluded to prevent re-running on user edits
   }, [isEditMode, jobData, onEditFormPopulated]);
-
-  // Memoized unit options
-  const unitOptions = useMemo(() => {
-    if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string; unit_name?: string };
-      return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_name || "",
-      };
-    });
-  }, [unitDataRaw]);
 
   // Effect to set up display names when initialData is provided (skip in edit mode with jobData)
   useEffect(() => {
@@ -2773,7 +2827,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           };
         },
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
   }, [isEditMode, initialData, jobData]);
 
@@ -2905,6 +2966,29 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   useEffect(() => {
     debouncedUpdateChargeableValues();
   }, [cargoValuesKey, debouncedUpdateChargeableValues]);
+
+  const cargoNoOfUnitsSyncKey = useMemo(
+    () =>
+      buildBookingCargoNoOfUnitsSyncKey(
+        form.values.service,
+        form.values.cargo_details,
+      ),
+    [form.values.service, form.values.cargo_details],
+  );
+
+  useEffect(() => {
+    if (!form.values.service) return;
+
+    setCharges((prev) => {
+      const updated = syncBookingChargesWithCargoNoOfUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      );
+      return updated ?? prev;
+    });
+  }, [cargoNoOfUnitsSyncKey, form.values.service, unitOptions]);
 
   const handleSubmit = async () => {
     try {
@@ -3096,7 +3180,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             currency_country_code: charge.currency_country_code,
             roe: roundToDecimals(parseFloat(charge.roe)) || 1,
             unit: charge.unit,
-            no_of_units: roundToDecimals(parseFloat(charge.no_of_units)) || 0,
+            no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
               roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
             min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
@@ -3874,11 +3958,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     required
                     apiEndpoint={URL.allCustomers}
                     placeholder="Type customer name"
-                    searchFields={["customer_code", "customer_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.customer_code),
-                      label: String(item.customer_name),
-                    })}
+                    searchFields={customerSearchFields}
+                    displayFormat={customerDisplayFormat}
                     value={form.values.customer_code}
                     displayValue={form.values.customer_name}
                     returnOriginalData
@@ -6296,7 +6377,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   : "",
                               }),
                             );
-                            setCharges(mappedCharges);
+                            setCharges(
+                              mapBookingChargesWithUnits(
+                                mappedCharges,
+                                form.values.service,
+                                form.values.cargo_details,
+                                unitOptions,
+                              ) ?? mappedCharges,
+                            );
                           }
                         }
                       }}
@@ -6463,9 +6551,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="Select Unit"
                           searchable
                           value={charge.unit}
-                          onChange={(value) =>
-                            updateCharge(index, "unit", value || "")
-                          }
+                          onChange={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
+                          onOptionSubmit={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
                           data={unitOptions}
                           size="xs"
                         />
@@ -6473,7 +6564,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="0"
-                          decimalScale={0}
+                          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                           value={charge.no_of_units}
                           onChange={(val) =>
                             updateCharge(index, "no_of_units", val ?? "")

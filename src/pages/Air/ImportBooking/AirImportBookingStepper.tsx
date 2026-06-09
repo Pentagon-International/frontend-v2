@@ -53,6 +53,15 @@ import useAuthStore from "../../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  applyBookingChargeUnitChange,
+  buildBookingCargoNoOfUnitsSyncKey,
+  buildBookingUnitOptions,
+  mapBookingChargesWithUnits,
+  HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
+  parseNoOfUnitForPayload,
+  syncBookingChargesWithCargoNoOfUnits,
+} from "../../../utils/houseCargoChargeableWeight";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -891,18 +900,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }));
   }, [rawContainerData]);
 
-  // Memoized unit options
-  const unitOptions = useMemo(() => {
-    if (!Array.isArray(unitDataRaw)) return [];
-    return unitDataRaw.map((item: unknown) => {
-      const unitItem = item as { unit_code?: string };
-      return {
-        value: String(unitItem.unit_code || ""),
-        label: unitItem.unit_code || "",
-      };
-    });
-  }, [unitDataRaw]);
-
   const updateCharge = (
     index: number,
     field: string,
@@ -913,9 +910,20 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         if (i === index) {
           const updatedCharge = { ...charge, [field]: value };
 
+          if (field === "unit") {
+            return applyBookingChargeUnitChange(
+              updatedCharge,
+              String(value),
+              form.values.service,
+              form.values.cargo_details,
+              unitOptions,
+            );
+          }
+
           // Calculate totals when relevant fields change (row-level)
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "sell_per_unit" ||
             field === "roe"
           ) {
@@ -930,6 +938,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
           if (
             field === "no_of_units" ||
+            field === "unit" ||
             field === "cost_per_unit" ||
             field === "roe"
           ) {
@@ -1378,6 +1387,23 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
+
+  const unitOptions = useMemo(
+    () => buildBookingUnitOptions(unitDataRaw),
+    [unitDataRaw],
+  );
+
+  useEffect(() => {
+    if (!unitOptions.length) return;
+    setCharges((prev) =>
+      mapBookingChargesWithUnits(
+        prev,
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      ) ?? prev,
+    );
+  }, [unitOptions, form.values.service, form.values.cargo_details]);
 
   // Events, Documents, Trigger Updates – form-based handlers
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
@@ -1845,9 +1871,23 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           total_sell: charge.total_sell ? String(charge.total_sell) : "",
         }),
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
-  }, [isFromQuotationFlow, quotationsData, onQuotationAlreadyBooked]);
+  }, [
+    isFromQuotationFlow,
+    quotationsData,
+    onQuotationAlreadyBooked,
+    unitOptions,
+    form.values.service,
+    form.values.cargo_details,
+  ]);
 
   // Salespersons data query - must be after form initialization
   const { data: rawSalespersonsData = [] } = useQuery({
@@ -2138,7 +2178,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         total_cost: charge.total_cost != null ? String(charge.total_cost) : "",
         total_sell: charge.total_sell != null ? String(charge.total_sell) : "",
       }));
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
 
     // Defer to next microtask so parent state update runs after form updates
@@ -2408,7 +2455,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           };
         },
       );
-      setCharges(mappedCharges);
+      setCharges(
+        mapBookingChargesWithUnits(
+          mappedCharges,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? mappedCharges,
+      );
     }
   }, [isEditMode, initialData, jobData]);
 
@@ -2604,6 +2658,29 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   useEffect(() => {
     debouncedUpdateChargeableValues();
   }, [cargoValuesKey, debouncedUpdateChargeableValues]);
+
+  const cargoNoOfUnitsSyncKey = useMemo(
+    () =>
+      buildBookingCargoNoOfUnitsSyncKey(
+        form.values.service,
+        form.values.cargo_details,
+      ),
+    [form.values.service, form.values.cargo_details],
+  );
+
+  useEffect(() => {
+    if (!form.values.service) return;
+
+    setCharges((prev) => {
+      const updated = syncBookingChargesWithCargoNoOfUnits(
+        prev as Parameters<typeof syncBookingChargesWithCargoNoOfUnits>[0],
+        form.values.service,
+        form.values.cargo_details,
+        unitOptions,
+      );
+      return updated ? (updated as typeof prev) : prev;
+    });
+  }, [cargoNoOfUnitsSyncKey, form.values.service, unitOptions]);
 
   const handleSubmit = async () => {
     try {
@@ -2813,15 +2890,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             currency_country_code: charge.currency_country_code,
             roe: roundToDecimals(parseFloat(charge.roe)) || 1,
             unit: charge.unit,
-            no_of_units: roundToDecimals(parseFloat(charge.no_of_units)) || 0,
+            no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
               roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
             min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
             cost_per_unit:
               roundToDecimals(parseFloat(charge.cost_per_unit)) || 0,
             total_cost: roundToDecimals(parseFloat(charge.total_cost)) || 0,
-            total_sell:
-              roundToDecimals(parseFloat(charge.total_sell)) || 0,
+            total_sell: roundToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -5868,7 +5944,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                                   : "",
                               }),
                             );
-                            setCharges(mappedCharges);
+                            setCharges(
+                              mapBookingChargesWithUnits(
+                                mappedCharges,
+                                form.values.service,
+                                form.values.cargo_details,
+                                unitOptions,
+                              ) ?? mappedCharges,
+                            );
                           }
                         }
                       }}
@@ -6036,9 +6119,12 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           placeholder="Select Unit"
                           searchable
                           value={charge.unit}
-                          onChange={(value) =>
-                            updateCharge(index, "unit", value || "")
-                          }
+                          onChange={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
+                          onOptionSubmit={(value) => {
+                            if (value) updateCharge(index, "unit", value);
+                          }}
                           data={unitOptions}
                           size="xs"
                         />
@@ -6046,7 +6132,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="0"
-                          decimalScale={0}
+                          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                           value={charge.no_of_units}
                           onChange={(val) =>
                             updateCharge(index, "no_of_units", val || "")

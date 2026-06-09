@@ -9,6 +9,8 @@ export {
 } from "./BookingMasterListTable";
 export {
   getBookingRowPW,
+  getBookingRowAirVolume,
+  getBookingRowOceanVolume,
   getBookingMilestoneStyleByIndex,
   getLastMilestoneDisplayLabel,
   getLastMilestoneIndex,

@@ -42,6 +42,8 @@ export type BookingMasterVisibleColumns = {
   customer: boolean;
   route: boolean;
   status: boolean;
+  job_no: boolean;
+  volume: boolean;
   mawb: boolean;
   flight: boolean;
   pieces: boolean;
@@ -59,6 +61,8 @@ export const DEFAULT_BOOKING_MASTER_VISIBLE_COLUMNS: BookingMasterVisibleColumns
   customer: true,
   route: true,
   status: true,
+  job_no: true,
+  volume: true,
   mawb: true,
   flight: true,
   pieces: true,
@@ -81,6 +85,8 @@ export type BookingMasterTableRowModel<TRaw = unknown> = {
   destCode: string;
   service?: string;
   status?: string;
+  job_no?: string;
+  volume?: string;
   mawb: string;
   flight: string;
   pieces: number;
@@ -157,6 +163,8 @@ function countVisibleDataColumns(
   if (v.route) n++;
   if (showServiceColumn && v.service) n++;
   if (v.status) n++;
+  if (v.job_no) n++;
+  if (v.volume) n++;
   if (v.mawb) n++;
   if (v.flight) n++;
   if (v.pieces) n++;
@@ -192,6 +200,8 @@ const DEFAULT_BOOKING_MASTER_HEADER_WIDTHS: BookingMasterHeaderWidths = {
   date: 140,
   route: 200,
   status: 120,
+  job_no: 180,
+  volume: 140,
   mawb: 140,
   flight: 100,
   pieces: 100,
@@ -363,6 +373,16 @@ export function BookingMasterListTable<TRaw>({
                 {renderHeader("status", "Status")}
               </th>
             )}
+            {v.job_no && (
+              <th style={thStyle("left", "job_no")}>
+                {renderHeader("job_no", "Job ID")}
+              </th>
+            )}
+            {v.volume && (
+              <th style={thStyle("left", "volume")}>
+                {renderHeader("volume", "Volume")}
+              </th>
+            )}
             {v.mawb && (
               <th style={thStyle("left", "mawb")}>{renderHeader("mawb", "MAWB")}</th>
             )}
@@ -530,6 +550,22 @@ export function BookingMasterListTable<TRaw>({
                   {v.status && (
                     <td style={bodyTdStyle()}>
                       <StatusPill status={booking.status} />
+                    </td>
+                  )}
+                  {v.job_no && (
+                    <td
+                      className={monoClass}
+                      style={{
+                        ...bodyTdStyle({ color: muted }),
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {booking.job_no?.trim() ? booking.job_no : "—"}
+                    </td>
+                  )}
+                  {v.volume && (
+                    <td style={bodyTdStyle({ color: muted })}>
+                      {booking.volume?.trim() ? booking.volume : "—"}
                     </td>
                   )}
                   {v.mawb && (

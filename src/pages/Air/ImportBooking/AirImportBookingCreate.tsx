@@ -187,14 +187,17 @@ function AirImportBookingCreate() {
 
       // Stepper 5 - Quotation Details and rate_details for prefilling charges
       quotation_id: quotationData.quotation_id || "",
-      quotation_primary_id: (data as { quotation_primary_id?: number }).quotation_primary_id ?? quotationData.id,
+      quotation_primary_id:
+        (data as { quotation_primary_id?: number }).quotation_primary_id ??
+        quotationData.id,
       quotation_charges: quotationData.charges || [],
       rate_details: Array.isArray(quotationData.charges)
         ? (quotationData.charges as Array<Record<string, unknown>>).map(
             (c) => ({
               charge_id: c.charge_id || "",
               charge_name: c.charge_name || "",
-              currency_country_code: c.currency || c.currency_country_code || "",
+              currency_country_code:
+                c.currency || c.currency_country_code || "",
               roe: c.roe ?? "",
               unit: c.unit || "",
               no_of_units: c.no_of_units ?? "",
@@ -203,7 +206,7 @@ function AirImportBookingCreate() {
               cost_per_unit: c.cost_per_unit ?? "",
               total_cost: c.total_cost ?? "",
               total_sell: c.total_sell ?? "",
-            })
+            }),
           )
         : [],
     };
@@ -263,11 +266,15 @@ function AirImportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (response?.success && bookingItem) {
           navigate("/air/import-booking/edit", {
             state: { job: bookingItem },
@@ -289,7 +296,7 @@ function AirImportBookingCreate() {
         setIsFetchingBooking(false);
       }
     },
-    [navigate]
+    [navigate],
   );
 
   const handleEditFormPopulated = useCallback(() => {
@@ -315,30 +322,46 @@ function AirImportBookingCreate() {
       try {
         const response = (await getAPICall(
           `${URL.customerServiceShipment}${bookingId}/`,
-          API_HEADER
-        )) as { success?: boolean; data?: Record<string, unknown> | Record<string, unknown>[] };
-        const bookingItem = Array.isArray(response?.data) && response.data.length > 0
-          ? response.data[0]
-          : (response?.data as Record<string, unknown>);
+          API_HEADER,
+        )) as {
+          success?: boolean;
+          data?: Record<string, unknown> | Record<string, unknown>[];
+        };
+        const bookingItem =
+          Array.isArray(response?.data) && response.data.length > 0
+            ? response.data[0]
+            : (response?.data as Record<string, unknown>);
         if (!cancelled && response?.success && bookingItem) {
           navigate("/air/import-booking/edit", {
-            state: { job: bookingItem, returnTo: location.state?.returnTo, viewMode: location.state?.viewMode },
+            state: {
+              job: bookingItem,
+              returnTo: location.state?.returnTo,
+              viewMode: location.state?.viewMode,
+            },
             replace: true,
           });
         } else if (!cancelled) {
-          ToastNotification({ type: "error", message: "Failed to load booking data." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking data.",
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching booking:", error);
-          ToastNotification({ type: "error", message: "Failed to load booking. Please try again." });
+          ToastNotification({
+            type: "error",
+            message: "Failed to load booking. Please try again.",
+          });
         }
       } finally {
         if (!cancelled) setIsFetchingBooking(false);
       }
     };
     fetchAndReplace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [location.state?.bookingId, location.state?.job, navigate]);
 
   const showLoader =

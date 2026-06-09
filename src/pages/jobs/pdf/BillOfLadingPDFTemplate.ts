@@ -1,4 +1,9 @@
 import { jsPDF } from "jspdf";
+import pentagonFreightInd from "../../../assets/images/pentagon-freight-ind.png";
+import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
+import cargoConsolidators from "../../../assets/images/CCIPL.png";
+import primeLogo from "../../../assets/images/prime.png";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -34,44 +39,87 @@ const formatDateForDisplay = (dateString: any) => {
   return formatDate(dateString);
 };
 
-// Helper function to get default branch info from user store
-const getDefaultBranchInfo = () => {
+// Active (default) branch from user store — matches ProfileDrawer / ExportJobCreate
+const getActiveBranchFromStore = () => {
   try {
     const userStr = localStorage.getItem("user");
     if (userStr) {
       const user = JSON.parse(userStr);
       if (user?.branches && Array.isArray(user.branches)) {
-        const defaultBranch = user.branches.find(
-          (branch: any) => branch.is_default === true
+        return (
+          user.branches.find((branch: { is_default?: boolean }) => branch.is_default === true) ||
+          user.branches[0] ||
+          null
         );
-        if (defaultBranch) {
-          return {
-            branch_title: defaultBranch.branch_title || "",
-            address: defaultBranch.address || "",
-            logo_url: defaultBranch.logo_url || null,
-            tel: defaultBranch.tel || "",
-            email: defaultBranch.email || "",
-            pan: defaultBranch.pan || "",
-            gstn: defaultBranch.gstn || "",
-          };
-        }
       }
     }
   } catch (error) {
-    console.error("Error getting default branch info:", error);
+    console.error("Error getting active branch info:", error);
   }
-  return {
-    branch_title: "",
-    address: "",
-    logo_url: null,
-    tel: "",
-    email: "",
-    pan: "",
-    gstn: "",
-  };
+  return null;
 };
 
-// Helper function to get branch info
+const getLogoByCountry = (country: any): string | null => {
+  try {
+    let companyName = "";
+    let countryName = "";
+    let countryCode = "";
+
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user?.company) {
+        companyName = (user.company.company_name || "").toUpperCase();
+      }
+      if (user?.country) {
+        countryName = (user.country.country_name || "").toUpperCase();
+        countryCode = (user.country.country_code || "").toUpperCase();
+      }
+    }
+
+    if (country) {
+      countryName = (country.country_name || "").toUpperCase();
+      countryCode = (country.country_code || "").toUpperCase();
+    }
+
+    const normalizedCompanyName = companyName.replace(/\s+/g, "").toUpperCase();
+    if (
+      normalizedCompanyName === "CARGOCONSOLIDATORSINDIA" &&
+      countryCode === "IN"
+    ) {
+      return cargoConsolidators;
+    }
+
+    if (
+      countryName.includes("INDIA") ||
+      countryCode === "IN" ||
+      countryName === "INDIA"
+    ) {
+      return pentagonFreightInd;
+    }
+    if (
+      countryName.includes("USA") ||
+      countryCode === "US" ||
+      countryName === "USA"
+    ) {
+      return pentagonPrimeAmericas;
+    }
+    if (
+      countryName.includes("CHINA") ||
+      countryCode === "CN" ||
+      countryName === "CHINA"
+    ) {
+      return pentagonPrimeChina;
+    }
+    if (countryName.includes("KENYA") || countryCode === "KE") {
+      return primeLogo;
+    }
+    return primeLogo;
+  } catch (error) {
+    console.error("Error getting logo by country:", error);
+    return primeLogo;
+  }
+};
 
 const isUsBranchForBillOfLading = (
   country?: { country_code?: string; country_name?: string } | null,
@@ -145,26 +193,30 @@ export const generateBillOfLadingPDF = (
       "NON NEGOTIABLE COPY",
     ];
 
-    // Get branch info from user store (default branch)
-    const defaultBranchInfo = getDefaultBranchInfo();
-    
+    const activeBranch = defaultBranch || getActiveBranchFromStore();
+
     const branchInfo = {
-      name: defaultBranchInfo.branch_title || defaultBranch?.branch_name || "CHENNAI",
-      address: defaultBranchInfo.address || "",
-      tel: defaultBranchInfo.tel || "",
-      email: defaultBranchInfo.email || "",
-      pan: defaultBranchInfo.pan || "", // Default PAN value
-      gstn: defaultBranchInfo.gstn || "", // Default GSTN value
+      name:
+        activeBranch?.reporting_name ||
+        activeBranch?.branch_title ||
+        activeBranch?.branch_name ||
+        "",
+      address:
+        activeBranch?.reporting_address || activeBranch?.address || "",
+      tel: activeBranch?.tel || "",
+      email: activeBranch?.email || "",
+      pan: activeBranch?.pan || "",
+      gstn: activeBranch?.gstn || "",
     };
-    const logoUrl = defaultBranchInfo.logo_url;
+    const logoImage = getLogoByCountry(activeBranch?.country || country);
 
     // Extract data from jobData and housingData
     const carrierDetails = jobData?.carrierDetails || {};
     const jobInfo = jobData || {};
     const mblDetails = jobData?.mblDetails || {};
 
-    // Document Numbers
-    const billOfLadingNo = carrierDetails?.mbl_number || housingData?.hbl_number || "";
+    // Document Numbers — Bill of Lading uses house (HBL) number
+    const billOfLadingNo = housingData?.hbl_number || "";
     const shipmentReferenceNo = housingData?.shipment_id || housingData?.hbl_number || "";
 
     // Consignor (Shipper) Details
@@ -405,10 +457,14 @@ export const generateBillOfLadingPDF = (
 
     // ===== RIGHT BOX CONTENT =====
     
-    // Bill of Lading Title
+    // Bill of Lading Title (house / HBL number)
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("Bill of Lading:", midLineX + boxPadding, rightY);
+    doc.text(
+      `Bill of Lading: ${billOfLadingNo || ""}`,
+      midLineX + boxPadding,
+      rightY,
+    );
     rightY += 8;
     const billTitleSectionEndY = rightY;
 
@@ -417,44 +473,53 @@ export const generateBillOfLadingPDF = (
     rightY += 5;
 
     // Company Section (Branch title at center, logo, address)
+    const companySectionCenterX = midLineX + rightBoxWidth / 2;
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    // Split company name to fit within the box width
-    const companyTitleLines = doc.splitTextToSize(branchInfo.name || "", rightBoxWidth - 2 * boxPadding);
-    doc.text(companyTitleLines, midLineX + boxPadding, rightY);
+    const companyTitleLines = doc.splitTextToSize(
+      branchInfo.name || "",
+      rightBoxWidth - 2 * boxPadding,
+    );
+    doc.text(companyTitleLines, companySectionCenterX, rightY, {
+      align: "center",
+    });
     rightY += companyTitleLines.length * 3.5;
 
-    // Logo from S3 URL - centered with padding on all sides
-    if (logoUrl) {
+    if (logoImage) {
       try {
-        const logoPadding = 3; // Padding on all sides
+        const logoPadding = 3;
         const logoWidth = 40;
         const logoHeight = 15;
-        
-        // Calculate available width for logo section
         const availableWidth = rightBoxWidth - 2 * boxPadding;
-        
-        // Center the logo horizontally within the available width
         const logoX = midLineX + boxPadding + (availableWidth - logoWidth) / 2;
-        
-        // Add top padding
-        // rightY += logoPadding;
-        
-        // Draw the logo
-        doc.addImage(logoUrl, "PNG", logoX, rightY, logoWidth, logoHeight, undefined, "FAST");
-        
-        // Add bottom padding
+
+        doc.addImage(
+          logoImage,
+          "PNG",
+          logoX,
+          rightY,
+          logoWidth,
+          logoHeight,
+          undefined,
+          "FAST",
+        );
+
         rightY += logoHeight + logoPadding + 3;
       } catch (error) {
-        console.warn("Could not load logo from URL, continuing without logo:", error);
+        console.warn("Could not add logo to PDF, continuing without logo:", error);
       }
     }
 
     // Branch Address
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
-    const branchAddressLines = doc.splitTextToSize(branchInfo.address || "", rightBoxWidth - 2 * boxPadding);
-    doc.text(branchAddressLines, midLineX + boxPadding, rightY);
+    const branchAddressLines = doc.splitTextToSize(
+      branchInfo.address || "",
+      rightBoxWidth - 2 * boxPadding,
+    );
+    doc.text(branchAddressLines, companySectionCenterX, rightY, {
+      align: "center",
+    });
     rightY += branchAddressLines.length * 3.5;
     
     // PAN and GSTN (if available)
