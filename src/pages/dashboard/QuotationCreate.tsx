@@ -61,6 +61,11 @@ import { postAPICall } from "../../service/postApiCall";
 import { putAPICall } from "../../service/putApiCall";
 import { toTitleCase } from "../../utils/textFormatter";
 import {
+  coerceHouseCargoWeightInput,
+  importHouseCargoWeightFromApi,
+  parseNoOfUnitForPayload,
+} from "../../utils/houseCargoChargeableWeight";
+import {
   ToastNotification,
   ServiceDetailsSlider,
   Dropdown,
@@ -248,6 +253,11 @@ type ChargeType = {
   // Present only for existing quotation charges (line items)
   id?: number;
 };
+
+function formatQuotationNoOfUnitsFromApi(value: unknown): string {
+  const imported = importHouseCargoWeightFromApi(value);
+  return imported === null ? "" : String(imported);
+}
 
 function computeChargeLineTotals(charge: {
   no_of_units?: string | number;
@@ -806,9 +816,17 @@ function QuotationCreate({
       return {
         ...inputProps,
         onChange: (event: ChangeEvent<HTMLInputElement>) => {
-          const value = event.currentTarget.value;
+          const raw = event.currentTarget.value;
+          if (field === "no_of_units") {
+            const previous = dynamicForm.values.charges[index]?.no_of_units;
+            const coerced = coerceHouseCargoWeightInput(raw, previous);
+            const value = coerced === null ? "" : String(coerced);
+            dynamicForm.setFieldValue(`charges.${index}.no_of_units`, value);
+            syncChargeTotalsAtIndex(index, { no_of_units: value });
+            return;
+          }
           inputProps.onChange?.(event);
-          syncChargeTotalsAtIndex(index, { [field]: value });
+          syncChargeTotalsAtIndex(index, { [field]: raw });
         },
       };
     },
@@ -865,8 +883,7 @@ function QuotationCreate({
           currency_country_code: charge.currency || "",
           roe: charge.roe != null ? String(charge.roe) : "1",
           unit: charge.unit || "",
-          no_of_units:
-            charge.no_of_units != null ? String(charge.no_of_units) : "",
+          no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit:
             charge.sell_per_unit != null ? String(charge.sell_per_unit) : "",
           min_sell: charge.min_sell != null ? String(charge.min_sell) : "",
@@ -1203,10 +1220,9 @@ function QuotationCreate({
                   currency_country_code: charge.currency || "",
                   roe: charge.roe != null ? String(charge.roe) : "1",
                   unit: charge.unit || "",
-                  no_of_units:
-                    charge.no_of_units != null
-                      ? String(charge.no_of_units)
-                      : "",
+                  no_of_units: formatQuotationNoOfUnitsFromApi(
+                    charge.no_of_units,
+                  ),
                   sell_per_unit:
                     charge.sell_per_unit != null
                       ? String(charge.sell_per_unit)
@@ -1298,12 +1314,12 @@ function QuotationCreate({
           currency_country_code: charge.currency || "",
           roe: Number(charge.roe) || 1,
           unit: charge.unit || "",
-          no_of_units: charge.no_of_units?.toString() || "",
+          no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit: charge.sell_per_unit?.toString() ?? "",
           min_sell: charge.min_sell?.toString() ?? "",
           cost_per_unit: charge.cost_per_unit?.toString() ?? "",
           ...computeChargeLineTotals({
-            no_of_units: charge.no_of_units?.toString() || "",
+            no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
             sell_per_unit: charge.sell_per_unit?.toString() ?? "",
             cost_per_unit: charge.cost_per_unit?.toString() ?? "",
             roe: Number(charge.roe) || 1,
@@ -1373,7 +1389,7 @@ function QuotationCreate({
         const unit = charge.unit ?? "";
         // Calculate no_of_units based on service and unit (not from API response)
         const calculatedNoOfUnits =
-          unit && selectedService && !isEditMode
+          unit && selectedService
             ? calculateNoOfUnits(
                 selectedService.service,
                 unit,
@@ -1659,7 +1675,10 @@ function QuotationCreate({
           currency_country_code: charge.currency_country_code || "INR",
           roe: charge.roe != null ? charge.roe : 1.0,
           unit: charge.unit || "",
-          no_of_units: charge.no_of_units != null ? charge.no_of_units : "1",
+          no_of_units:
+            charge.no_of_units != null
+              ? formatQuotationNoOfUnitsFromApi(charge.no_of_units)
+              : "1",
           // sell_per_unit: isLCL ? rate.toString() : charge.sell_per_unit || "0",
           sell_per_unit: isLCL
             ? charge.sell_per_unit != null
@@ -2343,7 +2362,7 @@ function QuotationCreate({
         currency_country_code: charge.currency_country_code,
         roe: parseFloat(charge.roe.toString()) || 1.0,
         unit: charge.unit,
-        no_of_units: parseInt(charge.no_of_units) || 0,
+        no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
         sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
         min_sell: parseFloat(charge.min_sell) || 0.0,
         cost_per_unit: parseFloat(charge.cost_per_unit) || 0.0,
@@ -2515,7 +2534,7 @@ function QuotationCreate({
               currency_country_code: charge.currency_country_code,
               roe: parseFloat(charge.roe.toString()) || 1.0,
               unit: charge.unit,
-              no_of_units: parseInt(charge.no_of_units) || 0,
+              no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
               sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
               min_sell: parseFloat(charge.min_sell) || 0.0,
               cost_per_unit: parseFloat(charge.cost_per_unit) || 0.0,
@@ -3024,10 +3043,9 @@ function QuotationCreate({
                   currency_country_code: charge.currency || "",
                   roe: charge.roe != null ? String(charge.roe) : "1",
                   unit: charge.unit || "",
-                  no_of_units:
-                    charge.no_of_units != null
-                      ? String(charge.no_of_units)
-                      : "",
+                  no_of_units: formatQuotationNoOfUnitsFromApi(
+                    charge.no_of_units,
+                  ),
                   sell_per_unit:
                     charge.sell_per_unit != null
                       ? String(charge.sell_per_unit)
@@ -3532,37 +3550,86 @@ function QuotationCreate({
     };
   }, [notesConditionsModalOpened, notes, conditions]);
 
-  // Helper function to calculate no_of_units based on service, unit, and enquiry data
+  // Helper function to calculate no_of_units based on service, unit, and enquiry/quotation data
   const calculateNoOfUnits = useCallback(
     (service: string, unit: string, serviceId?: number): string => {
-      // Skip if in edit mode
-      if (isEditMode) {
+      if (!service || !unit) {
         return "";
       }
 
-      if (!actualEnquiryData?.services || !service || !unit) {
+      const resolveServiceContext = (): {
+        serviceType: string;
+        cargoDetails: Array<Record<string, unknown>>;
+        primaryCargo: Record<string, unknown>;
+      } | null => {
+        let enquiryService: Record<string, unknown> | null = null;
+
+        if (actualEnquiryData?.services?.length) {
+          enquiryService =
+            (serviceId
+              ? actualEnquiryData.services.find((s: any) => s.id === serviceId)
+              : actualEnquiryData.services.find(
+                  (s: any) => s.service === service,
+                )) || actualEnquiryData.services[0];
+        }
+
+        if (!enquiryService && services.length > 0) {
+          enquiryService =
+            (serviceId
+              ? services.find((s) => s.id === serviceId)
+              : services.find((s) => s.service === service)) ||
+            selectedService ||
+            services[0];
+        }
+
+        if (!enquiryService) {
+          return null;
+        }
+
+        const cargoDetails = (
+          (enquiryService.cargo_details as Array<Record<string, unknown>>) ||
+          (enquiryService.fcl_details as Array<Record<string, unknown>>) ||
+          []
+        ).filter(Boolean);
+
+        const primaryCargo: Record<string, unknown> = cargoDetails[0] || {
+          gross_weight: enquiryService.gross_weight,
+          volume: enquiryService.volume,
+          volume_weight: enquiryService.volume_weight,
+          chargeable_weight:
+            enquiryService.chargeable_weight ?? enquiryService.chargable_weight,
+          chargable_weight:
+            enquiryService.chargable_weight ?? enquiryService.chargeable_weight,
+          chargeable_volume:
+            enquiryService.chargeable_volume ??
+            enquiryService.chargable_volume,
+          chargable_volume:
+            enquiryService.chargable_volume ?? enquiryService.chargeable_volume,
+        };
+
+        return {
+          serviceType: String(enquiryService.service || service),
+          cargoDetails,
+          primaryCargo,
+        };
+      };
+
+      const context = resolveServiceContext();
+      if (!context) {
         return "";
       }
 
-      // Find the service from enquiry data
-      const enquiryService = serviceId
-        ? actualEnquiryData.services.find((s: any) => s.id === serviceId)
-        : selectedService || actualEnquiryData.services[0];
-
-      if (!enquiryService) {
-        return "";
-      }
-
-      const serviceType = enquiryService.service;
+      const { serviceType, cargoDetails, primaryCargo } = context;
       const unitUpper = unit.toUpperCase();
 
       // AIR service logic
       if (serviceType === "AIR") {
         if (unitUpper === "KG") {
-          // Get chargable_weight from cargo_details
-          const cargo = enquiryService.cargo_details?.[0];
-          return cargo?.chargable_weight || cargo?.chargeable_weight || "";
-        } else if (
+          return formatQuotationNoOfUnitsFromApi(
+            primaryCargo.chargable_weight ?? primaryCargo.chargeable_weight,
+          );
+        }
+        if (
           unitUpper === "SHIPMENT" ||
           unitUpper === "SHPT" ||
           unitUpper === "DOC"
@@ -3573,19 +3640,21 @@ function QuotationCreate({
 
       // LCL service logic
       if (serviceType === "LCL") {
-        const cargo = enquiryService.cargo_details?.[0];
         if (unitUpper === "W/M") {
-          return cargo?.chargable_volume || cargo?.chargeable_volume || "";
-        } else if (unitUpper === "CBM") {
-          return cargo?.volume || "";
-        } else if (unitUpper === "SHPT" || unitUpper === "DOC") {
+          return formatQuotationNoOfUnitsFromApi(
+            primaryCargo.chargable_volume ?? primaryCargo.chargeable_volume,
+          );
+        }
+        if (unitUpper === "CBM") {
+          return formatQuotationNoOfUnitsFromApi(primaryCargo.volume);
+        }
+        if (unitUpper === "SHPT" || unitUpper === "DOC") {
           return "1";
         }
       }
 
       // FCL service logic
       if (serviceType === "FCL") {
-        // Check if unit matches shipment
         if (
           unitUpper === "SHIPMENT" ||
           unitUpper === "SHPT" ||
@@ -3594,23 +3663,60 @@ function QuotationCreate({
           return "1";
         }
 
-        // Find matching container_type_code in cargo_details
-        const cargoDetails =
-          enquiryService.cargo_details || enquiryService.fcl_details || [];
         const matchingCargo = cargoDetails.find(
-          (cargo: any) =>
-            (cargo.container_type_code || "").toUpperCase() === unitUpper ||
-            (cargo.container_type || "").toUpperCase() === unitUpper,
+          (cargo) =>
+            String(cargo.container_type_code || "").toUpperCase() ===
+              unitUpper ||
+            String(cargo.container_type || "").toUpperCase() === unitUpper,
         );
 
         if (matchingCargo) {
-          return matchingCargo.no_of_containers?.toString() || "";
+          return formatQuotationNoOfUnitsFromApi(
+            matchingCargo.no_of_containers,
+          );
         }
       }
 
       return "";
     },
-    [actualEnquiryData, selectedService, isEditMode],
+    [actualEnquiryData, selectedService, services],
+  );
+
+  const applyChargeUnitSelection = useCallback(
+    (index: number, value: string | null) => {
+      const unitValue = value || "";
+      dynamicForm.setFieldValue(`charges.${index}.unit`, unitValue);
+
+      if (!value || !selectedService) {
+        syncChargeTotalsAtIndex(index, { unit: unitValue });
+        return;
+      }
+
+      const calculatedNoOfUnits = calculateNoOfUnits(
+        selectedService.service,
+        value,
+        selectedService.id,
+      );
+
+      if (calculatedNoOfUnits) {
+        dynamicForm.setFieldValue(
+          `charges.${index}.no_of_units`,
+          calculatedNoOfUnits,
+        );
+        syncChargeTotalsAtIndex(index, {
+          unit: unitValue,
+          no_of_units: calculatedNoOfUnits,
+        });
+      } else {
+        syncChargeTotalsAtIndex(index, { unit: unitValue });
+      }
+    },
+    [
+      dynamicForm,
+      selectedService,
+      calculateNoOfUnits,
+      syncChargeTotalsAtIndex,
+    ],
   );
 
   // Fetch unit data based on service type
@@ -5361,39 +5467,12 @@ function QuotationCreate({
                               )}
                               onChange={(value) => {
                                 if (!isViewMode) {
-                                  // Set unit value
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.unit`,
-                                    value || "",
-                                  );
-
-                                  // Auto-calculate and set no_of_units based on service and unit
-                                  if (value && selectedService) {
-                                    const calculatedNoOfUnits =
-                                      calculateNoOfUnits(
-                                        selectedService.service,
-                                        value,
-                                        selectedService.id,
-                                      );
-                                    if (calculatedNoOfUnits) {
-                                      dynamicForm.setFieldValue(
-                                        `charges.${index}.no_of_units`,
-                                        calculatedNoOfUnits,
-                                      );
-                                      syncChargeTotalsAtIndex(index, {
-                                        unit: value || "",
-                                        no_of_units: calculatedNoOfUnits,
-                                      });
-                                    } else {
-                                      syncChargeTotalsAtIndex(index, {
-                                        unit: value || "",
-                                      });
-                                    }
-                                  } else {
-                                    syncChargeTotalsAtIndex(index, {
-                                      unit: value || "",
-                                    });
-                                  }
+                                  applyChargeUnitSelection(index, value);
+                                }
+                              }}
+                              onOptionSubmit={(value) => {
+                                if (!isViewMode) {
+                                  applyChargeUnitSelection(index, value);
                                 }
                               }}
                               disabled={isViewMode || isLoadingUnitData}
@@ -6719,35 +6798,10 @@ function QuotationCreate({
                               `charges.${index}.unit`,
                             )}
                             onChange={(value) => {
-                              dynamicForm.setFieldValue(
-                                `charges.${index}.unit`,
-                                value || "",
-                              );
-                              if (value && selectedService) {
-                                const calculatedNoOfUnits = calculateNoOfUnits(
-                                  selectedService.service,
-                                  value,
-                                  selectedService.id,
-                                );
-                                if (calculatedNoOfUnits) {
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.no_of_units`,
-                                    calculatedNoOfUnits,
-                                  );
-                                  syncChargeTotalsAtIndex(index, {
-                                    unit: value,
-                                    no_of_units: calculatedNoOfUnits,
-                                  });
-                                } else {
-                                  syncChargeTotalsAtIndex(index, {
-                                    unit: value,
-                                  });
-                                }
-                              } else {
-                                syncChargeTotalsAtIndex(index, {
-                                  unit: value || "",
-                                });
-                              }
+                              applyChargeUnitSelection(index, value);
+                            }}
+                            onOptionSubmit={(value) => {
+                              applyChargeUnitSelection(index, value);
                             }}
                             disabled={isLoadingUnitData}
                           />
