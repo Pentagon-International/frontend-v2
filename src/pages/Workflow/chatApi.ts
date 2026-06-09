@@ -47,15 +47,13 @@ export const handleChatApiError = (err: unknown): string => {
   return "Sorry, something went wrong. Please try again.";
 };
 
-/** API session_id: numeric for operations when possible, string for analytics */
+/** API session_id: numeric when id is digits (operations + analytics contract). */
 export const sessionIdForApi = (
   mode: ChatMode,
   sessionId: string,
 ): string | number => {
-  if (mode === "operations") {
-    const n = Number(sessionId);
-    if (!Number.isNaN(n) && /^\d+$/.test(sessionId)) return n;
-  }
+  const n = Number(sessionId);
+  if (!Number.isNaN(n) && /^\d+$/.test(sessionId)) return n;
   return sessionId;
 };
 

@@ -1,0 +1,21 @@
+.embeddedPanel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface, #ffffff);
+}
+
+.monoInput textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.memoryCard {
+  background: #f8fafc;
+}
+
+.memoryPreview {
+  color: var(--text-muted, #64748b);
+  white-space: pre-wrap;
+  line-height: 1.45;
+}

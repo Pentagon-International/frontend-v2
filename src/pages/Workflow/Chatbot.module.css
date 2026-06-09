@@ -1,5 +1,18 @@
 /* Pulse AI chatbot — Claude / ChatGPT–style layout, ERP palette */
 
+.analyticsSubNav {
+  flex-shrink: 0;
+  padding: 0 1rem 0.75rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+.statusPill {
+  text-transform: lowercase;
+  font-family: ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+}
+
 .fabWrap {
   position: fixed;
   bottom: 20px;
@@ -166,6 +179,7 @@
 
 .chatMain {
   flex: 1;
+  margin-bottom: 10px;
   min-width: 0;
   min-height: 0;
   display: flex;

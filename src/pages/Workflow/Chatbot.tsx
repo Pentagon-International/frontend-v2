@@ -190,9 +190,17 @@ const Chatbot: FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (chatMode === "analytics" && isListening) stopRecording();
+  }, [chatMode, isListening]);
+
   return (
     <ChatbotPageUi
-      subtitle="Whisper voice · Operations & Analytics"
+      subtitle={
+        chatMode === "analytics"
+          ? "Structured SQL analytics · Tables & charts"
+          : "Whisper voice · Operations & Analytics"
+      }
       chatMode={chatMode}
       onChatModeChange={setChatMode}
       sessions={sessions}
@@ -233,19 +241,21 @@ const Chatbot: FC = () => {
         ) : undefined
       }
       micButton={
-        <Tooltip label={isListening ? "Stop recording" : "Voice input"}>
-          <ActionIcon
-            size="lg"
-            radius="md"
-            variant={isListening ? "filled" : "light"}
-            color={isListening ? "red" : "gray"}
-            onClick={toggleVoice}
-            disabled={!activeSessionId}
-            className={isListening ? styles.micPulse : undefined}
-          >
-            {isListening ? <IconMicrophoneOff size={16} /> : <IconMicrophone size={16} />}
-          </ActionIcon>
-        </Tooltip>
+        chatMode === "analytics" ? null : (
+          <Tooltip label={isListening ? "Stop recording" : "Voice input"}>
+            <ActionIcon
+              size="lg"
+              radius="md"
+              variant={isListening ? "filled" : "light"}
+              color={isListening ? "red" : "gray"}
+              onClick={toggleVoice}
+              disabled={!activeSessionId}
+              className={isListening ? styles.micPulse : undefined}
+            >
+              {isListening ? <IconMicrophoneOff size={16} /> : <IconMicrophone size={16} />}
+            </ActionIcon>
+          </Tooltip>
+        )
       }
     />
   );

@@ -25,7 +25,7 @@ import { useIsAdminUser } from "../../hooks/useIsAdminUser";
 import {
   hasAnalyticsStructuredBlocks,
   parseAnalyticsChatData,
-  toAnalyticsMescsagePayload,
+  toAnalyticsMessagePayload,
   type AnalyticsMessagePayload,
 } from "./analyticsChatTypes";
 import { useOperationsChatSessionStore } from "./operationsChatSessionStore";
@@ -37,6 +37,8 @@ export type UseChatSessionsOptions = {
   syncUrl?: boolean;
   /** Share operations session id in memory until reload/login. */
   usePersistedSession?: boolean;
+  /** When false, skips session/history API calls until enabled (default true). */
+  enabled?: boolean;
 };
 
 export interface ChatMessage {
@@ -159,7 +161,7 @@ const resolveActiveSessionId = (
 };
 
 export const useChatSessions = (options: UseChatSessionsOptions = {}) => {
-  const { lockMode, syncUrl = true, usePersistedSession = false } = options;
+  const { lockMode, syncUrl = true, usePersistedSession = false, enabled = true } = options;
 
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -379,7 +381,10 @@ export const useChatSessions = (options: UseChatSessionsOptions = {}) => {
 
       try {
         const res = await chatApi.get("/chat/sessions", {
-          params: chatTypeParam(mode),
+          params:
+            mode === "analytics"
+              ? { ...chatTypeParam(mode), limit: 50, offset: 0 }
+              : chatTypeParam(mode),
         });
         if (fetchId !== sessionsFetchIdRef.current || mode !== chatModeRef.current) return;
 
@@ -432,6 +437,11 @@ export const useChatSessions = (options: UseChatSessionsOptions = {}) => {
   );
 
   useEffect(() => {
+    if (!enabled) {
+      setSessionsLoading(false);
+      return;
+    }
+
     if (lockMode) {
       setChatMode(lockMode);
       chatModeRef.current = lockMode;
@@ -454,7 +464,7 @@ export const useChatSessions = (options: UseChatSessionsOptions = {}) => {
       sessionsFetchIdRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount: restore mode from URL once
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     if (!urlSyncReady.current || !syncUrl || lockMode) return;

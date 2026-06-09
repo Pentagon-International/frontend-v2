@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, FC, ReactNode } from "react";
 import axios from "axios";
 import { postAPICall } from "../../../service/postApiCall";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { FilePreviewFrame } from "./automationFilePreview";
 
 const hblApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}workflow`,
@@ -35,6 +37,8 @@ interface FileRecord {
   diff_summary?: string;
   error_message?: string;
   created_by?: string;
+  mbl_file_url?: string;
+  hbl_file_url?: string;
 }
 
 interface OceanRouting {
@@ -710,16 +714,26 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 
-type DetailTab = "payload" | "raw";
+type DetailTab = "payload" | "mbl_file" | "hbl_file" | "raw";
 
 const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: CarrierOption[]; containerTypes: ContainerTypeOption[]; onClose: () => void }> = ({ record, ports, carriers, containerTypes, onClose }) => {
+  const isAdmin = useIsAdminUser();
   const [tab, setTab] = useState<DetailTab>("payload");
   const p = record.api_payload ?? record.extracted_data ?? {} as PayloadData;
 
-  const tabs: Array<{ key: DetailTab; label: string }> = [
-    { key: "payload", label: "Payload Form" },
-    { key: "raw", label: "Raw JSON" },
-  ];
+  const tabs = useMemo(() => {
+    const items: Array<{ key: DetailTab; label: string }> = [
+      { key: "payload", label: "Payload Form" },
+    ];
+    if (record.mbl_file_url?.trim()) items.push({ key: "mbl_file", label: "MBL File" });
+    if (record.hbl_file_url?.trim()) items.push({ key: "hbl_file", label: "HBL File" });
+    if (isAdmin) items.push({ key: "raw", label: "Raw JSON" });
+    return items;
+  }, [record.mbl_file_url, record.hbl_file_url, isAdmin]);
+
+  useEffect(() => {
+    if (!tabs.some(t => t.key === tab)) setTab("payload");
+  }, [tabs, tab]);
 
   return (
     <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -741,8 +755,14 @@ const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: Carri
             </button>
           ))}
         </div>
-        <div className="tab-body">
+        <div className="tab-body" style={tab === "mbl_file" || tab === "hbl_file" ? { padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } : undefined}>
           {tab === "payload" && <PayloadFormBody p={p} ports={ports} carriers={carriers} containerTypes={containerTypes} />}
+          {tab === "mbl_file" && record.mbl_file_url?.trim() && (
+            <FilePreviewFrame url={record.mbl_file_url.trim()} title={`MBL — ${record.filename}`} />
+          )}
+          {tab === "hbl_file" && record.hbl_file_url?.trim() && (
+            <FilePreviewFrame url={record.hbl_file_url.trim()} title={`HBL — ${record.filename}`} />
+          )}
           {tab === "raw" && (
             Object.keys(p).length
               ? <pre style={{ maxHeight: "calc(88vh - 200px)" }}>{JSON.stringify(p, null, 2)}</pre>
@@ -1188,6 +1208,7 @@ interface PayloadModalProps {
 }
 
 const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onClose, showToast, onRefreshList }) => {
+  const isAdmin = useIsAdminUser();
   // ── FIX 1: Seed editData immediately from inlineRecord — no race condition ──
   const initPayload = useCallback((): PayloadData => {
     return inlineRecord?.api_payload ?? inlineRecord?.extracted_data ?? {};
@@ -1197,13 +1218,27 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
   const [loading, setLoading] = useState(!inlineRecord);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [ptab, setPtab] = useState<"form" | "raw">("form");
+  const [ptab, setPtab] = useState<"form" | "mbl_file" | "hbl_file" | "raw">("form");
   const [ports, setPorts] = useState<PortOption[]>([]);
   const [carriers, setCarriers] = useState<CarrierOption[]>([]);
   const [containerTypes, setContainerTypes] = useState<ContainerTypeOption[]>([]);
   const [fixTarget, setFixTarget] = useState<{ record: FileRecord } | null>(null);
   const [containerTypeFixTarget, setContainerTypeFixTarget] = useState<{ record: FileRecord } | null>(null);
   const [carrierFixTarget, setCarrierFixTarget] = useState<{ record: FileRecord } | null>(null);
+
+  const payloadTabs = useMemo(() => {
+    const tabs: Array<{ key: "form" | "mbl_file" | "hbl_file" | "raw"; label: string }> = [
+      { key: "form", label: "Form View" },
+    ];
+    if (rec?.mbl_file_url?.trim()) tabs.push({ key: "mbl_file", label: "MBL File" });
+    if (rec?.hbl_file_url?.trim()) tabs.push({ key: "hbl_file", label: "HBL File" });
+    if (isAdmin) tabs.push({ key: "raw", label: "Raw JSON" });
+    return tabs;
+  }, [rec?.mbl_file_url, rec?.hbl_file_url, isAdmin]);
+
+  useEffect(() => {
+    if (!payloadTabs.some(t => t.key === ptab)) setPtab("form");
+  }, [payloadTabs, ptab]);
 
   // Seed all state immediately from inlineRecord (avoids blank form on first render)
   const [editData, setEditData] = useState<PayloadData>(initPayload);
@@ -1408,9 +1443,9 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
         </div>
 
         <div className="tabs" style={{ padding: "8px 24px 0" }}>
-          {(["form", "raw"] as const).map(t => (
-            <button key={t} className={`tab-btn ${ptab === t ? "active" : ""}`} onClick={() => setPtab(t)}>
-              {t === "form" ? "Form View" : "Raw JSON"}
+          {payloadTabs.map(t => (
+            <button key={t.key} className={`tab-btn ${ptab === t.key ? "active" : ""}`} onClick={() => setPtab(t.key)}>
+              {t.label}
             </button>
           ))}
         </div>
@@ -1447,6 +1482,10 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
                 onFixHousingCode={() => rec && setFixTarget({ record: rec })}
               />
             </div>
+          ) : ptab === "mbl_file" && rec?.mbl_file_url?.trim() ? (
+            <FilePreviewFrame url={rec.mbl_file_url.trim()} title={`MBL — ${rec.filename ?? txn_id}`} />
+          ) : ptab === "hbl_file" && rec?.hbl_file_url?.trim() ? (
+            <FilePreviewFrame url={rec.hbl_file_url.trim()} title={`HBL — ${rec.filename ?? txn_id}`} />
           ) : (
             <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
               <pre style={{ maxHeight: "calc(92vh - 220px)" }}>{JSON.stringify(rec?.api_payload ?? rec?.extracted_data ?? {}, null, 2)}</pre>
@@ -2389,7 +2428,7 @@ const HBLDocumentManager: FC = () => {
         <div className="top-brand">
           <div className="top-brand-icon">🧾</div>
           <div>
-            <div className="top-brand-text">Job Creation</div>
+            <div className="top-brand-text">Import Job</div>
             <div className="top-brand-sub">HBL · MBL · Upload · Review</div>
           </div>
         </div>

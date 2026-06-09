@@ -1,4 +1,4 @@
-import { FC, ReactNode, RefObject, useEffect } from "react";
+import { FC, ReactNode, RefObject, useEffect, useState } from "react";
 import {
   Box,
   Text,
@@ -31,10 +31,15 @@ import {
 import styles from "./Chatbot.module.css";
 import type { ChatReferences } from "./chatbotMessageUtils";
 import type { ReferenceLinkTarget } from "./chatReferenceNavigation";
-// import type { AnalyticsMessagePayload } from "./analyticsChatTypes";
+import type { AnalyticsMessagePayload } from "./analyticsChatTypes";
 import { useIsAdminUser } from "../../hooks/useIsAdminUser";
 import { AssistantMarkdown } from "./AssistantMarkdown";
 import { AssistantAnalyticsMessage } from "./AssistantAnalyticsMessage";
+import {
+  AnalyticsMemoryPanel,
+  AnalyticsTrainPanel,
+  type AnalyticsAdminView,
+} from "./analytics/AnalyticsAdminPanels";
 
 export interface ChatbotUiMessage {
   id: string;
@@ -82,6 +87,8 @@ export interface ChatbotPageUiProps {
   /** Embedded drawer/modal: hide sidebar and mode switch. */
   compact?: boolean;
   hideModeSelector?: boolean;
+  /** Extra controls in page header (e.g. analytics status pill). */
+  headerExtra?: ReactNode;
 }
 
 export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
@@ -90,6 +97,7 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
   onChatModeChange,
   compact = false,
   hideModeSelector = false,
+  headerExtra,
   sessions,
   activeSessionId,
   activeSession,
@@ -246,8 +254,17 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
     </>
   );
 
+  const [analyticsView, setAnalyticsView] = useState<AnalyticsAdminView>("chat");
+
+  useEffect(() => {
+    if (chatMode !== "analytics") setAnalyticsView("chat");
+  }, [chatMode]);
+
   const showModeSelector = !hideModeSelector && onChatModeChange && isStaffAdmin;
-  const showSidebar = !compact;
+  const showAnalyticsSubNav =
+    !compact && chatMode === "analytics" && isStaffAdmin;
+  const showAdminPanel = showAnalyticsSubNav && analyticsView !== "chat";
+  const showSidebar = !compact && !showAdminPanel;
 
   return (
     <Box className={compact ? styles.rootEmbedded : styles.root}>
@@ -273,6 +290,7 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
           </Box>
         </Box>
         <Box className={styles.headerActions}>
+          {headerExtra}
           {activeSession && (
             <Badge variant="light" color="blue" size="md">
               <Text span truncate inherit>
@@ -296,6 +314,30 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
       </Box>
       )}
 
+      {showAnalyticsSubNav && (
+        <Box className={styles.analyticsSubNav}>
+          <SegmentedControl
+            size="xs"
+            value={analyticsView}
+            onChange={(v) => setAnalyticsView(v as AnalyticsAdminView)}
+            data={[
+              { label: "Chat", value: "chat" },
+              { label: "Train", value: "train" },
+              { label: "Memory", value: "memory" },
+            ]}
+          />
+        </Box>
+      )}
+
+      {showAdminPanel ? (
+        <Box className={styles.layout}>
+          {analyticsView === "train" ? (
+            <AnalyticsTrainPanel />
+          ) : (
+            <AnalyticsMemoryPanel />
+          )}
+        </Box>
+      ) : (
       <Box className={styles.layout}>
         {showSidebar && !isMobile && (
           <Paper withBorder className={styles.sidebar}>
@@ -493,6 +535,7 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
           </Paper>
         </Box>
       </Box>
+      )}
     </Box>
   );
 };

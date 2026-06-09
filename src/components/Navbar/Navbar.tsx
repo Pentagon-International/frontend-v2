@@ -56,12 +56,12 @@ import {
   IconFileUpload,
   IconFiles,
   IconRobot,
-  IconClipboardList,
+  IconAutomation,
 } from "@tabler/icons-react";
 import {
   CHATBOT_PATH,
-  HBL_DOCUMENT_MANAGER_PATH,
-  INVOICE_MANAGER_PATH,
+  IMPORT_JOB_PATH,
+  VENDOR_INVOICE_PATH,
 } from "../../pages/Workflow/jobcreation/workflowUrls";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
@@ -97,9 +97,17 @@ const Navbar = ({
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isFinanceDashboardOpen, setIsFinanceDashboardOpen] = useState(false);
+  const [isAutomationOpen, setIsAutomationOpen] = useState(false);
 
   // Keep Accounts expanded when on receipt, payment, overseas-receipt or supplier-invoice routes
   useEffect(() => {
+    if (
+      location.pathname.startsWith("/automation/") ||
+      location.pathname.startsWith("/workflow/hbl-document-manager") ||
+      location.pathname.startsWith("/workflow/invoice-manager")
+    ) {
+      setIsAutomationOpen(true);
+    }
     if (
       location.pathname.startsWith("/receipt") ||
       location.pathname.startsWith("/payment") ||
@@ -1107,28 +1115,35 @@ const Navbar = ({
               ) : (
                 <Divider my="xs" color="#D5D5D5" size="sm" />
               )}
-              <SimpleNavLink
-                label="Jobcreation"
-                key={"Jobcreation"}
-                icon={IconFileUpload}
-                path={HBL_DOCUMENT_MANAGER_PATH}
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                }}
-              />
-              <SimpleNavLink
-                label="Invoice Manager"
-                key={"Invoice Manager"}
-                icon={IconClipboardList}
-                path={INVOICE_MANAGER_PATH}
-                collapsibles={{
-                  setIsSalesOpen,
-                  setIsTariffOpen,
-                  setIsCustomerServiceOpen,
-                }}
-              />
+              <CollapsibleNav
+                label="Automation"
+                openedLocal={isAutomationOpen}
+                setOpenedLocal={setIsAutomationOpen}
+                icon={IconAutomation}
+              >
+                <SubNavLink
+                  parent="Automation"
+                  label="Import Job"
+                  icon={IconFileUpload}
+                  path={IMPORT_JOB_PATH}
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Automation"
+                  label="Vendor Invoice"
+                  icon={IconFileInvoice}
+                  path={VENDOR_INVOICE_PATH}
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                  }}
+                />
+              </CollapsibleNav>
               <SimpleNavLink
                 label="Chatbot"
                 key={"Chatbot"}

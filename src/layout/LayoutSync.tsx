@@ -182,13 +182,19 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/debit-credit-note-non-trade")) {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");
+    } else if (path.startsWith("/automation/import-job") || path.startsWith("/automation/job-creation")) {
+      setActiveNav("Automation");
+      setActiveSubNav("Import Job");
+    } else if (path.startsWith("/automation/vendor-invoice") || path.startsWith("/automation/invoice-manager")) {
+      setActiveNav("Automation");
+      setActiveSubNav("Vendor Invoice");
     } else if (path.startsWith("/workflow/hbl-document-manager")) {
-      setActiveNav("Jobcreation");
-      setActiveSubNav("");
+      setActiveNav("Automation");
+      setActiveSubNav("Import Job");
     } else if (path.startsWith("/workflow/invoice-manager")) {
-      setActiveNav("Invoice Manager");
-      setActiveSubNav("");
-    } else if (path.startsWith("/workflow/chatbot")) {
+      setActiveNav("Automation");
+      setActiveSubNav("Vendor Invoice");
+    } else if (path.startsWith("/workflow/chatbot") || path.startsWith("/workflow/analytics")) {
       setActiveNav("Chatbot");
       setActiveSubNav("");
     } else if (path === "/invoice" || path.startsWith("/invoice/")) {

@@ -9,11 +9,11 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconHistory, IconRobot } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChatbotPageUi } from "./ChatbotUi";
 import { useChatSessions } from "./useChatSessions";
 import { CHAT_URL_SESSION_PARAM, CHAT_URL_TYPE_PARAM } from "./chatApi";
-import { CHATBOT_PATH } from "./jobcreation/workflowUrls";
+import { CHATBOT_PATH, isWorkflowChatbotPath } from "./jobcreation/workflowUrls";
 import { navigateFromChatReferences } from "./chatReferenceNavigation";
 import type { ReferenceLinkTarget } from "./chatReferenceNavigation";
 import type { ChatReferences } from "./chatbotMessageUtils";
@@ -22,6 +22,7 @@ import styles from "./Chatbot.module.css";
 const GlobalOperationsChatModal: FC = () => {
   const [opened, { open, close }] = useDisclosure(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const {
     sessions,
@@ -43,6 +44,7 @@ const GlobalOperationsChatModal: FC = () => {
     lockMode: "operations",
     syncUrl: false,
     usePersistedSession: true,
+    enabled: opened,
   });
 
   const handleShowHistory = () => {
@@ -62,6 +64,10 @@ const GlobalOperationsChatModal: FC = () => {
     },
     [navigate, close],
   );
+
+  if (isWorkflowChatbotPath(pathname)) {
+    return null;
+  }
 
   return (
     <>
@@ -108,30 +114,32 @@ const GlobalOperationsChatModal: FC = () => {
           body: { height: "calc(100% - 56px)", padding: 0, display: "flex", flexDirection: "column" },
         }}
       >
-        <Box className={styles.embeddedChat}>
-          <ChatbotPageUi
-            subtitle="Create enquiries and quotations"
-            hideModeSelector
-            compact
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            activeSession={activeSession}
-            sessionsLoading={sessionsLoading}
-            historyLoading={historyLoading}
-            loading={loading}
-            sessionCreating={sessionCreating}
-            input={input}
-            viewportRef={viewport}
-            onInputChange={setInput}
-            onKeyDown={handleKeyDown}
-            onSelectSession={handleSelectSession}
-            onNewSession={handleNewSession}
-            onDeleteSession={handleDeleteSession}
-            onSendMessage={sendMessage}
-            onReferenceLinkClick={handleReferenceLinkClick}
-            micButton={<span />}
-          />
-        </Box>
+        {opened && (
+          <Box className={styles.embeddedChat}>
+            <ChatbotPageUi
+              subtitle="Create enquiries and quotations"
+              hideModeSelector
+              compact
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              activeSession={activeSession}
+              sessionsLoading={sessionsLoading}
+              historyLoading={historyLoading}
+              loading={loading}
+              sessionCreating={sessionCreating}
+              input={input}
+              viewportRef={viewport}
+              onInputChange={setInput}
+              onKeyDown={handleKeyDown}
+              onSelectSession={handleSelectSession}
+              onNewSession={handleNewSession}
+              onDeleteSession={handleDeleteSession}
+              onSendMessage={sendMessage}
+              onReferenceLinkClick={handleReferenceLinkClick}
+              micButton={<span />}
+            />
+          </Box>
+        )}
       </Drawer>
     </>
   );

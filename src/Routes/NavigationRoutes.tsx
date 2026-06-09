@@ -546,15 +546,39 @@ const NavigationRoutes = () => {
         </Route>
         <Route path="/tariff-create" element={<TariffCreate />} />
         <Route path="/tariff-bulk-upload" element={<TariffBulkUpload />} />
-        <Route path="/workflow/hbl-document-manager" element={<HBLDocumentManager />} />
-        <Route path="/workflow/invoice-manager" element={<Invoice />} />
+        <Route path="/automation/import-job" element={<HBLDocumentManager />} />
+        <Route path="/automation/vendor-invoice" element={<Invoice />} />
+        <Route
+          path="/automation/job-creation"
+          element={<Navigate to="/automation/import-job" replace />}
+        />
+        <Route
+          path="/automation/invoice-manager"
+          element={<Navigate to="/automation/vendor-invoice" replace />}
+        />
+        <Route
+          path="/workflow/hbl-document-manager"
+          element={<Navigate to="/automation/import-job" replace />}
+        />
+        <Route
+          path="/workflow/invoice-manager"
+          element={<Navigate to="/automation/vendor-invoice" replace />}
+        />
         <Route
           path="/hbl-document-manager"
-          element={<Navigate to="/workflow/hbl-document-manager" replace />}
+          element={<Navigate to="/automation/import-job" replace />}
         />
         <Route path="/workflow/chatbot" element={<Chatbot />} />
         <Route path="/workflow/chatbot-google" element={<ChatbotGoogleApi />} />
         <Route path="/workflow/chatbot-browser" element={<ChatbotBrowser />} />
+        <Route
+          path="/workflow/analytics-chat"
+          element={<Navigate to="/workflow/chatbot?type=analytics" replace />}
+        />
+        <Route
+          path="/workflow/analytics-training"
+          element={<Navigate to="/workflow/chatbot?type=analytics" replace />}
+        />
         <Route path="/chatbot" element={<NavigateKeepSearch to="/workflow/chatbot" />} />
         <Route
           path="/chatbot-google"

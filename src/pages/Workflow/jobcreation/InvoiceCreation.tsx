@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, useCallback, FC } from "react";
+import { useState, useEffect, useRef, useCallback, FC, useMemo } from "react";
 import axios from "axios";
+import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { FilePreviewFrame } from "./automationFilePreview";
 
 const invoiceApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}ai-workflow`,
@@ -526,8 +528,24 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 // ─── Payload Modal ────────────────────────────────────────────────────────────
 
 const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: (m: string, t?: ToastState["type"]) => void }> = ({ record, onClose, showToast }) => {
-  const [tab, setTab] = useState<"form" | "raw">("form");
+  const isAdmin = useIsAdminUser();
+  const [tab, setTab] = useState<"form" | "file" | "raw">("form");
   const p: InvoicePayload = record.extracted_data ?? {};
+
+  const modalTabs = useMemo(() => {
+    const tabs: Array<{ key: "form" | "file" | "raw"; label: string }> = [
+      { key: "form", label: "Form View" },
+    ];
+    if (record.file_url?.trim()) {
+      tabs.push({ key: "file", label: record.file_name?.trim() || "File" });
+    }
+    if (isAdmin) tabs.push({ key: "raw", label: "Raw JSON" });
+    return tabs;
+  }, [record.file_url, record.file_name, isAdmin]);
+
+  useEffect(() => {
+    if (!modalTabs.some(t => t.key === tab)) setTab("form");
+  }, [modalTabs, tab]);
 
   const copy = () =>
     navigator.clipboard.writeText(JSON.stringify(p, null, 2))
@@ -553,17 +571,33 @@ const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: 
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="act-btn dl" style={{ fontSize: ".72rem", padding: "5px 12px" }} onClick={copy}>⎘ Copy JSON</button>
+            {isAdmin && (
+              <button className="act-btn dl" style={{ fontSize: ".72rem", padding: "5px 12px" }} onClick={copy}>⎘ Copy JSON</button>
+            )}
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
 
         <div className="tabs">
-          {(["form", "raw"] as const).map(t => (
-            <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-              {t === "form" ? "Form View" : "Raw JSON"}
-            </button>
-          ))}
+          {modalTabs.map((t) => {
+            if (
+              t.key === "file" &&
+              (!record.file_url ||
+                record.file_url.trim().startsWith("temp_uploads"))
+            ) {
+              return null;
+            }
+
+            return (
+              <button
+                key={t.key}
+                className={`tab-btn ${tab === t.key ? "active" : ""}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
 
         {tab === "form" && (
@@ -683,6 +717,13 @@ const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: 
               </>
             }
           </div>
+        )}
+
+        {tab === "file" && record.file_url?.trim() && !record.file_url?.trim().startsWith("temp_uploads") && (
+          <FilePreviewFrame
+            url={record.file_url.trim()}
+            title={record.file_name?.trim() || `Invoice #${record.id}`}
+          />
         )}
 
         {tab === "raw" && (
@@ -847,7 +888,7 @@ const Invoice: FC = () => {
         <div className="top-brand">
           <div className="top-brand-icon">🧾</div>
           <div>
-            <div className="top-brand-text">Invoice Manager</div>
+            <div className="top-brand-text">Vendor Invoice</div>
             <div className="top-brand-sub">PDF · Extraction · Review</div>
           </div>
         </div>
