@@ -73,6 +73,7 @@ import {
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
+  getBookingRowAirVolume,
   type ErpListTheme,
 } from "../../../components";
 import { useForm } from "@mantine/form";
@@ -183,6 +184,7 @@ type ExportShipmentData = {
   origin_name: string;
   destination_name: string;
   customer_service_name: string;
+  job_no?: string | null;
   status?: string;
   destination_agent_code?: string;
   destination_agent_address?: string;
@@ -297,6 +299,8 @@ type VisibleColumnsState = {
   customer: boolean;
   route: boolean;
   status: boolean;
+  job_no: boolean;
+  volume: boolean;
   mawb: boolean;
   flight: boolean;
   pieces: boolean;
@@ -1019,6 +1023,8 @@ function AirExportBookingMaster() {
     customer: true,
     route: true,
     status: true,
+    job_no: true,
+    volume: true,
     mawb: true,
     flight: true,
     pieces: true,
@@ -2577,6 +2583,12 @@ function AirExportBookingMaster() {
                       {visibleColumns.status && (
                         <Th col="status" label="Status" />
                       )}
+                      {visibleColumns.job_no && (
+                        <Th col="job_no" label="Job ID" minwidth={180} />
+                      )}
+                      {visibleColumns.volume && (
+                        <Th col="volume" label="Volume" minwidth={120} />
+                      )}
                       {visibleColumns.mawb && (
                         <th style={headerThStyle("left", 160)}>
                           <ERPListColumnHeaderFilter
@@ -2793,6 +2805,22 @@ function AirExportBookingMaster() {
                             {visibleColumns.status && (
                               <td style={bodyTdStyle()}>
                                 <StatusPill status={booking.status} />
+                              </td>
+                            )}
+                            {visibleColumns.job_no && (
+                              <td
+                                className={AIR_EXPORT_GEIST_MONO_CLASS}
+                                style={{
+                                  ...bodyTdStyle({ color: muted }),
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {booking.job_no?.trim() ? booking.job_no : "—"}
+                              </td>
+                            )}
+                            {visibleColumns.volume && (
+                              <td style={bodyTdStyle({ color: muted })}>
+                                {getBookingRowAirVolume(booking.cargo_details)}
                               </td>
                             )}
                             {visibleColumns.mawb && (

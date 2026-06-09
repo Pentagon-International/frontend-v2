@@ -364,3 +364,65 @@ export function getBookingRowPW(cargoDetails: unknown): { pieces: number; weight
   }
   return { pieces, weight };
 }
+
+function formatBookingVolumeNumber(total: number): string {
+  if (!Number.isFinite(total) || total <= 0) return "—";
+  return Number.isInteger(total) ? String(total) : total.toFixed(3).replace(/\.?0+$/, "");
+}
+
+/** Air booking list: sum `volume_weight` across cargo lines. */
+export function getBookingRowAirVolume(cargoDetails: unknown): string {
+  if (!Array.isArray(cargoDetails) || cargoDetails.length === 0) return "—";
+  let total = 0;
+  let hasAny = false;
+  for (const c of cargoDetails) {
+    const rec = c as Record<string, unknown>;
+    const raw = rec.volume_weight;
+    if (raw === null || raw === undefined || raw === "") continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) {
+      total += n;
+      hasAny = true;
+    }
+  }
+  return hasAny ? formatBookingVolumeNumber(total) : "—";
+}
+
+/**
+ * Ocean booking list: FCL shows `no_of_containers x container_type_name`;
+ * LCL sums `volume` from cargo lines.
+ */
+export function getBookingRowOceanVolume(
+  service: string | undefined,
+  cargoDetails: unknown,
+): string {
+  if (!Array.isArray(cargoDetails) || cargoDetails.length === 0) return "—";
+
+  const svc = (service || "").toUpperCase();
+  if (svc === "FCL") {
+    const parts: string[] = [];
+    for (const c of cargoDetails) {
+      const rec = c as Record<string, unknown>;
+      const count = Number(rec.no_of_containers ?? 0);
+      const typeName = String(rec.container_type_name ?? "").trim();
+      if (count > 0 && typeName) parts.push(`${count} x ${typeName}`);
+      else if (count > 0) parts.push(String(count));
+      else if (typeName) parts.push(typeName);
+    }
+    return parts.length > 0 ? parts.join(", ") : "—";
+  }
+
+  let total = 0;
+  let hasAny = false;
+  for (const c of cargoDetails) {
+    const rec = c as Record<string, unknown>;
+    const raw = rec.volume;
+    if (raw === null || raw === undefined || raw === "") continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) {
+      total += n;
+      hasAny = true;
+    }
+  }
+  return hasAny ? formatBookingVolumeNumber(total) : "—";
+}
