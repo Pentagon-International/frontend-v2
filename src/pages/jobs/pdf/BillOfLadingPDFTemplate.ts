@@ -1,4 +1,9 @@
 import { jsPDF } from "jspdf";
+import pentagonFreightInd from "../../../assets/images/pentagon-freight-ind.png";
+import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
+import cargoConsolidators from "../../../assets/images/CCIPL.png";
+import primeLogo from "../../../assets/images/prime.png";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -48,7 +53,6 @@ const getDefaultBranchInfo = () => {
           return {
             branch_title: defaultBranch.branch_title || "",
             address: defaultBranch.address || "",
-            logo_url: defaultBranch.logo_url || null,
             tel: defaultBranch.tel || "",
             email: defaultBranch.email || "",
             pan: defaultBranch.pan || "",
@@ -63,7 +67,6 @@ const getDefaultBranchInfo = () => {
   return {
     branch_title: "",
     address: "",
-    logo_url: null,
     tel: "",
     email: "",
     pan: "",
@@ -71,7 +74,67 @@ const getDefaultBranchInfo = () => {
   };
 };
 
-// Helper function to get branch info
+const getLogoByCountry = (country: any): string | null => {
+  try {
+    let companyName = "";
+    let countryName = "";
+    let countryCode = "";
+
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user?.company) {
+        companyName = (user.company.company_name || "").toUpperCase();
+      }
+      if (user?.country) {
+        countryName = (user.country.country_name || "").toUpperCase();
+        countryCode = (user.country.country_code || "").toUpperCase();
+      }
+    }
+
+    if (country) {
+      countryName = (country.country_name || "").toUpperCase();
+      countryCode = (country.country_code || "").toUpperCase();
+    }
+
+    const normalizedCompanyName = companyName.replace(/\s+/g, "").toUpperCase();
+    if (
+      normalizedCompanyName === "CARGOCONSOLIDATORSINDIA" &&
+      countryCode === "IN"
+    ) {
+      return cargoConsolidators;
+    }
+
+    if (
+      countryName.includes("INDIA") ||
+      countryCode === "IN" ||
+      countryName === "INDIA"
+    ) {
+      return pentagonFreightInd;
+    }
+    if (
+      countryName.includes("USA") ||
+      countryCode === "US" ||
+      countryName === "USA"
+    ) {
+      return pentagonPrimeAmericas;
+    }
+    if (
+      countryName.includes("CHINA") ||
+      countryCode === "CN" ||
+      countryName === "CHINA"
+    ) {
+      return pentagonPrimeChina;
+    }
+    if (countryName.includes("KENYA") || countryCode === "KE") {
+      return primeLogo;
+    }
+    return primeLogo;
+  } catch (error) {
+    console.error("Error getting logo by country:", error);
+    return primeLogo;
+  }
+};
 
 const isUsBranchForBillOfLading = (
   country?: { country_code?: string; country_name?: string } | null,
@@ -156,7 +219,7 @@ export const generateBillOfLadingPDF = (
       pan: defaultBranchInfo.pan || "", // Default PAN value
       gstn: defaultBranchInfo.gstn || "", // Default GSTN value
     };
-    const logoUrl = defaultBranchInfo.logo_url;
+    const logoImage = getLogoByCountry(country);
 
     // Extract data from jobData and housingData
     const carrierDetails = jobData?.carrierDetails || {};
@@ -424,29 +487,28 @@ export const generateBillOfLadingPDF = (
     doc.text(companyTitleLines, midLineX + boxPadding, rightY);
     rightY += companyTitleLines.length * 3.5;
 
-    // Logo from S3 URL - centered with padding on all sides
-    if (logoUrl) {
+    if (logoImage) {
       try {
-        const logoPadding = 3; // Padding on all sides
+        const logoPadding = 3;
         const logoWidth = 40;
         const logoHeight = 15;
-        
-        // Calculate available width for logo section
         const availableWidth = rightBoxWidth - 2 * boxPadding;
-        
-        // Center the logo horizontally within the available width
         const logoX = midLineX + boxPadding + (availableWidth - logoWidth) / 2;
-        
-        // Add top padding
-        // rightY += logoPadding;
-        
-        // Draw the logo
-        doc.addImage(logoUrl, "PNG", logoX, rightY, logoWidth, logoHeight, undefined, "FAST");
-        
-        // Add bottom padding
+
+        doc.addImage(
+          logoImage,
+          "PNG",
+          logoX,
+          rightY,
+          logoWidth,
+          logoHeight,
+          undefined,
+          "FAST",
+        );
+
         rightY += logoHeight + logoPadding + 3;
       } catch (error) {
-        console.warn("Could not load logo from URL, continuing without logo:", error);
+        console.warn("Could not add logo to PDF, continuing without logo:", error);
       }
     }
 
