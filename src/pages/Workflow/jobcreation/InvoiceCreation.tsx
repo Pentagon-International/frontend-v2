@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, FC, useMemo } from "react";
 import axios from "axios";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
-import { FilePreviewFrame } from "./automationFilePreview";
+import { FilePreviewModal, isViewableFileUrl } from "./automationFilePreview";
 
 const invoiceApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}ai-workflow`,
@@ -95,6 +95,7 @@ interface ToastState {
 type ModalState =
   | { type: "upload" }
   | { type: "payload"; record: InvoiceRecord }
+  | { type: "filePreview"; url: string; filename?: string; title?: string }
   | null;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -529,19 +530,16 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
 
 const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: (m: string, t?: ToastState["type"]) => void }> = ({ record, onClose, showToast }) => {
   const isAdmin = useIsAdminUser();
-  const [tab, setTab] = useState<"form" | "file" | "raw">("form");
+  const [tab, setTab] = useState<"form" | "raw">("form");
   const p: InvoicePayload = record.extracted_data ?? {};
 
   const modalTabs = useMemo(() => {
-    const tabs: Array<{ key: "form" | "file" | "raw"; label: string }> = [
+    const tabs: Array<{ key: "form" | "raw"; label: string }> = [
       { key: "form", label: "Form View" },
     ];
-    if (record.file_url?.trim()) {
-      tabs.push({ key: "file", label: record.file_name?.trim() || "File" });
-    }
     if (isAdmin) tabs.push({ key: "raw", label: "Raw JSON" });
     return tabs;
-  }, [record.file_url, record.file_name, isAdmin]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!modalTabs.some(t => t.key === tab)) setTab("form");
@@ -579,25 +577,15 @@ const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: 
         </div>
 
         <div className="tabs">
-          {modalTabs.map((t) => {
-            if (
-              t.key === "file" &&
-              (!record.file_url ||
-                record.file_url.trim().startsWith("temp_uploads"))
-            ) {
-              return null;
-            }
-
-            return (
-              <button
-                key={t.key}
-                className={`tab-btn ${tab === t.key ? "active" : ""}`}
-                onClick={() => setTab(t.key)}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+          {modalTabs.map((t) => (
+            <button
+              key={t.key}
+              className={`tab-btn ${tab === t.key ? "active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {tab === "form" && (
@@ -717,13 +705,6 @@ const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: 
               </>
             }
           </div>
-        )}
-
-        {tab === "file" && record.file_url?.trim() && !record.file_url?.trim().startsWith("temp_uploads") && (
-          <FilePreviewFrame
-            url={record.file_url.trim()}
-            title={record.file_name?.trim() || `Invoice #${record.id}`}
-          />
         )}
 
         {tab === "raw" && (
@@ -998,9 +979,16 @@ const Invoice: FC = () => {
                           ⊞ View
                         </button>
                       )}
-                      {f.file_url && (
-                        <button className="act-btn dl"
-                          onClick={() => window.open(f.file_url, "_blank")}>
+                      {isViewableFileUrl(f.file_url) && (
+                        <button
+                          className="act-btn dl"
+                          onClick={() => setModal({
+                            type: "filePreview",
+                            url: f.file_url!.trim(),
+                            filename: f.file_name,
+                            title: f.file_name ?? `Invoice #${f.id}`,
+                          })}
+                        >
                           ↓ PDF
                         </button>
                       )}
@@ -1076,6 +1064,14 @@ const Invoice: FC = () => {
       )}
       {modal?.type === "payload" && (
         <PayloadModal record={modal.record} onClose={() => setModal(null)} showToast={showToast} />
+      )}
+      {modal?.type === "filePreview" && (
+        <FilePreviewModal
+          url={modal.url}
+          filename={modal.filename}
+          title={modal.title}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );
