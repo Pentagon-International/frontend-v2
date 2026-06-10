@@ -19,6 +19,7 @@ import {
   Menu,
   Modal,
   Select,
+  Center,
 } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
@@ -34,7 +35,10 @@ import {
   IconCalendarEvent,
   IconFileDescription,
   IconBellRinging,
+  IconFileInvoice,
 } from "@tabler/icons-react";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { mapOceanExportBookingToBillOfLadingData } from "../../jobs/pdf/mapOceanExportBookingToBillOfLading";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -695,6 +699,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
+  const [bolPreviewOpen, setBolPreviewOpen] = useState(false);
+  const [bolPdfBlob, setBolPdfBlob] = useState<string | null>(null);
+  const [bolPreviewLabel, setBolPreviewLabel] = useState("HBL");
 
   // State for display values
   const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
@@ -3282,6 +3289,77 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     form.removeListItem("routingDetails", index);
   };
 
+  const handleDraftBillOfLadingPreview = () => {
+    try {
+      setBolPreviewOpen(true);
+      setBolPdfBlob(null);
+
+      const bookingRecord = (jobData ?? null) as Record<string, unknown> | null;
+      const selectedAgentAddress = agentAddressOptions.find(
+        (option) =>
+          option.value === String(form.values.destination_agent_address_id),
+      )?.label;
+
+      const { jobData: bolJobData, housingData } =
+        mapOceanExportBookingToBillOfLadingData(
+          form.values,
+          bookingRecord,
+          {
+            destinationAgentName: destinationAgentDisplayName,
+            destinationAgentAddress:
+              selectedAgentAddress ||
+              String(bookingRecord?.destination_agent_address ?? ""),
+          },
+        );
+
+      const defaultBranch =
+        user?.branches?.find((branch) => branch.is_default) ||
+        user?.branches?.[0] || { branch_name: "CHENNAI" };
+      const country = user?.country || null;
+
+      const blobUrl = generateBillOfLadingPDF(
+        bolJobData,
+        housingData,
+        defaultBranch,
+        country,
+      );
+
+      setBolPreviewLabel(
+        String(housingData.hbl_number || bookingRecord?.shipment_code || "HBL"),
+      );
+      setBolPdfBlob(blobUrl);
+    } catch (error) {
+      console.error("Error generating draft Bill of Lading PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Error generating draft Bill of Lading PDF",
+      });
+      setBolPreviewOpen(false);
+    }
+  };
+
+  const handleCloseBolPreview = () => {
+    setBolPreviewOpen(false);
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+    setBolPdfBlob(null);
+  };
+
+  const handleDownloadBolPdf = () => {
+    if (!bolPdfBlob) return;
+    const link = document.createElement("a");
+    link.href = bolPdfBlob;
+    link.download = `Bill-Of-Lading-${bolPreviewLabel || "HBL"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    ToastNotification({
+      type: "success",
+      message: "PDF downloaded successfully",
+    });
+  };
+
   return (
     <>
       {/* Events modal - single heading row, multiple data rows (like Rate Details) */}
@@ -3727,6 +3805,64 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
+      <Modal
+        opened={bolPreviewOpen}
+        onClose={handleCloseBolPreview}
+        title={`Draft Bill Of Lading - ${bolPreviewLabel}`}
+        size="xl"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        centered
+        fullScreen
+        transitionProps={{ transition: "fade", duration: 200 }}
+      >
+        <Stack h="82vh">
+          {bolPdfBlob ? (
+            <>
+              <iframe
+                src={bolPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Draft Bill Of Lading PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseBolPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadBolPdf}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating draft Bill of Lading PDF...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
       <Box
         style={{
           flex: 1,
@@ -3846,6 +3982,25 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 >
                   Documents
                 </Menu.Item>
+                {isEditMode && (
+                  <Menu.Item
+                    leftSection={<IconFileInvoice size={16} />}
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": { backgroundColor: "#F8F9FA" },
+                      },
+                    }}
+                    onClick={handleDraftBillOfLadingPreview}
+                  >
+                    Draft Bill of Lading
+                  </Menu.Item>
+                )}
                 <Menu.Item
                   leftSection={<IconBellRinging size={16} />}
                   styles={{

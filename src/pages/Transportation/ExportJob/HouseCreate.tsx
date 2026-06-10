@@ -2372,6 +2372,9 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+        freight: String(
+          (editData as { freight?: string } | undefined)?.freight ?? "",
+        ),
         cargo_details: cargoDetails.map((c) => ({
           no_of_packages: c.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),

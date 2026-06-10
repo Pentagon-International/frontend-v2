@@ -378,6 +378,13 @@ type HousingDetail = {
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
+  freight?: string;
+  summary?: {
+    total_no_of_packages?: number | string;
+    total_gross_weight?: number | string;
+    total_volume?: number | string;
+    container_type?: string[];
+  };
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -1127,6 +1134,13 @@ function ExportJobCreate() {
                 : house.shipment_terms_name
                   ? String(house.shipment_terms_name)
                   : "",
+              freight: house.freight ? String(house.freight) : "",
+              summary:
+                house.summary &&
+                typeof house.summary === "object" &&
+                !Array.isArray(house.summary)
+                  ? (house.summary as HousingDetail["summary"])
+                  : undefined,
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -2191,9 +2205,23 @@ function ExportJobCreate() {
         containerDetails: containerDetailsForm.values.containers,
       };
 
+      const housingFromJob = (
+        jobWithMergedHousingDetails ?? jobData
+      )?.housing_details?.find(
+        (house) =>
+          house.id === housing.id ||
+          Number(house.id) === Number(housing.id),
+      ) as { freight?: string; summary?: HousingDetail["summary"] } | undefined;
+
+      const housingForPdf = {
+        ...housing,
+        freight: housing.freight || housingFromJob?.freight || "",
+        summary: housing.summary ?? housingFromJob?.summary,
+      };
+
       const blobUrl = generateBillOfLadingPDF(
         combinedData,
-        housing,
+        housingForPdf,
         defaultBranch,
         country,
       );

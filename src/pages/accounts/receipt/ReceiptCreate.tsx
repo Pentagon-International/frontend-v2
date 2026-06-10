@@ -3,6 +3,7 @@ import {
   Menu,
   ActionIcon,
   Box,
+  Center,
   Button,
   Card,
   Checkbox,
@@ -16,7 +17,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  UnstyledButton,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -564,6 +564,8 @@ export default function ReceiptCreate({
     useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [receiptPdfBlob, setReceiptPdfBlob] = useState<string | null>(null);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     receipt_no?: string;
@@ -1903,6 +1905,62 @@ export default function ReceiptCreate({
     }
   };
 
+  const handleReceiptPreview = async () => {
+    const receiptId = saveResponse?.id;
+    if (!receiptId) {
+      ToastNotification({
+        type: "error",
+        message: "Save the receipt first before previewing.",
+      });
+      return;
+    }
+    setReceiptPreviewOpen(true);
+    setReceiptPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.receipt}${receiptId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("Empty PDF response");
+      }
+      setReceiptPdfBlob(window.URL.createObjectURL(blob));
+    } catch (err) {
+      console.error("Receipt PDF preview error:", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load receipt PDF preview.",
+      });
+      setReceiptPreviewOpen(false);
+    }
+  };
+
+  const handleCloseReceiptPreview = () => {
+    setReceiptPreviewOpen(false);
+    if (receiptPdfBlob) {
+      window.URL.revokeObjectURL(receiptPdfBlob);
+    }
+    setReceiptPdfBlob(null);
+  };
+
+  const handleDownloadReceiptPdf = () => {
+    if (!receiptPdfBlob) return;
+    const link = document.createElement("a");
+    link.href = receiptPdfBlob;
+    link.download = `Receipt-${saveResponse?.receipt_no || saveResponse?.document_no || saveResponse?.id || "draft"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const reversalStatusUpper = String(
     reverseReceiptSaveResponse?.status ?? "",
@@ -2086,32 +2144,28 @@ export default function ReceiptCreate({
                   </Group>
                 </Group>
               )}
-            {isViewRoute && (
+            {saveResponse?.id && !_isReversal && (
               <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
                 <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray">
-                    <IconDotsVertical size={16} />
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        // Show document details (download list) in view mode
-                        openDocumentsModal();
-                      }}
+                  <Menu.Item
+                    leftSection={<IconDownload size={16} />}
+                    onClick={handleReceiptPreview}
+                  >
+                    Download Receipt
+                  </Menu.Item>
+                  {isViewRoute && (
+                    <Menu.Item
+                      leftSection={<IconFileInvoice size={16} />}
+                      onClick={openDocumentsModal}
                     >
-                      <Group gap="sm">
-                        <IconDownload size={16} style={{ color: "#105476" }} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Document
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
+                      Document
+                    </Menu.Item>
+                  )}
                 </Menu.Dropdown>
               </Menu>
             )}
@@ -3542,6 +3596,72 @@ export default function ReceiptCreate({
           </Group>
         </Box>
       </Stack>
+
+      <Modal
+        opened={receiptPreviewOpen}
+        onClose={handleCloseReceiptPreview}
+        title={`Receipt - ${saveResponse?.receipt_no || saveResponse?.document_no || saveResponse?.id || ""}`}
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {receiptPdfBlob ? (
+            <>
+              <iframe
+                src={receiptPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Receipt PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseReceiptPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadReceiptPdf}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Loading receipt PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

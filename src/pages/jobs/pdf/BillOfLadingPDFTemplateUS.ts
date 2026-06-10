@@ -265,32 +265,37 @@ export const generateUsBillOfLadingPDF = (
     housingData?.no_of_originals ??
     "ZERO";
 
-  const freightCharge = (housingData?.charges || []).find((charge: any) => {
-    const name = (charge?.charge_name || "").toUpperCase();
-    return name.includes("FREIGHT");
-  });
-  const paymentTerms =
-    housingData?.freight_terms ||
-    (freightCharge?.pp_cc === "PP"
-      ? "FREIGHT PREPAID"
-      : freightCharge?.pp_cc === "CC"
-        ? "FREIGHT COLLECT"
-        : "") ||
-    "FREIGHT PREPAID";
+  const normalizeFreightTerm = (value: unknown): string => {
+    const raw = String(value ?? "").trim().toUpperCase();
+    if (!raw) return "";
+    if (raw.includes("PREPAID")) return "PREPAID";
+    if (raw.includes("COLLECT")) return "COLLECT";
+    return raw;
+  };
+
+  const housingDetailsArray = jobData?.housing_details || [];
+  const housingId = housingData?.id;
+  const matchingHousing =
+    housingId && Array.isArray(housingDetailsArray)
+      ? housingDetailsArray.find(
+          (house: { id?: unknown }) =>
+            house.id === housingId || house.id === Number(housingId),
+        )
+      : null;
+
+  const freightTerm = normalizeFreightTerm(
+    housingData?.freight ??
+      housingData?.freight_terms ??
+      matchingHousing?.freight ??
+      matchingHousing?.freight_terms,
+  );
+  const paymentTerms = freightTerm ? `FREIGHT ${freightTerm}` : "";
 
   const cargoDetailsFromHousing = housingData?.cargo_details || [];
 
   let summary = housingData?.summary || {};
   if (!summary || Object.keys(summary).length === 0) {
-    const housingDetailsArray = jobData?.housing_details || [];
-    const housingId = housingData?.id;
-    if (housingId) {
-      const matchingHousing = housingDetailsArray.find(
-        (house: any) =>
-          house.id === housingId || house.id === Number(housingId),
-      );
-      summary = matchingHousing?.summary || {};
-    }
+    summary = matchingHousing?.summary || {};
   }
 
   const cargoSummary = housingData?.cargo_summary || {};
