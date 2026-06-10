@@ -4,6 +4,7 @@ import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../../assets/images/CCIPL.png";
 import primeLogo from "../../../assets/images/prime.png";
+import { generateUsBillOfLadingPDF } from "./BillOfLadingPDFTemplateUS";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -177,6 +178,15 @@ export const generateBillOfLadingPDF = (
   country?: any
 ): string => {
   try {
+    if (isUsBranchForBillOfLading(country, defaultBranch)) {
+      return generateUsBillOfLadingPDF(
+        jobData,
+        housingData,
+        defaultBranch,
+        country,
+      );
+    }
+
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -610,18 +620,6 @@ export const generateBillOfLadingPDF = (
     doc.text(modesOfTransport || "", meansOfTransportLeftX, leftHalfY);
     leftHalfY += 4;
 
-    const isUsBolBranch = isUsBranchForBillOfLading(country, defaultBranch);
-    if (isUsBolBranch) {
-      leftHalfY += 10;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.text("DBA Name:", meansOfTransportLeftX, leftHalfY);
-      leftHalfY += 4;
-      doc.setFont("helvetica", "normal");
-      doc.text("Pentagon Prime Americas Inc", meansOfTransportLeftX, leftHalfY);
-      leftHalfY += 4;
-    }
-
     // Right half: Route/ Place of Transhipments
     let rightHalfY = rightY;
     doc.setFont("helvetica", "bold");
@@ -632,21 +630,6 @@ export const generateBillOfLadingPDF = (
     const routeLines = doc.splitTextToSize(routePlaceOfTransshipment || "", meansOfTransportHalfWidth - 2);
     doc.text(routeLines, meansOfTransportRightX + 2, rightHalfY);
     rightHalfY += Math.max(routeLines.length * 3.5, 4);
-
-    if (isUsBolBranch) {
-      rightHalfY += 10;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      const fmcTitleLines = doc.splitTextToSize(
-        "FMC Organization Number:",
-        meansOfTransportHalfWidth - 2,
-      );
-      doc.text(fmcTitleLines, meansOfTransportRightX + 2, rightHalfY);
-      rightHalfY += fmcTitleLines.length * 3.5;
-      doc.setFont("helvetica", "normal");
-      doc.text("FMC 034982N", meansOfTransportRightX + 2, rightHalfY);
-      rightHalfY += 4;
-    }
 
     rightY = Math.max(leftHalfY, rightHalfY);
 
