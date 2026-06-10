@@ -4,10 +4,24 @@ import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 const US_LICENSE_NO = "";
 const US_FMC_NO = "FMC 034982N";
 const US_DBA_NAME = "Pentagon Prime Americas Inc";
-const TOP_TABLE_ROW_HEIGHT = 30;
+const TOP_ROW1_HEIGHT = 28;
+const TOP_ROW2_HEIGHT = 28;
+const TOP_ROW3_HEIGHT = 40;
 const TABLE_SEPARATION_GAP = 4;
-const RIGHT_ROW3_VESSEL_HEIGHT = 10;
-const RIGHT_ROW3_PORT_HEIGHT = 10;
+const BANNER_GAP = 1;
+const RIGHT_ROW3_VESSEL_HEIGHT = 12;
+const RIGHT_ROW3_PORT_HEIGHT = 14;
+
+// Document font sizes (+2pt from original layout)
+const FONT_HEADER = 11;
+const FONT_LICENSE = 9;
+const FONT_SECTION_TITLE = 9;
+const FONT_SECTION_BODY = 9;
+const FONT_BANNER = 10;
+const FONT_TABLE_HEAD = 8.5;
+const FONT_TABLE_BODY = 9;
+const FONT_LEGAL_TITLE = 9;
+const FONT_LEGAL_BODY = 6.5;
 
 const formatUsDate = (dateString: unknown): string => {
   if (!dateString) return "";
@@ -99,7 +113,7 @@ const buildTextLines = (
   doc: jsPDF,
   parts: string[],
   maxWidth: number,
-  fontSize = 7,
+  fontSize = FONT_SECTION_BODY,
 ): string[] => {
   doc.setFontSize(fontSize);
   return parts
@@ -118,16 +132,16 @@ const drawFixedLabeledSection = (
   padding = 3,
 ) => {
   const contentWidth = width - 2 * padding;
-  const titleLineHeight = 3.5;
-  const bodyLineHeight = 3.2;
+  const titleLineHeight = 4;
+  const bodyLineHeight = 3.7;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
+  doc.setFontSize(FONT_SECTION_TITLE);
   const titleLines = doc.splitTextToSize(title, contentWidth);
   doc.text(titleLines, x + padding, y + padding + 3);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(FONT_SECTION_BODY);
   const titleHeight = titleLines.length * titleLineHeight;
   const bodyStartY = y + padding + 3 + titleHeight;
   const maxBodyLines = Math.max(
@@ -138,26 +152,6 @@ const drawFixedLabeledSection = (
   if (visibleLines.length > 0) {
     doc.text(visibleLines, x + padding, bodyStartY);
   }
-};
-
-const drawBoldLabelValue = (
-  doc: jsPDF,
-  label: string,
-  value: string,
-  centerX: number,
-  y: number,
-  fontSize = 7,
-) => {
-  doc.setFontSize(fontSize);
-  doc.setFont("helvetica", "bold");
-  const labelWidth = doc.getTextWidth(label);
-  doc.setFont("helvetica", "normal");
-  const valueWidth = doc.getTextWidth(` ${value}`);
-  const startX = centerX - (labelWidth + valueWidth) / 2;
-  doc.setFont("helvetica", "bold");
-  doc.text(label, startX, y);
-  doc.setFont("helvetica", "normal");
-  doc.text(` ${value}`, startX + labelWidth, y);
 };
 
 export const generateUsBillOfLadingPDF = (
@@ -251,12 +245,10 @@ export const generateUsBillOfLadingPDF = (
       : carrierDetails?.vessel_name || carrierDetails?.voyage_number || "";
 
   const shippedOnBoardDate = formatUsDate(
-    housingData?.on_board_date || carrierDetails?.mbl_date,
+    carrierDetails?.etd || mblDetails?.etd || jobData?.etd,
   );
-  const dateOfIssue = formatUsDate(
-    housingData?.date_of_issue || carrierDetails?.mbl_date,
-  );
-  const placeOfIssue = housingData?.place_of_issue || masterOrigin || "";
+  const dateOfIssue = formatUsDate(new Date().toISOString());
+  const placeOfIssue = activeBranch?.branch_name || "United States";
 
   const numberOfOriginalBl =
     housingData?.number_of_originals ??
@@ -277,21 +269,6 @@ export const generateUsBillOfLadingPDF = (
     "FREIGHT PREPAID";
 
   const cargoDetailsFromHousing = housingData?.cargo_details || [];
-  const containerDetailsFromJob = jobData?.container_details || [];
-  const containerDetails = cargoDetailsFromHousing.map((cargo: any) => {
-    const matchingContainer = containerDetailsFromJob.find(
-      (container: any) => container.container_no === cargo.container_no,
-    );
-    return {
-      ...cargo,
-      actual_seal_no:
-        cargo.actual_seal_no || matchingContainer?.actual_seal_no || "",
-      container_type_name:
-        cargo.container_type_name ||
-        matchingContainer?.container_type_details?.container_type_name ||
-        "",
-    };
-  });
 
   let summary = housingData?.summary || {};
   if (!summary || Object.keys(summary).length === 0) {
@@ -349,21 +326,6 @@ export const generateUsBillOfLadingPDF = (
     hsCode ? `NCM: ${hsCode}` : "",
   ].filter(Boolean);
 
-  const shipmentTerms =
-    housingData?.shipment_terms_code ||
-    housingData?.shipment_terms_name ||
-    "";
-  const containerInfoLines = containerDetails
-    .map((cargo: any) => {
-      const parts = [
-        cargo?.container_no,
-        cargo?.actual_seal_no,
-        cargo?.container_type_name,
-      ].filter(Boolean);
-      return parts.join("/");
-    })
-    .filter(Boolean);
-
   const packagesCount = parseInt(String(totalNoOfPackages), 10);
   const packagesInWords = !isNaN(packagesCount)
     ? `SAY ${numberToWords(packagesCount)} ${packageType} ONLY.`
@@ -404,41 +366,41 @@ export const generateUsBillOfLadingPDF = (
   const headerCenterX = innerMargin + (innerWidth - headerCenterWidth) / 2;
   const centerTextX = headerCenterX + headerCenterWidth / 2;
 
-  doc.setFontSize(7);
   if (US_LICENSE_NO) {
     doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_LICENSE);
     doc.text(`License No. ${US_LICENSE_NO}`, centerTextX, topMetaY - 4, {
       align: "center",
     });
-    drawBoldLabelValue(
-      doc,
-      "FMC No.",
-      US_FMC_NO,
-      centerTextX,
-      topMetaY,
-    );
-  } else {
-    drawBoldLabelValue(doc, "FMC No.", US_FMC_NO, centerTextX, topMetaY);
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text(
-    `B/L No. ${billOfLadingNo}`,
-    innerMargin + innerWidth - 2,
-    topMetaY,
-    { align: "right" },
-  );
+  doc.setFontSize(FONT_HEADER);
+  doc.text(`FMC No. ${US_FMC_NO}`, centerTextX, topMetaY, {
+    align: "center",
+  });
+
+  const blLabel = "B/L No.";
+  const blValue = billOfLadingNo || "";
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(FONT_HEADER);
+  const blLabelWidth = doc.getTextWidth(`${blLabel} `);
+  doc.setFont("helvetica", "normal");
+  const blValueWidth = doc.getTextWidth(blValue);
+  const blStartX = innerMargin + innerWidth - 2 - blLabelWidth - blValueWidth;
+  doc.setFont("helvetica", "bold");
+  doc.text(`${blLabel} `, blStartX, topMetaY);
+  doc.setFont("helvetica", "normal");
+  doc.text(blValue, blStartX + blLabelWidth, topMetaY);
 
   // ===== TABLE 1: TOP INFORMATION GRID =====
-  const topTableHeight = TOP_TABLE_ROW_HEIGHT * 3;
+  const topTableHeight = TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT + TOP_ROW3_HEIGHT;
   const colWidth = innerWidth / 2;
   const leftX = innerMargin;
   const rightX = innerMargin + colWidth;
   const sectionPad = boxPadding;
   const textWidth = colWidth - 2 * sectionPad;
 
-  doc.setFontSize(7);
   const shipperLines = buildTextLines(doc, shipperParts, textWidth);
   const exportRefLines = buildTextLines(doc, [exportReference], textWidth);
   const consigneeLines = buildTextLines(doc, consigneeParts, textWidth);
@@ -446,15 +408,15 @@ export const generateUsBillOfLadingPDF = (
   const notifyLines = buildTextLines(doc, notifyParts, textWidth);
 
   const row1Y = topTableStartY;
-  const row2Y = topTableStartY + TOP_TABLE_ROW_HEIGHT;
-  const row3Y = topTableStartY + TOP_TABLE_ROW_HEIGHT * 2;
+  const row2Y = topTableStartY + TOP_ROW1_HEIGHT;
+  const row3Y = topTableStartY + TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT;
 
   drawFixedLabeledSection(
     doc,
     leftX,
     row1Y,
     colWidth,
-    TOP_TABLE_ROW_HEIGHT,
+    TOP_ROW1_HEIGHT,
     "Shipper",
     shipperLines,
     sectionPad,
@@ -464,7 +426,7 @@ export const generateUsBillOfLadingPDF = (
     rightX,
     row1Y,
     colWidth,
-    TOP_TABLE_ROW_HEIGHT,
+    TOP_ROW1_HEIGHT,
     "Export Reference",
     exportRefLines,
     sectionPad,
@@ -475,7 +437,7 @@ export const generateUsBillOfLadingPDF = (
     leftX,
     row2Y,
     colWidth,
-    TOP_TABLE_ROW_HEIGHT,
+    TOP_ROW2_HEIGHT,
     "Consignee(if 'to Order' so indicate)",
     consigneeLines,
     sectionPad,
@@ -485,7 +447,7 @@ export const generateUsBillOfLadingPDF = (
     rightX,
     row2Y,
     colWidth,
-    TOP_TABLE_ROW_HEIGHT,
+    TOP_ROW2_HEIGHT,
     "Delivery Agent",
     deliveryAgentLines,
     sectionPad,
@@ -496,7 +458,7 @@ export const generateUsBillOfLadingPDF = (
     leftX,
     row3Y,
     colWidth,
-    TOP_TABLE_ROW_HEIGHT,
+    TOP_ROW3_HEIGHT,
     "Notify Party(No claim shall attach for failure to notify)",
     notifyLines,
     sectionPad,
@@ -508,12 +470,14 @@ export const generateUsBillOfLadingPDF = (
   const portsRow2Y = row3Y + RIGHT_ROW3_VESSEL_HEIGHT + RIGHT_ROW3_PORT_HEIGHT;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  doc.text("Vessel and Voyage", rightX + sectionPad, vesselTopY + 4.5);
+  doc.setFontSize(FONT_SECTION_TITLE);
+  doc.text("Vessel and Voyage", rightX + sectionPad, vesselTopY + 4);
   doc.setFont("helvetica", "normal");
-  doc.text(vesselVoyNo || "", rightX + sectionPad, vesselTopY + 8.5);
+  doc.setFontSize(FONT_SECTION_BODY);
+  doc.text(vesselVoyNo || "", rightX + sectionPad, vesselTopY + 9);
 
   doc.setFont("helvetica", "bold");
+  doc.setFontSize(FONT_SECTION_TITLE);
   doc.text("Place of Receipt", rightX + sectionPad, portsRow1Y + 3);
   doc.text(
     "Port of Loading",
@@ -521,14 +485,16 @@ export const generateUsBillOfLadingPDF = (
     portsRow1Y + 3,
   );
   doc.setFont("helvetica", "normal");
-  doc.text(placeOfReceipt || "", rightX + sectionPad, portsRow1Y + 7.5);
+  doc.setFontSize(FONT_SECTION_BODY);
+  doc.text(placeOfReceipt || "", rightX + sectionPad, portsRow1Y + 8);
   doc.text(
     portOfLoading || "",
     rightX + rightSubWidth + sectionPad,
-    portsRow1Y + 7.5,
+    portsRow1Y + 8,
   );
 
   doc.setFont("helvetica", "bold");
+  doc.setFontSize(FONT_SECTION_TITLE);
   doc.text("Port of Discharge", rightX + sectionPad, portsRow2Y + 3);
   doc.text(
     "Place of Delivery",
@@ -536,11 +502,12 @@ export const generateUsBillOfLadingPDF = (
     portsRow2Y + 3,
   );
   doc.setFont("helvetica", "normal");
-  doc.text(portOfDischarge || "", rightX + sectionPad, portsRow2Y + 7.5);
+  doc.setFontSize(FONT_SECTION_BODY);
+  doc.text(portOfDischarge || "", rightX + sectionPad, portsRow2Y + 8);
   doc.text(
     placeOfDelivery || "",
     rightX + rightSubWidth + sectionPad,
-    portsRow2Y + 7.5,
+    portsRow2Y + 8,
   );
 
   drawBox(doc, innerMargin, topTableStartY, innerWidth, topTableHeight);
@@ -557,17 +524,17 @@ export const generateUsBillOfLadingPDF = (
     topTableStartY + topTableHeight,
   );
 
-  let yPos = topTableStartY + topTableHeight + TABLE_SEPARATION_GAP;
+  let yPos = topTableStartY + topTableHeight + BANNER_GAP;
 
-  // Separation title between tables (left-aligned, no border)
+  // Separation title between tables (left-aligned, minimal vertical spacing)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(FONT_BANNER);
   doc.text(
     "PARTICULAR FURNISHED BY MERCHANTS",
     innerMargin + boxPadding,
-    yPos + 4,
+    yPos + 3,
   );
-  yPos += 8 + TABLE_SEPARATION_GAP;
+  yPos += 5 + BANNER_GAP;
 
   // ===== TABLE 2: CARGO DETAILS — ends at Temperature Control Instructions =====
   const footerTableHeight = 52;
@@ -596,7 +563,7 @@ export const generateUsBillOfLadingPDF = (
   const headerY = cargoTableStartY + 4;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
+  doc.setFontSize(FONT_TABLE_HEAD);
   doc.text("Mark & Numbers", col1X + boxPadding, headerY);
   doc.text(
     "No. of Packages or Shipping Units",
@@ -609,8 +576,6 @@ export const generateUsBillOfLadingPDF = (
   doc.text("Measurement", col5X + boxPadding, headerY);
 
   const headerBottomY = cargoTableStartY + headerRowHeight;
-  const containerBoxHeight = 14;
-  const containerBoxY = wordsRowY - containerBoxHeight;
 
   drawBox(doc, innerMargin, cargoTableStartY, innerWidth, middleTableHeight);
   doc.line(innerMargin, headerBottomY, innerMargin + innerWidth, headerBottomY);
@@ -618,13 +583,12 @@ export const generateUsBillOfLadingPDF = (
   doc.line(col3X, cargoTableStartY, col3X, wordsRowY);
   doc.line(col4X, cargoTableStartY, col4X, wordsRowY);
   doc.line(col5X, cargoTableStartY, col5X, wordsRowY);
-  doc.line(col4X, containerBoxY, innerMargin + innerWidth, containerBoxY);
   doc.line(innerMargin, wordsRowY, innerMargin + innerWidth, wordsRowY);
   doc.line(innerMargin, tempRowY, innerMargin + innerWidth, tempRowY);
 
   const dataStartY = headerBottomY + 4;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(FONT_TABLE_BODY);
 
   const marksLines = marksNo
     ? doc.splitTextToSize(marksNo, col1W - 2 * boxPadding)
@@ -644,36 +608,26 @@ export const generateUsBillOfLadingPDF = (
   if (descriptionLines.length)
     doc.text(descriptionLines, col3X + boxPadding, dataStartY);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
   doc.text(grossWeightText || "-", col4X + boxPadding, dataStartY);
   doc.text(volumeText || "-", col5X + boxPadding, dataStartY);
-  doc.setFont("helvetica", "normal");
-
-  doc.setFontSize(6.5);
-  if (shipmentTerms) {
-    doc.text(shipmentTerms, col4X + boxPadding, containerBoxY + 4);
-  }
-  containerInfoLines.forEach((line, idx) => {
-    doc.text(line, col4X + boxPadding, containerBoxY + 8 + idx * 3.5);
-  });
 
   // Packages in words row (inside table 2)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
+  doc.setFontSize(FONT_TABLE_HEAD);
   doc.text(
     "Total Number of Containers of Packages(in words)",
     col1X + boxPadding,
     wordsRowY + 3,
   );
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(FONT_TABLE_BODY);
   doc.text(packagesInWords, col1X + boxPadding, wordsRowY + 6.5, {
     maxWidth: innerWidth - 2 * boxPadding,
   });
 
   // Temperature control row — last row of table 2
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
+  doc.setFontSize(FONT_TABLE_HEAD);
   doc.text(
     "Temperature Control Instructions",
     col1X + boxPadding,
@@ -697,10 +651,10 @@ export const generateUsBillOfLadingPDF = (
     value: string,
   ) => {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
+    doc.setFontSize(FONT_TABLE_HEAD);
     doc.text(title, x + boxPadding, y + 4);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(FONT_TABLE_BODY);
     doc.text(value || "", x + boxPadding, y + 8.5, {
       maxWidth: w - 2 * boxPadding,
     });
@@ -779,7 +733,7 @@ export const generateUsBillOfLadingPDF = (
   );
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.5);
+  doc.setFontSize(FONT_TABLE_HEAD);
   doc.text(
     "Signed by the Carrier / on behalf of the Carrier",
     innerMargin + boxPadding,
@@ -788,7 +742,7 @@ export const generateUsBillOfLadingPDF = (
 
   const legalX = innerMargin + signColW;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
+  doc.setFontSize(FONT_LEGAL_TITLE);
   const companyLines = doc.splitTextToSize(
     branchInfo.name.toUpperCase(),
     legalColW - 2 * boxPadding,
@@ -797,7 +751,7 @@ export const generateUsBillOfLadingPDF = (
     align: "center",
   });
 
-  doc.setFontSize(7);
+  doc.setFontSize(FONT_LEGAL_TITLE);
   doc.text(
     "Combined Transport Bill Of Lading",
     legalX + legalColW / 2,
@@ -806,7 +760,7 @@ export const generateUsBillOfLadingPDF = (
   );
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(4.5);
+  doc.setFontSize(FONT_LEGAL_BODY);
   const legalText =
     "In accepting this Bill of Lading, the Merchant expressly accepts and agrees to all its terms, conditions and exceptions, whether printed, stamped or otherwise incorporated. One original Bill of Lading must be surrendered duly endorsed in exchange for the goods or delivery order.";
   const legalLines = doc.splitTextToSize(
