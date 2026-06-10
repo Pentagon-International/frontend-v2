@@ -204,19 +204,29 @@ export const generateUsBillOfLadingPDF = (
     housingData?.consignee_pan ? `ID: ${housingData.consignee_pan}` : "",
   ];
 
-  const notifyName = housingData?.notify_customer1_name || "";
-  const notifyAddress = housingData?.notify_customer1_address || "";
-  const consigneeName = housingData?.consignee_name || "";
-  const isSameAsConsignee =
-    !notifyName ||
-    (notifyName.toUpperCase() === consigneeName.toUpperCase() &&
-      (!notifyAddress ||
-        notifyAddress.toUpperCase() ===
-          (housingData?.consignee_address || "").toUpperCase()));
+  const notifyName =
+    housingData?.notify_customer1_name ||
+    housingData?.notify1_customer_name ||
+    "";
+  const notifyAddress =
+    housingData?.notify_customer1_address ||
+    housingData?.notify1_customer_address ||
+    "";
+  const notifyEmail =
+    housingData?.notify_customer1_email ||
+    housingData?.notify1_customer_email ||
+    "";
 
-  const notifyParts = isSameAsConsignee
-    ? ["SAME AS CONSIGNEE"]
-    : [notifyName, notifyAddress].filter(Boolean);
+  const hasNotifyCustomer =
+    String(notifyName).trim() !== "" || String(notifyAddress).trim() !== "";
+
+  const notifyParts = hasNotifyCustomer
+    ? [
+        notifyName,
+        notifyAddress,
+        notifyEmail ? `EMAIL: ${notifyEmail}` : "",
+      ].filter((part) => part && part.trim())
+    : ["SAME AS CONSIGNEE"];
 
   const deliveryAgentParts = [
     housingData?.agent_name || "",
