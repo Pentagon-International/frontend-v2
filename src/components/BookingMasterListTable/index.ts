@@ -11,6 +11,8 @@ export {
   getBookingRowPW,
   getBookingRowAirVolume,
   getBookingRowOceanVolume,
+  getQuotationServiceVolume,
+  type QuotationVolumeService,
   getBookingMilestoneStyleByIndex,
   getLastMilestoneDisplayLabel,
   getLastMilestoneIndex,

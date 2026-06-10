@@ -81,6 +81,7 @@ const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
 
 type VisibleColumnsState = {
   sno: boolean;
+  quotation_id: boolean;
   job_id: boolean;
   mbl: boolean;
   service: boolean;
@@ -91,9 +92,24 @@ type VisibleColumnsState = {
   status: boolean;
 };
 
+const OCEAN_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
+  sno: "S.No",
+  quotation_id: "Quotation ID",
+  job_id: "Job ID",
+  mbl: "MBL No",
+  service: "Service",
+  agent: "Agent",
+  route: "Route",
+  etd: "ETD",
+  eta: "ETA",
+  status: "Status",
+};
+
 type ExportJobData = {
   id: number;
   sno?: number;
+  quotation_id?: string | null;
+  enquiry_id?: string | null;
   service_id?: number;
   service: string;
   is_direct?: boolean | string | number;
@@ -233,6 +249,7 @@ function ExportJobMaster() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
+    quotation_id: true,
     job_id: true,
     mbl: true,
     service: true,
@@ -553,7 +570,7 @@ function ExportJobMaster() {
     () =>
       (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
         id: String(key),
-        label: String(key).replace(/_/g, " "),
+        label: OCEAN_EXPORT_JOB_COLUMN_LABELS[key],
         checked: visibleColumns[key],
         onToggle: () =>
           setVisibleColumns((prev) => ({
@@ -941,6 +958,9 @@ function ExportJobMaster() {
                   <thead>
                     <tr>
                       {visibleColumns.sno && <th style={mergeTh(70, 70)}>S.No</th>}
+                      {visibleColumns.quotation_id && (
+                        <th style={mergeTh(180, 180)}>Quotation ID</th>
+                      )}
                       {visibleColumns.job_id && (
                         <th style={mergeTh(150, 150)}>
                           <ERPListColumnHeaderFilter
@@ -1301,6 +1321,18 @@ function ExportJobMaster() {
                                 <Text fw={600} size="sm" c={fg}>
                                   {sno}
                                 </Text>
+                              </td>
+                            )}
+                            {visibleColumns.quotation_id && (
+                              <td style={tdPad}>
+                                <Text fw={600} size="sm" c={fg}>
+                                  {row.quotation_id?.trim() ? row.quotation_id : "—"}
+                                </Text>
+                                {row.enquiry_id ? (
+                                  <Text fz={10} c={muted}>
+                                    {row.enquiry_id}
+                                  </Text>
+                                ) : null}
                               </td>
                             )}
                             {visibleColumns.job_id && (

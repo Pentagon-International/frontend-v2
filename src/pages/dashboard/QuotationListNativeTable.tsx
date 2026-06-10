@@ -47,6 +47,7 @@ import {
   erpListTdPaddingStyle,
   erpListThActionsSpacer,
   erpListThStyle,
+  getQuotationServiceVolume,
 } from "../../components";
 
 /** Row shape used by quotation list (aligned with QuotationMaster `QuotationData`). */
@@ -62,8 +63,14 @@ export type QuotationTableRow = {
   valid_upto_list?: string[];
   reject_remark?: string;
   status?: string;
+  service?: string;
   quotation?: Array<{
     quotation_id?: string;
+    service_type?: string;
+    service?: string;
+    trade?: string;
+    cargo_details?: unknown[];
+    fcl_details?: unknown[];
     created_at?: string;
     revision?: number;
     quotation_service_id?: number;
@@ -79,6 +86,8 @@ export type QuotationVisibleColumns = {
   created_at: boolean;
   /** One column: origin → destination (same as Air Export Booking “Route”). */
   route: boolean;
+  service: boolean;
+  volume: boolean;
   reference_no: boolean;
   /** Immediately after Reference No in the table. */
   status: boolean;
@@ -480,6 +489,33 @@ function FilterableHeaderEdit({
   );
 }
 
+const QUOTATION_ROUTE_COL_MIN = 130;
+const QUOTATION_ROUTE_COL_MAX = 150;
+
+function quotationRouteTooltip(
+  originList?: string[],
+  destList?: string[],
+): string {
+  const oa = originList ?? [];
+  const da = destList ?? [];
+  const lineCount = Math.max(oa.length, da.length, 1);
+  return Array.from({ length: lineCount }, (_, i) => {
+    const oc = oa[i]?.trim() || "—";
+    const dc = da[i]?.trim() || "—";
+    return `${oc} → ${dc}`;
+  }).join("\n");
+}
+
+function quotationServiceLabel(
+  quote: { service_type?: string; service?: string; trade?: string },
+  rowService?: string,
+): string {
+  const type = (quote.service_type || quote.service || rowService || "").trim();
+  const trade = (quote.trade || "").trim();
+  if (type && trade) return `${type} - ${trade}`;
+  return type || "—";
+}
+
 function QuotationRowMenu({
   row,
   ctx,
@@ -611,6 +647,8 @@ export function QuotationListNativeTable({
       visible.sales_person,
       visible.created_at,
       visible.route,
+      visible.service,
+      visible.volume,
       visible.reference_no,
       visible.status,
       visible.valid_upto_list,
@@ -743,7 +781,14 @@ export function QuotationListNativeTable({
             </th>
           )}
           {visible.route && (
-            <th style={{ ...erpListThStyle(theme), minWidth: 200 }}>
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                minWidth: QUOTATION_ROUTE_COL_MIN,
+                maxWidth: QUOTATION_ROUTE_COL_MAX,
+                width: QUOTATION_ROUTE_COL_MAX,
+              }}
+            >
               {hf && filterValues ? (
                 <div
                   style={{
@@ -815,6 +860,16 @@ export function QuotationListNativeTable({
               ) : (
                 "Route"
               )}
+            </th>
+          )}
+          {visible.service && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 100 }}>
+              Service
+            </th>
+          )}
+          {visible.volume && (
+            <th style={{ ...erpListThStyle(theme), minWidth: 120 }}>
+              Volume
             </th>
           )}
           {visible.reference_no && (
@@ -986,13 +1041,74 @@ export function QuotationListNativeTable({
                   </td>
                 )}
                 {visible.route && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      maxWidth: QUOTATION_ROUTE_COL_MAX,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Tooltip
+                      label={quotationRouteTooltip(
+                        row.origin_code_list,
+                        row.destination_code_list,
+                      )}
+                      withArrow
+                      multiline
+                      styles={{ tooltip: { fontFamily: fontSans, fontSize: 12 } }}
+                    >
+                      <Box style={{ overflow: "hidden", minWidth: 0 }}>
+                        {erpListRouteListCell(
+                          row.origin_code_list,
+                          row.destination_code_list,
+                          { primary, fg, muted, fontSans },
+                          { compact: true },
+                        )}
+                      </Box>
+                    </Tooltip>
+                  </td>
+                )}
+                {visible.service && (
                   <td style={erpListTdPaddingStyle()}>
-                    {erpListRouteListCell(row.origin_code_list, row.destination_code_list, {
-                      primary,
-                      fg,
-                      muted,
-                      fontSans,
-                    })}
+                    {!row.quotation?.length ? (
+                      <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                        {row.service?.trim() ? row.service : "—"}
+                      </Text>
+                    ) : (
+                      <Stack gap={4}>
+                        {row.quotation.map((quote, quoteIndex) => (
+                          <Text
+                            key={`${row.id}-svc-${quoteIndex}`}
+                            size="sm"
+                            c={fg}
+                            style={{ fontFamily: fontSans }}
+                          >
+                            {quotationServiceLabel(quote, row.service)}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
+                  </td>
+                )}
+                {visible.volume && (
+                  <td style={{ ...erpListTdPaddingStyle(), color: muted }}>
+                    {!row.quotation?.length ? (
+                      <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
+                        —
+                      </Text>
+                    ) : (
+                      <Stack gap={4}>
+                        {row.quotation.map((quote, quoteIndex) => (
+                          <Text
+                            key={`${row.id}-vol-${quoteIndex}`}
+                            size="sm"
+                            style={{ fontFamily: fontSans }}
+                          >
+                            {getQuotationServiceVolume(quote)}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
                   </td>
                 )}
                 {visible.reference_no && (

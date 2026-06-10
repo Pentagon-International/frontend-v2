@@ -370,6 +370,16 @@ function formatBookingVolumeNumber(total: number): string {
   return Number.isInteger(total) ? String(total) : total.toFixed(3).replace(/\.?0+$/, "");
 }
 
+function resolveBookingCargoContainerType(rec: Record<string, unknown>): string {
+  return String(
+    rec.container_type_name ??
+      rec.container_type ??
+      rec.container_name ??
+      rec.container_type_code ??
+      "",
+  ).trim();
+}
+
 /** Air booking list: sum `volume_weight` across cargo lines. */
 export function getBookingRowAirVolume(cargoDetails: unknown): string {
   if (!Array.isArray(cargoDetails) || cargoDetails.length === 0) return "—";
@@ -404,7 +414,7 @@ export function getBookingRowOceanVolume(
     for (const c of cargoDetails) {
       const rec = c as Record<string, unknown>;
       const count = Number(rec.no_of_containers ?? 0);
-      const typeName = String(rec.container_type_name ?? "").trim();
+      const typeName = resolveBookingCargoContainerType(rec);
       if (count > 0 && typeName) parts.push(`${count} x ${typeName}`);
       else if (count > 0) parts.push(String(count));
       else if (typeName) parts.push(typeName);
@@ -425,4 +435,34 @@ export function getBookingRowOceanVolume(
     }
   }
   return hasAny ? formatBookingVolumeNumber(total) : "—";
+}
+
+export type QuotationVolumeService = {
+  service_type?: string;
+  service?: string;
+  cargo_details?: unknown;
+  fcl_details?: unknown;
+};
+
+function resolveQuotationCargoLines(
+  serviceType: string,
+  quote: QuotationVolumeService,
+): unknown {
+  const cargo = quote.cargo_details;
+  const fcl = quote.fcl_details;
+  if (serviceType === "FCL") {
+    if (Array.isArray(cargo) && cargo.length > 0) return cargo;
+    if (Array.isArray(fcl) && fcl.length > 0) return fcl;
+    return cargo ?? fcl;
+  }
+  return cargo;
+}
+
+/** Quotation list: same volume rules as booking list (AIR/LCL/FCL). */
+export function getQuotationServiceVolume(quote: QuotationVolumeService): string {
+  const st = String(quote.service_type || quote.service || "").toUpperCase();
+  const cargo = resolveQuotationCargoLines(st, quote);
+  if (st === "AIR") return getBookingRowAirVolume(cargo);
+  if (st === "FCL" || st === "LCL") return getBookingRowOceanVolume(st, cargo);
+  return "—";
 }
