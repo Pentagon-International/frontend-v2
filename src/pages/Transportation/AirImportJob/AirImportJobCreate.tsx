@@ -3230,7 +3230,7 @@ function AirImportJobCreate() {
                         });
                       }}
                     >
-                      Create Invoice
+                      Create Agent Invoice
                     </Menu.Item>
                     <Menu.Item
                       leftSection={

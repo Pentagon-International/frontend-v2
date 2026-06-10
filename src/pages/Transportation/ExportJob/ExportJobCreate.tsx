@@ -77,6 +77,10 @@ import {
   calcSellLocalAmount,
   resolveSellAmount,
 } from "../../../utils/houseChargeAmounts";
+import {
+  JobMasterPartyDetailsPanel,
+  type PartyAddressOption,
+} from "../JobMasterPartyDetailsPanel";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -93,6 +97,21 @@ type MBLDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  shipper_id: string;
+  shipper_name: string;
+  shipper_email: string;
+  shipper_address_id: string;
+  shipper_address: string;
+  consignee_id: string;
+  consignee_name: string;
+  consignee_email: string;
+  consignee_address_id: string;
+  consignee_address: string;
+  carrier_agent_id: string;
+  carrier_agent_name: string;
+  carrier_agent_email: string;
+  carrier_agent_address_id: string;
+  carrier_agent_address: string;
 };
 
 type CarrierDetailsForm = {
@@ -669,9 +688,42 @@ function ExportJobCreate() {
       eta: null,
       atd: null,
       ata: null,
+      shipper_id: "",
+      shipper_name: "",
+      shipper_email: "",
+      shipper_address_id: "",
+      shipper_address: "",
+      consignee_id: "",
+      consignee_name: "",
+      consignee_email: "",
+      consignee_address_id: "",
+      consignee_address: "",
+      carrier_agent_id: "",
+      carrier_agent_name: "",
+      carrier_agent_email: "",
+      carrier_agent_address_id: "",
+      carrier_agent_address: "",
     },
     validate: yupResolver(mblDetailsSchema),
   });
+
+  const partyDetailsForm = mblDetailsForm;
+  const [shipperAddressOptions, setShipperAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [carrierAgentAddressOptions, setCarrierAgentAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [shipperAddressSearch, setShipperAddressSearch] = useState("");
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
+  const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
+    useState(false);
 
   // Carrier Details Form
   const carrierDetailsForm = useForm<CarrierDetailsForm>({
@@ -739,7 +791,7 @@ function ExportJobCreate() {
       try {
         let mblData, carrierData, housingData, containerData, routingData;
         if (location.state?.fromHouseCreate) {
-          setActive(2);
+          setActive(3);
           mblData = location.state?.mblDetails;
           carrierData = location.state?.carrierDetails;
           housingData = location.state?.housingDetails;
@@ -778,6 +830,16 @@ function ExportJobCreate() {
           }
         }
 
+        const mblFlat = mblData as Record<string, unknown>;
+        const stateMbl = (location.state?.mblDetails ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const shipperNest =
+          mblFlat.shipper && typeof mblFlat.shipper === "object"
+            ? (mblFlat.shipper as Record<string, unknown>)
+            : undefined;
+
         mblDetailsForm.setValues({
           service: mblData.service || "",
           is_direct: parseBoolean(
@@ -810,6 +872,98 @@ function ExportJobCreate() {
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
               : null,
+          shipper_id: String(
+            mblFlat.shipper_id ?? shipperNest?.id ?? stateMbl.shipper_id ?? "",
+          ),
+          shipper_name: String(
+            mblFlat.shipper_name ??
+              shipperNest?.customer_name ??
+              shipperNest?.name ??
+              stateMbl.shipper_name ??
+              "",
+          ),
+          shipper_email: String(
+            mblFlat.shipper_email ??
+              shipperNest?.email ??
+              stateMbl.shipper_email ??
+              "",
+          ),
+          shipper_address_id: String(
+            mblFlat.shipper_address_id ?? stateMbl.shipper_address_id ?? "",
+          ),
+          shipper_address: String(
+            mblFlat.shipper_address ??
+              shipperNest?.address ??
+              stateMbl.shipper_address ??
+              "",
+          ),
+          consignee_id: String(
+            (mblData as { consignee_id?: unknown }).consignee_id ??
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.id as string | number | undefined
+              ) ??
+              stateMbl.consignee_id ??
+              "",
+          ),
+          consignee_name: String(
+            mblData.consignee_name ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.customer_name as string | undefined
+              ) ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.name as string | undefined
+              ) ||
+              stateMbl.consignee_name ||
+              "",
+          ),
+          consignee_email: String(
+            mblData.consignee_email ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.email as string | undefined
+              ) ||
+              stateMbl.consignee_email ||
+              "",
+          ),
+          consignee_address_id: String(
+            mblFlat.consignee_address_id ??
+              stateMbl.consignee_address_id ??
+              "",
+          ),
+          consignee_address: String(
+            mblData.consignee_address ||
+              (
+                (mblFlat.consignee as Record<string, unknown> | undefined)
+                  ?.address as string | undefined
+              ) ||
+              stateMbl.consignee_address ||
+              "",
+          ),
+          carrier_agent_id: String(
+            (mblData as { carrier_agent_id?: unknown }).carrier_agent_id ??
+              stateMbl.carrier_agent_id ??
+              "",
+          ),
+          carrier_agent_name: String(
+            mblData.carrier_agent_name || stateMbl.carrier_agent_name || "",
+          ),
+          carrier_agent_email: String(
+            mblData.carrier_agent_email || stateMbl.carrier_agent_email || "",
+          ),
+          carrier_agent_address_id: String(
+            (mblData as { carrier_agent_address_id?: unknown })
+              .carrier_agent_address_id ??
+              stateMbl.carrier_agent_address_id ??
+              "",
+          ),
+          carrier_agent_address: String(
+            mblData.carrier_agent_address ||
+              stateMbl.carrier_agent_address ||
+              "",
+          ),
         });
 
         // Populate Carrier Details using setValues
@@ -1345,12 +1499,12 @@ function ExportJobCreate() {
 
   // Reset active when not in edit mode and on Accounts tab
   useEffect(() => {
-    if (mode !== "edit" && active === 4) setActive(0);
+    if (mode !== "edit" && active === 5) setActive(0);
   }, [active, mode]);
 
   // Fetch invoice list when Accounts tab is active
   useEffect(() => {
-    if (active !== 4) return;
+    if (active !== 5) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -1423,6 +1577,50 @@ function ExportJobCreate() {
           eta: mblDetails.eta || null,
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
+          shipper_id:
+            (mblDetails as { shipper_id?: string } | undefined)?.shipper_id || "",
+          shipper_name:
+            (mblDetails as { shipper_name?: string } | undefined)?.shipper_name ||
+            "",
+          shipper_email:
+            (mblDetails as { shipper_email?: string } | undefined)?.shipper_email ||
+            "",
+          shipper_address_id:
+            (mblDetails as { shipper_address_id?: string } | undefined)
+              ?.shipper_address_id || "",
+          shipper_address:
+            (mblDetails as { shipper_address?: string } | undefined)
+              ?.shipper_address || "",
+          consignee_id:
+            (mblDetails as { consignee_id?: string } | undefined)?.consignee_id ||
+            "",
+          consignee_name:
+            (mblDetails as { consignee_name?: string } | undefined)
+              ?.consignee_name || "",
+          consignee_email:
+            (mblDetails as { consignee_email?: string } | undefined)
+              ?.consignee_email || "",
+          consignee_address_id:
+            (mblDetails as { consignee_address_id?: string } | undefined)
+              ?.consignee_address_id || "",
+          consignee_address:
+            (mblDetails as { consignee_address?: string } | undefined)
+              ?.consignee_address || "",
+          carrier_agent_id:
+            (mblDetails as { carrier_agent_id?: string } | undefined)
+              ?.carrier_agent_id || "",
+          carrier_agent_name:
+            (mblDetails as { carrier_agent_name?: string } | undefined)
+              ?.carrier_agent_name || "",
+          carrier_agent_email:
+            (mblDetails as { carrier_agent_email?: string } | undefined)
+              ?.carrier_agent_email || "",
+          carrier_agent_address_id:
+            (mblDetails as { carrier_agent_address_id?: string } | undefined)
+              ?.carrier_agent_address_id || "",
+          carrier_agent_address:
+            (mblDetails as { carrier_agent_address?: string } | undefined)
+              ?.carrier_agent_address || "",
         });
       }
 
@@ -1466,7 +1664,7 @@ function ExportJobCreate() {
       // Set active step to 2 (Container Details) when navigating back from HouseCreate
       // This ensures the user sees the HBL list after saving
       if (isNavigatingBackFromHouseCreate) {
-        setActive(2);
+        setActive(3);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1672,34 +1870,10 @@ function ExportJobCreate() {
         setActive(1);
       }
     } else if (active === 1) {
+      setActive(2);
+    } else if (active === 2) {
       if (validateStep2()) {
         // Save container details before moving to step 3
-        // navigate(location.pathname, {
-        //   replace: true,
-        //   state: {
-        //     ...location.state,
-        //     containerDetails: containerDetailsForm.values.containers,
-        //     // Preserve all other state
-        //     ...(location.state?.housingDetails && {
-        //       housingDetails: location.state.housingDetails,
-        //     }),
-        //     ...(location.state?.mblDetails && {
-        //       mblDetails: location.state.mblDetails,
-        //     }),
-        //     ...(location.state?.carrierDetails && {
-        //       carrierDetails: location.state.carrierDetails,
-        //     }),
-        //     ...(location.state?.routings && {
-        //       routings: location.state.routings,
-        //     }),
-        //     ...(location.state?.job && { job: location.state.job }),
-        //   },
-        // });
-        setActive(2);
-      }
-    } else if (active === 2) {
-      if (validateStep3()) {
-        // Save container details before submitting
         // navigate(location.pathname, {
         //   replace: true,
         //   state: {
@@ -1724,6 +1898,32 @@ function ExportJobCreate() {
         setActive(3);
       }
     } else if (active === 3) {
+      if (validateStep3()) {
+        // Save container details before submitting
+        // navigate(location.pathname, {
+        //   replace: true,
+        //   state: {
+        //     ...location.state,
+        //     containerDetails: containerDetailsForm.values.containers,
+        //     // Preserve all other state
+        //     ...(location.state?.housingDetails && {
+        //       housingDetails: location.state.housingDetails,
+        //     }),
+        //     ...(location.state?.mblDetails && {
+        //       mblDetails: location.state.mblDetails,
+        //     }),
+        //     ...(location.state?.carrierDetails && {
+        //       carrierDetails: location.state.carrierDetails,
+        //     }),
+        //     ...(location.state?.routings && {
+        //       routings: location.state.routings,
+        //     }),
+        //     ...(location.state?.job && { job: location.state.job }),
+        //   },
+        // });
+        setActive(4);
+      }
+    } else if (active === 4) {
       handleSubmit();
     }
   };
@@ -2208,6 +2408,23 @@ function ExportJobCreate() {
             eta: mblDetailsForm.values.eta || null,
             atd: mblDetailsForm.values.atd || null,
             ata: mblDetailsForm.values.ata || null,
+            shipper_id: mblDetailsForm.values.shipper_id || "",
+            shipper_name: mblDetailsForm.values.shipper_name || "",
+            shipper_email: mblDetailsForm.values.shipper_email || "",
+            shipper_address_id: mblDetailsForm.values.shipper_address_id || "",
+            shipper_address: mblDetailsForm.values.shipper_address || "",
+            consignee_id: mblDetailsForm.values.consignee_id || "",
+            consignee_name: mblDetailsForm.values.consignee_name || "",
+            consignee_email: mblDetailsForm.values.consignee_email || "",
+            consignee_address_id: mblDetailsForm.values.consignee_address_id || "",
+            consignee_address: mblDetailsForm.values.consignee_address || "",
+            carrier_agent_id: mblDetailsForm.values.carrier_agent_id || "",
+            carrier_agent_name: mblDetailsForm.values.carrier_agent_name || "",
+            carrier_agent_email: mblDetailsForm.values.carrier_agent_email || "",
+            carrier_agent_address_id:
+              mblDetailsForm.values.carrier_agent_address_id || "",
+            carrier_agent_address:
+              mblDetailsForm.values.carrier_agent_address || "",
           },
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
@@ -2320,7 +2537,7 @@ function ExportJobCreate() {
     // Validate container details - this will set field-level errors
     if (!validateStep3()) {
       // Navigate to step 3 to show validation errors
-      setActive(2);
+      setActive(3);
       setIsSubmitting(false);
       return;
     }
@@ -2328,6 +2545,15 @@ function ExportJobCreate() {
       const payload = {
         service: mblDetailsForm.values.service,
         service_type: "Export", // Export job creation
+        shipper_name: partyDetailsForm.values.shipper_name || "",
+        shipper_email: partyDetailsForm.values.shipper_email || "",
+        shipper_address: partyDetailsForm.values.shipper_address || "",
+        consignee_name: partyDetailsForm.values.consignee_name || "",
+        consignee_email: partyDetailsForm.values.consignee_email || "",
+        consignee_address: partyDetailsForm.values.consignee_address || "",
+        carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
+        carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
+        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,
@@ -2973,7 +3199,7 @@ function ExportJobCreate() {
                         });
                       }}
                     >
-                      Create Invoice
+                      Create Agent Invoice
                     </Menu.Item>
                   )}
 
@@ -3074,7 +3300,7 @@ function ExportJobCreate() {
               fontWeight: active === 1 ? 600 : 400,
             }}
           >
-            Routings
+            Party Details
           </Tabs.Tab>
           <Tabs.Tab
             value="2"
@@ -3088,7 +3314,7 @@ function ExportJobCreate() {
               fontWeight: active === 2 ? 600 : 400,
             }}
           >
-            Container Details
+            Routings
           </Tabs.Tab>
           <Tabs.Tab
             value="3"
@@ -3102,19 +3328,33 @@ function ExportJobCreate() {
               fontWeight: active === 3 ? 600 : 400,
             }}
           >
+            Container Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="4"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 4 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 4 ? 600 : 400,
+            }}
+          >
             Estimates
           </Tabs.Tab>
           {mode === "edit" && jobData?.id && (
             <Tabs.Tab
-              value="4"
+              value="5"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                borderBottom: active === 5 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 4 ? 600 : 400,
+                fontWeight: active === 5 ? 600 : 400,
               }}
             >
               Accounts
@@ -3482,8 +3722,35 @@ function ExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 2: Routings */}
         <Tabs.Panel value="1">
+          <Box mt="md">
+            <JobMasterPartyDetailsPanel
+              idPrefix="ocean-export-party"
+              partyDetailsForm={partyDetailsForm}
+              shipperAddressOptions={shipperAddressOptions}
+              setShipperAddressOptions={setShipperAddressOptions}
+              consigneeAddressOptions={consigneeAddressOptions}
+              setConsigneeAddressOptions={setConsigneeAddressOptions}
+              carrierAgentAddressOptions={carrierAgentAddressOptions}
+              setCarrierAgentAddressOptions={setCarrierAgentAddressOptions}
+              shipperAddressSearch={shipperAddressSearch}
+              setShipperAddressSearch={setShipperAddressSearch}
+              consigneeAddressSearch={consigneeAddressSearch}
+              setConsigneeAddressSearch={setConsigneeAddressSearch}
+              carrierAgentAddressSearch={carrierAgentAddressSearch}
+              setCarrierAgentAddressSearch={setCarrierAgentAddressSearch}
+              shipperAddressCustom={shipperAddressCustom}
+              setShipperAddressCustom={setShipperAddressCustom}
+              consigneeAddressCustom={consigneeAddressCustom}
+              setConsigneeAddressCustom={setConsigneeAddressCustom}
+              carrierAgentAddressCustom={carrierAgentAddressCustom}
+              setCarrierAgentAddressCustom={setCarrierAgentAddressCustom}
+            />
+          </Box>
+        </Tabs.Panel>
+
+        {/* Tab 3: Routings */}
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Routings{" "}
@@ -4029,8 +4296,8 @@ function ExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 3: Container Details */}
-        <Tabs.Panel value="2">
+        {/* Tab 4: Container Details */}
+        <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="flex-start" mb="md">
               <Text size="lg" fw={600} c="#105476" mb="md">
@@ -4280,8 +4547,8 @@ function ExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 4: Estimates */}
-        <Tabs.Panel value="3">
+        {/* Tab 5: Estimates */}
+        <Tabs.Panel value="4">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
               <Text size="lg" fw={600} c="#105476">
@@ -4489,7 +4756,7 @@ function ExportJobCreate() {
         </Tabs.Panel>
 
         {mode === "edit" && jobData?.id && (
-          <Tabs.Panel value="4">
+          <Tabs.Panel value="5">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -5190,7 +5457,8 @@ function ExportJobCreate() {
           {(active === 1 ||
             active === 2 ||
             active === 3 ||
-            (active === 4 && mode === "edit" && jobData?.id)) &&
+            active === 4 ||
+            (active === 5 && mode === "edit" && jobData?.id)) &&
             !isReadOnly && (
               <Button
                 leftSection={<IconChevronLeft size={16} />}
@@ -5252,6 +5520,16 @@ function ExportJobCreate() {
           )}
 
           {active === 2 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

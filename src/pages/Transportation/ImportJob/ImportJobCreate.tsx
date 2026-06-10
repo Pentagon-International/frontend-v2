@@ -3561,7 +3561,7 @@ function ImportJobCreate() {
                         });
                       }}
                     >
-                      Create Invoice
+                      Create Agent Invoice
                     </Menu.Item>
                   )}
 

@@ -19,7 +19,7 @@ import {
   Loader,
   Modal,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronLeft,
@@ -75,6 +75,11 @@ import {
   importHouseCargoWeightFromApi,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
+import {
+  JobMasterPartyDetailsPanel,
+  type JobMasterPartyDetailsValues,
+  type PartyAddressOption,
+} from "../JobMasterPartyDetailsPanel";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -90,6 +95,21 @@ type MAWBDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  shipper_id: string;
+  shipper_name: string;
+  shipper_email: string;
+  shipper_address_id: string;
+  shipper_address: string;
+  consignee_id: string;
+  consignee_name: string;
+  consignee_email: string;
+  consignee_address_id: string;
+  consignee_address: string;
+  carrier_agent_id: string;
+  carrier_agent_name: string;
+  carrier_agent_email: string;
+  carrier_agent_address_id: string;
+  carrier_agent_address: string;
 };
 
 type CarrierDetailsForm = {
@@ -492,9 +512,132 @@ function AirExportJobCreate() {
         jobData?.ata && dayjs.utc(jobData.ata).isValid()
           ? dayjs.utc(jobData.ata).local().toDate()
           : location.state?.mawbDetails?.ata || null,
+      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_name:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
+        ) ||
+        location.state?.mawbDetails?.shipper_name ||
+        "",
+      shipper_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_email || "",
+        ) ||
+        location.state?.mawbDetails?.shipper_email ||
+        "",
+      shipper_address_id:
+        location.state?.mawbDetails?.shipper_address_id || "",
+      shipper_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_address ||
+            "",
+        ) ||
+        location.state?.mawbDetails?.shipper_address ||
+        "",
+      consignee_id: location.state?.mawbDetails?.consignee_id || "",
+      consignee_name:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_name ||
+            "",
+        ) ||
+        location.state?.mawbDetails?.consignee_name ||
+        "",
+      consignee_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_email ||
+            "",
+        ) ||
+        location.state?.mawbDetails?.consignee_email ||
+        "",
+      consignee_address_id:
+        location.state?.mawbDetails?.consignee_address_id || "",
+      consignee_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)?.consignee_address ||
+            "",
+        ) ||
+        location.state?.mawbDetails?.consignee_address ||
+        "",
+      carrier_agent_id: location.state?.mawbDetails?.carrier_agent_id || "",
+      carrier_agent_name:
+        String(
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_name || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_name ||
+        "",
+      carrier_agent_email:
+        String(
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_email || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_email ||
+        "",
+      carrier_agent_address_id:
+        location.state?.mawbDetails?.carrier_agent_address_id || "",
+      carrier_agent_address:
+        String(
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_address || "",
+        ) ||
+        location.state?.mawbDetails?.carrier_agent_address ||
+        "",
     },
     validate: yupResolver(mawbDetailsSchema),
   });
+
+  const partyDetailsForm = mawbDetailsForm;
+  const [shipperAddressOptions, setShipperAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [carrierAgentAddressOptions, setCarrierAgentAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [shipperAddressSearch, setShipperAddressSearch] = useState("");
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
+  const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
+    useState(false);
+
+  const getMawbDetailsSnapshot = useCallback(
+    () => ({
+      service: mawbDetailsForm.values.service || "AIR",
+      is_direct: mawbDetailsForm.values.is_direct,
+      agent_code: mawbDetailsForm.values.agent_code || "",
+      agent_name: mawbDetailsForm.values.agent_name || "",
+      origin_code: mawbDetailsForm.values.origin_code || "",
+      origin_name: mawbDetailsForm.values.origin_name || "",
+      destination_code: mawbDetailsForm.values.destination_code || "",
+      destination_name: mawbDetailsForm.values.destination_name || "",
+      etd: mawbDetailsForm.values.etd || null,
+      eta: mawbDetailsForm.values.eta || null,
+      atd: mawbDetailsForm.values.atd || null,
+      ata: mawbDetailsForm.values.ata || null,
+      agent_data: originAgentDataRef.current || null,
+      shipper_id: mawbDetailsForm.values.shipper_id || "",
+      shipper_name: mawbDetailsForm.values.shipper_name || "",
+      shipper_email: mawbDetailsForm.values.shipper_email || "",
+      shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+      shipper_address: mawbDetailsForm.values.shipper_address || "",
+      consignee_id: mawbDetailsForm.values.consignee_id || "",
+      consignee_name: mawbDetailsForm.values.consignee_name || "",
+      consignee_email: mawbDetailsForm.values.consignee_email || "",
+      consignee_address_id: mawbDetailsForm.values.consignee_address_id || "",
+      consignee_address: mawbDetailsForm.values.consignee_address || "",
+      carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+      carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
+      carrier_agent_email: mawbDetailsForm.values.carrier_agent_email || "",
+      carrier_agent_address_id:
+        mawbDetailsForm.values.carrier_agent_address_id || "",
+      carrier_agent_address: mawbDetailsForm.values.carrier_agent_address || "",
+    }),
+    [mawbDetailsForm.values],
+  );
 
   // Auto-set service to "Air" on mount
   // useEffect(() => {
@@ -615,6 +758,21 @@ function AirExportJobCreate() {
             jobData.ata && dayjs.utc(jobData.ata).isValid()
               ? dayjs.utc(jobData.ata).local().toDate()
               : null,
+          shipper_id: "",
+          shipper_name: String(jobData.shipper_name || ""),
+          shipper_email: String(jobData.shipper_email || ""),
+          shipper_address_id: "",
+          shipper_address: String(jobData.shipper_address || ""),
+          consignee_id: "",
+          consignee_name: String(jobData.consignee_name || ""),
+          consignee_email: String(jobData.consignee_email || ""),
+          consignee_address_id: "",
+          consignee_address: String(jobData.consignee_address || ""),
+          carrier_agent_id: "",
+          carrier_agent_name: String(jobData.carrier_agent_name || ""),
+          carrier_agent_email: String(jobData.carrier_agent_email || ""),
+          carrier_agent_address_id: "",
+          carrier_agent_address: String(jobData.carrier_agent_address || ""),
         };
 
         console.log("🔧 Setting MAWB form values:", mawbInitialValues);
@@ -639,6 +797,27 @@ function AirExportJobCreate() {
             eta: savedMawbDetailsFromState.eta || null,
             atd: savedMawbDetailsFromState.atd || null,
             ata: savedMawbDetailsFromState.ata || null,
+            shipper_id: savedMawbDetailsFromState.shipper_id || "",
+            shipper_name: savedMawbDetailsFromState.shipper_name || "",
+            shipper_email: savedMawbDetailsFromState.shipper_email || "",
+            shipper_address_id:
+              savedMawbDetailsFromState.shipper_address_id || "",
+            shipper_address: savedMawbDetailsFromState.shipper_address || "",
+            consignee_id: savedMawbDetailsFromState.consignee_id || "",
+            consignee_name: savedMawbDetailsFromState.consignee_name || "",
+            consignee_email: savedMawbDetailsFromState.consignee_email || "",
+            consignee_address_id:
+              savedMawbDetailsFromState.consignee_address_id || "",
+            consignee_address: savedMawbDetailsFromState.consignee_address || "",
+            carrier_agent_id: savedMawbDetailsFromState.carrier_agent_id || "",
+            carrier_agent_name:
+              savedMawbDetailsFromState.carrier_agent_name || "",
+            carrier_agent_email:
+              savedMawbDetailsFromState.carrier_agent_email || "",
+            carrier_agent_address_id:
+              savedMawbDetailsFromState.carrier_agent_address_id || "",
+            carrier_agent_address:
+              savedMawbDetailsFromState.carrier_agent_address || "",
           });
 
           if (savedMawbDetailsFromState.agent_data) {
@@ -1347,34 +1526,14 @@ function AirExportJobCreate() {
   const handleNext = () => {
     if (active === 0) {
       if (validateStep1()) {
-        // Save ALL current form values before moving to step 2
         navigate(location.pathname, {
           replace: true,
           state: {
             ...location.state,
-            // Save current MAWB form values
-            mawbDetails: {
-              service: mawbDetailsForm.values.service || "AIR",
-              is_direct: mawbDetailsForm.values.is_direct,
-              agent_code: mawbDetailsForm.values.agent_code || "",
-              agent_name: mawbDetailsForm.values.agent_name || "",
-              origin_code: mawbDetailsForm.values.origin_code || "",
-              origin_name: mawbDetailsForm.values.origin_name || "",
-              destination_code: mawbDetailsForm.values.destination_code || "",
-              destination_name: mawbDetailsForm.values.destination_name || "",
-              etd: mawbDetailsForm.values.etd || null,
-              eta: mawbDetailsForm.values.eta || null,
-              atd: mawbDetailsForm.values.atd || null,
-              ata: mawbDetailsForm.values.ata || null,
-              agent_data: originAgentDataRef.current || null,
-            },
-            // Save current Carrier form values
+            mawbDetails: getMawbDetailsSnapshot(),
             carrierDetails: carrierDetailsForm.values,
-            // Save current Routings form values
             routings: routingsForm.values.routings,
-            // Save current Estimates form values
             estimates: estimatesForm.values.estimates,
-            // Preserve all other state
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
             }),
@@ -1387,35 +1546,17 @@ function AirExportJobCreate() {
         setActive(1);
       }
     } else if (active === 1) {
+      setActive(2);
+    } else if (active === 2) {
       if (validateStep2()) {
-        // Save ALL current form values before moving to Estimates
         navigate(location.pathname, {
           replace: true,
           state: {
             ...location.state,
-            // Save current MAWB form values
-            mawbDetails: {
-              service: mawbDetailsForm.values.service || "AIR",
-              is_direct: mawbDetailsForm.values.is_direct,
-              agent_code: mawbDetailsForm.values.agent_code || "",
-              agent_name: mawbDetailsForm.values.agent_name || "",
-              origin_code: mawbDetailsForm.values.origin_code || "",
-              origin_name: mawbDetailsForm.values.origin_name || "",
-              destination_code: mawbDetailsForm.values.destination_code || "",
-              destination_name: mawbDetailsForm.values.destination_name || "",
-              etd: mawbDetailsForm.values.etd || null,
-              eta: mawbDetailsForm.values.eta || null,
-              atd: mawbDetailsForm.values.atd || null,
-              ata: mawbDetailsForm.values.ata || null,
-              agent_data: originAgentDataRef.current || null,
-            },
-            // Save current Carrier form values
+            mawbDetails: getMawbDetailsSnapshot(),
             carrierDetails: carrierDetailsForm.values,
-            // Save current Routings form values
             routings: routingsForm.values.routings,
-            // Save current Estimates form values
             estimates: estimatesForm.values.estimates,
-            // Preserve all other state
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
             }),
@@ -1425,28 +1566,14 @@ function AirExportJobCreate() {
             ...(location.state?.job && { job: location.state.job }),
           },
         });
-        setActive(2);
+        setActive(3);
       }
-    } else if (active === 2) {
+    } else if (active === 3) {
       navigate(location.pathname, {
         replace: true,
         state: {
           ...location.state,
-          mawbDetails: {
-            service: mawbDetailsForm.values.service || "AIR",
-            is_direct: mawbDetailsForm.values.is_direct,
-            agent_code: mawbDetailsForm.values.agent_code || "",
-            agent_name: mawbDetailsForm.values.agent_name || "",
-            origin_code: mawbDetailsForm.values.origin_code || "",
-            origin_name: mawbDetailsForm.values.origin_name || "",
-            destination_code: mawbDetailsForm.values.destination_code || "",
-            destination_name: mawbDetailsForm.values.destination_name || "",
-            etd: mawbDetailsForm.values.etd || null,
-            eta: mawbDetailsForm.values.eta || null,
-            atd: mawbDetailsForm.values.atd || null,
-            ata: mawbDetailsForm.values.ata || null,
-            agent_data: originAgentDataRef.current || null,
-          },
+          mawbDetails: getMawbDetailsSnapshot(),
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
           estimates: estimatesForm.values.estimates,
@@ -1471,23 +1598,7 @@ function AirExportJobCreate() {
         replace: true,
         state: {
           ...location.state,
-          // Save current MAWB form values
-          mawbDetails: {
-            service: mawbDetailsForm.values.service || "AIR",
-            is_direct: mawbDetailsForm.values.is_direct,
-            agent_code: mawbDetailsForm.values.agent_code || "",
-            agent_name: mawbDetailsForm.values.agent_name || "",
-            origin_code: mawbDetailsForm.values.origin_code || "",
-            origin_name: mawbDetailsForm.values.origin_name || "",
-            destination_code: mawbDetailsForm.values.destination_code || "",
-            destination_name: mawbDetailsForm.values.destination_name || "",
-            etd: mawbDetailsForm.values.etd || null,
-            eta: mawbDetailsForm.values.eta || null,
-            atd: mawbDetailsForm.values.atd || null,
-            ata: mawbDetailsForm.values.ata || null,
-            agent_data: originAgentDataRef.current || null,
-          },
-          // Save current Carrier form values
+          mawbDetails: getMawbDetailsSnapshot(),
           carrierDetails: carrierDetailsForm.values,
           // Save current Routings form values
           routings: routingsForm.values.routings,
@@ -1603,6 +1714,52 @@ function AirExportJobCreate() {
             eta: savedMawbDetails.eta || null,
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
+            shipper_id:
+              (savedMawbDetails as { shipper_id?: string } | undefined)
+                ?.shipper_id || "",
+            shipper_name:
+              (savedMawbDetails as { shipper_name?: string } | undefined)
+                ?.shipper_name || "",
+            shipper_email:
+              (savedMawbDetails as { shipper_email?: string } | undefined)
+                ?.shipper_email || "",
+            shipper_address_id:
+              (savedMawbDetails as { shipper_address_id?: string } | undefined)
+                ?.shipper_address_id || "",
+            shipper_address:
+              (savedMawbDetails as { shipper_address?: string } | undefined)
+                ?.shipper_address || "",
+            consignee_id:
+              (savedMawbDetails as { consignee_id?: string } | undefined)
+                ?.consignee_id || "",
+            consignee_name:
+              (savedMawbDetails as { consignee_name?: string } | undefined)
+                ?.consignee_name || "",
+            consignee_email:
+              (savedMawbDetails as { consignee_email?: string } | undefined)
+                ?.consignee_email || "",
+            consignee_address_id:
+              (savedMawbDetails as { consignee_address_id?: string } | undefined)
+                ?.consignee_address_id || "",
+            consignee_address:
+              (savedMawbDetails as { consignee_address?: string } | undefined)
+                ?.consignee_address || "",
+            carrier_agent_id:
+              (savedMawbDetails as { carrier_agent_id?: string } | undefined)
+                ?.carrier_agent_id || "",
+            carrier_agent_name:
+              (savedMawbDetails as { carrier_agent_name?: string } | undefined)
+                ?.carrier_agent_name || "",
+            carrier_agent_email:
+              (savedMawbDetails as { carrier_agent_email?: string } | undefined)
+                ?.carrier_agent_email || "",
+            carrier_agent_address_id:
+              (
+                savedMawbDetails as { carrier_agent_address_id?: string } | undefined
+              )?.carrier_agent_address_id || "",
+            carrier_agent_address:
+              (savedMawbDetails as { carrier_agent_address?: string } | undefined)
+                ?.carrier_agent_address || "",
           });
 
           // Update origin agent data ref if available in location state
@@ -1785,23 +1942,7 @@ function AirExportJobCreate() {
       lastRestoredMawbDetailsRef.current = null;
       routingStateInitializedRef.current = false;
 
-      // Prepare MAWB details with ALL current form values including origin_name and destination_name
-      const mawbDetailsToPass = {
-        service: mawbDetailsForm.values.service || "AIR",
-        is_direct: mawbDetailsForm.values.is_direct,
-        agent_code: mawbDetailsForm.values.agent_code || "",
-        agent_name: mawbDetailsForm.values.agent_name || "",
-        origin_code: mawbDetailsForm.values.origin_code || "",
-        origin_name: mawbDetailsForm.values.origin_name || "",
-        destination_code: mawbDetailsForm.values.destination_code || "",
-        destination_name: mawbDetailsForm.values.destination_name || "",
-        etd: mawbDetailsForm.values.etd || null,
-        eta: mawbDetailsForm.values.eta || null,
-        atd: mawbDetailsForm.values.atd || null,
-        ata: mawbDetailsForm.values.ata || null,
-        // Use ref first (most recent), then fallback to location.state
-        agent_data: originAgentDataRef.current || null,
-      };
+      const mawbDetailsToPass = getMawbDetailsSnapshot();
 
       console.log("🚀 Navigating to HAWBCreate with mawbDetails:", {
         mawbDetailsToPass,
@@ -1834,7 +1975,7 @@ function AirExportJobCreate() {
       }, 1000);
     },
     [
-      mawbDetailsForm.values,
+      getMawbDetailsSnapshot,
       carrierDetailsForm.values,
       routingsForm.values.routings,
       estimatesForm.values.estimates,
@@ -2138,6 +2279,15 @@ function AirExportJobCreate() {
           : null,
         flightno: carrierDetailsForm.values.flight_number || null,
         mawb_no: carrierDetailsForm.values.mawb_number || null,
+        shipper_name: partyDetailsForm.values.shipper_name || "",
+        shipper_email: partyDetailsForm.values.shipper_email || "",
+        shipper_address: partyDetailsForm.values.shipper_address || "",
+        consignee_name: partyDetailsForm.values.consignee_name || "",
+        consignee_email: partyDetailsForm.values.consignee_email || "",
+        consignee_address: partyDetailsForm.values.consignee_address || "",
+        carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
+        carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
+        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const normalizedTransportType = String(
             routing.transport_type || "",
@@ -2380,9 +2530,9 @@ function AirExportJobCreate() {
     }
   };
 
-  // Fetch invoice list when Accounts tab (active === 3) is active
+  // Fetch invoice list when Accounts tab (active === 4) is active
   useEffect(() => {
-    if (active !== 3) return;
+    if (active !== 4) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -2594,7 +2744,7 @@ function AirExportJobCreate() {
                       });
                     }}
                   >
-                    Create Invoice
+                    Create Agent Invoice
                   </Menu.Item>
 
                   <Menu.Item
@@ -2740,7 +2890,7 @@ function AirExportJobCreate() {
               fontWeight: active === 1 ? 600 : 400,
             }}
           >
-            Routings
+            Party Details
           </Tabs.Tab>
           <Tabs.Tab
             value="2"
@@ -2754,19 +2904,33 @@ function AirExportJobCreate() {
               fontWeight: active === 2 ? 600 : 400,
             }}
           >
+            Routings
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="3"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 3 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 3 ? 600 : 400,
+            }}
+          >
             Estimates
           </Tabs.Tab>
           {jobData?.id != null && (
             <Tabs.Tab
-              value="3"
+              value="4"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 3 ? "3px solid #105476" : "none",
+                borderBottom: active === 4 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 3 ? 600 : 400,
+                fontWeight: active === 4 ? 600 : 400,
               }}
             >
               Accounts
@@ -3086,8 +3250,37 @@ function AirExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 2: Routings */}
         <Tabs.Panel value="1">
+          <Box mt="md">
+            <JobMasterPartyDetailsPanel
+              idPrefix="air-export-party"
+              partyDetailsForm={
+                partyDetailsForm as unknown as UseFormReturnType<JobMasterPartyDetailsValues>
+              }
+              shipperAddressOptions={shipperAddressOptions}
+              setShipperAddressOptions={setShipperAddressOptions}
+              consigneeAddressOptions={consigneeAddressOptions}
+              setConsigneeAddressOptions={setConsigneeAddressOptions}
+              carrierAgentAddressOptions={carrierAgentAddressOptions}
+              setCarrierAgentAddressOptions={setCarrierAgentAddressOptions}
+              shipperAddressSearch={shipperAddressSearch}
+              setShipperAddressSearch={setShipperAddressSearch}
+              consigneeAddressSearch={consigneeAddressSearch}
+              setConsigneeAddressSearch={setConsigneeAddressSearch}
+              carrierAgentAddressSearch={carrierAgentAddressSearch}
+              setCarrierAgentAddressSearch={setCarrierAgentAddressSearch}
+              shipperAddressCustom={shipperAddressCustom}
+              setShipperAddressCustom={setShipperAddressCustom}
+              consigneeAddressCustom={consigneeAddressCustom}
+              setConsigneeAddressCustom={setConsigneeAddressCustom}
+              carrierAgentAddressCustom={carrierAgentAddressCustom}
+              setCarrierAgentAddressCustom={setCarrierAgentAddressCustom}
+            />
+          </Box>
+        </Tabs.Panel>
+
+        {/* Tab 3: Routings */}
+        <Tabs.Panel value="2">
           <Box mt="md">
             <Text size="lg" fw={600} c="#105476" mb="md">
               Routings
@@ -3619,8 +3812,8 @@ function AirExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 3: Estimates */}
-        <Tabs.Panel value="2">
+        {/* Tab 4: Estimates */}
+        <Tabs.Panel value="3">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
               <Text size="lg" fw={600} c="#105476">
@@ -3829,7 +4022,7 @@ function AirExportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="3">
+          <Tabs.Panel value="4">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -4520,7 +4713,7 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2) && !isReadOnly && (
+          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -4561,8 +4754,17 @@ function AirExportJobCreate() {
               Next
             </Button>
           )}
-
           {active === 2 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
