@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, FC, ReactNode } from
 import axios from "axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
-import { FilePreviewFrame } from "./automationFilePreview";
+import { FilePreviewModal } from "./automationFilePreview";
 
 const hblApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}workflow`,
@@ -39,6 +39,26 @@ interface FileRecord {
   created_by?: string;
   mbl_file_url?: string;
   hbl_file_url?: string;
+  file_url?: string;
+  hbl_count?: number;
+  mbl_files?: BillFileItem[];
+  hbl_files?: BillFileItem[];
+}
+
+interface BillFileItem {
+  sequence?: number;
+  filename: string;
+  file_type?: string;
+  file_url: string;
+  status?: string;
+  size_kb?: number;
+  hbl_number?: string;
+  mbl_number?: string;
+}
+
+interface BillFileSlot {
+  label: string;
+  file: BillFileItem;
 }
 
 interface OceanRouting {
@@ -239,7 +259,57 @@ type ModalState =
   | { type: "detail"; record: FileRecord }
   | { type: "payload"; txn_id: string; record?: FileRecord }
   | { type: "fix_port"; record: FileRecord }
+  | { type: "files"; record: FileRecord }
+  | { type: "filePreview"; url: string; filename: string; title?: string; backTo?: FileRecord }
   | null;
+
+const getMblFileSlot = (record: FileRecord): BillFileSlot | null => {
+  const mblFromList = record.mbl_files?.find(f => f.file_url?.trim());
+  if (mblFromList) {
+    return { label: "MBL", file: mblFromList };
+  }
+  if (record.mbl_file_url?.trim()) {
+    return {
+      label: "MBL",
+      file: {
+        filename: record.filename,
+        file_url: record.mbl_file_url.trim(),
+        file_type: "mbl",
+        mbl_number: record.bl_number,
+      },
+    };
+  }
+  return null;
+};
+
+const getHblFileSlots = (record: FileRecord): BillFileSlot[] => {
+  const slots: BillFileSlot[] = [];
+
+  if (record.hbl_files?.length) {
+    record.hbl_files.forEach((f, i) => {
+      if (f.file_url?.trim()) {
+        slots.push({
+          label: `HBL ${f.sequence ?? i + 1}`,
+          file: f,
+        });
+      }
+    });
+  } else if (record.hbl_file_url?.trim()) {
+    slots.push({
+      label: "HBL 1",
+      file: {
+        filename: record.filename,
+        file_url: record.hbl_file_url.trim(),
+        file_type: "hbl",
+      },
+    });
+  }
+
+  return slots;
+};
+
+const hasViewableFiles = (record: FileRecord): boolean =>
+  Boolean(getMblFileSlot(record)) || getHblFileSlots(record).length > 0;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -366,6 +436,19 @@ const STYLES = `
   .hbl-app .modal-close:hover { color: var(--text); }
   .hbl-app .modal-body { padding: 20px 22px; overflow-y: auto; flex: 1; }
   .hbl-app .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+  .hbl-app .file-section { margin-bottom: 20px; }
+  .hbl-app .file-section:last-child { margin-bottom: 0; }
+  .hbl-app .file-section-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+  .hbl-app .file-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .hbl-app .file-grid-cell { min-width: 0; display: flex; flex-direction: column; }
+  .hbl-app .file-card-full { width: 100%; }
+  .hbl-app .file-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; cursor: pointer; background: var(--surface2); transition: border-color .15s, box-shadow .15s; }
+  .hbl-app .file-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .hbl-app .file-card-icon { font-size: 1.4rem; margin-bottom: 8px; }
+  .hbl-app .file-card-name { font-size: .78rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hbl-app .file-card-meta { font-size: .65rem; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+  @media (max-width: 900px) { .hbl-app .file-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .hbl-app .file-grid { grid-template-columns: 1fr; } }
   .hbl-app .upload-zones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
   .hbl-app .zone-label { display: flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
   .hbl-app .zone-label .dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -551,8 +634,12 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
     const allowed = Array.from(files).filter(f =>
       ALLOWED_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext))
     );
-    const setter = type === "hbl" ? setHbl : setMbl;
-    setter(prev => {
+    if (!allowed.length) return;
+    if (type === "mbl") {
+      setMbl([allowed[0]]);
+      return;
+    }
+    setHbl(prev => {
       const names = new Set(prev.map(f => f.name));
       return [...prev, ...allowed.filter(f => !names.has(f.name))];
     });
@@ -615,14 +702,14 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
           <small>
             {type === "hbl"
               ? "House Bill of Lading — PDF & Images"
-              : "Master Bill of Lading — PDF & Images"}
+              : "Master Bill of Lading — 1 file max (PDF & Images)"}
           </small>
         </div>
         <input
           type="file"
           id={`fi-${type}`}
           accept={ALLOWED_ACCEPT}
-          multiple
+          multiple={type === "hbl"}
           onChange={e => addFiles(type, e.target.files)}
           style={{ display: "none" }}
         />
@@ -712,9 +799,85 @@ const UploadModal: FC<UploadModalProps> = ({ onClose, onUploaded }) => {
   );
 };
 
+// ─── Files List Modal ─────────────────────────────────────────────────────────
+
+const FilesListModal: FC<{
+  record: FileRecord;
+  onClose: () => void;
+  onSelectFile: (file: BillFileItem, sectionTitle: string) => void;
+}> = ({ record, onClose, onSelectFile }) => {
+  const mblSlot = useMemo(() => getMblFileSlot(record), [record]);
+  const hblSlots = useMemo(() => getHblFileSlots(record), [record]);
+  const hasFiles = Boolean(mblSlot) || hblSlots.length > 0;
+
+  const renderFileCard = (file: BillFileItem, label: string, fullWidth = false) => (
+    <button
+      type="button"
+      className={`file-card${fullWidth ? " file-card-full" : ""}`}
+      style={{ textAlign: "left", width: "100%" }}
+      onClick={() => onSelectFile(file, label)}
+    >
+      <div className="file-card-icon">📄</div>
+      <div className="file-card-name" title={file.filename}>{file.filename}</div>
+      <div className="file-card-meta">
+        {file.size_kb != null ? `${file.size_kb} KB` : "—"}
+        {file.mbl_number ? ` · ${file.mbl_number}` : ""}
+        {file.hbl_number ? ` · ${file.hbl_number}` : ""}
+        {file.status ? ` · ${file.status}` : ""}
+      </div>
+    </button>
+  );
+
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal modal-lg">
+        <div className="modal-head">
+          <div>
+            <div className="detail-txn">{record.txn_id}</div>
+            <div className="detail-fname">{record.filename}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {!hasFiles ? (
+            <div className="state-box">
+              <div className="state-icon">📭</div>
+              <div className="state-text">No files available</div>
+            </div>
+          ) : (
+            <>
+              {mblSlot && (
+                <div className="file-section">
+                  <div className="file-section-title">{mblSlot.label}</div>
+                  {renderFileCard(mblSlot.file, mblSlot.label, true)}
+                </div>
+              )}
+              {hblSlots.length > 0 && (
+                <div className="file-section">
+                  <div className="file-grid">
+                    {hblSlots.map(({ label, file }) => (
+                      <div key={`${label}-${file.file_url}`} className="file-grid-cell">
+                        <div className="file-section-title">{label}</div>
+                        {renderFileCard(file, label)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 
-type DetailTab = "payload" | "mbl_file" | "hbl_file" | "raw";
+type DetailTab = "payload" | "raw";
 
 const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: CarrierOption[]; containerTypes: ContainerTypeOption[]; onClose: () => void }> = ({ record, ports, carriers, containerTypes, onClose }) => {
   const isAdmin = useIsAdminUser();
@@ -725,11 +888,9 @@ const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: Carri
     const items: Array<{ key: DetailTab; label: string }> = [
       { key: "payload", label: "Payload Form" },
     ];
-    if (record.mbl_file_url?.trim()) items.push({ key: "mbl_file", label: "MBL File" });
-    if (record.hbl_file_url?.trim()) items.push({ key: "hbl_file", label: "HBL File" });
     if (isAdmin) items.push({ key: "raw", label: "Raw JSON" });
     return items;
-  }, [record.mbl_file_url, record.hbl_file_url, isAdmin]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!tabs.some(t => t.key === tab)) setTab("payload");
@@ -755,14 +916,8 @@ const DetailModal: FC<{ record: FileRecord; ports: PortOption[]; carriers: Carri
             </button>
           ))}
         </div>
-        <div className="tab-body" style={tab === "mbl_file" || tab === "hbl_file" ? { padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } : undefined}>
+        <div className="tab-body">
           {tab === "payload" && <PayloadFormBody p={p} ports={ports} carriers={carriers} containerTypes={containerTypes} />}
-          {tab === "mbl_file" && record.mbl_file_url?.trim() && (
-            <FilePreviewFrame url={record.mbl_file_url.trim()} title={`MBL — ${record.filename}`} />
-          )}
-          {tab === "hbl_file" && record.hbl_file_url?.trim() && (
-            <FilePreviewFrame url={record.hbl_file_url.trim()} title={`HBL — ${record.filename}`} />
-          )}
           {tab === "raw" && (
             Object.keys(p).length
               ? <pre style={{ maxHeight: "calc(88vh - 200px)" }}>{JSON.stringify(p, null, 2)}</pre>
@@ -1218,7 +1373,7 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
   const [loading, setLoading] = useState(!inlineRecord);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [ptab, setPtab] = useState<"form" | "mbl_file" | "hbl_file" | "raw">("form");
+  const [ptab, setPtab] = useState<"form" | "raw">("form");
   const [ports, setPorts] = useState<PortOption[]>([]);
   const [carriers, setCarriers] = useState<CarrierOption[]>([]);
   const [containerTypes, setContainerTypes] = useState<ContainerTypeOption[]>([]);
@@ -1227,14 +1382,12 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
   const [carrierFixTarget, setCarrierFixTarget] = useState<{ record: FileRecord } | null>(null);
 
   const payloadTabs = useMemo(() => {
-    const tabs: Array<{ key: "form" | "mbl_file" | "hbl_file" | "raw"; label: string }> = [
+    const tabs: Array<{ key: "form" | "raw"; label: string }> = [
       { key: "form", label: "Form View" },
     ];
-    if (rec?.mbl_file_url?.trim()) tabs.push({ key: "mbl_file", label: "MBL File" });
-    if (rec?.hbl_file_url?.trim()) tabs.push({ key: "hbl_file", label: "HBL File" });
     if (isAdmin) tabs.push({ key: "raw", label: "Raw JSON" });
     return tabs;
-  }, [rec?.mbl_file_url, rec?.hbl_file_url, isAdmin]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!payloadTabs.some(t => t.key === ptab)) setPtab("form");
@@ -1482,10 +1635,6 @@ const PayloadModal: FC<PayloadModalProps> = ({ txn_id, record: inlineRecord, onC
                 onFixHousingCode={() => rec && setFixTarget({ record: rec })}
               />
             </div>
-          ) : ptab === "mbl_file" && rec?.mbl_file_url?.trim() ? (
-            <FilePreviewFrame url={rec.mbl_file_url.trim()} title={`MBL — ${rec.filename ?? txn_id}`} />
-          ) : ptab === "hbl_file" && rec?.hbl_file_url?.trim() ? (
-            <FilePreviewFrame url={rec.hbl_file_url.trim()} title={`HBL — ${rec.filename ?? txn_id}`} />
           ) : (
             <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
               <pre style={{ maxHeight: "calc(92vh - 220px)" }}>{JSON.stringify(rec?.api_payload ?? rec?.extracted_data ?? {}, null, 2)}</pre>
@@ -2526,6 +2675,14 @@ const HBLDocumentManager: FC = () => {
                       onClick={() => setModal({ type: "payload", txn_id: f.txn_id, record: f })}
                       style={hasCodeValidationError(f) ? { color: "var(--red)", borderColor: "var(--red)", background: "rgba(220,38,38,.06)" } : undefined}
                     >⊞ View</button>
+                    {hasViewableFiles(f) && (
+                      <button
+                        className="act-btn dl"
+                        onClick={() => setModal({ type: "files", record: f })}
+                      >
+                        ↓ PDF
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -2607,6 +2764,28 @@ const HBLDocumentManager: FC = () => {
           onClose={() => setModal(null)}
           onSaved={loadFiles}
           showToast={showToast}
+        />
+      )}
+      {modal?.type === "files" && (
+        <FilesListModal
+          record={modal.record}
+          onClose={() => setModal(null)}
+          onSelectFile={(file, sectionTitle) => setModal({
+            type: "filePreview",
+            url: file.file_url.trim(),
+            filename: file.filename,
+            title: `${sectionTitle} — ${file.filename}`,
+            backTo: modal.record,
+          })}
+        />
+      )}
+      {modal?.type === "filePreview" && (
+        <FilePreviewModal
+          url={modal.url}
+          filename={modal.filename}
+          title={modal.title}
+          onClose={() => setModal(null)}
+          onBack={modal.backTo ? () => setModal({ type: "files", record: modal.backTo! }) : undefined}
         />
       )}
     </div>
