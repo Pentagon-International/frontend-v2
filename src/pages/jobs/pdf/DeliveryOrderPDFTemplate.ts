@@ -164,7 +164,7 @@ const drawHeaderSection = (
   const headerStartY = yPos;
   const headerHeight = 25;
   const logoWidth = 50;
-  const logoHeight = 12;
+  const logoHeight = 20;
   const logoX = margin + 5;
   let companyInfoX = margin + 5;
   let companyY = headerStartY + boxPadding + 3;
@@ -185,7 +185,7 @@ const drawHeaderSection = (
         "FAST"
       );
       companyInfoX = logoX + logoWidth + 5;
-      companyY = logoY + 1;
+      companyY = logoY + 5;
     } catch (error) {
       console.warn("Could not load logo image, continuing without logo:", error);
     }
@@ -307,8 +307,8 @@ const getBranchInfo = (country?: any) => {
     }
 
     return {
-      name: defaultBranch?.branch_title || "",
-      address: defaultBranch?.address || "",
+      name: defaultBranch?.reporting_name || "",
+      address: defaultBranch?.reporting_address || "",
       tel: defaultBranch?.tel || "",
       email: defaultBranch?.email || "",
       pan: defaultBranch?.pan || "",
