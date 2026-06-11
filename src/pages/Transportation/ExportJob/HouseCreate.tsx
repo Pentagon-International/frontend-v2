@@ -68,8 +68,9 @@ import {
   formatHouseCargoChargeableForPayload,
   importHouseCargoWeightFromApi,
   applyJobChargeUnitChange,
-  buildBookingCargoNoOfUnitsSyncKey,
+  buildJobChargeNoOfUnitsSyncKey,
   buildJobUnitOptions,
+  type JobChargeNoOfUnitContext,
   mapJobChargesWithUnits,
   parseNoOfUnitForPayload,
   syncJobChargesWithCargoNoOfUnits,
@@ -1482,9 +1483,28 @@ function HouseCreate() {
     [cargoDetails],
   );
 
+  const jobChargeNoOfUnitContext = useMemo((): JobChargeNoOfUnitContext => {
+    const containerDetails = (
+      (location.state?.containerDetails as JobChargeNoOfUnitContext["containerDetails"]) ??
+      []
+    );
+    return {
+      containerDetails,
+      jobCargoDetails: cargoDetails.map((cargo) => ({
+        container_number: cargo.container_number,
+        no_of_packages: cargo.no_of_packages,
+      })),
+    };
+  }, [cargoDetails, location.state?.containerDetails]);
+
   const cargoNoOfUnitsSyncKey = useMemo(
-    () => buildBookingCargoNoOfUnitsSyncKey(jobService, bookingCargoForCharges),
-    [jobService, bookingCargoForCharges],
+    () =>
+      buildJobChargeNoOfUnitsSyncKey(
+        jobService,
+        bookingCargoForCharges,
+        jobChargeNoOfUnitContext,
+      ),
+    [jobService, bookingCargoForCharges, jobChargeNoOfUnitContext],
   );
 
   useEffect(() => {
@@ -1494,6 +1514,7 @@ function HouseCreate() {
       jobService,
       bookingCargoForCharges,
       unitOptions,
+      jobChargeNoOfUnitContext,
     );
     if (updated) {
       chargesForm.setValues({ charges: updated });
@@ -1508,12 +1529,13 @@ function HouseCreate() {
       jobService,
       bookingCargoForCharges,
       unitOptions,
+      jobChargeNoOfUnitContext,
     );
     if (updated) {
       chargesForm.setValues({ charges: updated });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unitOptions, jobService, bookingCargoForCharges]);
+  }, [unitOptions, jobService, bookingCargoForCharges, jobChargeNoOfUnitContext]);
 
   // Format container numbers from location state into dropdown options
   const containerNumberOptions = useMemo(() => {
@@ -4678,6 +4700,7 @@ function HouseCreate() {
                           unitOptions,
                           jobService,
                           bookingCargoForCharges,
+                          jobChargeNoOfUnitContext,
                         );
                         chargesForm.setFieldValue(
                           `charges.${index}.unit_id`,

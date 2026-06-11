@@ -635,6 +635,96 @@ export type JobChargeForNoOfUnits = {
   no_of_unit?: number | null;
 };
 
+export type JobContainerForNoOfUnits = {
+  container_type?: string;
+  container_type_code?: string;
+  container_no?: string;
+};
+
+export type JobCargoForFclNoOfUnits = {
+  container_number?: string;
+  container_no?: string;
+  no_of_packages?: number | string | null;
+};
+
+export type JobChargeNoOfUnitContext = {
+  containerDetails?: JobContainerForNoOfUnits[];
+  jobCargoDetails?: JobCargoForFclNoOfUnits[];
+};
+
+const FCL_CONTAINER_UNIT_PATTERN = /^(20|40|45|53)/;
+
+function containerDetailTypeTokens(
+  container: JobContainerForNoOfUnits,
+): string[] {
+  const tokens = new Set<string>();
+  for (const value of [
+    container.container_type,
+    container.container_type_code,
+  ]) {
+    const normalized = normalizeChargeUnitToken(String(value ?? ""));
+    if (normalized) tokens.add(normalized);
+  }
+  return [...tokens];
+}
+
+function isProbableFclContainerChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  const tokens = chargeUnitTokens(unitCode, unitLabel);
+  if (tokens.some((token) => token.includes("CONTAINER"))) return true;
+  return tokens.some((token) => FCL_CONTAINER_UNIT_PATTERN.test(token));
+}
+
+/**
+ * FCL job: match charge unit to container_details, then no_of_packages on linked cargo.
+ * Returns "not-container" when the unit is not a container-type unit.
+ */
+function resolveFclJobContainerChargeNoOfUnit(
+  unitCode: string,
+  unitLabel: string | undefined,
+  containerDetails: JobContainerForNoOfUnits[],
+  cargoDetails: JobCargoForFclNoOfUnits[],
+): number | "not-container" {
+  const unitTokens = chargeUnitTokens(unitCode, unitLabel);
+  const knownContainerTypeTokens = new Set(
+    containerDetails.flatMap((container) => containerDetailTypeTokens(container)),
+  );
+
+  const isContainerUnit =
+    unitTokens.some((token) => knownContainerTypeTokens.has(token)) ||
+    isProbableFclContainerChargeUnit(unitCode, unitLabel);
+
+  if (!isContainerUnit) return "not-container";
+
+  const matchingContainer = containerDetails.find((container) => {
+    const typeTokens = containerDetailTypeTokens(container);
+    return typeTokens.some((token) => unitTokens.includes(token));
+  });
+
+  if (!matchingContainer) return 1;
+
+  const containerNo = String(matchingContainer.container_no ?? "").trim();
+  if (!containerNo) return 1;
+
+  const matchingCargo = cargoDetails.find((cargo) => {
+    const cargoContainerNo = String(
+      cargo.container_number ?? cargo.container_no ?? "",
+    ).trim();
+    return cargoContainerNo && cargoContainerNo === containerNo;
+  });
+
+  if (!matchingCargo) return 1;
+
+  const packages = matchingCargo.no_of_packages;
+  if (packages === null || packages === undefined || packages === "") {
+    return 1;
+  }
+
+  return parseNoOfUnitForPayload(packages) ?? 1;
+}
+
 /** Job unit dropdown: all ACTIVE rows — value = unit id, label = unit_name. */
 export function buildJobUnitOptions(unitDataRaw: unknown[]): JobUnitOption[] {
   if (!Array.isArray(unitDataRaw)) return [];
@@ -709,15 +799,33 @@ function resolveJobChargeNoOfUnitNumber(
   unitLabel: string | undefined,
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],
+  context?: JobChargeNoOfUnitContext,
 ): number | null {
+  if (!unitCode.trim() || !service) return null;
+
+  if (service === "FCL" && context?.containerDetails?.length) {
+    const fclResult = resolveFclJobContainerChargeNoOfUnit(
+      unitCode,
+      unitLabel,
+      context.containerDetails,
+      context.jobCargoDetails ?? [],
+    );
+    if (fclResult !== "not-container") {
+      return fclResult;
+    }
+  }
+
   const resolved = resolveBookingChargeNoOfUnits(
     unitCode,
     unitLabel,
     service,
     cargoDetails,
   );
-  if (resolved === null || resolved === "") return null;
-  return parseNoOfUnitForPayload(resolved);
+  if (resolved !== null && resolved !== "") {
+    return parseNoOfUnitForPayload(resolved);
+  }
+
+  return 1;
 }
 
 /** Job charges: apply unit selection and auto-fill no_of_unit from cargo. */
@@ -727,7 +835,17 @@ export function applyJobChargeUnitChange<T extends JobChargeForNoOfUnits>(
   unitOptions: JobUnitOption[],
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],
+  context?: JobChargeNoOfUnitContext,
 ): T {
+  if (!unitId) {
+    return {
+      ...charge,
+      unit_id: "",
+      unit_code: "",
+      no_of_unit: null,
+    };
+  }
+
   const unitOpt = findJobUnitOption(unitOptions, unitId);
   const unitCode = resolveJobUnitCodeFromOption(unitOpt);
   const nextNoOfUnit = resolveJobChargeNoOfUnitNumber(
@@ -735,6 +853,7 @@ export function applyJobChargeUnitChange<T extends JobChargeForNoOfUnits>(
     unitOpt?.label,
     service,
     cargoDetails,
+    context,
   );
 
   return {
@@ -751,6 +870,7 @@ export function mapJobChargesWithUnits<T extends JobChargeForNoOfUnits>(
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],
   unitOptions: JobUnitOption[],
+  context?: JobChargeNoOfUnitContext,
 ): T[] | null {
   if (!charges.length) return null;
 
@@ -798,6 +918,7 @@ export function mapJobChargesWithUnits<T extends JobChargeForNoOfUnits>(
         unitOpt?.label,
         service,
         cargoDetails,
+        context,
       );
       if (resolved !== null) {
         hasChanges = true;
@@ -819,6 +940,7 @@ export function syncJobChargesWithCargoNoOfUnits<
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],
   unitOptions: JobUnitOption[],
+  context?: JobChargeNoOfUnitContext,
 ): T[] | null {
   let hasChanges = false;
   const updated = charges.map((charge) => {
@@ -835,6 +957,7 @@ export function syncJobChargesWithCargoNoOfUnits<
       unitOpt?.label,
       service,
       cargoDetails,
+      context,
     );
     if (nextNoOfUnit === null) return charge;
     if (noOfUnitValuesEqual(charge.no_of_unit, nextNoOfUnit)) return charge;
@@ -848,6 +971,30 @@ export function syncJobChargesWithCargoNoOfUnits<
   });
 
   return hasChanges ? updated : null;
+}
+
+export function buildJobChargeNoOfUnitsSyncKey(
+  service: string,
+  cargoDetails: BookingCargoForNoOfUnits[],
+  context?: JobChargeNoOfUnitContext,
+): string {
+  const base = buildBookingCargoNoOfUnitsSyncKey(service, cargoDetails);
+  if (service !== "FCL" || !context?.containerDetails?.length) return base;
+
+  const containers = context.containerDetails
+    .map(
+      (container) =>
+        `${container.container_type ?? ""}:${container.container_type_code ?? ""}:${container.container_no ?? ""}`,
+    )
+    .join("|");
+  const cargo = (context.jobCargoDetails ?? [])
+    .map(
+      (row) =>
+        `${row.container_number ?? row.container_no ?? ""}:${row.no_of_packages ?? ""}`,
+    )
+    .join("|");
+
+  return `${base}::${containers}::${cargo}`;
 }
 
 export function buildBookingCargoNoOfUnitsSyncKey(

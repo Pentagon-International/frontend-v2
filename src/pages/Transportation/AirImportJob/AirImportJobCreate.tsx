@@ -4888,6 +4888,7 @@ function AirImportJobCreate() {
               form={estimatesForm}
               readOnly={isReadOnly}
               debugTag="AIR_IMPORT_JOB"
+              jobUnitDefaults={{ service: "AIR" }}
             />
           </Box>
         </Tabs.Panel>

@@ -55,14 +55,20 @@ function mapOceanRoutings(booking: Record<string, unknown>, transportType: strin
   });
 }
 
-function mapCargoDetails(booking: Record<string, unknown>) {
+function mapCargoDetails(
+  booking: Record<string, unknown>,
+  transport: "air" | "ocean" = "ocean",
+) {
   const cargo = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
   return cargo.map((c) => {
     const row = c as Record<string, unknown>;
     return {
       no_of_packages: row.no_of_packages || row.no_of_containers || "",
       gross_weight: row.gross_weight || "",
-      volume: row.volume || "",
+      volume:
+        transport === "air"
+          ? row.volume_weight ?? row.volume ?? ""
+          : row.volume ?? "",
       chargeable_weight: row.chargeable_weight || "",
       haz: booking.is_hazardous ?? "",
     };
@@ -276,7 +282,7 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
     marks_no: booking.marks_no || "",
     shipment_terms_code:
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
-    cargo_details: mapCargoDetails(booking),
+    cargo_details: mapCargoDetails(booking, "air"),
     mawb_charges: hasBookingRateDetails(booking)
       ? mapHouseChargesFromBooking(booking, true)
       : [],

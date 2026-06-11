@@ -2036,6 +2036,19 @@ function ImportJobCreate() {
     });
   }, [containerDetailsForm.values.containers]);
 
+  const estimatesJobUnitDefaults = useMemo(
+    () => ({
+      service: String(mblDetailsForm.values.service ?? "FCL").toUpperCase(),
+      containerDetails: containerDetailsForm.values.containers.map(
+        (container) => ({
+          container_type: container.container_type,
+          container_no: container.container_no,
+        }),
+      ),
+    }),
+    [mblDetailsForm.values.service, containerDetailsForm.values.containers],
+  );
+
   // Handle save container details
   const handleSaveContainerDetails = () => {
     // Validate container details before saving
@@ -5555,7 +5568,12 @@ function ImportJobCreate() {
                 </Group>
               )}
             </Group>
-            <EstimatesSection serviceType="SEA" form={estimatesForm} readOnly={isReadOnly} />
+            <EstimatesSection
+              serviceType="SEA"
+              form={estimatesForm}
+              readOnly={isReadOnly}
+              jobUnitDefaults={estimatesJobUnitDefaults}
+            />
           </Box>
         </Tabs.Panel>
 

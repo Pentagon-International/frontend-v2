@@ -194,8 +194,7 @@ function ServiceHeaderFilterInput({
 
   // True while the user has *uncommitted* changes vs the upstream filter
   // state (i.e. they have picked something but not pressed tick yet).
-  const isModified =
-    localService !== serviceValue || localTrade !== tradeValue;
+  const isModified = localService !== serviceValue || localTrade !== tradeValue;
   // True when the upstream filter already holds a service or trade value.
   const hasCommittedFilters = serviceValue != null || tradeValue != null;
   // Show the clear (X) button instead of the tick (✓) when the column is
@@ -344,7 +343,11 @@ const PREVIEW_COLUMN_TO_KEY_MAP: Record<string, string> = {
  * query has resolved. Kept at module scope so `tablePreviewData` keeps the same
  * reference between renders while `previewResult` is still `undefined`.
  */
-const EMPTY_PREVIEW_RESULT: { columns: unknown[]; data: unknown[]; total: number } = {
+const EMPTY_PREVIEW_RESULT: {
+  columns: unknown[];
+  data: unknown[];
+  total: number;
+} = {
   columns: [],
   data: [],
   total: 0,
@@ -355,7 +358,9 @@ function normalizeEnquiryStatusKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function normalizeEnquiryStatusCounts(raw: unknown): Record<string, number> | null {
+function normalizeEnquiryStatusCounts(
+  raw: unknown,
+): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
@@ -392,7 +397,9 @@ function parseEnquiryFilterResponse(data: any): {
       : Array.isArray(data?.result)
         ? data.result
         : [];
-  const statusCounts = normalizeEnquiryStatusCounts(data?.summary?.status_counts);
+  const statusCounts = normalizeEnquiryStatusCounts(
+    data?.summary?.status_counts,
+  );
 
   const indexRaw = data?.index;
   const requestOffset =
@@ -447,7 +454,7 @@ function EnquiryMaster() {
     return new Date();
   };
 
-  const dateFormat = useDateFormat()
+  const dateFormat = useDateFormat();
 
   const navigate = useNavigate();
   const location = useLocation(); // Add this line to get location
@@ -526,21 +533,26 @@ function EnquiryMaster() {
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [listTotalRecords, setListTotalRecords] = useState(0);
-  const [cancellingEnquiryId, setCancellingEnquiryId] = useState<number | null>(null);
+  const [cancellingEnquiryId, setCancellingEnquiryId] = useState<number | null>(
+    null,
+  );
 
-  const [summaryVisibleColumns, setSummaryVisibleColumns] = useState<EnquirySummaryVisibleColumns>({
-    sno: true,
-    enquiry_id: true,
-    customer_name: true,
-    sales_person: true,
-    service: true,
-    route: true,
-    reference_no: true,
-    date: true,
-    status: true,
-    remark: true,
-  });
-  const [summaryActionsMenuKey, setSummaryActionsMenuKey] = useState<string | number | null>(null);
+  const [summaryVisibleColumns, setSummaryVisibleColumns] =
+    useState<EnquirySummaryVisibleColumns>({
+      sno: true,
+      enquiry_id: true,
+      customer_name: true,
+      sales_person: true,
+      service: true,
+      route: true,
+      reference_no: true,
+      date: true,
+      status: true,
+      remark: true,
+    });
+  const [summaryActionsMenuKey, setSummaryActionsMenuKey] = useState<
+    string | number | null
+  >(null);
 
   // Detailed view pagination (completely separate)
   const [previewCurrentPage, setPreviewCurrentPage] = useState(1);
@@ -697,7 +709,7 @@ function EnquiryMaster() {
       const response: any = await postAPICall(
         `${URL.enquiryDownloadExcel}`,
         requestBody,
-        { responseType: "blob" }
+        { responseType: "blob" },
       );
       const blob = response?.data instanceof Blob ? response.data : response;
       const url = window.URL.createObjectURL(blob);
@@ -916,8 +928,7 @@ function EnquiryMaster() {
       origin: filters.origin_code ?? "",
       destination: filters.destination_code ?? "",
       // Hide the "ALL" sentinel in the header input — empty box === "all".
-      status:
-        !filters.status || filters.status === "ALL" ? "" : filters.status,
+      status: !filters.status || filters.status === "ALL" ? "" : filters.status,
       reference_no: filters.reference_no ?? "",
     }),
     [filters],
@@ -1081,15 +1092,20 @@ function EnquiryMaster() {
       payload.enquiry_received_date_to = dayjs(toDate).format("YYYY-MM-DD");
     }
 
-    if (previewFilters.customer_name) payload.customer_code = previewFilters.customer_name;
-    if (previewFilters.sales_person) payload.sales_person = previewFilters.sales_person;
-    if (previewFilters.origin_name) payload.origin_code = previewFilters.origin_name;
+    if (previewFilters.customer_name)
+      payload.customer_code = previewFilters.customer_name;
+    if (previewFilters.sales_person)
+      payload.sales_person = previewFilters.sales_person;
+    if (previewFilters.origin_name)
+      payload.origin_code = previewFilters.origin_name;
     if (previewFilters.destination_name)
       payload.destination_code = previewFilters.destination_name;
     if (previewFilters.service) payload.service = previewFilters.service;
     if (previewFilters.trade) payload.trade = previewFilters.trade;
-    if (previewFilters.enquiry_id) payload.enquiry_id = previewFilters.enquiry_id;
-    if (previewFilters.reference_no) payload.reference_no = previewFilters.reference_no;
+    if (previewFilters.enquiry_id)
+      payload.enquiry_id = previewFilters.enquiry_id;
+    if (previewFilters.reference_no)
+      payload.reference_no = previewFilters.reference_no;
     if (previewFilters.terms_of_shipment)
       payload.terms_of_shipment = previewFilters.terms_of_shipment;
     if (previewFilters.status && previewFilters.status !== "ALL") {
@@ -1518,8 +1534,7 @@ function EnquiryMaster() {
       customer_name: (raw) => customerDisplayValue ?? raw,
       origin: (raw) => originDisplayValue ?? raw,
       destination: (raw) => destinationDisplayValue ?? raw,
-      status: (raw) =>
-        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+      status: (raw) => statusOptions.find((o) => o.value === raw)?.label ?? raw,
     }),
     [
       customerDisplayValue,
@@ -1739,8 +1754,7 @@ function EnquiryMaster() {
       customer_name: (raw) => previewCustomerDisplayValue ?? raw,
       origin: (raw) => previewOriginDisplayValue ?? raw,
       destination: (raw) => previewDestinationDisplayValue ?? raw,
-      status: (raw) =>
-        statusOptions.find((o) => o.value === raw)?.label ?? raw,
+      status: (raw) => statusOptions.find((o) => o.value === raw)?.label ?? raw,
     }),
     [
       previewCustomerDisplayValue,
@@ -1799,7 +1813,12 @@ function EnquiryMaster() {
     if (listCurrentPage > totalPages) {
       setListCurrentPage(totalPages);
     }
-  }, [showPreviewTable, summaryListTotalRecords, listPageSize, listCurrentPage]);
+  }, [
+    showPreviewTable,
+    summaryListTotalRecords,
+    listPageSize,
+    listCurrentPage,
+  ]);
 
   const previewListTotalRecords =
     previewResult?.total ?? detailedListTotalBaselineRef.current;
@@ -1809,8 +1828,7 @@ function EnquiryMaster() {
     if (!showPreviewTable) return;
     // While paginating, RQ often has no `data` yet for the new query key → total briefly 0; clamp would reset to page 1.
     if (previewFetching) return;
-    const tr =
-      previewResult?.total ?? detailedListTotalBaselineRef.current;
+    const tr = previewResult?.total ?? detailedListTotalBaselineRef.current;
     const totalPages = Math.max(1, Math.ceil(tr / previewPageSize));
     if (previewCurrentPage > totalPages) {
       setPreviewCurrentPage(totalPages);
@@ -1837,7 +1855,8 @@ function EnquiryMaster() {
    */
   useEffect(() => {
     if (debouncedHeaderFilterTick === 0) return;
-    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick) return;
+    if (lastHandledHeaderFilterTickRef.current === debouncedHeaderFilterTick)
+      return;
     lastHandledHeaderFilterTickRef.current = debouncedHeaderFilterTick;
 
     if (showPreviewTable) {
@@ -1847,7 +1866,12 @@ function EnquiryMaster() {
       setFiltersApplied(true);
       void refetchSummary();
     }
-  }, [debouncedHeaderFilterTick, showPreviewTable, refetchSummary, refetchPreview]);
+  }, [
+    debouncedHeaderFilterTick,
+    showPreviewTable,
+    refetchSummary,
+    refetchPreview,
+  ]);
 
   // Loading state - single source of truth for table loader
   // Use isFetching states (not isLoading) as they remain true during refetch
@@ -1873,15 +1897,13 @@ function EnquiryMaster() {
   // Map status to badge props (label and color)
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
-    const label =
-      statusUpper === "INACTIVE" ? "CANCEL" : statusUpper || "ACTIVE";
+    const label = statusUpper || "ACTIVE";
     let color: string = "cyan";
     if (label === "GAINED") color = "green";
-    else if (label === "LOST" || label === "CANCEL") color = "red";
+    else if (label === "LOST" || label === "INACTIVE") color = "red";
     else if (label === "ACTIVE") color = "#105476";
     return { label, color } as const;
   };
-
 
   const applyFilters = async () => {
     try {
@@ -1920,10 +1942,7 @@ function EnquiryMaster() {
         setPreviewFiltersApplied(true); // Mark that filters were applied
         setIsRefreshingData(true);
         try {
-          await Promise.all([
-            refetchPreview(),
-            refetchSummary(),
-          ]);
+          await Promise.all([refetchPreview(), refetchSummary()]);
           setIsRefreshingData(false);
           ToastNotification({
             type: "success",
@@ -2050,10 +2069,7 @@ function EnquiryMaster() {
       // Wait a bit for state updates to flush before refetching
       await new Promise((resolve) => setTimeout(resolve, 100));
       setIsRefreshingData(true);
-      await Promise.all([
-        refetchPreview(),
-        refetchSummary(),
-      ]);
+      await Promise.all([refetchPreview(), refetchSummary()]);
       setIsRefreshingData(false);
     } else {
       setListCurrentPage(1); // Reset to first page
@@ -2080,11 +2096,12 @@ function EnquiryMaster() {
       typeof rawId === "number"
         ? rawId
         : typeof rawId === "string" && rawId !== ""
-          ? (Number.isFinite(Number(rawId)) ? Number(rawId) : null)
+          ? Number.isFinite(Number(rawId))
+            ? Number(rawId)
+            : null
           : null,
     );
     try {
-
       // Build service payload to match edit flow (getEnquiryPayload in EnquiryCreate)
       const mapService = (service: any) => {
         const svc: any = {
@@ -2096,10 +2113,14 @@ function EnquiryMaster() {
           delivery: service.delivery === true || service.delivery === "true",
           pickup_location: service.pickup_location || "",
           delivery_location: service.delivery_location || "",
-          hazardous_cargo: service.hazardous_cargo === true || service.hazardous_cargo === "Yes",
+          hazardous_cargo:
+            service.hazardous_cargo === true ||
+            service.hazardous_cargo === "Yes",
           stackable: service.stackable === true || service.stackable === "Yes",
           shipment_terms_code:
-            service.shipment_terms_code_read || service.shipment_terms_code || "",
+            service.shipment_terms_code_read ||
+            service.shipment_terms_code ||
+            "",
           icd: service.icd || "",
           service_remark: service.service_remark || "",
           commodity: service.commodity || "",
@@ -2108,7 +2129,9 @@ function EnquiryMaster() {
         svc.un_no =
           svc.hazardous_cargo === true ? (service.un_no ?? null) : null;
         svc.class_name =
-          svc.hazardous_cargo === true ? (service.class_name ?? service.class ?? null) : null;
+          svc.hazardous_cargo === true
+            ? (service.class_name ?? service.class ?? null)
+            : null;
         svc.pkg_group =
           svc.hazardous_cargo === true ? (service.pkg_group ?? null) : null;
         if (service.service === "OTHERS") {
@@ -2142,9 +2165,11 @@ function EnquiryMaster() {
         if (
           service.service === "AIR" ||
           (service.service === "OTHERS" &&
-            (service.volume_weight != null || service.chargeable_weight != null))
+            (service.volume_weight != null ||
+              service.chargeable_weight != null))
         ) {
-          svc.no_of_packages = service.no_of_packages != null ? Number(service.no_of_packages) : 0;
+          svc.no_of_packages =
+            service.no_of_packages != null ? Number(service.no_of_packages) : 0;
           svc.gross_weight =
             service.gross_weight != null
               ? Number(service.gross_weight).toFixed(2)
@@ -2168,7 +2193,10 @@ function EnquiryMaster() {
               width: Number(d.width) || 0,
               height: Number(d.height) || 0,
               value: Number(d.value) || 0,
-              volume_weight: d.volume_weight != null ? Math.round(Number(d.volume_weight) * 1000) / 1000 : 0,
+              volume_weight:
+                d.volume_weight != null
+                  ? Math.round(Number(d.volume_weight) * 1000) / 1000
+                  : 0,
               dimension_unit: d.dimension_unit || "",
               ...(d.id != null && { id: d.id }),
             }));
@@ -2181,13 +2209,16 @@ function EnquiryMaster() {
             !svc.fcl_details &&
             (service.volume != null || service.chargeable_volume != null))
         ) {
-          svc.no_of_packages = service.no_of_packages != null ? Number(service.no_of_packages) : 0;
+          svc.no_of_packages =
+            service.no_of_packages != null ? Number(service.no_of_packages) : 0;
           svc.gross_weight =
             service.gross_weight != null
               ? Number(service.gross_weight).toFixed(2)
               : "0.00";
           svc.volume =
-            service.volume != null ? Number(service.volume).toFixed(3) : "0.000";
+            service.volume != null
+              ? Number(service.volume).toFixed(3)
+              : "0.000";
           svc.chargeable_volume =
             service.chargeable_volume != null
               ? Number(service.chargeable_volume).toFixed(3)
@@ -2203,7 +2234,10 @@ function EnquiryMaster() {
               width: Number(d.width) || 0,
               height: Number(d.height) || 0,
               value: Number(d.value) || 0,
-              volume_weight: d.volume_weight != null ? Math.round(Number(d.volume_weight) * 1000) / 1000 : 0,
+              volume_weight:
+                d.volume_weight != null
+                  ? Math.round(Number(d.volume_weight) * 1000) / 1000
+                  : 0,
               dimension_unit: d.dimension_unit || "",
               ...(d.id != null && { id: d.id }),
             }));
@@ -2230,9 +2264,10 @@ function EnquiryMaster() {
         ...(enquiryData.documents_list?.length > 0 && {
           documents_list: enquiryData.documents_list,
         }),
-        ...(enquiryData.remark != null && enquiryData.remark !== "" && {
-          remark: enquiryData.remark,
-        }),
+        ...(enquiryData.remark != null &&
+          enquiryData.remark !== "" && {
+            remark: enquiryData.remark,
+          }),
         services: (enquiryData.services || []).map(mapService),
       };
 
@@ -2248,7 +2283,7 @@ function EnquiryMaster() {
             "Content-Type": "multipart/form-data",
             ...API_HEADER.headers,
           },
-        }
+        },
       );
 
       if (response) {
@@ -2406,18 +2441,31 @@ function EnquiryMaster() {
 
       // 3️⃣ Build payload from store so refetch uses exact saved filters
       const payload: Record<string, unknown> = {};
-      if (restoredFilters?.enquiry_received_date && restoredFilters?.enquiry_received_date_to) {
-        payload.enquiry_received_date_from = dayjs(restoredFilters.enquiry_received_date).format("YYYY-MM-DD");
-        payload.enquiry_received_date_to = dayjs(restoredFilters.enquiry_received_date_to).format("YYYY-MM-DD");
+      if (
+        restoredFilters?.enquiry_received_date &&
+        restoredFilters?.enquiry_received_date_to
+      ) {
+        payload.enquiry_received_date_from = dayjs(
+          restoredFilters.enquiry_received_date,
+        ).format("YYYY-MM-DD");
+        payload.enquiry_received_date_to = dayjs(
+          restoredFilters.enquiry_received_date_to,
+        ).format("YYYY-MM-DD");
       }
-      if (restoredFilters?.customer_code) payload.customer_code = restoredFilters.customer_code;
-      if (restoredFilters?.sales_person) payload.sales_person = restoredFilters.sales_person;
-      if (restoredFilters?.origin_code) payload.origin_code = restoredFilters.origin_code;
-      if (restoredFilters?.destination_code) payload.destination_code = restoredFilters.destination_code;
+      if (restoredFilters?.customer_code)
+        payload.customer_code = restoredFilters.customer_code;
+      if (restoredFilters?.sales_person)
+        payload.sales_person = restoredFilters.sales_person;
+      if (restoredFilters?.origin_code)
+        payload.origin_code = restoredFilters.origin_code;
+      if (restoredFilters?.destination_code)
+        payload.destination_code = restoredFilters.destination_code;
       if (restoredFilters?.service) payload.service = restoredFilters.service;
       if (restoredFilters?.trade) payload.trade = restoredFilters.trade;
-      if (restoredFilters?.enquiry_id) payload.enquiry_id = restoredFilters.enquiry_id;
-      if (restoredFilters?.reference_no) payload.reference_no = restoredFilters.reference_no;
+      if (restoredFilters?.enquiry_id)
+        payload.enquiry_id = restoredFilters.enquiry_id;
+      if (restoredFilters?.reference_no)
+        payload.reference_no = restoredFilters.reference_no;
       if (restoredFilters?.status && restoredFilters.status !== "ALL") {
         payload.status = restoredFilters.status;
       } else {
@@ -2425,7 +2473,8 @@ function EnquiryMaster() {
       }
       const searchStr = (restoredState.search ?? "").trim();
       if (searchStr) payload.search = searchStr;
-      restorePayloadRef.current = Object.keys(payload).length > 0 ? payload : null;
+      restorePayloadRef.current =
+        Object.keys(payload).length > 0 ? payload : null;
 
       // Wait for state updates to flush
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -2648,8 +2697,8 @@ function EnquiryMaster() {
                 },
               );
 
-              const restoredPreviewFilters =
-                (restoredPreviewState.filters || {}) as PreviewFilterState;
+              const restoredPreviewFilters = (restoredPreviewState.filters ||
+                {}) as PreviewFilterState;
               setPreviewFilters(restoredPreviewFilters);
               setSearchQuery(restoredPreviewState.search ?? "");
               const dv = restoredPreviewState.displayValues;
@@ -2674,9 +2723,7 @@ function EnquiryMaster() {
                 enquiry_id: restoredPreviewFilters.enquiry_id || null,
                 reference_no: restoredPreviewFilters.reference_no || null,
               });
-              setFromDate(
-                restoredPreviewFilters.enquiry_received_date || null,
-              );
+              setFromDate(restoredPreviewFilters.enquiry_received_date || null);
               setToDate(
                 restoredPreviewFilters.enquiry_received_date_to || null,
               );
@@ -2686,7 +2733,9 @@ function EnquiryMaster() {
             await new Promise((resolve) => setTimeout(resolve, 250));
             await new Promise((resolve) => setTimeout(resolve, 0));
 
-            console.log("✅ [refreshData - Detailed] Fetching preview data with restored/current state");
+            console.log(
+              "✅ [refreshData - Detailed] Fetching preview data with restored/current state",
+            );
             await Promise.all([refetchPreview(), refetchSummary()]);
             setIsRefreshingData(false);
           } else {
@@ -2696,12 +2745,16 @@ function EnquiryMaster() {
               .getState(LIST_KEY);
 
             if (restoredState) {
-              console.log("🔄 [refreshData] Restoring filters/search from store:", {
-                filters: restoredState.filters,
-                search: restoredState.search,
-              });
+              console.log(
+                "🔄 [refreshData] Restoring filters/search from store:",
+                {
+                  filters: restoredState.filters,
+                  search: restoredState.search,
+                },
+              );
 
-              const restoredFilters = (restoredState.filters || {}) as FilterState;
+              const restoredFilters = (restoredState.filters ||
+                {}) as FilterState;
               setFilters(restoredFilters);
               if (restoredFilters.enquiry_received_date != null) {
                 setFromDate(restoredFilters.enquiry_received_date);
@@ -2721,18 +2774,32 @@ function EnquiryMaster() {
 
               // Build payload from stored state so the next refetch uses exact saved filters
               const payload: Record<string, unknown> = {};
-              if (restoredFilters.enquiry_received_date && restoredFilters.enquiry_received_date_to) {
-                payload.enquiry_received_date_from = dayjs(restoredFilters.enquiry_received_date).format("YYYY-MM-DD");
-                payload.enquiry_received_date_to = dayjs(restoredFilters.enquiry_received_date_to).format("YYYY-MM-DD");
+              if (
+                restoredFilters.enquiry_received_date &&
+                restoredFilters.enquiry_received_date_to
+              ) {
+                payload.enquiry_received_date_from = dayjs(
+                  restoredFilters.enquiry_received_date,
+                ).format("YYYY-MM-DD");
+                payload.enquiry_received_date_to = dayjs(
+                  restoredFilters.enquiry_received_date_to,
+                ).format("YYYY-MM-DD");
               }
-              if (restoredFilters.customer_code) payload.customer_code = restoredFilters.customer_code;
-              if (restoredFilters.sales_person) payload.sales_person = restoredFilters.sales_person;
-              if (restoredFilters.origin_code) payload.origin_code = restoredFilters.origin_code;
-              if (restoredFilters.destination_code) payload.destination_code = restoredFilters.destination_code;
-              if (restoredFilters.service) payload.service = restoredFilters.service;
+              if (restoredFilters.customer_code)
+                payload.customer_code = restoredFilters.customer_code;
+              if (restoredFilters.sales_person)
+                payload.sales_person = restoredFilters.sales_person;
+              if (restoredFilters.origin_code)
+                payload.origin_code = restoredFilters.origin_code;
+              if (restoredFilters.destination_code)
+                payload.destination_code = restoredFilters.destination_code;
+              if (restoredFilters.service)
+                payload.service = restoredFilters.service;
               if (restoredFilters.trade) payload.trade = restoredFilters.trade;
-              if (restoredFilters.enquiry_id) payload.enquiry_id = restoredFilters.enquiry_id;
-              if (restoredFilters.reference_no) payload.reference_no = restoredFilters.reference_no;
+              if (restoredFilters.enquiry_id)
+                payload.enquiry_id = restoredFilters.enquiry_id;
+              if (restoredFilters.reference_no)
+                payload.reference_no = restoredFilters.reference_no;
               if (restoredFilters.status && restoredFilters.status !== "ALL") {
                 payload.status = restoredFilters.status;
               } else {
@@ -2747,7 +2814,9 @@ function EnquiryMaster() {
             await new Promise((resolve) => setTimeout(resolve, 100));
             await new Promise((resolve) => setTimeout(resolve, 0));
 
-            console.log("✅ [refreshData] Fetching summary data with restored/current state");
+            console.log(
+              "✅ [refreshData] Fetching summary data with restored/current state",
+            );
             const result = await refetchSummary();
             if (result.data && Array.isArray(result.data)) {
               await new Promise((resolve) => setTimeout(resolve, 50));
@@ -3135,12 +3204,15 @@ function EnquiryMaster() {
   }, [previewCurrentPage, previewPageSize, showPreviewTable]);
 
   const previewLayout = useMemo(
-    () => buildPreviewColumnDescriptors(tablePreviewData, previewColumnToKeyMap),
+    () =>
+      buildPreviewColumnDescriptors(tablePreviewData, previewColumnToKeyMap),
     [tablePreviewData, previewColumnToKeyMap],
   );
 
   /** Detailed view: per-column visibility (keyed by `PreviewColDef.id`). New API columns default to visible. */
-  const [previewColumnVisibility, setPreviewColumnVisibility] = useState<Record<string, boolean>>({});
+  const [previewColumnVisibility, setPreviewColumnVisibility] = useState<
+    Record<string, boolean>
+  >({});
   const previewColumnIdsKey = useMemo(
     () => previewLayout.columns.map((c) => c.id).join("|"),
     [previewLayout.columns],
@@ -3229,28 +3301,102 @@ function EnquiryMaster() {
 
   const summaryColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
     () => [
-      { id: "sno", label: "S.No", checked: summaryVisibleColumns.sno, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
-      { id: "enquiry_id", label: "Enquiry ID", checked: summaryVisibleColumns.enquiry_id, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, enquiry_id: !p.enquiry_id })) },
-      { id: "customer", label: "Customer", checked: summaryVisibleColumns.customer_name, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
-      { id: "sales", label: "Sales Person", checked: summaryVisibleColumns.sales_person, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
-      { id: "service", label: "Service", checked: summaryVisibleColumns.service, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, service: !p.service })) },
-      { id: "route", label: "Route", checked: summaryVisibleColumns.route, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, route: !p.route })) },
-      { id: "status", label: "Status", checked: summaryVisibleColumns.status, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, status: !p.status })) },
-      { id: "date", label: "Enquiry Date", checked: summaryVisibleColumns.date, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })) },
-      { id: "ref", label: "Reference No", checked: summaryVisibleColumns.reference_no, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
-      { id: "remark", label: "Remark", checked: summaryVisibleColumns.remark, onToggle: () => setSummaryVisibleColumns((p) => ({ ...p, remark: !p.remark })) },
+      {
+        id: "sno",
+        label: "S.No",
+        checked: summaryVisibleColumns.sno,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, sno: !p.sno })),
+      },
+      {
+        id: "enquiry_id",
+        label: "Enquiry ID",
+        checked: summaryVisibleColumns.enquiry_id,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({
+            ...p,
+            enquiry_id: !p.enquiry_id,
+          })),
+      },
+      {
+        id: "customer",
+        label: "Customer",
+        checked: summaryVisibleColumns.customer_name,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({
+            ...p,
+            customer_name: !p.customer_name,
+          })),
+      },
+      {
+        id: "sales",
+        label: "Sales Person",
+        checked: summaryVisibleColumns.sales_person,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({
+            ...p,
+            sales_person: !p.sales_person,
+          })),
+      },
+      {
+        id: "service",
+        label: "Service",
+        checked: summaryVisibleColumns.service,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, service: !p.service })),
+      },
+      {
+        id: "route",
+        label: "Route",
+        checked: summaryVisibleColumns.route,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, route: !p.route })),
+      },
+      {
+        id: "status",
+        label: "Status",
+        checked: summaryVisibleColumns.status,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, status: !p.status })),
+      },
+      {
+        id: "date",
+        label: "Enquiry Date",
+        checked: summaryVisibleColumns.date,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, date: !p.date })),
+      },
+      {
+        id: "ref",
+        label: "Reference No",
+        checked: summaryVisibleColumns.reference_no,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({
+            ...p,
+            reference_no: !p.reference_no,
+          })),
+      },
+      {
+        id: "remark",
+        label: "Remark",
+        checked: summaryVisibleColumns.remark,
+        onToggle: () =>
+          setSummaryVisibleColumns((p) => ({ ...p, remark: !p.remark })),
+      },
     ],
     [summaryVisibleColumns],
   );
 
   const isSummaryTableDataLoading = !showPreviewTable && tableLoading;
-  const isPreviewListDataLoading =
-    showPreviewTable && isPreviewLoading;
+  const isPreviewListDataLoading = showPreviewTable && isPreviewLoading;
 
   return (
     <>
       <MantineProvider theme={erpListGeistMantineTheme}>
-        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+        <Box
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          style={erpListGeistRootTypography}
+        >
           <ERPListScreen
             theme={erpTheme}
             className={ERP_LIST_GEIST_ROOT_CLASS}
@@ -3284,7 +3430,8 @@ function EnquiryMaster() {
                     styles={{ input: { width: 130, fontWeight: 500 } }}
                     aria-label="Switch between Summary and Detailed list view"
                   />
-                  {(location.state?.returnToDashboard || returnToDashboardRef.current) && (
+                  {(location.state?.returnToDashboard ||
+                    returnToDashboardRef.current) && (
                     <Button
                       size="xs"
                       variant="default"
@@ -3292,10 +3439,14 @@ function EnquiryMaster() {
                       styles={erpToolbarOutlineButtonStyles(erpTheme)}
                       onClick={() => {
                         const dashboardState =
-                          location.state?.dashboardState || dashboardStateRef.current;
+                          location.state?.dashboardState ||
+                          dashboardStateRef.current;
                         if (dashboardState) {
                           navigate("/", {
-                            state: { returnToEnquiryDetailedView: true, dashboardState },
+                            state: {
+                              returnToEnquiryDetailedView: true,
+                              dashboardState,
+                            },
                           });
                         } else {
                           navigate("/");
@@ -3382,7 +3533,9 @@ function EnquiryMaster() {
                           size="sm"
                           onClick={() => {
                             setSearchQuery("");
-                            const currentListKey = showPreviewTable ? DETAILED_LIST_KEY : LIST_KEY;
+                            const currentListKey = showPreviewTable
+                              ? DETAILED_LIST_KEY
+                              : LIST_KEY;
                             clearStoreSearch(currentListKey);
                             if (showPreviewTable) {
                               prevPreviewSearchRef.current = debouncedSearch;
@@ -3398,7 +3551,8 @@ function EnquiryMaster() {
                                 previewFilters.service ||
                                 previewFilters.trade ||
                                 previewFilters.terms_of_shipment ||
-                                (previewFilters.status && previewFilters.status !== "ALL") ||
+                                (previewFilters.status &&
+                                  previewFilters.status !== "ALL") ||
                                 previewFilters.enquiry_id ||
                                 previewFilters.reference_no ||
                                 (previewFilters.enquiry_received_date &&
@@ -3499,12 +3653,19 @@ function EnquiryMaster() {
                         },
                       };
                       if (showPreviewTable) {
-                        useListFilterStore.getState().setShouldRestore(DETAILED_LIST_KEY, true);
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(DETAILED_LIST_KEY, true);
                       } else {
-                        useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                        useListFilterStore
+                          .getState()
+                          .setShouldRestore(LIST_KEY, true);
                       }
                       navigate("/enquiry-create", {
-                        state: { preserveFilters: currentFilterState, fromEnquiry: true },
+                        state: {
+                          preserveFilters: currentFilterState,
+                          fromEnquiry: true,
+                        },
                       });
                     }}
                   >
@@ -3520,294 +3681,321 @@ function EnquiryMaster() {
                 ? "Apply to detailed list (same as summary: customer, ports, service, status, date range, IDs)"
                 : "Narrow enquiries by customer, route, service, or status",
               onClose: () => setShowFilters(false),
-                footer: (
+              footer: (
                 <ERPListFilterActionsFooter
                   theme={erpTheme}
                   onClear={clearAllFilters}
                   onApply={applyFilters}
-                  applyLoading={showPreviewTable ? isPreviewLoading : tableLoading}
-                  applyDisabled={showPreviewTable ? isPreviewLoading : tableLoading}
+                  applyLoading={
+                    showPreviewTable ? isPreviewLoading : tableLoading
+                  }
+                  applyDisabled={
+                    showPreviewTable ? isPreviewLoading : tableLoading
+                  }
                 />
               ),
               children: (
                 <>
-              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                {/* Row 1 */}
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Customer Name"
-                    placeholder="Select Service"
-                    apiEndpoint={URL.customer}
-                    searchFields={["customer_code", "customer_name"]}
-                    displayFormat={enquiryCustomerDisplayFormat}
-                    value={filters.customer_code}
-                    displayValue={customerDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("customer_code", value || null);
-                      setCustomerDisplayValue(selectedData?.label || null);
-                      // Keep detailed-view filter state in sync when in Detailed view
-                      if (showPreviewTable) {
-                        updatePreviewFilter("customer_name", value || null);
-                        setPreviewCustomerDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                    className="filter-searchable-select"
-                  />
-                  </Box>
-                </Grid.Col>
+                  <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                    {/* Row 1 */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Customer Name"
+                          placeholder="Select Service"
+                          apiEndpoint={URL.customer}
+                          searchFields={["customer_code", "customer_name"]}
+                          displayFormat={enquiryCustomerDisplayFormat}
+                          value={filters.customer_code}
+                          displayValue={customerDisplayValue}
+                          onChange={(value, selectedData) => {
+                            updateFilter("customer_code", value || null);
+                            setCustomerDisplayValue(
+                              selectedData?.label || null,
+                            );
+                            // Keep detailed-view filter state in sync when in Detailed view
+                            if (showPreviewTable) {
+                              updatePreviewFilter(
+                                "customer_name",
+                                value || null,
+                              );
+                              setPreviewCustomerDisplayValue(
+                                selectedData?.label || null,
+                              );
+                            }
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
 
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Origin"
-                    placeholder="Type Origin Code"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={enquiryPortDisplayFormat}
-                    value={filters.origin_code}
-                    displayValue={originDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("origin_code", value || null);
-                      setOriginDisplayValue(selectedData?.label || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("origin_name", value || null);
-                        setPreviewOriginDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                    className="filter-searchable-select"
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <SearchableSelect
-                    size="xs"
-                    label="Destination"
-                    placeholder="Type destination code"
-                    apiEndpoint={URL.portMaster}
-                    searchFields={["port_code", "port_name"]}
-                    displayFormat={enquiryPortDisplayFormat}
-                    value={filters.destination_code}
-                    displayValue={destinationDisplayValue}
-                    onChange={(value, selectedData) => {
-                      updateFilter("destination_code", value || null);
-                      setDestinationDisplayValue(selectedData?.label || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("destination_name", value || null);
-                        setPreviewDestinationDisplayValue(
-                          selectedData?.label || null,
-                        );
-                      }
-                    }}
-                    minSearchLength={3}
-                    dropdownZIndex={1000}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                    className="filter-searchable-select"
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <DateRangeInput
-                    fromDate={fromDate}
-                    toDate={toDate}
-                    onFromDateChange={(date) => {
-                      setFromDate(date);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_received_date", date);
-                      }
-                    }}
-                    onToDateChange={(date) => {
-                      setToDate(date);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_received_date_to", date);
-                      }
-                    }}
-                    fromLabel="From Date"
-                    toLabel="To Date"
-                    size="xs"
-                    allowDeselection={true}
-                    showRangeInCalendar={false}
-                    inputWidth={260}
-                    filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                    dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                  />
-                  </Box>
-                </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Origin"
+                          placeholder="Type Origin Code"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={enquiryPortDisplayFormat}
+                          value={filters.origin_code}
+                          displayValue={originDisplayValue}
+                          onChange={(value, selectedData) => {
+                            updateFilter("origin_code", value || null);
+                            setOriginDisplayValue(selectedData?.label || null);
+                            if (showPreviewTable) {
+                              updatePreviewFilter("origin_name", value || null);
+                              setPreviewOriginDisplayValue(
+                                selectedData?.label || null,
+                              );
+                            }
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Destination"
+                          placeholder="Type destination code"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={enquiryPortDisplayFormat}
+                          value={filters.destination_code}
+                          displayValue={destinationDisplayValue}
+                          onChange={(value, selectedData) => {
+                            updateFilter("destination_code", value || null);
+                            setDestinationDisplayValue(
+                              selectedData?.label || null,
+                            );
+                            if (showPreviewTable) {
+                              updatePreviewFilter(
+                                "destination_name",
+                                value || null,
+                              );
+                              setPreviewDestinationDisplayValue(
+                                selectedData?.label || null,
+                              );
+                            }
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_WIDE}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <DateRangeInput
+                          fromDate={fromDate}
+                          toDate={toDate}
+                          onFromDateChange={(date) => {
+                            setFromDate(date);
+                            if (showPreviewTable) {
+                              updatePreviewFilter(
+                                "enquiry_received_date",
+                                date,
+                              );
+                            }
+                          }}
+                          onToDateChange={(date) => {
+                            setToDate(date);
+                            if (showPreviewTable) {
+                              updatePreviewFilter(
+                                "enquiry_received_date_to",
+                                date,
+                              );
+                            }
+                          }}
+                          fromLabel="From Date"
+                          toLabel="To Date"
+                          size="xs"
+                          allowDeselection={true}
+                          showRangeInCalendar={false}
+                          inputWidth={260}
+                          filterFieldStyles={erpListFilterUnifiedMantineStyles(
+                            erpTheme,
+                          )}
+                          dateInputClassNames={{
+                            dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                          }}
+                        />
+                      </Box>
+                    </Grid.Col>
 
-                {/* Row 2 */}
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <Select
-                    key={`sales-person-${filters.sales_person}`}
-                    label="Sales Person"
-                    placeholder={
-                      salespersonsLoading
-                        ? "Loading salespersons..."
-                        : "Select Service"
-                    }
-                    searchable
-                    clearable
-                    size="xs"
-                    data={salespersonOptions}
-                    disabled={salespersonsLoading}
-                    value={filters.sales_person}
-                    onChange={(value) => {
-                      updateFilter("sales_person", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("sales_person", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <Select
-                    key={`service-${filters.service}`}
-                    label="Service"
-                    placeholder="Select Service"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={serviceOptions}
-                    value={filters.service}
-                    onChange={(value) => {
-                      updateFilter("service", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("service", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <Select
-                    key={`trade-${filters.trade}`}
-                    label="Trade"
-                    placeholder="Select Service"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={tradeOptions}
-                    value={filters.trade}
-                    onChange={(value) => {
-                      updateFilter("trade", value || null);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("trade", value || null);
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <Select
-                    key={`status-${filters.status}`}
-                    label="Status"
-                    placeholder="Active"
-                    searchable
-                    clearable
-                    size="xs"
-                    data={statusOptions}
-                    value={filters.status}
-                    onChange={(value) => {
-                      updateFilter("status", value || "all");
-                      if (showPreviewTable) {
-                        updatePreviewFilter("status", value || "all");
-                      }
-                    }}
-                    onFocus={(event) => {
-                      const input = event.target as HTMLInputElement;
-                      if (input && input.value) {
-                        input.select();
-                      }
-                    }}
-                    classNames={erpListGeistSelectClassNames}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <TextInput
-                    label="Enquiry ID"
-                    placeholder="Placeholder"
-                    size="xs"
-                    value={filters.enquiry_id || ""}
-                    onChange={(e) => {
-                      const val = e.currentTarget.value || null;
-                      updateFilter("enquiry_id", val);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("enquiry_id", val);
-                      }
-                    }}
-                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                  <TextInput
-                    label="Reference No"
-                    placeholder="Placeholder"
-                    size="xs"
-                    value={filters.reference_no || ""}
-                    onChange={(e) => {
-                      const val = e.currentTarget.value || null;
-                      updateFilter("reference_no", val);
-                      if (showPreviewTable) {
-                        updatePreviewFilter("reference_no", val);
-                      }
-                    }}
-                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                    styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                  />
-                  </Box>
-                </Grid.Col>
-              </Grid>
+                    {/* Row 2 */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`sales-person-${filters.sales_person}`}
+                          label="Sales Person"
+                          placeholder={
+                            salespersonsLoading
+                              ? "Loading salespersons..."
+                              : "Select Service"
+                          }
+                          searchable
+                          clearable
+                          size="xs"
+                          data={salespersonOptions}
+                          disabled={salespersonsLoading}
+                          value={filters.sales_person}
+                          onChange={(value) => {
+                            updateFilter("sales_person", value || null);
+                            if (showPreviewTable) {
+                              updatePreviewFilter(
+                                "sales_person",
+                                value || null,
+                              );
+                            }
+                          }}
+                          onFocus={(event) => {
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`service-${filters.service}`}
+                          label="Service"
+                          placeholder="Select Service"
+                          searchable
+                          clearable
+                          size="xs"
+                          data={serviceOptions}
+                          value={filters.service}
+                          onChange={(value) => {
+                            updateFilter("service", value || null);
+                            if (showPreviewTable) {
+                              updatePreviewFilter("service", value || null);
+                            }
+                          }}
+                          onFocus={(event) => {
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`trade-${filters.trade}`}
+                          label="Trade"
+                          placeholder="Select Service"
+                          searchable
+                          clearable
+                          size="xs"
+                          data={tradeOptions}
+                          value={filters.trade}
+                          onChange={(value) => {
+                            updateFilter("trade", value || null);
+                            if (showPreviewTable) {
+                              updatePreviewFilter("trade", value || null);
+                            }
+                          }}
+                          onFocus={(event) => {
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`status-${filters.status}`}
+                          label="Status"
+                          placeholder="Active"
+                          searchable
+                          clearable
+                          size="xs"
+                          data={statusOptions}
+                          value={filters.status}
+                          onChange={(value) => {
+                            updateFilter("status", value || "all");
+                            if (showPreviewTable) {
+                              updatePreviewFilter("status", value || "all");
+                            }
+                          }}
+                          onFocus={(event) => {
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <TextInput
+                          label="Enquiry ID"
+                          placeholder="Placeholder"
+                          size="xs"
+                          value={filters.enquiry_id || ""}
+                          onChange={(e) => {
+                            const val = e.currentTarget.value || null;
+                            updateFilter("enquiry_id", val);
+                            if (showPreviewTable) {
+                              updatePreviewFilter("enquiry_id", val);
+                            }
+                          }}
+                          classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <TextInput
+                          label="Reference No"
+                          placeholder="Placeholder"
+                          size="xs"
+                          value={filters.reference_no || ""}
+                          onChange={(e) => {
+                            const val = e.currentTarget.value || null;
+                            updateFilter("reference_no", val);
+                            if (showPreviewTable) {
+                              updatePreviewFilter("reference_no", val);
+                            }
+                          }}
+                          classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                  </Grid>
                 </>
               ),
             }}
@@ -3816,9 +4004,15 @@ function EnquiryMaster() {
                 <ERPListPaginationFooter
                   theme={erpTheme}
                   totalRecords={
-                    showPreviewTable ? previewListTotalRecords : summaryListTotalRecords
+                    showPreviewTable
+                      ? previewListTotalRecords
+                      : summaryListTotalRecords
                   }
-                  pageIndex={showPreviewTable ? previewCurrentPage - 1 : listCurrentPage - 1}
+                  pageIndex={
+                    showPreviewTable
+                      ? previewCurrentPage - 1
+                      : listCurrentPage - 1
+                  }
                   pageSize={showPreviewTable ? previewPageSize : listPageSize}
                   onPageIndexChange={(idx) => {
                     if (showPreviewTable) {
@@ -3827,7 +4021,11 @@ function EnquiryMaster() {
                       handlePageChange(idx + 1);
                     }
                   }}
-                  onPageSizeChange={showPreviewTable ? handlePreviewPageSizeChange : handlePageSizeChange}
+                  onPageSizeChange={
+                    showPreviewTable
+                      ? handlePreviewPageSizeChange
+                      : handlePageSizeChange
+                  }
                   pageSizeOptions={["10", "15", "25", "50"]}
                   selectClassNames={{
                     dropdown: ERP_LIST_GEIST_ROOT_CLASS,
@@ -3844,7 +4042,9 @@ function EnquiryMaster() {
                 <EnquiryPreviewNativeTable
                   theme={erpTheme}
                   columns={visiblePreviewColumns}
-                  data={(tablePreviewData?.data as Record<string, unknown>[]) ?? []}
+                  data={
+                    (tablePreviewData?.data as Record<string, unknown>[]) ?? []
+                  }
                   dateFormat={dateFormat}
                   getStatusBadge={getStatusBadge}
                   headerFilters={previewHeaderFiltersProp}
@@ -3869,7 +4069,9 @@ function EnquiryMaster() {
                   headerFilters={summaryHeaderFiltersProp}
                   loading={isSummaryTableDataLoading}
                   loadingMessage={
-                    isRefreshingData ? "Updating enquiries…" : "Loading enquiries…"
+                    isRefreshingData
+                      ? "Updating enquiries…"
+                      : "Loading enquiries…"
                   }
                 />
               ),

@@ -4017,6 +4017,7 @@ function AirExportJobCreate() {
               readOnly={isReadOnly}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"
+              jobUnitDefaults={{ service: "AIR" }}
             />
           </Box>
         </Tabs.Panel>

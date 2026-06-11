@@ -12,6 +12,12 @@ import Dropdown from "./Dropdown";
 import SearchableSelect from "./SearchableSelect";
 import FormNumberInput from "./FormNumberInput";
 import RequiredLabel from "./RequiredLabel";
+import {
+  applyJobChargeUnitChange,
+  buildJobUnitOptions,
+  toBookingCargoForNoOfUnits,
+  type JobChargeNoOfUnitContext,
+} from "../utils/houseCargoChargeableWeight";
 
 export type EstimateRow = {
   id?: number | string;
@@ -130,6 +136,10 @@ export type EstimatesSectionProps = {
   unitMasterFilters?: Record<string, unknown>;
   /** Optional debug tag; logs form values when provided */
   debugTag?: string;
+  /** When set, auto-fills no_of_unit on unit selection (job create/edit). */
+  jobUnitDefaults?: {
+    service: string;
+  } & JobChargeNoOfUnitContext;
 };
 
 export function EstimatesSection({
@@ -139,6 +149,7 @@ export function EstimatesSection({
   supplierEndpoint = URL.supplierByType,
   chargeEndpoint = URL.chargeMaster,
   debugTag,
+  jobUnitDefaults,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
   const serviceTypeValue = Array.isArray(serviceType)
@@ -179,6 +190,8 @@ export function EstimatesSection({
       return { value: id, label: name };
     })
     .filter(Boolean) as Array<{ value: string; label: string }>;
+
+  const jobUnitOptions = buildJobUnitOptions(unitDataRaw ?? []);
 
   useEffect(() => {
     if (!debugTag) return;
@@ -320,6 +333,46 @@ export function EstimatesSection({
               value={selectStringId(row.unit_id)}
               onChange={(value) => {
                 const unitId = value ?? "";
+                if (jobUnitDefaults?.service && jobUnitOptions.length) {
+                  const bookingCargo = toBookingCargoForNoOfUnits(
+                    jobUnitDefaults.jobCargoDetails ?? [],
+                  );
+                  const updated = applyJobChargeUnitChange(
+                    {
+                      unit_id: row.unit_id,
+                      unit_code: row.unit_code,
+                      no_of_unit: row.no_of_unit,
+                    },
+                    unitId,
+                    jobUnitOptions,
+                    jobUnitDefaults.service,
+                    bookingCargo,
+                    {
+                      containerDetails: jobUnitDefaults.containerDetails,
+                      jobCargoDetails: jobUnitDefaults.jobCargoDetails,
+                    },
+                  );
+                  form.setFieldValue(
+                    `estimates.${index}.unit_id`,
+                    updated.unit_id ?? "",
+                  );
+                  form.setFieldValue(
+                    `estimates.${index}.unit_code`,
+                    updated.unit_code ?? "",
+                  );
+                  form.setFieldValue(
+                    `estimates.${index}.no_of_unit`,
+                    updated.no_of_unit,
+                  );
+                  const total = calcTotalCost(
+                    updated.no_of_unit,
+                    row.roe,
+                    row.cost_per_unit,
+                  );
+                  form.setFieldValue(`estimates.${index}.total_cost`, total);
+                  return;
+                }
+
                 const unitItem = (unitDataRaw ?? []).find(
                   (u) => String(u.id ?? "") === unitId,
                 );
