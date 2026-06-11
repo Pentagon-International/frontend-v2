@@ -77,6 +77,7 @@ import {
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
 import { commonSearchAPI } from "../../../service/searchApi";
+import OceanBookingCarrierSelect from "../components/OceanBookingCarrierSelect";
 
 interface ExportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -611,6 +612,43 @@ const normalizeMoveType = (mode?: string | null) => {
   return "SEA";
 };
 
+const DEFAULT_EMPTY_ROUTING_DETAIL_ROW: RoutingDetail = {
+  move_type: "",
+  from_location_code: "",
+  to_location_code: "",
+  from_location_name: "",
+  to_location_name: "",
+  carrier_code: "",
+  carrier_name: "",
+  etd: null,
+  eta: null,
+  flight_no: null,
+  status: "Active",
+};
+
+const mapRoutingDetailsFromApi = (
+  routingDetails: unknown,
+): RoutingDetail[] => {
+  const routes = Array.isArray(routingDetails) ? routingDetails : [];
+  if (routes.length === 0) {
+    return [{ ...DEFAULT_EMPTY_ROUTING_DETAIL_ROW }];
+  }
+  return routes.map((route: Record<string, unknown>) => ({
+    id: route.id != null ? Number(route.id) : undefined,
+    move_type: String(route.move_type || ""),
+    from_location_code: String(route.from_location_code || ""),
+    to_location_code: String(route.to_location_code || ""),
+    from_location_name: String(route.from_location_name || ""),
+    to_location_name: String(route.to_location_name || ""),
+    carrier_code: String(route.carrier_code || ""),
+    carrier_name: String(route.carrier_name || ""),
+    etd: route.etd ? new Date(String(route.etd)) : null,
+    eta: route.eta ? new Date(String(route.eta)) : null,
+    flight_no: route.flight_no ? String(route.flight_no) : null,
+    status: String(route.status || ""),
+  }));
+};
+
 const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   onStepChange,
   onComplete,
@@ -1095,24 +1133,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       voyage_no: String(data.voyage_no || ""),
 
       // Routing Details - map from routing_details array
-      routingDetails: data.routing_details
-        ? (data.routing_details as Array<Record<string, unknown>>).map(
-            (route: Record<string, unknown>) => ({
-              id: route.id != null ? Number(route.id) : undefined,
-              move_type: String(route.move_type || ""),
-              from_location_code: String(route.from_location_code || ""),
-              to_location_code: String(route.to_location_code || ""),
-              from_location_name: String(route.from_location_name || ""),
-              to_location_name: String(route.to_location_name || ""),
-              carrier_code: String(route.carrier_code || ""),
-              carrier_name: String(route.carrier_name || ""),
-              etd: route.etd ? new Date(String(route.etd)) : null,
-              eta: route.eta ? new Date(String(route.eta)) : null,
-              flight_no: route.flight_no ? String(route.flight_no) : null,
-              status: String(route.status || ""),
-            }),
-          )
-        : [],
+      routingDetails: mapRoutingDetailsFromApi(data.routing_details),
 
       // Party Details fields - map from the provided data structure
       // Check for both _read and regular versions to handle API response format
@@ -1474,19 +1495,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   );
 
   const emptyRoutingDetailRow = useMemo<RoutingDetail>(
-    () => ({
-      move_type: "",
-      from_location_code: "",
-      to_location_code: "",
-      from_location_name: "",
-      to_location_name: "",
-      carrier_code: "",
-      carrier_name: "",
-      etd: null,
-      eta: null,
-      flight_no: null,
-      status: "Active",
-    }),
+    () => ({ ...DEFAULT_EMPTY_ROUTING_DETAIL_ROW }),
     [],
   );
 
@@ -1561,13 +1570,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setScheduleOptions([]);
       if (!isEditMode) {
         form.setFieldValue("schedule_id", "");
-        form.setFieldValue("carrier_code", "");
-        form.setFieldValue("carrier_name", "");
-        form.setFieldValue("vessel_name", "");
-        form.setFieldValue("voyage_no", "");
-        form.setFieldValue("etd", null);
-        form.setFieldValue("eta", null);
-        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+        if (form.values.routingDetails.length === 0) {
+          form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+        }
       }
       return;
     }
@@ -1593,15 +1598,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
       // In edit mode, keep the saved schedule/routings values visible.
       if (!preserveSaved) {
-        // Clear schedule/routings while fetching new options
         form.setFieldValue("schedule_id", "");
-        form.setFieldValue("carrier_code", "");
-        form.setFieldValue("carrier_name", "");
-        form.setFieldValue("vessel_name", "");
-        form.setFieldValue("voyage_no", "");
-        form.setFieldValue("etd", null);
-        form.setFieldValue("eta", null);
-        form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
       }
 
       try {
@@ -1647,28 +1644,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         setScheduleOptions(options);
 
         if (!preserveSaved) {
-          if (items.length > 0) {
-            const hasExisting = existingScheduleId
-              ? items.some(
-                  (i) => String(i.schedule_id) === String(existingScheduleId),
-                )
-              : false;
-
-            const selectedId = hasExisting
-              ? String(existingScheduleId)
-              : String(items[0].schedule_id);
-
-            applyScheduleSelection(selectedId);
+          if (existingScheduleId) {
+            const hasExisting = items.some(
+              (i) => String(i.schedule_id) === String(existingScheduleId),
+            );
+            if (hasExisting) {
+              applyScheduleSelection(String(existingScheduleId));
+            } else {
+              form.setFieldValue("schedule_id", "");
+            }
           } else {
-            // API returned empty: clear schedule + routings.
             form.setFieldValue("schedule_id", "");
-            form.setFieldValue("carrier_code", "");
-            form.setFieldValue("carrier_name", "");
-            form.setFieldValue("vessel_name", "");
-            form.setFieldValue("voyage_no", "");
-            form.setFieldValue("etd", null);
-            form.setFieldValue("eta", null);
-            form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+            if (form.values.routingDetails.length === 0) {
+              form.setFieldValue("routingDetails", [emptyRoutingDetailRow]);
+            }
           }
         }
       } catch (e) {
@@ -3051,6 +3040,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         return "";
       };
 
+      const formatDateOrNull = (
+        dateValue: Date | string | null | undefined,
+      ) => {
+        if (!dateValue) return null;
+        const formatted = formatDate(dateValue);
+        return formatted || null;
+      };
+
       // Transform form data to match API payload structure
       const payload: Record<string, unknown> = {
         customer_code: form.values.customer_code,
@@ -3066,10 +3063,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
 
-        schedule_id: form.values.schedule_id,
+        schedule_id: form.values.schedule_id || null,
         carrier_code: form.values.carrier_code,
-        eta: formatDate(form.values.eta),
-        etd: formatDate(form.values.etd),
+        eta: formatDateOrNull(form.values.eta),
+        etd: formatDateOrNull(form.values.etd),
         vessel_name: form.values.vessel_name,
         voyage_no: form.values.voyage_no,
 
@@ -4420,15 +4417,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       const selectedId = value || "";
                       if (!selectedId) {
                         form.setFieldValue("schedule_id", "");
-                        form.setFieldValue("carrier_code", "");
-                        form.setFieldValue("carrier_name", "");
-                        form.setFieldValue("vessel_name", "");
-                        form.setFieldValue("voyage_no", "");
-                        form.setFieldValue("etd", null);
-                        form.setFieldValue("eta", null);
-                        form.setFieldValue("routingDetails", [
-                          emptyRoutingDetailRow,
-                        ]);
                         return;
                       }
 
@@ -4437,15 +4425,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
-                  <SearchableSelect
-                    label="Carrier"
-                    placeholder="Type carrier name"
-                    apiEndpoint={URL.carrier}
-                    searchFields={["carrier_code", "carrier_name"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.carrier_code),
-                      label: String(item.carrier_name),
-                    })}
+                  <OceanBookingCarrierSelect
                     value={form.values.carrier_code}
                     displayValue={form.values.carrier_name}
                     onChange={(value, selectedData) => {
@@ -4456,13 +4436,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       );
                     }}
                     error={form.errors.carrier_code as string}
-                    minSearchLength={2}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
                     label="Vessel Name"
-                    placeholder="Select vessel"
+                    placeholder="Enter vessel name"
+                    format="normal"
                     {...form.getInputProps("vessel_name")}
                   />
                 </Grid.Col>
@@ -4470,6 +4450,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Voyage Number"
                     placeholder="Enter voyage number"
+                    format="normal"
                     {...form.getInputProps("voyage_no")}
                   />
                 </Grid.Col>

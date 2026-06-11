@@ -29,10 +29,119 @@ function formatRoutingDate(value: unknown): string | null {
   return d.isValid() ? d.format("YYYY-MM-DD") : null;
 }
 
-function mapOceanRoutings(booking: Record<string, unknown>, transportType: string) {
-  const routingDetails = Array.isArray(booking.routing_details)
-    ? booking.routing_details
+function resolveCarrierCode(booking: Record<string, unknown>): string {
+  const code = String(
+    booking.carrier_code ?? booking.carrier_code_read ?? "",
+  ).trim();
+  if (code) return code;
+  return String(booking.carrier_name ?? "").trim();
+}
+
+function resolveCarrierName(booking: Record<string, unknown>): string {
+  return String(booking.carrier_name ?? "").trim();
+}
+
+function resolveVoyageNumber(booking: Record<string, unknown>): string {
+  return String(booking.voyage_no ?? booking.voyage_number ?? "").trim();
+}
+
+function resolveVesselName(booking: Record<string, unknown>): string {
+  return String(booking.vessel_name ?? "").trim();
+}
+
+function isLclBooking(booking: Record<string, unknown>): boolean {
+  return String(booking.service ?? "").trim().toUpperCase() === "LCL";
+}
+
+function resolveContainerTypeCode(cargo: Record<string, unknown>): string {
+  return String(
+    cargo.container_type_code ??
+      cargo.container_type ??
+      cargo.container_type_name ??
+      "",
+  ).trim();
+}
+
+function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
+  if (!isLclBooking(booking)) return [];
+
+  const cargoList = Array.isArray(booking.cargo_details)
+    ? booking.cargo_details
     : [];
+  const containers: Array<Record<string, unknown>> = [];
+
+  for (const cargo of cargoList) {
+    const row = cargo as Record<string, unknown>;
+    const containerType = resolveContainerTypeCode(row);
+    const nested = Array.isArray(row.containers) ? row.containers : [];
+
+    if (nested.length > 0) {
+      for (const nestedRow of nested) {
+        const container = nestedRow as Record<string, unknown>;
+        const containerNo = String(container.container_no ?? "").trim();
+        if (!containerNo && !containerType) continue;
+        containers.push({
+          container_type_input: containerType || null,
+          container_no: containerNo || null,
+          actual_seal_no: null,
+          customs_seal_no: null,
+          loading_date: null,
+          uploading_date: null,
+        });
+      }
+      continue;
+    }
+
+    const containerNo = String(row.container_no ?? "").trim();
+    if (!containerNo && !containerType) continue;
+    containers.push({
+      container_type_input: containerType || null,
+      container_no: containerNo || null,
+      actual_seal_no: null,
+      customs_seal_no: null,
+      loading_date: null,
+      uploading_date: null,
+    });
+  }
+
+  return containers;
+}
+
+function isRoutingRowDefined(row: Record<string, unknown>): boolean {
+  return Boolean(
+    row.move_type ||
+      row.from_port_code ||
+      row.from_location_code ||
+      row.from_code ||
+      row.to_port_code ||
+      row.to_location_code ||
+      row.to_code ||
+      row.carrier_code ||
+      row.carrier_name ||
+      row.etd ||
+      row.eta ||
+      row.atd ||
+      row.ata ||
+      row.flight ||
+      row.flight_no ||
+      row.rail_no ||
+      row.truck_no ||
+      row.voyage_number ||
+      row.voyage_no ||
+      row.vessel ||
+      row.vessel_name,
+  );
+}
+
+function mapOceanRoutings(booking: Record<string, unknown>, transportType: string) {
+  const routingDetails = (
+    Array.isArray(booking.routing_details) ? booking.routing_details : []
+  ).filter((r) => isRoutingRowDefined(r as Record<string, unknown>));
+
+  if (routingDetails.length === 0) {
+    return [];
+  }
+
   return routingDetails.map((r) => {
     const row = r as Record<string, unknown>;
     return {
@@ -46,7 +155,7 @@ function mapOceanRoutings(booking: Record<string, unknown>, transportType: strin
       rail_no: row.rail_no || "",
       truck_no: row.truck_no || "",
       voyage_number: row.voyage_number || row.voyage_no || "",
-      vessel: row.vessel || row.vessel_name || booking.vessel_name || "",
+      vessel: row.vessel || row.vessel_name || "",
       etd: formatRoutingDate(row.etd),
       eta: formatRoutingDate(row.eta),
       atd: formatRoutingDate(row.atd),
@@ -351,6 +460,7 @@ export function buildJobCreatePayloadFromBooking(
     mode === "air-import" || mode === "ocean-import" ? "Import" : "Export";
   const service = String(booking.service || (isAir ? "AIR" : "FCL"));
   const routingTransport = isAir ? "Air" : "Sea";
+  const oceanRoutings = mapOceanRoutings(booking, routingTransport);
 
   const base: Record<string, unknown> = {
     service,
@@ -367,14 +477,15 @@ export function buildJobCreatePayloadFromBooking(
     eta: formatRoutingDate(booking.eta),
     atd: formatRoutingDate(booking.atd),
     ata: formatRoutingDate(booking.ata),
-    carrier_code: booking.carrier_code || booking.carrier_code_read || "",
+    carrier_code: resolveCarrierCode(booking),
+    carrier_name: resolveCarrierName(booking),
     carrier_booking_no: booking.carrier_booking_no || "",
-    voyage_number: booking.voyage_no || booking.voyage_number || "",
+    voyage_number: resolveVoyageNumber(booking) || null,
     booking_ids: getBookingIdsFromBooking(booking),
     estimates: shouldMapBookingChargesToEstimates(mode, booking)
       ? mapBookingRateDetailsToEstimates(booking)
       : [],
-    ocean_routings: mapOceanRoutings(booking, routingTransport),
+    ...(oceanRoutings.length > 0 ? { ocean_routings: oceanRoutings } : {}),
     housing_details: [
       isAir
         ? buildAirHousing(
@@ -399,12 +510,18 @@ export function buildJobCreatePayloadFromBooking(
     };
   }
 
+  const containerDetails = mapContainerDetailsFromBooking(booking);
+
   return {
     ...base,
     is_direct: booking.is_direct ?? false,
-    vessel_name: booking.vessel_name || null,
+    schedule_id: booking.schedule_id ? String(booking.schedule_id) : null,
+    vessel_name: resolveVesselName(booking) || null,
     mbl_number: booking.mawb_no || booking.mbl_number || null,
     mbl_date: formatRoutingDate(booking.mbl_date || booking.mawb_date),
+    ...(containerDetails.length > 0
+      ? { container_details: containerDetails }
+      : {}),
     ...(mode === "ocean-import"
       ? {
           igm_no: booking.igm_no ? String(booking.igm_no).trim() : null,

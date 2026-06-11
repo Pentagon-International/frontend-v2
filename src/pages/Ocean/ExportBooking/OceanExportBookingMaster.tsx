@@ -125,6 +125,8 @@ type ExportShipmentData = {
   status?: string;
   mawb_no?: string | null;
   carrier_booking_no?: string | null;
+  carrier_code?: string | null;
+  carrier_name?: string | null;
   voyage_no?: string | null;
   vessel_name?: string | null;
   etd?: string | null;
@@ -138,9 +140,14 @@ type ExportShipmentData = {
   cargo_details?: Array<{
     no_of_packages?: number;
     no_of_containers?: number;
+    container_type_code?: string | null;
     container_type_name?: string;
+    container_no?: string | null;
     gross_weight?: string | number;
     volume?: string | number | null;
+    containers?: Array<{
+      container_no?: string | null;
+    }>;
   }>;
   last_milestone?: string | null;
   last_milestone_date?: string | null;

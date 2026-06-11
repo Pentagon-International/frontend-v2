@@ -131,6 +131,7 @@ type ImportShipmentData = {
   routed_by?: string;
   shipment_terms_name?: string;
   shipment_terms_code_read?: string;
+  carrier_code?: string | null;
   carrier_name?: string;
   eta?: string;
   etd?: string;
@@ -168,11 +169,16 @@ type ImportShipmentData = {
   sno?: number;
   cargo_details?: Array<{
     id: number;
+    container_type_code?: string | null;
     container_type_name: string;
+    container_no?: string | null;
     no_of_containers: number;
     no_of_packages?: number;
     gross_weight: string;
     volume?: string | number | null;
+    containers?: Array<{
+      container_no?: string | null;
+    }>;
   }>;
   routing_details?: Array<{
     move_type: string;
