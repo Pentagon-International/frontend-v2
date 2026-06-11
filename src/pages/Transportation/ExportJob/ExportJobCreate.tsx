@@ -906,46 +906,34 @@ function ExportJobCreate() {
           ),
           consignee_id: String(
             (mblData as { consignee_id?: unknown }).consignee_id ??
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.id as string | number | undefined
-              ) ??
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.id as string | number | undefined) ??
               stateMbl.consignee_id ??
               "",
           ),
           consignee_name: String(
             mblData.consignee_name ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.customer_name as string | undefined
-              ) ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.name as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.customer_name as string | undefined) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.name as string | undefined) ||
               stateMbl.consignee_name ||
               "",
           ),
           consignee_email: String(
             mblData.consignee_email ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.email as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.email as string | undefined) ||
               stateMbl.consignee_email ||
               "",
           ),
           consignee_address_id: String(
-            mblFlat.consignee_address_id ??
-              stateMbl.consignee_address_id ??
-              "",
+            mblFlat.consignee_address_id ?? stateMbl.consignee_address_id ?? "",
           ),
           consignee_address: String(
             mblData.consignee_address ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.address as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.address as string | undefined) ||
               stateMbl.consignee_address ||
               "",
           ),
@@ -1134,7 +1122,10 @@ function ExportJobCreate() {
                 : house.shipment_terms_name
                   ? String(house.shipment_terms_name)
                   : "",
-              freight: house.freight ? String(house.freight) : "",
+              freight:
+                house.freight != null && String(house.freight).trim() !== ""
+                  ? String(house.freight).trim()
+                  : "",
               summary:
                 house.summary &&
                 typeof house.summary === "object" &&
@@ -1592,13 +1583,14 @@ function ExportJobCreate() {
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
           shipper_id:
-            (mblDetails as { shipper_id?: string } | undefined)?.shipper_id || "",
+            (mblDetails as { shipper_id?: string } | undefined)?.shipper_id ||
+            "",
           shipper_name:
-            (mblDetails as { shipper_name?: string } | undefined)?.shipper_name ||
-            "",
+            (mblDetails as { shipper_name?: string } | undefined)
+              ?.shipper_name || "",
           shipper_email:
-            (mblDetails as { shipper_email?: string } | undefined)?.shipper_email ||
-            "",
+            (mblDetails as { shipper_email?: string } | undefined)
+              ?.shipper_email || "",
           shipper_address_id:
             (mblDetails as { shipper_address_id?: string } | undefined)
               ?.shipper_address_id || "",
@@ -1606,8 +1598,8 @@ function ExportJobCreate() {
             (mblDetails as { shipper_address?: string } | undefined)
               ?.shipper_address || "",
           consignee_id:
-            (mblDetails as { consignee_id?: string } | undefined)?.consignee_id ||
-            "",
+            (mblDetails as { consignee_id?: string } | undefined)
+              ?.consignee_id || "",
           consignee_name:
             (mblDetails as { consignee_name?: string } | undefined)
               ?.consignee_name || "",
@@ -2209,13 +2201,15 @@ function ExportJobCreate() {
         jobWithMergedHousingDetails ?? jobData
       )?.housing_details?.find(
         (house) =>
-          house.id === housing.id ||
-          Number(house.id) === Number(housing.id),
+          house.id === housing.id || Number(house.id) === Number(housing.id),
       ) as { freight?: string; summary?: HousingDetail["summary"] } | undefined;
 
       const housingForPdf = {
+        ...housingFromJob,
         ...housing,
-        freight: housing.freight || housingFromJob?.freight || "",
+        freight:
+          String(housing.freight || housingFromJob?.freight || "").trim() ||
+          "",
         summary: housing.summary ?? housingFromJob?.summary,
       };
 
@@ -2444,11 +2438,13 @@ function ExportJobCreate() {
             consignee_id: mblDetailsForm.values.consignee_id || "",
             consignee_name: mblDetailsForm.values.consignee_name || "",
             consignee_email: mblDetailsForm.values.consignee_email || "",
-            consignee_address_id: mblDetailsForm.values.consignee_address_id || "",
+            consignee_address_id:
+              mblDetailsForm.values.consignee_address_id || "",
             consignee_address: mblDetailsForm.values.consignee_address || "",
             carrier_agent_id: mblDetailsForm.values.carrier_agent_id || "",
             carrier_agent_name: mblDetailsForm.values.carrier_agent_name || "",
-            carrier_agent_email: mblDetailsForm.values.carrier_agent_email || "",
+            carrier_agent_email:
+              mblDetailsForm.values.carrier_agent_email || "",
             carrier_agent_address_id:
               mblDetailsForm.values.carrier_agent_address_id || "",
             carrier_agent_address:
@@ -2581,7 +2577,8 @@ function ExportJobCreate() {
         consignee_address: partyDetailsForm.values.consignee_address || "",
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          partyDetailsForm.values.carrier_agent_address || "",
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,
@@ -2728,6 +2725,10 @@ function ExportJobCreate() {
           ...(house.shipment_terms_code != null &&
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
+            }),
+          ...(house.freight != null &&
+            String(house.freight).trim() !== "" && {
+              freight: String(house.freight),
             }),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (

@@ -696,6 +696,34 @@ function HouseCreate() {
   const editIndex = location.state?.editIndex;
   const editData = location.state?.editData;
   const isEditMode = editIndex !== undefined && editData !== undefined;
+
+  const resolveHouseFreight = (): string => {
+    const fromEdit = (editData as { freight?: string } | undefined)?.freight;
+    if (fromEdit != null && String(fromEdit).trim()) {
+      return String(fromEdit).trim();
+    }
+    const fromExisting =
+      editIndex != null && existingHousingDetails[editIndex]
+        ? (existingHousingDetails[editIndex] as { freight?: string }).freight
+        : undefined;
+    if (fromExisting != null && String(fromExisting).trim()) {
+      return String(fromExisting).trim();
+    }
+    const fromJob = (
+      location.state?.job as
+        | { housing_details?: Array<{ id?: unknown; freight?: string }> }
+        | undefined
+    )?.housing_details?.find((house, index) =>
+      (editData as { id?: unknown } | undefined)?.id != null
+        ? house.id === (editData as { id?: unknown }).id ||
+          Number(house.id) === Number((editData as { id?: unknown }).id)
+        : index === editIndex,
+    )?.freight;
+    if (fromJob != null && String(fromJob).trim()) {
+      return String(fromJob).trim();
+    }
+    return "";
+  };
   const isLclShipment = useMemo(
     () =>
       String(location.state?.mblDetails?.service ?? "").toUpperCase() ===
@@ -2092,6 +2120,7 @@ function HouseCreate() {
         : null,
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
+      freight: resolveHouseFreight(),
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2145,9 +2174,11 @@ function HouseCreate() {
         JSON.stringify(existingHousingDetails),
       );
 
-      // Safely replace the updated house
+      // Safely replace the updated house (preserve fields not on the form, e.g. freight)
       updatedHousingDetails[editIndex] = {
+        ...updatedHousingDetails[editIndex],
         ...housingDetail,
+        freight: resolveHouseFreight(),
         cargo_details: [...housingDetail.cargo_details], // ensure fresh arrays
         charges: [...housingDetail.charges],
       };
@@ -2218,6 +2249,7 @@ function HouseCreate() {
       house_date: v.house_date ? dayjs(v.house_date).format("YYYY-MM-DD") : null,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
+      freight: resolveHouseFreight(),
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2335,6 +2367,7 @@ function HouseCreate() {
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
       const housingData = {
+        id: (editData as { id?: number | string } | undefined)?.id,
         hbl_number: form.values.hbl_number,
         house_date: form.values.house_date ? dayjs(form.values.house_date).format("YYYY-MM-DD") : null,
         routed: form.values.routed,
@@ -2372,9 +2405,7 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-        freight: String(
-          (editData as { freight?: string } | undefined)?.freight ?? "",
-        ),
+        freight: resolveHouseFreight(),
         cargo_details: cargoDetails.map((c) => ({
           no_of_packages: c.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
