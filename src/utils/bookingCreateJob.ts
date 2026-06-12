@@ -12,12 +12,14 @@ import {
 
 export type BookingCreateJobMode =
   | "air-export"
+  | "inland-export"
   | "air-import"
   | "ocean-export"
   | "ocean-import";
 
 const JOB_EDIT_PATH: Record<BookingCreateJobMode, string> = {
   "air-export": "/air/export-job/edit",
+  "inland-export": "/inland/export-job/edit",
   "air-import": "/air/import-job/edit",
   "ocean-export": "/SeaExport/export-job/edit",
   "ocean-import": "/SeaExport/import-job/edit",
@@ -495,7 +497,7 @@ export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
 ): Record<string, unknown> {
-  const isAir = mode === "air-export" || mode === "air-import";
+  const isAir = mode === "air-export" || mode === "inland-export" || mode === "air-import";
   const serviceType =
     mode === "air-import" || mode === "ocean-import" ? "Import" : "Export";
   const service = String(booking.service || (isAir ? "AIR" : "FCL"));
@@ -530,7 +532,7 @@ export function buildJobCreatePayloadFromBooking(
       isAir
         ? buildAirHousing(
             booking,
-            mode === "air-export" ? "Re Export" : "Import",
+            mode === "air-export" || mode === "inland-export" ? "Re Export" : "Import",
           )
         : buildOceanHousing(
             booking,

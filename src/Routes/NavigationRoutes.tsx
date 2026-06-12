@@ -122,6 +122,13 @@ import {
   AirJobGenerationCreate,
   AirExportBookingMaster,
   AirExportBookingCreate,
+  InlandExportJobMaster,
+  InlandExportJobCreate,
+  InlandExportHouseCreate,
+  InlandJobGenerationMaster,
+  InlandJobGenerationCreate,
+  InlandExportBookingMaster,
+  InlandExportBookingCreate,
   AirImportBookingMaster,
   AirImportBookingCreate,
   AirImportToExportBooking,
@@ -259,6 +266,33 @@ const NavigationRoutes = () => {
           element={<FinanceDashboardPendingPage />}
         />
         <Route path="/road" element={<Road />} />
+        <Route path="/inland">
+          <Route path="export-job">
+            <Route index element={<InlandExportJobMaster />} />
+            <Route path="create" element={<InlandExportJobCreate />} />
+            <Route path="edit" element={<InlandExportJobCreate />} />
+            <Route path="view" element={<InlandExportJobCreate />} />
+            <Route path="house-create" element={<InlandExportHouseCreate />} />
+            <Route path="invoice" element={<InvoiceCreate />} />
+            <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+            <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route path="invoice/reverse" element={<InvoiceReverse />} />
+          </Route>
+          <Route path="job-generation">
+            <Route index element={<InlandJobGenerationMaster />} />
+            <Route path="create" element={<InlandJobGenerationCreate />} />
+            <Route path="edit" element={<InlandJobGenerationCreate />} />
+            <Route path="view" element={<InlandJobGenerationCreate />} />
+          </Route>
+          <Route path="export-booking">
+            <Route index element={<InlandExportBookingMaster />} />
+            <Route path="create" element={<InlandExportBookingCreate />} />
+            <Route path="edit" element={<InlandExportBookingCreate />} />
+          </Route>
+        </Route>
         <Route path="/air">
           <Route path="import-dsr" element={<AirImportDsr />} />
           <Route path="export-dsr" element={<AirExportDsr />} />

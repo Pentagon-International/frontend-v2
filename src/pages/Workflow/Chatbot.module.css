@@ -1,17 +1,4 @@
-/* Pulse AI chatbot — Claude / ChatGPT–style layout, ERP palette */
-
-.analyticsSubNav {
-  flex-shrink: 0;
-  padding: 0 1rem 0.75rem;
-  border-bottom: 1px solid var(--border, #e2e8f0);
-}
-
-.statusPill {
-  text-transform: lowercase;
-  font-family: ui-monospace, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-}
+/* Pulse AI chatbot — ChatGPT-style layout */
 
 .fabWrap {
   position: fixed;
@@ -34,8 +21,6 @@
   height: 100%;
   min-height: 0;
   max-height: 100%;
-  padding: 0.5rem 0.75rem 0;
-  gap: 0.5rem;
 }
 
 .root {
@@ -44,64 +29,174 @@
   height: 100%;
   min-height: 0;
   max-height: 100%;
-  padding: 1rem 0 0; 
-  gap: 0.875rem;
 }
 
-.pageHeader {
+/* ─── Shell: sidebar + main ─── */
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface, #ffffff);
+}
+
+/* ─── Left sidebar (ChatGPT thread list) ─── */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #f7f7f8;
+  border-right: 1px solid var(--border, #e5e7eb);
+  overflow: hidden;
+}
+
+.sidebarDrawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f7f7f8;
+}
+
+.drawerBody {
+  padding: 0 !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebarTop {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 12px 9.2px;
+  background: #f7f7f8;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.sidebarLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--accent, #105476);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sidebarTitle {
+  color: var(--text-primary, #1e293b);
+  letter-spacing: -0.01em;
+}
+
+.newChatBtn {
+  border: 1px solid var(--border, #d1d5db) !important;
+  background: #ffffff !important;
+  color: var(--text-primary, #1e293b) !important;
+  font-weight: 500 !important;
+}
+
+.newChatBtn:hover {
+  background: #ececf1 !important;
+}
+
+.sidebarSessions {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 12px;
+}
+
+.sessionItem {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-primary, #1e293b);
+  transition: background-color 0.15s ease;
+}
+
+.sessionItem:hover {
+  background-color: #ececf1;
+}
+
+.sessionItemActive {
+  background-color: #e3e3e8 !important;
+}
+
+.sessionIcon {
+  color: var(--text-secondary, #64748b);
+  flex-shrink: 0;
+}
+
+.sessionDelete {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sessionItem:hover .sessionDelete,
+.sessionItemActive .sessionDelete {
+  opacity: 1;
+}
+
+/* ─── Main column ─── */
+.mainColumn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface, #ffffff);
+}
+
+.mainHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  padding: 0 2px;
+  min-height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--surface, #ffffff);
 }
 
-.pageTitleRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.pageIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--accent-light, #dbeafe);
-  color: var(--accent, #105476);
+.mainHeaderActions {
   flex-shrink: 0;
 }
 
-.pageTitle {
-  font-size: clamp(1.0625rem, 2.5vw, 1.25rem);
-  font-weight: 600;
+.sessionTitle {
   color: var(--text-primary, #1e293b);
-  line-height: 1.3;
-  margin: 0;
-  letter-spacing: -0.01em;
 }
 
-.pageSubtitle {
-  font-size: 0.8125rem;
-  color: var(--text-secondary, #64748b);
-  margin-top: 2px;
-  line-height: 1.4;
+.subHeader {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--surface, #ffffff);
 }
 
-.headerActions {
+.mainBody {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modeSelector {
   flex-shrink: 0;
+}
+
+.statusPill {
+  text-transform: lowercase;
+  font-family: ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
 }
 
 .refLink {
@@ -122,95 +217,30 @@
   color: #0d4360;
 }
 
-.layout {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  gap: 14px;
-  overflow: hidden;
-}
-
-/* Conversation sidebar — Claude-style thread list */
-.sidebar {
-  width: 272px;
-  min-width: 240px;
-  max-width: 300px;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  border: 1px solid var(--border, #e2e8f0) !important;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--surface, #ffffff);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.sidebarHeader {
-  border-bottom: 1px solid var(--border, #e2e8f0);
-  flex-shrink: 0;
-  background: #f8fafc;
-}
-
-.sidebarFooter {
-  border-top: 1px solid var(--border, #e2e8f0);
-  flex-shrink: 0;
-  background: #f8fafc;
-}
-
-.sessionItem {
-  border-radius: 10px;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-  border: 1px solid transparent;
-}
-
-.sessionItem:hover {
-  background-color: #f1f5f9;
-}
-
-.sessionItemActive {
-  background-color: var(--accent-light, #dbeafe) !important;
-  border-color: rgba(16, 84, 118, 0.12) !important;
-  box-shadow: inset 3px 0 0 var(--accent, #105476);
-}
-
-.chatMain {
-  flex: 1;
-  margin-bottom: 10px;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Main chat surface */
+/* ─── Chat panel ─── */
 .chatPanel {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border, #e2e8f0) !important;
-  border-radius: 12px;
   background: var(--surface, #ffffff);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 4px 24px rgba(15, 23, 42, 0.04);
+}
+
+.adminScrollArea {
+  flex: 1;
+  min-height: 0;
 }
 
 .messagesArea {
   flex: 1;
   min-height: 0;
-  background: linear-gradient(180deg, #fafbfc 0%, #ffffff 48px);
+  background: var(--surface, #ffffff);
 }
 
 .messagesInner {
   padding: 1.25rem 1rem 1.5rem;
-  /* max-width: 48rem; */
+  max-width: 80rem;
   margin: 0 auto;
   width: 100%;
 }
@@ -246,17 +276,13 @@
 .messageContent {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(88%, 36rem);
+  max-width: min(80%, 48rem);
 }
 
 .messageRowUser .messageContent {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-}
-
-.messageBubbleWrap {
-  max-width: 100%;
 }
 
 .userBubble {
@@ -280,8 +306,8 @@
 }
 
 .assistantBubbleCard {
-  background: #f8fafc;
-  border: 1px solid var(--border, #e2e8f0);
+  background: #f7f7f8;
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
   padding: 0.75rem 1rem;
 }
@@ -338,7 +364,6 @@
   color: inherit;
 }
 
-/* GFM tables inside assistant markdown */
 .tableScroll {
   overflow-x: auto;
   max-width: 100%;
@@ -380,7 +405,6 @@
   white-space: nowrap;
 }
 
-/* KPI summary: Metric|Count or Label|Value (≤10 rows) */
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -413,7 +437,6 @@
   word-break: break-word;
 }
 
-/* Analytics structured message blocks */
 .analyticsMessage {
   display: flex;
   flex-direction: column;
@@ -482,15 +505,14 @@
 /* Bottom compose — ChatGPT-style pill */
 .inputArea {
   flex-shrink: 0;
-  padding: 0.875rem 1rem 1rem;
+  padding: 0.875rem 1rem 0.5rem;
   background: var(--surface, #ffffff);
-  border-top: 1px solid var(--border, #e2e8f0);
 }
 
 .composeOuter {
-  /* max-width: 48rem; */
+  max-width: 64rem;
   margin: 0 auto;
-  width: 90%;
+  width: 100%;
 }
 
 .composeBar {
@@ -500,12 +522,9 @@
   width: 100%;
   padding: 6px 8px 6px 14px;
   background: var(--surface, #ffffff);
-  border: 1px solid var(--border, #e2e8f0);
+  border: 1px solid var(--border, #d1d5db);
   border-radius: 1.5rem;
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.02),
-    0 2px 8px rgba(15, 23, 42, 0.06),
-    0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -515,7 +534,7 @@
   border-color: rgba(16, 84, 118, 0.35);
   box-shadow:
     0 0 0 3px rgba(16, 84, 118, 0.08),
-    0 2px 8px rgba(15, 23, 42, 0.06);
+    0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .composeBarListening {
@@ -593,7 +612,7 @@
   justify-content: center;
   padding: 3rem 1.5rem;
   text-align: center;
-  min-height: 200px;
+  min-height: 280px;
 }
 
 .emptyStateIcon {
@@ -656,23 +675,17 @@
   }
 
   .messageContent {
-    max-width: min(82%, 36rem);
+    max-width: min(80%, 48rem);
   }
 }
 
 @media (max-width: 47.99em) {
-  .root {
-    margin-top: 0.75rem;
-    gap: 0.625rem;
+  .mainHeader {
+    padding: 0 12px;
   }
 
-  .layout {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .sidebar {
-    display: none;
+  .subHeader {
+    padding: 8px 12px;
   }
 
   .messagesInner {

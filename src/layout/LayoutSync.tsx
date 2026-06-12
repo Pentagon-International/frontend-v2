@@ -62,6 +62,18 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/customer-service/import-to-export-booking")) {
       setActiveNav("Customer Service");
       setActiveSubNav("Import to Export Booking");
+    } else if (path.startsWith("/inland/job-generation")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Inland Export Job Generation");
+    } else if (path.startsWith("/inland/export-job")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Inland Export Job");
+    } else if (path.startsWith("/inland/export-booking")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Inland Export Booking");
+    } else if (path.startsWith("/inland")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("Inland Export Booking");
     } else if (path.startsWith("/air/job-generation")) {
       setActiveNav("Transportation");
       setActiveSubNav("Air Export Job Generation");

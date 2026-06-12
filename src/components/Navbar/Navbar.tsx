@@ -57,6 +57,7 @@ import {
   IconFiles,
   IconRobot,
   IconAutomation,
+  IconTruck,
 } from "@tabler/icons-react";
 import {
   CHATBOT_PATH,
@@ -94,6 +95,7 @@ const Navbar = ({
   const [, setIsCustomerServiceOpen] = useState(false);
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
+  const [isInlandOpen, setIsInlandOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isFinanceDashboardOpen, setIsFinanceDashboardOpen] = useState(false);
@@ -707,6 +709,57 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                </CollapsibleNav>
+              </Box>
+              <Box>
+                <CollapsibleNav
+                  label="Inland"
+                  openedLocal={isInlandOpen}
+                  setOpenedLocal={setIsInlandOpen}
+                  icon={IconTruck as any}
+                >
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Inland Export Booking"
+                    icon={IconTruck}
+                    path="/inland/export-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Inland Export Job Generation"
+                    icon={IconTruck}
+                    path="/inland/job-generation"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Inland Export Job"
+                    icon={IconTruck}
+                    path="/inland/export-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />

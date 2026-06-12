@@ -28,6 +28,7 @@ const pathTitleMap: Record<string, string> = {
   "/tariff-create": "Sales",
   "/tariff-bulk-upload": "Sales",
   "/road": "Road",
+  "/inland": "Inland",
   "/air": "Air",
   "/SeaExport": "Ocean",
   "/air/import-dsr": "Air Import DSR",

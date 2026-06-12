@@ -5,18 +5,16 @@ import {
   Textarea,
   ActionIcon,
   ScrollArea,
-  Paper,
   Group,
   Avatar,
   Loader,
   Stack,
   Button,
   Tooltip,
-  Badge,
   Drawer,
-  Burger,
   Center,
   SegmentedControl,
+  UnstyledButton,
 } from "@mantine/core";
 import type { ChatMode } from "./chatApi";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
@@ -27,6 +25,8 @@ import {
   IconTrash,
   IconMessage,
   IconSend,
+  IconLayoutSidebar,
+  IconInfoCircle,
 } from "@tabler/icons-react";
 import styles from "./Chatbot.module.css";
 import type { ChatReferences } from "./chatbotMessageUtils";
@@ -121,13 +121,19 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
 }) => {
   const isStaffAdmin = useIsAdminUser();
   const isMobile = useMediaQuery("(max-width: 47.99em)");
-  const [sidebarOpened, { open: openSidebar, close: closeSidebar }] =
+  const [mobileSidebarOpened, { open: openMobileSidebar, close: closeMobileSidebar }] =
     useDisclosure(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [analyticsView, setAnalyticsView] = useState<AnalyticsAdminView>("chat");
 
   const selectSession = (sessionId: string) => {
     onSelectSession(sessionId);
-    if (isMobile) closeSidebar();
+    if (isMobile) closeMobileSidebar();
   };
+
+  useEffect(() => {
+    if (chatMode !== "analytics") setAnalyticsView("chat");
+  }, [chatMode]);
 
   // Scroll after messages render (markdown/history) — fixes first-load clipped replies
   useEffect(() => {
@@ -160,28 +166,53 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
     viewportRef,
   ]);
 
-  const renderSessionsPanel = () => (
+  const showModeSelector = !hideModeSelector && onChatModeChange && isStaffAdmin;
+  const showAnalyticsSubNav = !compact && chatMode === "analytics" && isStaffAdmin;
+  const showAdminPanel = showAnalyticsSubNav && analyticsView !== "chat";
+  const showSidebar = !compact;
+  const sidebarVisible = showSidebar && (isMobile ? false : desktopSidebarOpen);
+
+  const toggleSidebar = () => {
+    if (isMobile) {
+      openMobileSidebar();
+    } else {
+      setDesktopSidebarOpen((v) => !v);
+    }
+  };
+
+  const renderSidebarContent = () => (
     <>
-      <Box p="sm" className={styles.sidebarHeader}>
-        <Group justify="space-between" align="center">
-          <Text fw={600} fz="sm" c="var(--text-primary, #1E293B)">
-            Sessions
+      <Box className={styles.sidebarTop}>
+        <Group gap="sm" wrap="nowrap">
+          <Box className={styles.sidebarLogo}>
+            <IconRobot size={20} stroke={1.5} />
+          </Box>
+          <Text fw={600} fz="sm" className={styles.sidebarTitle}>
+            Pulse AI
           </Text>
-          <Tooltip label="New session">
-            <ActionIcon
-              size="sm"
-              variant="light"
-              color="blue"
-              onClick={onNewSession}
-              loading={sessionCreating}
-            >
-              <IconPlus size={14} />
-            </ActionIcon>
-          </Tooltip>
         </Group>
       </Box>
+      <Box px="sm" py="xs" my="xs">
+        <Button
+          fullWidth
+          size="sm"
+          variant="default"
+          leftSection={<IconPlus size={16} />}
+          onClick={onNewSession}
+          loading={sessionCreating}
+          className={styles.newChatBtn}
+        >
+          New chat
+        </Button>
+      </Box>
 
-      <ScrollArea style={{ flex: 1 }} type="auto" offsetScrollbars>
+      <Box px="sm" py="xs" mt="sm" mb="xs">
+        <Text fz="sm" c="dimmed" tt="uppercase" fw={600}>
+          Recent Chats
+        </Text>
+      </Box>
+
+      <ScrollArea scrollbarSize={8} className={styles.sidebarSessions} type="auto" offsetScrollbars>
         {sessionsLoading ? (
           <Center py="xl">
             <Loader size="sm" />
@@ -189,353 +220,320 @@ export const ChatbotPageUi: FC<ChatbotPageUiProps> = ({
         ) : sessions.length === 0 ? (
           <Center py="xl" px="md">
             <Text fz="xs" c="dimmed" ta="center">
-              No sessions yet. Create one to start chatting.
+              No chats yet
             </Text>
           </Center>
         ) : (
-          <Stack gap={4} p="xs">
+          <Stack gap={2} p="xs">
             {sessions.map((session) => (
-              <Group
+              <UnstyledButton
                 key={session.id}
-                gap={6}
-                p="xs"
-                wrap="nowrap"
                 className={`${styles.sessionItem} ${
                   activeSessionId === session.id ? styles.sessionItemActive : ""
                 }`}
                 onClick={() => selectSession(session.id)}
               >
-                <IconMessage
-                  size={18}
-                  color="var(--text-secondary, #64748B)"
-                  style={{ flexShrink: 0 }}
-                />
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text fz="sm" truncate fw={activeSessionId === session.id ? 600 : 400}>
+                <Group gap={8} wrap="nowrap" w="100%">
+                  <IconMessage size={16} className={styles.sessionIcon} />
+                  <Text fz="sm" truncate fw={activeSessionId === session.id ? 600 : 400} style={{ flex: 1 }}>
                     {session.label}
                   </Text>
-                  <Text fz={10} c="dimmed" truncate>
-                    {session.createdAt.toLocaleDateString()}
-                  </Text>
-                </Box>
-                {sessions.length > 1 && (
-                  <ActionIcon
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    style={{ flexShrink: 0 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.id);
-                    }}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                )}
-              </Group>
+                  {sessions.length > 1 && (
+                    <ActionIcon
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      className={styles.sessionDelete}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteSession(session.id);
+                      }}
+                    >
+                      <IconTrash size={14} color="red" />
+                    </ActionIcon>
+                  )}
+                </Group>
+              </UnstyledButton>
             ))}
           </Stack>
         )}
       </ScrollArea>
+    </>
+  );
 
-      <Box p="xs" className={styles.sidebarFooter}>
-        <Button
-          fullWidth
-          size="xs"
-          variant="light"
-          color="blue"
-          leftSection={<IconPlus size={12} />}
-          onClick={onNewSession}
-          loading={sessionCreating}
-        >
-          New Session
-        </Button>
+  const renderChatMessages = () => (
+    <>
+      <ScrollArea
+        scrollbarSize={8}
+        className={styles.messagesArea}
+        viewportRef={viewportRef}
+        type="auto"
+        offsetScrollbars
+      >
+        <Box className={styles.messagesInner}>
+          <Stack gap="lg">
+            {historyLoading && !loading && (
+              <Box className={styles.historyLoading}>
+                <Loader size="md" color="blue" />
+                <Text fz="sm" c="dimmed">
+                  Loading conversation…
+                </Text>
+              </Box>
+            )}
+
+            {!historyLoading && !activeSessionId && !sessionsLoading && (
+              <Box className={styles.emptyState}>
+                <Stack align="center" gap="md">
+                  <Box className={styles.emptyStateIcon}>
+                    <IconRobot size={28} stroke={1.5} />
+                  </Box>
+                  <Text fw={600} fz="lg" c="var(--text-primary, #1E293B)">
+                    How can I help you today?
+                  </Text>
+                  <Text fz="sm" c="dimmed" maw={360} ta="center">
+                    {subtitle}
+                  </Text>
+                  {!compact && (
+                    <Button
+                      size="sm"
+                      variant="light"
+                      leftSection={<IconPlus size={14} />}
+                      onClick={onNewSession}
+                      loading={sessionCreating}
+                    >
+                      New chat
+                    </Button>
+                  )}
+                </Stack>
+              </Box>
+            )}
+
+            {!historyLoading &&
+              activeSession?.messages.map((msg) =>
+                msg.role === "user" ? (
+                  <Box
+                    key={msg.id}
+                    className={`${styles.messageRow} ${styles.messageRowUser}`}
+                  >
+                    <Box className={styles.messageContent}>
+                      <Box className={styles.userBubble}>{msg.content}</Box>
+                      <Text className={styles.messageTimestamp} ta="right">
+                        {msg.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </Box>
+                    <Avatar
+                      color="gray"
+                      radius="xl"
+                      size="sm"
+                      className={styles.messageAvatar}
+                    >
+                      <IconUser size={16} />
+                    </Avatar>
+                  </Box>
+                ) : (
+                  <Box key={msg.id} className={styles.messageRow}>
+                    <Avatar
+                      color="blue"
+                      radius="xl"
+                      size="sm"
+                      className={styles.messageAvatar}
+                    >
+                      <IconRobot size={16} />
+                    </Avatar>
+                    <Box className={styles.messageContent}>
+                      <Box
+                        className={`${styles.assistantBubble} ${styles.assistantBubbleCard}`}
+                      >
+                        <div className={styles.markdownBody}>
+                          {msg.analytics ? (
+                            <AssistantAnalyticsMessage
+                              content={msg.content}
+                              analytics={msg.analytics}
+                              references={msg.references}
+                              onReferenceLinkClick={onReferenceLinkClick}
+                            />
+                          ) : (
+                            <AssistantMarkdown
+                              content={msg.content}
+                              references={msg.references}
+                              onReferenceLinkClick={onReferenceLinkClick}
+                            />
+                          )}
+                        </div>
+                      </Box>
+                      <Text className={styles.messageTimestamp} ta="left">
+                        {msg.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </Box>
+                  </Box>
+                ),
+              )}
+
+            {loading && (
+              <Box className={styles.messageRow}>
+                <Avatar color="blue" radius="xl" size="sm" className={styles.messageAvatar}>
+                  <IconRobot size={16} />
+                </Avatar>
+                <Box className={styles.messageContent}>
+                  <Box className={styles.assistantBubbleCard}>
+                    <Loader size="xs" color="blue" />
+                  </Box>
+                </Box>
+              </Box>
+            )}
+          </Stack>
+        </Box>
+      </ScrollArea>
+
+      <Box className={styles.inputArea}>
+        <Box className={styles.composeOuter}>
+          {voiceBanner}
+          <Box
+            className={`${styles.composeBar} ${
+              inputListening ? styles.composeBarListening : ""
+            }`}
+          >
+            <Box className={styles.textareaWrap}>
+              <Textarea
+                placeholder={inputPlaceholder}
+                value={input}
+                onChange={(e) => onInputChange(e.currentTarget.value)}
+                onKeyDown={onKeyDown}
+                disabled={loading || historyLoading || !activeSessionId}
+                autosize
+                minRows={1}
+                maxRows={5}
+                variant="unstyled"
+              />
+            </Box>
+            <Box className={styles.composeActions}>
+              {micButton}
+              <ActionIcon
+                size="lg"
+                radius="xl"
+                variant="filled"
+                className={styles.sendButton}
+                onClick={onSendMessage}
+                disabled={!input.trim() || loading || historyLoading || !activeSessionId}
+                aria-label="Send message"
+              >
+                <IconSend size={16} />
+              </ActionIcon>
+            </Box>
+          </Box>
+          <Box style={{display: "flex", alignItems: "center", justifyContent: "center", gap:4, marginTop: 8}}>
+            <IconInfoCircle size={12} color="#222222" />
+            <Text fz="xs" c="dimmed" ta="center">
+              Chatbot is in early access and may occasionally produce incorrect or nonsensical answers. Always verify critical information.
+            </Text>
+          </Box>
+        </Box>
       </Box>
     </>
   );
 
-  const [analyticsView, setAnalyticsView] = useState<AnalyticsAdminView>("chat");
+  const renderMainContent = () => {
+    if (showAdminPanel) {
+      return (
+        <ScrollArea scrollbarSize={8} className={styles.adminScrollArea} type="auto" offsetScrollbars>
+          {analyticsView === "train" ? <AnalyticsTrainPanel /> : <AnalyticsMemoryPanel />}
+        </ScrollArea>
+      );
+    }
+    return <Box className={styles.chatPanel}>{renderChatMessages()}</Box>;
+  };
 
-  useEffect(() => {
-    if (chatMode !== "analytics") setAnalyticsView("chat");
-  }, [chatMode]);
-
-  const showModeSelector = !hideModeSelector && onChatModeChange && isStaffAdmin;
-  const showAnalyticsSubNav =
-    !compact && chatMode === "analytics" && isStaffAdmin;
-  const showAdminPanel = showAnalyticsSubNav && analyticsView !== "chat";
-  const showSidebar = !compact && !showAdminPanel;
-
-  return (
-    <Box className={compact ? styles.rootEmbedded : styles.root}>
-      {!compact && (
-      <Box className={styles.pageHeader}>
-        <Box className={styles.pageTitleRow}>
-          {isMobile && showSidebar && (
-            <Burger
-              opened={sidebarOpened}
-              onClick={openSidebar}
-              size="sm"
-              aria-label="Open sessions"
-            />
-          )}
-          <Box className={styles.pageIcon}>
-            <IconRobot size={22} stroke={1.5} />
-          </Box>
-          <Box style={{ minWidth: 0 }}>
-            <Text component="h1" className={styles.pageTitle}>
-              Pulse AI Assistant
-            </Text>
-            <Text className={styles.pageSubtitle}>{subtitle}</Text>
-          </Box>
-        </Box>
-        <Box className={styles.headerActions}>
-          {headerExtra}
-          {activeSession && (
-            <Badge variant="light" color="blue" size="md">
-              <Text span truncate inherit>
-                {activeSession.label}
-              </Text>
-            </Badge>
-          )}
-          {showModeSelector && (
-            <SegmentedControl
-              size="xs"
-              value={chatMode}
-              onChange={(v) => onChatModeChange(v as ChatMode)}
-              data={[
-                { label: "Operations", value: "operations" },
-                { label: "Analytics", value: "analytics" },
-              ]}
-              className={styles.modeSelector}
-            />
-          )}
+  if (compact) {
+    return (
+      <Box className={styles.rootEmbedded}>
+        <Box className={styles.mainColumn}>
+          <Box className={styles.mainBody}>{renderChatMessages()}</Box>
         </Box>
       </Box>
-      )}
+    );
+  }
 
-      {showAnalyticsSubNav && (
-        <Box className={styles.analyticsSubNav}>
-          <SegmentedControl
-            size="xs"
-            value={analyticsView}
-            onChange={(v) => setAnalyticsView(v as AnalyticsAdminView)}
-            data={[
-              { label: "Chat", value: "chat" },
-              { label: "Train", value: "train" },
-              { label: "Memory", value: "memory" },
-            ]}
-          />
-        </Box>
-      )}
-
-      {showAdminPanel ? (
-        <Box className={styles.layout}>
-          {analyticsView === "train" ? (
-            <AnalyticsTrainPanel />
-          ) : (
-            <AnalyticsMemoryPanel />
-          )}
-        </Box>
-      ) : (
-      <Box className={styles.layout}>
-        {showSidebar && !isMobile && (
-          <Paper withBorder className={styles.sidebar}>
-            {renderSessionsPanel()}
-          </Paper>
+  return (
+    <Box className={styles.root}>
+      <Box className={styles.shell}>
+        {sidebarVisible && (
+          <aside className={styles.sidebar}>{renderSidebarContent()}</aside>
         )}
 
         {showSidebar && (
-        <Drawer
-          opened={Boolean(isMobile && sidebarOpened)}
-          onClose={closeSidebar}
-          title="Sessions"
-          position="left"
-          size="min(300px, 88vw)"
-          padding="md"
-          zIndex={200}
-        >
-          <Paper
-            withBorder
-            className={styles.sidebar}
-            style={{ width: "100%", maxWidth: "none", height: "100%" }}
+          <Drawer
+            opened={Boolean(isMobile && mobileSidebarOpened)}
+            onClose={closeMobileSidebar}
+            withCloseButton={false}
+            position="left"
+            size="min(280px, 88vw)"
+            padding={0}
+            zIndex={200}
+            classNames={{ body: styles.drawerBody }}
           >
-            {renderSessionsPanel()}
-          </Paper>
-        </Drawer>
+            <Box className={styles.sidebarDrawer}>{renderSidebarContent()}</Box>
+          </Drawer>
         )}
 
-        <Box className={styles.chatMain}>
-          <Paper withBorder className={styles.chatPanel}>
-            <ScrollArea
-              className={styles.messagesArea}
-              viewportRef={viewportRef}
-              type="auto"
-              offsetScrollbars
-            >
-              <Box className={styles.messagesInner}>
-                <Stack gap="lg">
-                  {historyLoading && !loading && (
-                    <Box className={styles.historyLoading}>
-                      <Loader size="md" color="blue" />
-                      <Text fz="sm" c="dimmed">
-                        Loading conversation…
-                      </Text>
-                    </Box>
-                  )}
-
-                  {!historyLoading && !activeSessionId && !sessionsLoading && (
-                    <Box className={styles.emptyState}>
-                      <Stack align="center" gap="md">
-                        <Box className={styles.emptyStateIcon}>
-                          <IconMessage size={26} stroke={1.5} />
-                        </Box>
-                        <Text fw={500} c="var(--text-primary, #1E293B)">
-                          Select or create a session
-                        </Text>
-                        <Text fz="sm" c="dimmed" maw={320}>
-                          Use the sessions panel to start a new conversation with Pulse AI.
-                        </Text>
-                        {!compact && (
-                          <Button
-                            size="sm"
-                            variant="light"
-                            leftSection={<IconPlus size={14} />}
-                            onClick={onNewSession}
-                            loading={sessionCreating}
-                          >
-                            New Session
-                          </Button>
-                        )}
-                      </Stack>
-                    </Box>
-                  )}
-
-                  {!historyLoading &&
-                    activeSession?.messages.map((msg) =>
-                    msg.role === "user" ? (
-                      <Box
-                        key={msg.id}
-                        className={`${styles.messageRow} ${styles.messageRowUser}`}
-                      >
-                        <Box className={styles.messageContent}>
-                          <Box className={styles.userBubble}>{msg.content}</Box>
-                          <Text className={styles.messageTimestamp} ta="right">
-                            {msg.timestamp.toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </Text>
-                        </Box>
-                        <Avatar
-                          color="gray"
-                          radius="xl"
-                          size="sm"
-                          className={styles.messageAvatar}
-                        >
-                          <IconUser size={16} />
-                        </Avatar>
-                      </Box>
-                    ) : (
-                      <Box key={msg.id} className={styles.messageRow}>
-                        <Avatar
-                          color="blue"
-                          radius="xl"
-                          size="sm"
-                          className={styles.messageAvatar}
-                        >
-                          <IconRobot size={16} />
-                        </Avatar>
-                        <Box className={styles.messageContent}>
-                          <Box
-                            className={`${styles.assistantBubble} ${styles.assistantBubbleCard}`}
-                          >
-                            <div className={styles.markdownBody}>
-                              {msg.analytics ? (
-                                <AssistantAnalyticsMessage
-                                  content={msg.content}
-                                  analytics={msg.analytics}
-                                  references={msg.references}
-                                  onReferenceLinkClick={onReferenceLinkClick}
-                                />
-                              ) : (
-                                <AssistantMarkdown
-                                  content={msg.content}
-                                  references={msg.references}
-                                  onReferenceLinkClick={onReferenceLinkClick}
-                                />
-                              )}
-                            </div>
-                          </Box>
-                          <Text className={styles.messageTimestamp} ta="left">
-                            {msg.timestamp.toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </Text>
-                        </Box>
-                      </Box>
-                    ),
-                  )}
-
-                  {loading && (
-                    <Box className={styles.messageRow}>
-                      <Avatar color="blue" radius="xl" size="sm" className={styles.messageAvatar}>
-                        <IconRobot size={16} />
-                      </Avatar>
-                      <Box className={styles.messageContent}>
-                        <Box className={styles.assistantBubbleCard}>
-                          <Loader size="xs" color="blue" />
-                        </Box>
-                      </Box>
-                    </Box>
-                  )}
-                </Stack>
-              </Box>
-            </ScrollArea>
-
-            <Box className={styles.inputArea}>
-              <Box className={styles.composeOuter}>
-                {voiceBanner}
-                <Box
-                  className={`${styles.composeBar} ${
-                    inputListening ? styles.composeBarListening : ""
-                  }`}
+        <Box className={styles.mainColumn}>
+          <Box className={styles.mainHeader}>
+            <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+              <Tooltip label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  onClick={toggleSidebar}
+                  aria-label="Toggle sidebar"
                 >
-                  <Box className={styles.textareaWrap}>
-                    <Textarea
-                      placeholder={inputPlaceholder}
-                      value={input}
-                      onChange={(e) => onInputChange(e.currentTarget.value)}
-                      onKeyDown={onKeyDown}
-                      disabled={loading || historyLoading || !activeSessionId}
-                      autosize
-                      minRows={1}
-                      maxRows={5}
-                      variant="unstyled"
-                    />
-                  </Box>
-                  <Box className={styles.composeActions}>
-                    {micButton}
-                    <ActionIcon
-                      size="lg"
-                      radius="xl"
-                      variant="filled"
-                      className={styles.sendButton}
-                      onClick={onSendMessage}
-                      disabled={!input.trim() || loading || historyLoading || !activeSessionId}
-                      aria-label="Send message"
-                    >
-                      <IconSend size={16} />
-                    </ActionIcon>
-                  </Box>
-                </Box>
-              </Box>
+                  <IconLayoutSidebar size={24} stroke={1.5} />
+                </ActionIcon>
+              </Tooltip>
+              <Text fw={600} fz="sm" truncate className={styles.sessionTitle}>
+                {activeSession?.label ?? "New chat"}
+              </Text>
+            </Group>
+            <Group gap="sm" wrap="nowrap" className={styles.mainHeaderActions}>
+              {headerExtra}
+              {showModeSelector && (
+                <SegmentedControl
+                  size="xs"
+                  value={chatMode}
+                  onChange={(v) => onChatModeChange(v as ChatMode)}
+                  data={[
+                    { label: "Operations", value: "operations" },
+                    { label: "Analytics", value: "analytics" },
+                  ]}
+                  className={styles.modeSelector}
+                />
+              )}
+            </Group>
+          </Box>
+
+          {showAnalyticsSubNav && (
+            <Box className={styles.subHeader}>
+              <SegmentedControl
+                size="xs"
+                value={analyticsView}
+                onChange={(v) => setAnalyticsView(v as AnalyticsAdminView)}
+                data={[
+                  { label: "Chat", value: "chat" },
+                  { label: "Train", value: "train" },
+                  { label: "Memory", value: "memory" },
+                ]}
+              />
             </Box>
-          </Paper>
+          )}
+
+          <Box className={styles.mainBody}>{renderMainContent()}</Box>
         </Box>
       </Box>
-      )}
     </Box>
   );
 };

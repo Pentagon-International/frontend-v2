@@ -121,6 +121,13 @@ import AirJobGenerationMaster from "./Air/JobGeneration/AirJobGenerationMaster";
 import AirJobGenerationCreate from "./Air/JobGeneration/AirJobGenerationCreate";
 import AirExportBookingMaster from "./Air/ExportBooking/AirExportBookingMaster";
 import AirExportBookingCreate from "./Air/ExportBooking/AirExportBookingCreate";
+import InlandExportJobMaster from "./Transportation/InlandExportJob";
+import InlandExportJobCreate from "./Transportation/InlandExportJob/InlandExportJobCreate";
+import InlandExportHouseCreate from "./Transportation/InlandExportJob/InlandHouseCreate";
+import InlandJobGenerationMaster from "./Inland/JobGeneration/InlandJobGenerationMaster";
+import InlandJobGenerationCreate from "./Inland/JobGeneration/InlandJobGenerationCreate";
+import InlandExportBookingMaster from "./Inland/ExportBooking/InlandExportBookingMaster";
+import InlandExportBookingCreate from "./Inland/ExportBooking/InlandExportBookingCreate";
 import AirImportBookingMaster from "./Air/ImportBooking/AirImportBookingMaster";
 import AirImportBookingCreate from "./Air/ImportBooking/AirImportBookingCreate";
 import AirImportToExportBooking from "./Air/ImportToExportBooking";
@@ -309,6 +316,13 @@ export {
   AirJobGenerationCreate,
   AirExportBookingMaster,
   AirExportBookingCreate,
+  InlandExportJobMaster,
+  InlandExportJobCreate,
+  InlandExportHouseCreate,
+  InlandJobGenerationMaster,
+  InlandJobGenerationCreate,
+  InlandExportBookingMaster,
+  InlandExportBookingCreate,
   AirImportBookingMaster,
   AirImportBookingCreate,
   AirImportToExportBooking,

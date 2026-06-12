@@ -3,10 +3,13 @@ import { Navbar } from "../components/index";
 import MainSectionHeader from "../components/MainSectionHeader";
 import GlobalOperationsChatModal from "../pages/Workflow/GlobalOperationsChatModal";
 import { useLayoutStore } from "../store/useLayoutStore";
+import { useLocation } from "react-router-dom";
 
 const AppShellLayout = ({ children }) => {
   const { isSidebarCollapsed, setIsSidebarCollapsed } = useLayoutStore();
   const navbarWidth = isSidebarCollapsed ? 64 : 260;
+   const location = useLocation();
+  const isWorkflowPage = location.pathname.includes("/workflow/chatbot");
 
   return (
     <AppShell
@@ -57,9 +60,9 @@ const AppShellLayout = ({ children }) => {
 
         {/* Page content */}
         <Box
-          px={{ base: 16, sm: 24 }}
+          px={{ base: isWorkflowPage ? 0 :16, sm: isWorkflowPage ? 0 : 24 }}
           mt={0}
-          mb="md"
+          mb={isWorkflowPage ? 0 : "md"}
           style={{
             flexGrow: 1,
             minHeight: 0,
