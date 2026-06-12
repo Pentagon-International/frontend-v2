@@ -73,6 +73,7 @@ import {
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
+import { resolveHousingDetailsPrimaryKey } from "../../../utils/airWayBillPdf";
 import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -2028,7 +2029,11 @@ function HouseCreate() {
   // Build current form as housing detail (for passing to invoice page)
   const getCurrentHousingDetail = () => {
     const v = form.values;
+    const housingPk = resolveHousingDetailsPrimaryKey(
+      editData as { id?: unknown },
+    );
     return {
+      ...(housingPk > 0 ? { id: housingPk } : {}),
       hawb_number: v.hawb_number,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
@@ -2123,8 +2128,13 @@ function HouseCreate() {
       allValues: currentFormValues,
     });
 
+    const housingPk = resolveHousingDetailsPrimaryKey(
+      editData as { id?: unknown },
+    );
+
     // Prepare housing detail object - use current form values
     const housingDetail = {
+      ...(housingPk > 0 ? { id: housingPk } : {}),
       hawb_number: currentFormValues.hawb_number,
       shipment_terms_code: currentFormValues.shipment_terms_code,
       shipment_terms_name: currentFormValues.shipment_terms_name,

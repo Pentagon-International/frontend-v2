@@ -2469,6 +2469,8 @@ function InlandExportJobCreate() {
           return routingPayload;
         }),
         housing_details: hawbDetails.map((hawb) => ({
+          ...(hawb.id != null &&
+            hawb.id !== undefined && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,

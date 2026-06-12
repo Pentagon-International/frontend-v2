@@ -80,6 +80,11 @@ import {
   type JobMasterPartyDetailsValues,
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
+import {
+  fetchAirWayBillLabelPdf,
+  resolveAirExportHouseMenuLabel,
+  resolveHousingDetailsPrimaryKey,
+} from "../../../utils/airWayBillPdf";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -376,6 +381,14 @@ function AirExportJobCreate() {
   // Cargo manifest PDF preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+
+  // Air Way Bill PDF preview state
+  const [airWayBillPreviewOpen, setAirWayBillPreviewOpen] = useState(false);
+  const [airWayBillPdfBlob, setAirWayBillPdfBlob] = useState<string | null>(
+    null,
+  );
+  const [airWayBillPreviewTitle, setAirWayBillPreviewTitle] =
+    useState("Air Way Bill");
 
   // Proforma PDF preview state
   const [proformaPreviewOpen, setProformaPreviewOpen] = useState(false);
@@ -892,7 +905,7 @@ function AirExportJobCreate() {
         ) {
           const mappedHawbDetails = housingDetailsData.map(
             (house: Record<string, unknown>) => ({
-              id: house.id ? Number(house.id) : 0,
+              id: resolveHousingDetailsPrimaryKey(house),
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hawb_number:
                 house.hawb_number || house.hawb_no || house.hbl_number
@@ -2041,6 +2054,55 @@ function AirExportJobCreate() {
     }
   };
 
+  const handleAirWayBillPreview = async (
+    housingId: number,
+    previewTitle: string,
+  ) => {
+    if (!housingId) {
+      ToastNotification({
+        type: "error",
+        message: "House ID not found for Air Way Bill.",
+      });
+      return;
+    }
+
+    setAirWayBillPreviewTitle(previewTitle);
+    setAirWayBillPreviewOpen(true);
+    setAirWayBillPdfBlob(null);
+
+    try {
+      const blob = await fetchAirWayBillLabelPdf(housingId);
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setAirWayBillPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching Air Way Bill PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load Air Way Bill PDF",
+      });
+      setAirWayBillPreviewOpen(false);
+    }
+  };
+
+  const handleAirWayBillClosePreview = () => {
+    setAirWayBillPreviewOpen(false);
+    if (airWayBillPdfBlob) {
+      window.URL.revokeObjectURL(airWayBillPdfBlob);
+    }
+    setAirWayBillPdfBlob(null);
+  };
+
+  const handleAirWayBillDownloadPDF = () => {
+    if (airWayBillPdfBlob) {
+      const link = document.createElement("a");
+      link.href = airWayBillPdfBlob;
+      link.download = `${airWayBillPreviewTitle.replace(/\s+/g, "-")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Proforma PDF preview handlers
   const handleProformaPreview = async (shipmentId: string) => {
     if (!shipmentId) return;
@@ -2660,6 +2722,59 @@ function AirExportJobCreate() {
                   >
                     Cargo Manifest
                   </Menu.Item>
+                  {mode === "edit" &&
+                    hawbDetails
+                      .filter((hawb) => hawb.id > 0)
+                      .map((hawb, index) => {
+                        const houseLabel = resolveAirExportHouseMenuLabel(
+                          hawb,
+                          index,
+                        );
+                        const previewTitle = `Air Way Bill - ${houseLabel}`;
+                        return (
+                          <Menu.Item
+                            key={`master-air-way-bill-${hawb.id}`}
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconFileInvoice size={16} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                marginBottom: "4px",
+                                "&:hover": {
+                                  backgroundColor: "#F8F9FA",
+                                },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={() =>
+                              handleAirWayBillPreview(hawb.id, previewTitle)
+                            }
+                          >
+                            {previewTitle}
+                          </Menu.Item>
+                        );
+                      })}
                   <Menu.Item
                     leftSection={
                       <Box
@@ -4872,6 +4987,73 @@ function AirExportJobCreate() {
         </Stack>
       </Modal>
 
+      {/* Air Way Bill PDF Preview Modal */}
+      <Modal
+        opened={airWayBillPreviewOpen}
+        onClose={handleAirWayBillClosePreview}
+        title={airWayBillPreviewTitle}
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {airWayBillPdfBlob ? (
+            <>
+              <iframe
+                src={airWayBillPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Air Way Bill"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleAirWayBillClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleAirWayBillDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating Air Way Bill PDF...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
       {/* Proforma Currency Modal */}
       <Modal
         opened={proformaCurrencyModalOpen}
@@ -5112,6 +5294,45 @@ function AirExportJobCreate() {
                         >
                           Proforma
                         </Menu.Item>
+                        {mode === "edit" && hawb.id > 0 && (
+                          <Menu.Item
+                            leftSection={
+                              <Box
+                                style={{
+                                  backgroundColor: "#E7F5FF",
+                                  borderRadius: "6px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <IconFileInvoice size={14} color="#105476" />
+                              </Box>
+                            }
+                            styles={{
+                              item: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                borderRadius: "6px",
+                                padding: "10px 12px",
+                                "&:hover": { backgroundColor: "#F8F9FA" },
+                              },
+                              itemLabel: {
+                                fontFamily: "Inter",
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                color: "#424242",
+                              },
+                            }}
+                            onClick={() =>
+                              handleAirWayBillPreview(hawb.id, "Air Way Bill")
+                            }
+                          >
+                            Air Way Bill
+                          </Menu.Item>
+                        )}
                       </Menu.Dropdown>
                     </Menu>
                   </Group>
