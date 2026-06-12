@@ -125,6 +125,8 @@ type ImportShipmentData = {
   shipment_terms_name?: string;
   shipment_terms_code_read?: string;
   carrier_name?: string;
+  carrier_code?: string | null;
+  flight_no?: string | null;
   eta?: string;
   etd?: string;
   vessel_name?: string;
@@ -272,6 +274,7 @@ function airImportRowToTableModel(
     (r.carrier_booking_no && String(r.carrier_booking_no).trim()) ||
     "";
   const flight =
+    (r.flight_no && String(r.flight_no).trim()) ||
     (r.voyage_no && r.voyage_no.trim()) ||
     r.routing_details?.[0]?.flight_no?.trim() ||
     "";

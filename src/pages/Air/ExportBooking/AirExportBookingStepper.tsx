@@ -65,6 +65,7 @@ import FormTextArea from "../../../components/FormTextArea";
 import SingleDateInput from "../../../components/SingleDateInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { commonSearchAPI } from "../../../service/searchApi";
+import AirBookingCarrierSelect from "../components/AirBookingCarrierSelect";
 
 interface ExportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -138,6 +139,9 @@ interface FormValues {
   bill_no: string;
   bill_date: Date | null;
   iata: string;
+  carrier_code: string;
+  carrier_name: string;
+  flight_no: string | null;
   is_direct: boolean;
   is_coload: boolean;
 
@@ -256,6 +260,9 @@ const validationSchema = yup.object({
   bill_no: yup.string().trim().nullable().notRequired(),
   bill_date: yup.date().nullable().notRequired(),
   iata: yup.string().trim().nullable().notRequired(),
+  carrier_code: yup.string().optional(),
+  carrier_name: yup.string().optional(),
+  flight_no: yup.string().nullable().optional(),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
 
@@ -1028,6 +1035,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           ? new Date(String(data.bill_date))
           : null,
       iata: String(data.iata ?? ""),
+      carrier_code: String(data.carrier_code ?? ""),
+      carrier_name: String(data.carrier_name ?? ""),
+      flight_no: data.flight_no ? String(data.flight_no) : null,
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
 
@@ -1287,6 +1297,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       bill_no: "",
       bill_date: null,
       iata: "",
+      carrier_code: "",
+      carrier_name: "",
+      flight_no: null,
       is_direct: false,
       is_coload: false,
 
@@ -2856,6 +2869,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           ? formatDate(form.values.bill_date)
           : null,
         iata: form.values.iata?.trim() || null,
+        carrier_code: form.values.carrier_code || null,
+        flight_no: form.values.flight_no,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
 
@@ -3978,6 +3993,34 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     value={form.values.iata}
                     onChange={(e) => form.setFieldValue("iata", e.target.value)}
                     error={form.errors.iata}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <AirBookingCarrierSelect
+                    value={form.values.carrier_code}
+                    displayValue={form.values.carrier_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("carrier_code", value || "");
+                      form.setFieldValue(
+                        "carrier_name",
+                        selectedData?.label || "",
+                      );
+                    }}
+                    error={form.errors.carrier_code as string}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Flight Number"
+                    placeholder="Enter flight number"
+                    value={form.values.flight_no ?? ""}
+                    onChange={(e) => {
+                      form.setFieldValue(
+                        "flight_no",
+                        e.target.value.trim() ? e.target.value : null,
+                      );
+                    }}
+                    error={form.errors.flight_no as string}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||

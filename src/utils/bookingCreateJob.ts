@@ -29,24 +29,52 @@ function formatRoutingDate(value: unknown): string | null {
   return d.isValid() ? d.format("YYYY-MM-DD") : null;
 }
 
+/** Booking header carrier only — not routing leg carrier. */
 function resolveCarrierCode(booking: Record<string, unknown>): string {
-  const code = String(
-    booking.carrier_code ?? booking.carrier_code_read ?? "",
-  ).trim();
-  if (code) return code;
-  return String(booking.carrier_name ?? "").trim();
+  return String(booking.carrier_code ?? "").trim();
 }
 
 function resolveCarrierName(booking: Record<string, unknown>): string {
   return String(booking.carrier_name ?? "").trim();
 }
 
+/** Booking header flight number only — not routing leg flight. */
+function resolveFlightNumber(booking: Record<string, unknown>): string {
+  return String(
+    booking.flight_no ?? booking.flightno ?? booking.flight_number ?? "",
+  ).trim();
+}
+
+/** Booking header voyage number only — not routing leg voyage. */
 function resolveVoyageNumber(booking: Record<string, unknown>): string {
   return String(booking.voyage_no ?? booking.voyage_number ?? "").trim();
 }
 
 function resolveVesselName(booking: Record<string, unknown>): string {
   return String(booking.vessel_name ?? "").trim();
+}
+
+/** House reference from booking (HAWB / HBL). */
+function resolveBookingHouseNumber(booking: Record<string, unknown>): string {
+  return String(
+    booking.houseno ??
+      booking.house_no ??
+      booking.hawb_no ??
+      booking.hawb_number ??
+      booking.hbl_number ??
+      "",
+  ).trim();
+}
+
+/** Master reference from booking (MAWB / MBL). */
+function resolveBookingMasterNumber(booking: Record<string, unknown>): string {
+  return String(
+    booking.mawb_no ??
+      booking.master_no ??
+      booking.mbl_number ??
+      booking.masterno ??
+      "",
+  ).trim();
 }
 
 function isLclBooking(booking: Record<string, unknown>): boolean {
@@ -107,10 +135,10 @@ function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
   return containers;
 }
 
+/** True when a booking routing leg has real data (not just move_type / status placeholders). */
 function isRoutingRowDefined(row: Record<string, unknown>): boolean {
   return Boolean(
-    row.move_type ||
-      row.from_port_code ||
+    row.from_port_code ||
       row.from_location_code ||
       row.from_code ||
       row.to_port_code ||
@@ -133,6 +161,18 @@ function isRoutingRowDefined(row: Record<string, unknown>): boolean {
   );
 }
 
+function mapRoutingTransportType(
+  row: Record<string, unknown>,
+  fallback: string,
+): string {
+  const move = String(row.move_type ?? "").trim().toUpperCase();
+  if (move === "AIR") return "Air";
+  if (move === "SEA") return "Sea";
+  if (move === "ROAD") return "Road";
+  if (move === "RAIL") return "Rail";
+  return fallback;
+}
+
 function mapOceanRoutings(booking: Record<string, unknown>, transportType: string) {
   const routingDetails = (
     Array.isArray(booking.routing_details) ? booking.routing_details : []
@@ -145,7 +185,7 @@ function mapOceanRoutings(booking: Record<string, unknown>, transportType: strin
   return routingDetails.map((r) => {
     const row = r as Record<string, unknown>;
     return {
-      transport_type: transportType,
+      transport_type: mapRoutingTransportType(row, transportType),
       from_port_code:
         row.from_port_code || row.from_location_code || row.from_code || "",
       to_port_code:
@@ -359,7 +399,7 @@ function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
 
 function buildAirHousing(booking: Record<string, unknown>, trade: string) {
   return {
-    hawb_no: booking.mawb_no || booking.houseno || "",
+    hawb_no: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",
     destination_code:
       booking.destination_code || booking.destination_code_read || "",
@@ -405,7 +445,7 @@ function buildOceanHousing(
   mode: BookingCreateJobMode,
 ) {
   const housing: Record<string, unknown> = {
-    hbl_number: booking.houseno || booking.house_no || booking.mawb_no || "",
+    hbl_number: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",
     destination_code:
       booking.destination_code || booking.destination_code_read || "",
@@ -501,23 +541,27 @@ export function buildJobCreatePayloadFromBooking(
   };
 
   if (isAir) {
+    const masterNo = resolveBookingMasterNumber(booking);
+    const flightNo = resolveFlightNumber(booking);
     return {
       ...base,
-      flightno: booking.flight_no || booking.flightno || "",
+      flightno: flightNo || null,
+      flight_no: flightNo || null,
       is_direct: booking.is_direct ?? false,
-      mawb_no: booking.mawb_no || "",
+      mawb_no: masterNo,
       mbl_date: formatRoutingDate(booking.mawb_date),
     };
   }
 
   const containerDetails = mapContainerDetailsFromBooking(booking);
+  const masterNo = resolveBookingMasterNumber(booking);
 
   return {
     ...base,
     is_direct: booking.is_direct ?? false,
     schedule_id: booking.schedule_id ? String(booking.schedule_id) : null,
     vessel_name: resolveVesselName(booking) || null,
-    mbl_number: booking.mawb_no || booking.mbl_number || null,
+    mbl_number: masterNo || null,
     mbl_date: formatRoutingDate(booking.mbl_date || booking.mawb_date),
     ...(containerDetails.length > 0
       ? { container_details: containerDetails }

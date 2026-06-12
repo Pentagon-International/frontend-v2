@@ -68,6 +68,7 @@ import FormTextArea from "../../../components/FormTextArea";
 import SingleDateInput from "../../../components/SingleDateInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { commonSearchAPI } from "../../../service/searchApi";
+import AirBookingCarrierSelect from "../components/AirBookingCarrierSelect";
 
 interface ImportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -141,6 +142,9 @@ interface FormValues {
   is_coload: boolean;
   houseno: string;
   master_no: string;
+  carrier_code: string;
+  carrier_name: string;
+  flight_no: string | null;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -262,6 +266,9 @@ const validationSchema = yup.object({
   is_coload: yup.boolean(),
   houseno: yup.string().optional(),
   master_no: yup.string().optional(),
+  carrier_code: yup.string().optional(),
+  carrier_name: yup.string().optional(),
+  flight_no: yup.string().nullable().optional(),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -1018,6 +1025,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_coload: Boolean(data.is_coload),
       houseno: String(data.houseno || ""),
       master_no: String(data.master_no || ""),
+      carrier_code: String(data.carrier_code ?? ""),
+      carrier_name: String(data.carrier_name ?? ""),
+      flight_no: data.flight_no ? String(data.flight_no) : null,
 
       // Routing Details - map from routing_details array (include from/to/carrier codes and names from API)
       routingDetails: data.routing_details
@@ -1288,6 +1298,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_coload: false,
       houseno: "",
       master_no: "",
+      carrier_code: "",
+      carrier_name: "",
+      flight_no: null,
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -2760,6 +2773,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_coload: form.values.is_coload,
         houseno: form.values.houseno,
         master_no: form.values.master_no,
+        carrier_code: form.values.carrier_code || null,
+        flight_no: form.values.flight_no,
 
         // Routing Details
         routing_details: form.values.routingDetails.map((route) => {
@@ -3959,6 +3974,34 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       form.setFieldValue("master_no", e.target.value);
                     }}
                     error={form.errors.master_no}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <AirBookingCarrierSelect
+                    value={form.values.carrier_code}
+                    displayValue={form.values.carrier_name}
+                    onChange={(value, selectedData) => {
+                      form.setFieldValue("carrier_code", value || "");
+                      form.setFieldValue(
+                        "carrier_name",
+                        selectedData?.label || "",
+                      );
+                    }}
+                    error={form.errors.carrier_code as string}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Flight Number"
+                    placeholder="Enter flight number"
+                    value={form.values.flight_no ?? ""}
+                    onChange={(e) => {
+                      form.setFieldValue(
+                        "flight_no",
+                        e.target.value.trim() ? e.target.value : null,
+                      );
+                    }}
+                    error={form.errors.flight_no as string}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||
