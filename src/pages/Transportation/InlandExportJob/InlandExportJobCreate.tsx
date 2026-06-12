@@ -44,6 +44,7 @@ import {
   useCallback,
   Fragment,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -80,10 +81,46 @@ import {
   type JobMasterPartyDetailsValues,
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
+import {
+  buildInlandExportJobServicePayload,
+  resolveInlandExportJobServiceFields,
+  withInlandExportJobServiceFields,
+} from "./inlandExportJobService";
+
+type ServiceMasterItem = {
+  service_code: string;
+  service_name: string;
+};
+
+const fetchInlandExportServices = async (): Promise<ServiceMasterItem[]> => {
+  const response = await getAPICall(
+    `${URL.serviceMaster}?filter=inland_export`,
+    API_HEADER,
+  );
+  return Array.isArray(response) ? response : [];
+};
+
+const fetchServiceMasterByCode = async (
+  serviceCode: string,
+): Promise<ServiceMasterItem | null> => {
+  if (!serviceCode.trim()) return null;
+  const response = await getAPICall(
+    `${URL.serviceMaster}?service_code=${encodeURIComponent(serviceCode.trim())}`,
+    API_HEADER,
+  );
+  if (Array.isArray(response) && response.length > 0) {
+    return response[0] as ServiceMasterItem;
+  }
+  if (response && typeof response === "object" && "service_code" in response) {
+    return response as ServiceMasterItem;
+  }
+  return null;
+};
 
 // Type definitions
 type MAWBDetailsForm = {
-  service: string;
+  service_code: string;
+  service_name: string;
   is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
@@ -242,7 +279,7 @@ type InvoiceListItem = {
 
 // Validation schemas
 const mawbDetailsSchema = yup.object({
-  service: yup.string().required("Service is required"),
+  service_code: yup.string().trim().required("Service is required"),
   is_direct: yup.boolean().required(),
   // Destination Agent is required when "Direct" is No (false).
   // When "Direct" is Yes (true), Destination Agent becomes optional.
@@ -284,11 +321,11 @@ const carrierDetailsSchema = yup.object({
   schedule_id: yup.string().nullable(),
   carrier_code: yup.string().required("Carrier is required"),
   carrier_name: yup.string().required("Carrier is required"),
-  flight_number: yup.string().required("Flight Number is required"),
+  flight_number: yup.string().required("Truck Number is required"),
   mawb_number: yup
     .string()
-    .required("MAWB Number is required")
-    .matches(/^[A-Za-z0-9]{11}$/, "MAWB Number must be exactly 11 characters"),
+    .required("AWB Number is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "AWB Number must be exactly 11 characters"),
   mawb_date: yup.date().nullable(),
 });
 
@@ -336,6 +373,13 @@ function InlandExportJobCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const jobData = location.state?.job;
+  const jobServiceFields = useMemo(
+    () =>
+      resolveInlandExportJobServiceFields(
+        jobData as Record<string, unknown> | undefined,
+      ),
+    [jobData],
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
@@ -405,6 +449,36 @@ function InlandExportJobCreate() {
 
   const isReadOnly = mode === "view";
 
+  const { data: inlandExportServices = [] } = useQuery({
+    queryKey: ["serviceMaster", "inland_export"],
+    queryFn: fetchInlandExportServices,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const inlandServiceOptions = useMemo(
+    () =>
+      inlandExportServices.map((item) => ({
+        value: item.service_code,
+        label: item.service_name || item.service_code,
+      })),
+    [inlandExportServices],
+  );
+
+  const resolvedServiceCode = jobServiceFields.service_code;
+
+  const { data: resolvedServiceByCode } = useQuery({
+    queryKey: ["serviceMaster", "byCode", resolvedServiceCode],
+    queryFn: () => fetchServiceMasterByCode(resolvedServiceCode),
+    enabled: Boolean(resolvedServiceCode),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
     // In create mode the job is not saved yet; confirm before leaving.
@@ -415,10 +489,23 @@ function InlandExportJobCreate() {
     navigate("/inland/export-job");
   };
 
-  // When navigated from Customer Service (Jobs without BL) with jobId only - fetch job and show
+  // Fetch full job when only jobId is provided, or list row is missing service_code.
   useEffect(() => {
-    const jobId = location.state?.jobId as number | undefined;
-    if (jobId == null || location.state?.job) return;
+    const jobFromState = location.state?.job as Record<string, unknown> | undefined;
+    const jobId =
+      (location.state?.jobId as number | undefined) ??
+      (jobFromState?.id as number | undefined);
+    if (jobId == null) return;
+
+    const listServiceCode =
+      resolveInlandExportJobServiceFields(jobFromState).service_code;
+    const shouldFetch =
+      location.state?.jobId != null ||
+      !location.state?.job ||
+      !listServiceCode;
+
+    if (!shouldFetch) return;
+
     let cancelled = false;
     const fetchAndReplace = async () => {
       setIsFetchingJobById(true);
@@ -434,7 +521,11 @@ function InlandExportJobCreate() {
             ? (body as unknown[])
             : [];
         const job =
-          list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+          list.length > 0
+            ? withInlandExportJobServiceFields(
+                list[0] as Record<string, unknown>,
+              )
+            : null;
         if (!cancelled && job) {
           navigate("/inland/export-job/edit", {
             state: {
@@ -466,13 +557,25 @@ function InlandExportJobCreate() {
     return () => {
       cancelled = true;
     };
-  }, [location.state?.jobId, location.state?.job, navigate]);
+  }, [
+    location.state?.jobId,
+    location.state?.job,
+    location.state?.returnTo,
+    location.state?.viewMode,
+    navigate,
+  ]);
 
   // MAWB Details Form - Initialize with jobData if available, or from location.state for create mode
   const mawbDetailsForm = useForm<MAWBDetailsForm>({
     initialValues: {
-      service:
-        jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      service_code:
+        jobServiceFields.service_code ||
+        location.state?.mawbDetails?.service_code ||
+        "",
+      service_name:
+        jobServiceFields.service_name ||
+        location.state?.mawbDetails?.service_name ||
+        "",
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -606,7 +709,8 @@ function InlandExportJobCreate() {
 
   const getMawbDetailsSnapshot = useCallback(
     () => ({
-      service: mawbDetailsForm.values.service || "AIR",
+      service_code: mawbDetailsForm.values.service_code || "",
+      service_name: mawbDetailsForm.values.service_name || "",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -639,10 +743,17 @@ function InlandExportJobCreate() {
     [mawbDetailsForm.values],
   );
 
-  // Auto-set service to "Air" on mount
-  // useEffect(() => {
-  //   mawbDetailsForm.setFieldValue("service", "Air");
-  // }, []);
+  useEffect(() => {
+    if (!resolvedServiceByCode?.service_code) return;
+    mawbDetailsForm.setFieldValue(
+      "service_code",
+      resolvedServiceByCode.service_code,
+    );
+    mawbDetailsForm.setFieldValue(
+      "service_name",
+      resolvedServiceByCode.service_name || resolvedServiceByCode.service_code,
+    );
+  }, [resolvedServiceByCode?.service_code, resolvedServiceByCode?.service_name]);
 
   // Carrier Details Form - Initialize with jobData if available, or from location.state for create mode
   const carrierDetailsForm = useForm<CarrierDetailsForm>({
@@ -733,7 +844,8 @@ function InlandExportJobCreate() {
 
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
-          service: jobData.service || "AIR",
+          service_code: jobServiceFields.service_code,
+          service_name: jobServiceFields.service_name,
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -785,7 +897,8 @@ function InlandExportJobCreate() {
         const savedMawbDetailsFromState = location.state?.mawbDetails;
         if (savedMawbDetailsFromState) {
           mawbDetailsForm.setValues({
-            service: savedMawbDetailsFromState.service || "AIR",
+            service_code: savedMawbDetailsFromState.service_code || "",
+            service_name: savedMawbDetailsFromState.service_name || "",
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1684,7 +1797,7 @@ function InlandExportJobCreate() {
         // Create a unique key for this mawbDetails state to prevent duplicate restorations
         const mawbDetailsKey = savedMawbDetails
           ? JSON.stringify({
-              service: savedMawbDetails.service,
+              service_code: savedMawbDetails.service_code,
               is_direct: savedMawbDetails.is_direct,
               agent_code: savedMawbDetails.agent_code,
               origin_code: savedMawbDetails.origin_code,
@@ -1702,7 +1815,8 @@ function InlandExportJobCreate() {
         if (shouldRestore && savedMawbDetails) {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
-            service: savedMawbDetails.service || "AIR",
+            service_code: savedMawbDetails.service_code || "",
+            service_name: savedMawbDetails.service_name || "",
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -1901,7 +2015,7 @@ function InlandExportJobCreate() {
       // Validate MAWB mandatory fields before navigating
       const missingFields: string[] = [];
 
-      if (!mawbDetailsForm.values.service?.trim()) {
+      if (!mawbDetailsForm.values.service_code?.trim()) {
         missingFields.push("Service");
       }
       if (
@@ -2103,7 +2217,7 @@ function InlandExportJobCreate() {
       : !!mawbDetailsForm.values.agent_code?.trim();
 
     const mawbFieldsValid =
-      mawbDetailsForm.values.service?.trim() &&
+      mawbDetailsForm.values.service_code?.trim() &&
       destinationAgentValid &&
       mawbDetailsForm.values.origin_code?.trim() &&
       mawbDetailsForm.values.destination_code?.trim() &&
@@ -2115,7 +2229,7 @@ function InlandExportJobCreate() {
 
     return mawbFieldsValid && hasHawbDetails;
   }, [
-    mawbDetailsForm.values.service,
+    mawbDetailsForm.values.service_code,
     mawbDetailsForm.values.is_direct,
     mawbDetailsForm.values.agent_code,
     mawbDetailsForm.values.origin_code,
@@ -2130,7 +2244,7 @@ function InlandExportJobCreate() {
     if (hawbDetails.length === 0) {
       ToastNotification({
         type: "error",
-        message: "At least one HAWB detail is required before creating MAWB",
+        message: "At least one AWB detail is required before creating job",
       });
       return false;
     }
@@ -2142,7 +2256,7 @@ function InlandExportJobCreate() {
 
       // Step 1 validations
       if (!hawb.hawb_number?.trim()) {
-        missingFields.push("HAWB Number");
+        missingFields.push("AWB Number");
       }
       if (!hawb.origin_code?.trim()) {
         missingFields.push("Origin");
@@ -2187,7 +2301,7 @@ function InlandExportJobCreate() {
       if (missingFields.length > 0) {
         ToastNotification({
           type: "error",
-          message: `HAWB ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
+          message: `AWB ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
         });
         return false;
       }
@@ -2234,12 +2348,11 @@ function InlandExportJobCreate() {
     }
     try {
       const payload = {
-        service: mawbDetailsForm.values.service,
+        ...buildInlandExportJobServicePayload(
+          mawbDetailsForm.values.service_code,
+        ),
         is_direct: mawbDetailsForm.values.is_direct,
-        service_type: "Export",
-        agent: mawbDetailsForm.values.is_direct
-          ? null
-          : mawbDetailsForm.values.agent_code || null,
+        agent: mawbDetailsForm.values.agent_code?.trim() || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
         etd: mawbDetailsForm.values.etd
@@ -2952,10 +3065,22 @@ function InlandExportJobCreate() {
                 <Dropdown
                   label="Service"
                   required
-                  placeholder="Select Service"
+                  placeholder="Select service"
                   searchable
-                  data={["AIR"]}
-                  {...mawbDetailsForm.getInputProps("service")}
+                  data={inlandServiceOptions}
+                  value={mawbDetailsForm.values.service_code || null}
+                  onChange={(value) => {
+                    const code = value ?? "";
+                    const selected = inlandExportServices.find(
+                      (item) => item.service_code === code,
+                    );
+                    mawbDetailsForm.setFieldValue("service_code", code);
+                    mawbDetailsForm.setFieldValue(
+                      "service_name",
+                      selected?.service_name || code,
+                    );
+                  }}
+                  error={mawbDetailsForm.errors.service_code as string}
                 />
               </Grid.Col>
 
@@ -3199,30 +3324,23 @@ function InlandExportJobCreate() {
                   }}
                   minSearchLength={2}
                   error={carrierDetailsForm.errors.carrier_code as string}
-                  additionalParams={
-                    mawbDetailsForm.values.service
-                      ? {
-                          transport_mode: "AIR",
-                        }
-                      : undefined
-                  }
                 />
               </Grid.Col>
 
               <Grid.Col span={2}>
                 <FormTextInput
-                  label="Flight Number"
+                  label="Truck Number"
                   required
-                  placeholder="Enter Flight number"
+                  placeholder="Enter truck number"
                   {...carrierDetailsForm.getInputProps("flight_number")}
                 />
               </Grid.Col>
 
               <Grid.Col span={2}>
                 <FormTextInput
-                  label="MAWB Number"
+                  label="AWB Number"
                   required
-                  placeholder="Enter MAWB number"
+                  placeholder="Enter AWB number"
                   maxLength={11}
                   {...carrierDetailsForm.getInputProps("mawb_number")}
                 />
@@ -3230,7 +3348,7 @@ function InlandExportJobCreate() {
 
               <Grid.Col span={2}>
                 <SingleDateInput
-                  label="MAWB Date"
+                  label="AWB Date"
                   placeholder="YYYY-MM-DD"
                   {...(() => {
                     const inputProps =
@@ -4733,7 +4851,7 @@ function InlandExportJobCreate() {
               leftSection={<IconPlus size={16} />}
               onClick={() => navigateToHawbCreate()}
             >
-              Add HAWB
+              Add AWB
             </Button>
           )}
           {active === 0 && !isReadOnly && (
@@ -4984,11 +5102,11 @@ function InlandExportJobCreate() {
         </Stack>
       </Modal>
 
-      {/* HAWB Details Display - Show at the top (all steps) */}
+      {/* AWB Details Display - Show at the top (all steps) */}
       {hawbDetails.length > 0 && (
         <Box mb="xl">
           <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
-            House Air Waybill (HAWB) ({hawbDetails.length})
+            Air Waybill (AWB) ({hawbDetails.length})
           </Text>
           <Stack gap="md">
             {hawbDetails.map((hawb, index) => (
@@ -4996,7 +5114,7 @@ function InlandExportJobCreate() {
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
                     <Badge color="#105476" size="lg">
-                      HAWB {index + 1}
+                      AWB {index + 1}
                     </Badge>
                     <Badge
                       color={
@@ -5119,7 +5237,7 @@ function InlandExportJobCreate() {
                 <Grid>
                   <Grid.Col span={2}>
                     <Text size="sm" fw={500} c="dimmed">
-                      HAWB Number
+                      AWB Number
                     </Text>
                     <Text size="sm" mb="sm">
                       {hawb.hawb_number || "-"}

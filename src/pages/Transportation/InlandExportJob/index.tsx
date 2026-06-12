@@ -77,6 +77,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { withInlandExportJobServiceFields } from "./inlandExportJobService";
 
 const LIST_KEY = "INLAND_EXPORT_JOB_MASTER";
 
@@ -92,7 +93,10 @@ type VisibleColumnsState = {
   status: boolean;
 };
 
-const INLAND_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
+const INLAND_EXPORT_JOB_COLUMN_LABELS: Record<
+  keyof VisibleColumnsState,
+  string
+> = {
   sno: "S.No",
   quotation_id: "Quotation ID",
   job_id: "Job ID",
@@ -111,6 +115,8 @@ type InlandExportJobData = {
   enquiry_id?: string | null;
   service_id?: number;
   service: string;
+  service_code?: string;
+  service_name?: string;
   service_type: string;
   agent_code: string | null;
   agent_name: string | null;
@@ -218,7 +224,8 @@ function InlandExportJobMaster() {
     eta: "",
     status: "",
   };
-  const [draftFilters, setDraftFilters] = useState<AirExportJobFilters>(DEFAULT_FILTERS);
+  const [draftFilters, setDraftFilters] =
+    useState<AirExportJobFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<AirExportJobFilters>(DEFAULT_FILTERS);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -233,9 +240,8 @@ function InlandExportJobMaster() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 1000);
-  const [cancelConfirmRow, setCancelConfirmRow] = useState<InlandExportJobData | null>(
-    null
-  );
+  const [cancelConfirmRow, setCancelConfirmRow] =
+    useState<InlandExportJobData | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
@@ -260,7 +266,10 @@ function InlandExportJobMaster() {
   );
 
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
-  const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
+  const openHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId(id),
+    [],
+  );
   const collapseHeaderEditor = useCallback(
     (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
     [],
@@ -287,7 +296,8 @@ function InlandExportJobMaster() {
         : statusUpper === "CLOSED"
           ? "Closed"
           : "Active";
-    const color = label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
+    const color =
+      label === "Cancel" ? "red" : label === "Closed" ? "blue" : "green";
     return { label, color } as const;
   };
 
@@ -382,28 +392,31 @@ function InlandExportJobMaster() {
     refetch: refetchExportJobs,
   } = useQuery<InlandExportJobListQueryResult>({
     queryKey: [
-      "airExportJobs",
+      "inlandExportJobs",
       pagination.pageIndex,
       pagination.pageSize,
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
     queryFn: async (): Promise<InlandExportJobListQueryResult> => {
-      const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+      const filtersPayload = buildFiltersPayload(
+        appliedFilters,
+        debouncedSearch,
+      );
 
       const payload =
         Object.keys(filtersPayload).length > 0
           ? {
               filters: {
-                service: "AIR",
                 service_type: "Export",
+                service: "INLAND",
                 ...filtersPayload,
               },
             }
           : {
               filters: {
-                service: "AIR",
                 service_type: "Export",
+                service: "INLAND",
               },
             };
 
@@ -412,16 +425,24 @@ function InlandExportJobMaster() {
       const response = (await apiCallProtected.post(
         `${URL.filterJobCreate}?index=${offset}&limit=${pagination.pageSize}`,
         payload,
-        API_HEADER
+        API_HEADER,
       )) as Record<string, unknown>;
 
-      const list = Array.isArray(response?.data) ? (response.data as InlandExportJobData[]) : [];
+      const list = Array.isArray(response?.data)
+        ? (response.data as InlandExportJobData[]).map((row) =>
+            withInlandExportJobServiceFields(
+              row as unknown as Record<string, unknown>,
+            ) as InlandExportJobData,
+          )
+        : [];
       const total = getBookingShipmentFilterListTotal(response, list, offset);
       setTotalRecords(total);
 
       const rawSummary = response?.summary;
       const summary: InlandExportJobListSummary | undefined =
-        rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
+        rawSummary &&
+        typeof rawSummary === "object" &&
+        !Array.isArray(rawSummary)
           ? (rawSummary as InlandExportJobListSummary)
           : undefined;
 
@@ -478,7 +499,7 @@ function InlandExportJobMaster() {
       const response = (await apiCallProtected.patch(
         `${URL.importJob}${rowToCancel.id}/`,
         { status: "CANCEL" },
-        API_HEADER
+        API_HEADER,
       )) as { status?: boolean; message?: string };
       if (response?.status === false) {
         throw new Error(response?.message || "Failed to cancel job");
@@ -513,30 +534,38 @@ function InlandExportJobMaster() {
     const rows = exportJobData;
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+      active: rows.filter((r) => getStatusBadge(r.status).label === "Active")
+        .length,
+      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed")
+        .length,
+      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel")
+        .length,
     };
   }, [exportJobData, totalRecords, listSummary]);
 
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
-        id: String(key),
-        label: INLAND_EXPORT_JOB_COLUMN_LABELS[key],
-        checked: visibleColumns[key],
-        onToggle: () =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: !prev[key],
-          })),
-      })),
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map(
+        (key) => ({
+          id: String(key),
+          label: INLAND_EXPORT_JOB_COLUMN_LABELS[key],
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        }),
+      ),
     [visibleColumns],
   );
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
-      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={erpListGeistRootTypography}
+      >
         <ERPListScreen
           theme={theme}
           toolbar={{
@@ -577,13 +606,21 @@ function InlandExportJobMaster() {
             secondary: (
               <>
                 <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <IconStack2
+                    size={16}
+                    color={muted}
+                    style={{ flexShrink: 0 }}
+                  />
                   <Text fw={600} size="sm" c={fg} component="span">
                     {exportJobData.length}
                   </Text>
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
+                  <IconBriefcase
+                    size={16}
+                    color={muted}
+                    style={{ flexShrink: 0 }}
+                  />
                   <Text fw={600} size="sm" c={fg} component="span">
                     {totalRecords.toLocaleString()}
                   </Text>
@@ -627,7 +664,11 @@ function InlandExportJobMaster() {
                 <Select
                   size="xs"
                   w={130}
-                  value={appliedFilters.status?.trim() ? appliedFilters.status : "all"}
+                  value={
+                    appliedFilters.status?.trim()
+                      ? appliedFilters.status
+                      : "all"
+                  }
                   onChange={(v) => {
                     const status = !v || v === "all" ? "" : v;
                     setDraftFilters((p) => ({ ...p, status }));
@@ -677,7 +718,8 @@ function InlandExportJobMaster() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine Inland Export Jobs by reference, agent, route, or dates",
+            subtitle:
+              "Refine Inland Export Jobs by reference, agent, route, or dates",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -699,7 +741,10 @@ function InlandExportJobMaster() {
                       styles={filterFieldStyles}
                       value={draftFilters.job_id}
                       onChange={(e) =>
-                        setDraftFilters((prev) => ({ ...prev, job_id: e.currentTarget.value }))
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_id: e.currentTarget.value,
+                        }))
                       }
                     />
                   </Box>
@@ -713,7 +758,10 @@ function InlandExportJobMaster() {
                       styles={filterFieldStyles}
                       value={draftFilters.mawb_no}
                       onChange={(e) =>
-                        setDraftFilters((prev) => ({ ...prev, mawb_no: e.currentTarget.value }))
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          mawb_no: e.currentTarget.value,
+                        }))
                       }
                     />
                   </Box>
@@ -734,7 +782,10 @@ function InlandExportJobMaster() {
                           agent_name:
                             selectedData?.label ||
                             String(
-                              originalData?.customer_name ?? originalData?.name ?? value ?? ""
+                              originalData?.customer_name ??
+                                originalData?.name ??
+                                value ??
+                                "",
                             ),
                         }))
                       }
@@ -820,7 +871,11 @@ function InlandExportJobMaster() {
                     <SingleDateInput
                       label="ETD"
                       size="xs"
-                      value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                      value={
+                        draftFilters.etd
+                          ? dayjs(draftFilters.etd).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
@@ -837,7 +892,11 @@ function InlandExportJobMaster() {
                     <SingleDateInput
                       label="ETA"
                       size="xs"
-                      value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                      value={
+                        draftFilters.eta
+                          ? dayjs(draftFilters.eta).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
@@ -864,7 +923,10 @@ function InlandExportJobMaster() {
                       ]}
                       value={draftFilters.status || null}
                       onChange={(value) =>
-                        setDraftFilters((prev) => ({ ...prev, status: value || "" }))
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          status: value || "",
+                        }))
                       }
                       styles={filterFieldStyles}
                       classNames={{
@@ -912,7 +974,9 @@ function InlandExportJobMaster() {
                             isEditing={editingHeaderId === "job_id"}
                             onStartEdit={() => openHeaderEditor("job_id")}
                             onStopEdit={() => collapseHeaderEditor("job_id")}
-                            onChange={(next) => commitHeaderFilters({ job_id: next || "" })}
+                            onChange={(next) =>
+                              commitHeaderFilters({ job_id: next || "" })
+                            }
                           />
                         </th>
                       )}
@@ -927,7 +991,9 @@ function InlandExportJobMaster() {
                             isEditing={editingHeaderId === "mawb_no"}
                             onStartEdit={() => openHeaderEditor("mawb_no")}
                             onStopEdit={() => collapseHeaderEditor("mawb_no")}
-                            onChange={(next) => commitHeaderFilters({ mawb_no: next || "" })}
+                            onChange={(next) =>
+                              commitHeaderFilters({ mawb_no: next || "" })
+                            }
                           />
                         </th>
                       )}
@@ -936,7 +1002,10 @@ function InlandExportJobMaster() {
                           <ERPListColumnHeaderFilter
                             label="Destination Agent"
                             value={appliedFilters.agent_code}
-                            displayValue={appliedFilters.agent_name || appliedFilters.agent_code}
+                            displayValue={
+                              appliedFilters.agent_name ||
+                              appliedFilters.agent_code
+                            }
                             theme={theme}
                             placeholder="Filter agent"
                             isEditing={editingHeaderId === "agent"}
@@ -949,14 +1018,28 @@ function InlandExportJobMaster() {
                                 size="xs"
                                 placeholder="Agent"
                                 apiEndpoint={URL.agent}
-                                searchFields={["customer_code", "customer_name", "name"]}
+                                searchFields={[
+                                  "customer_code",
+                                  "customer_name",
+                                  "name",
+                                ]}
                                 displayFormat={(item) => ({
-                                  value: String(item.customer_code ?? item.id ?? ""),
-                                  label: String(item.customer_name ?? item.name ?? ""),
+                                  value: String(
+                                    item.customer_code ?? item.id ?? "",
+                                  ),
+                                  label: String(
+                                    item.customer_name ?? item.name ?? "",
+                                  ),
                                 })}
                                 value={appliedFilters.agent_code || undefined}
-                                displayValue={appliedFilters.agent_name || undefined}
-                                onChange={(value, selectedData, originalData) => {
+                                displayValue={
+                                  appliedFilters.agent_name || undefined
+                                }
+                                onChange={(
+                                  value,
+                                  selectedData,
+                                  originalData,
+                                ) => {
                                   commitHeaderFilters({
                                     agent_code: value || "",
                                     agent_name:
@@ -965,7 +1048,7 @@ function InlandExportJobMaster() {
                                         originalData?.customer_name ??
                                           originalData?.name ??
                                           value ??
-                                          ""
+                                          "",
                                       ),
                                   });
                                 }}
@@ -988,7 +1071,8 @@ function InlandExportJobMaster() {
                               (appliedFilters.destination_code || "")
                             }
                             displayValue={
-                              appliedFilters.origin_code || appliedFilters.destination_code
+                              appliedFilters.origin_code ||
+                              appliedFilters.destination_code
                                 ? `${appliedFilters.origin_code || "—"} → ${appliedFilters.destination_code || "—"}`
                                 : ""
                             }
@@ -998,7 +1082,11 @@ function InlandExportJobMaster() {
                             onStopEdit={() => collapseHeaderEditor("route")}
                             onChange={() => {}}
                             renderEditor={({ autoFocus }) => (
-                              <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                              <Group
+                                gap={4}
+                                wrap="nowrap"
+                                style={{ width: "100%" }}
+                              >
                                 <Box style={{ flex: 1, minWidth: 0 }}>
                                   <SearchableSelect
                                     autoFocus={autoFocus}
@@ -1007,18 +1095,28 @@ function InlandExportJobMaster() {
                                     additionalParams={{ transport_mode: "AIR" }}
                                     searchFields={["port_code", "port_name"]}
                                     placeholder="Origin"
-                                    displayFormat={(item: Record<string, unknown>) => ({
+                                    displayFormat={(
+                                      item: Record<string, unknown>,
+                                    ) => ({
                                       value: String(item.port_code),
                                       label: `${item.port_name} (${item.port_code})`,
                                     })}
                                     value={appliedFilters.origin_code}
                                     displayValue={appliedFilters.origin_name}
-                                    onChange={(value, selectedData, originalData) =>
+                                    onChange={(
+                                      value,
+                                      selectedData,
+                                      originalData,
+                                    ) =>
                                       commitHeaderFilters({
                                         origin_code: value || "",
                                         origin_name:
                                           selectedData?.label ||
-                                          String(originalData?.port_name ?? value ?? ""),
+                                          String(
+                                            originalData?.port_name ??
+                                              value ??
+                                              "",
+                                          ),
                                       })
                                     }
                                     minSearchLength={1}
@@ -1035,18 +1133,30 @@ function InlandExportJobMaster() {
                                     additionalParams={{ transport_mode: "AIR" }}
                                     searchFields={["port_code", "port_name"]}
                                     placeholder="Destination"
-                                    displayFormat={(item: Record<string, unknown>) => ({
+                                    displayFormat={(
+                                      item: Record<string, unknown>,
+                                    ) => ({
                                       value: String(item.port_code),
                                       label: `${item.port_name} (${item.port_code})`,
                                     })}
                                     value={appliedFilters.destination_code}
-                                    displayValue={appliedFilters.destination_name}
-                                    onChange={(value, selectedData, originalData) =>
+                                    displayValue={
+                                      appliedFilters.destination_name
+                                    }
+                                    onChange={(
+                                      value,
+                                      selectedData,
+                                      originalData,
+                                    ) =>
                                       commitHeaderFilters({
                                         destination_code: value || "",
                                         destination_name:
                                           selectedData?.label ||
-                                          String(originalData?.port_name ?? value ?? ""),
+                                          String(
+                                            originalData?.port_name ??
+                                              value ??
+                                              "",
+                                          ),
                                       })
                                     }
                                     minSearchLength={1}
@@ -1066,7 +1176,9 @@ function InlandExportJobMaster() {
                           <ERPListColumnHeaderFilter
                             label="ETD"
                             value={appliedFilters.etd}
-                            displayValue={formatFilterDateLabel(appliedFilters.etd)}
+                            displayValue={formatFilterDateLabel(
+                              appliedFilters.etd,
+                            )}
                             theme={theme}
                             isEditing={editingHeaderId === "etd"}
                             onStartEdit={() => openHeaderEditor("etd")}
@@ -1075,14 +1187,22 @@ function InlandExportJobMaster() {
                             renderEditor={({ autoFocus, onClose }) => (
                               <SingleDateInput
                                 size="xs"
-                                value={appliedFilters.etd ? dayjs(appliedFilters.etd).toDate() : null}
+                                value={
+                                  appliedFilters.etd
+                                    ? dayjs(appliedFilters.etd).toDate()
+                                    : null
+                                }
                                 onChange={(date) => {
                                   commitHeaderFilters({
-                                    etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                    etd: date
+                                      ? dayjs(date).format("YYYY-MM-DD")
+                                      : "",
                                   });
                                   if (date) onClose();
                                 }}
-                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                classNames={{
+                                  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                }}
                                 styles={filterFieldStyles}
                                 {...(autoFocus ? { autoFocus: true } : {})}
                               />
@@ -1095,7 +1215,9 @@ function InlandExportJobMaster() {
                           <ERPListColumnHeaderFilter
                             label="ETA"
                             value={appliedFilters.eta}
-                            displayValue={formatFilterDateLabel(appliedFilters.eta)}
+                            displayValue={formatFilterDateLabel(
+                              appliedFilters.eta,
+                            )}
                             theme={theme}
                             isEditing={editingHeaderId === "eta"}
                             onStartEdit={() => openHeaderEditor("eta")}
@@ -1104,14 +1226,22 @@ function InlandExportJobMaster() {
                             renderEditor={({ autoFocus, onClose }) => (
                               <SingleDateInput
                                 size="xs"
-                                value={appliedFilters.eta ? dayjs(appliedFilters.eta).toDate() : null}
+                                value={
+                                  appliedFilters.eta
+                                    ? dayjs(appliedFilters.eta).toDate()
+                                    : null
+                                }
                                 onChange={(date) => {
                                   commitHeaderFilters({
-                                    eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                    eta: date
+                                      ? dayjs(date).format("YYYY-MM-DD")
+                                      : "",
                                   });
                                   if (date) onClose();
                                 }}
-                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                classNames={{
+                                  dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                }}
                                 styles={filterFieldStyles}
                                 {...(autoFocus ? { autoFocus: true } : {})}
                               />
@@ -1171,11 +1301,18 @@ function InlandExportJobMaster() {
                   <tbody>
                     {isLoading ? (
                       <tr>
-                        <td colSpan={20} style={{ padding: 80, textAlign: "center" }}>
+                        <td
+                          colSpan={20}
+                          style={{ padding: 80, textAlign: "center" }}
+                        >
                           <Center className="erp-header-filter-fade">
                             <Stack align="center" gap="sm">
                               <Loader size="lg" color={primary} />
-                              <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
+                              <Text
+                                c="dimmed"
+                                size="sm"
+                                style={{ fontFamily: theme.fontSans }}
+                              >
                                 Loading Inland Export Jobs…
                               </Text>
                             </Stack>
@@ -1184,14 +1321,18 @@ function InlandExportJobMaster() {
                       </tr>
                     ) : exportJobData.length === 0 ? (
                       <tr>
-                        <td colSpan={10} style={{ padding: 60, textAlign: "center" }}>
+                        <td
+                          colSpan={10}
+                          style={{ padding: 60, textAlign: "center" }}
+                        >
                           <Stack align="center" gap="md">
                             <Box
                               style={{
                                 width: 48,
                                 height: 48,
                                 borderRadius: "50%",
-                                backgroundColor: ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
+                                backgroundColor:
+                                  ERP_LIST_BOOKING_MASTER_EMPTY_ICON_BG,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -1216,7 +1357,8 @@ function InlandExportJobMaster() {
                         const sno = row.sno ?? pageIndex * pageSize + i + 1;
                         const tdPad = erpListBookingMasterBodyTd();
                         const tdDate = erpListBookingMasterDateTd(theme);
-                        const refShell = erpListBookingMasterReferenceTdShell(theme);
+                        const refShell =
+                          erpListBookingMasterReferenceTdShell(theme);
                         const fmtUtcLocal = (v: string | null | undefined) => {
                           if (!v) return "—";
                           try {
@@ -1249,7 +1391,9 @@ function InlandExportJobMaster() {
                             {visibleColumns.quotation_id && (
                               <td style={tdPad}>
                                 <Text fw={600} size="sm" c={fg}>
-                                  {row.quotation_id?.trim() ? row.quotation_id : "—"}
+                                  {row.quotation_id?.trim()
+                                    ? row.quotation_id
+                                    : "—"}
                                 </Text>
                                 {row.enquiry_id ? (
                                   <Text fz={10} c={muted}>
@@ -1304,22 +1448,24 @@ function InlandExportJobMaster() {
                                 </Tooltip>
                               </td>
                             )}
-                            {visibleColumns.route && (() => {
-                              const { oc, dc } = routeEndpointsFromAirExportJobRow(row);
-                              return (
-                                <td style={tdPad}>
-                                  <Group gap={6} wrap="nowrap">
-                                    <Text fw={600} size="sm" c={primary}>
-                                      {oc || "—"}
-                                    </Text>
-                                    <IconArrowRight size={12} color={muted} />
-                                    <Text fw={500} size="sm" c={fg}>
-                                      {dc || "—"}
-                                    </Text>
-                                  </Group>
-                                </td>
-                              );
-                            })()}
+                            {visibleColumns.route &&
+                              (() => {
+                                const { oc, dc } =
+                                  routeEndpointsFromAirExportJobRow(row);
+                                return (
+                                  <td style={tdPad}>
+                                    <Group gap={6} wrap="nowrap">
+                                      <Text fw={600} size="sm" c={primary}>
+                                        {oc || "—"}
+                                      </Text>
+                                      <IconArrowRight size={12} color={muted} />
+                                      <Text fw={500} size="sm" c={fg}>
+                                        {dc || "—"}
+                                      </Text>
+                                    </Group>
+                                  </td>
+                                );
+                              })()}
                             {visibleColumns.etd && (
                               <td style={tdDate}>{fmtUtcLocal(row.etd)}</td>
                             )}
@@ -1333,9 +1479,12 @@ function InlandExportJobMaster() {
                             )}
                             <td style={erpListStickyActionTdStyle(theme)}>
                               {(() => {
-                                const statusUpper = (row.status ?? "").toUpperCase();
+                                const statusUpper = (
+                                  row.status ?? ""
+                                ).toUpperCase();
                                 const isCancel = statusUpper === "CANCEL";
-                                const canCancel = statusUpper !== "GENERATED" && !isCancel;
+                                const canCancel =
+                                  statusUpper !== "GENERATED" && !isCancel;
                                 return (
                                   <Menu
                                     withinPortal
@@ -1343,10 +1492,16 @@ function InlandExportJobMaster() {
                                     shadow="md"
                                     width={200}
                                     styles={erpListGeistMenuDropdownStyles}
-                                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                    classNames={{
+                                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                    }}
                                   >
                                     <Menu.Target>
-                                      <ActionIcon variant="subtle" color="gray" size="sm">
+                                      <ActionIcon
+                                        variant="subtle"
+                                        color="gray"
+                                        size="sm"
+                                      >
                                         <IconDotsVertical size={16} />
                                       </ActionIcon>
                                     </Menu.Target>
@@ -1356,12 +1511,25 @@ function InlandExportJobMaster() {
                                         disabled={isCancel}
                                         onClick={() => {
                                           if (!isCancel) {
-                                            setStoreFilters(LIST_KEY, appliedFilters);
+                                            setStoreFilters(
+                                              LIST_KEY,
+                                              appliedFilters,
+                                            );
                                             setStoreSearch(LIST_KEY, search);
                                             setShouldRestore(LIST_KEY, true);
-                                            navigate(`/inland/export-job/edit`, {
-                                              state: { job: row },
-                                            });
+                                            navigate(
+                                              `/inland/export-job/edit`,
+                                              {
+                                                state: {
+                                                  job: withInlandExportJobServiceFields(
+                                                    row as unknown as Record<
+                                                      string,
+                                                      unknown
+                                                    >,
+                                                  ),
+                                                },
+                                              },
+                                            );
                                           }
                                         }}
                                       >
@@ -1372,7 +1540,8 @@ function InlandExportJobMaster() {
                                         color="red"
                                         disabled={!canCancel}
                                         onClick={() => {
-                                          if (canCancel) setCancelConfirmRow(row);
+                                          if (canCancel)
+                                            setCancelConfirmRow(row);
                                         }}
                                       >
                                         Cancel
@@ -1408,8 +1577,14 @@ function InlandExportJobMaster() {
             header: ERP_LIST_GEIST_ROOT_CLASS,
           }}
         >
-          <Text size="sm" c="dimmed" mb="md" style={{ fontFamily: theme.fontSans }}>
-            Are you sure you want to cancel this job? This action cannot be undone.
+          <Text
+            size="sm"
+            c="dimmed"
+            mb="md"
+            style={{ fontFamily: theme.fontSans }}
+          >
+            Are you sure you want to cancel this job? This action cannot be
+            undone.
           </Text>
           <Group justify="flex-end" gap="xs">
             <Button
@@ -1419,7 +1594,11 @@ function InlandExportJobMaster() {
             >
               No
             </Button>
-            <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
+            <Button
+              color="red"
+              onClick={handleConfirmCancel}
+              loading={isCancelling}
+            >
               Yes, cancel
             </Button>
           </Group>

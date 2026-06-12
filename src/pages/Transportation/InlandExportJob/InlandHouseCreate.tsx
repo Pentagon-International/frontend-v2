@@ -1835,7 +1835,7 @@ function HouseCreate() {
     const errors: Record<string, string> = {};
 
     if (!form.values.hawb_number?.trim()) {
-      errors.hawb_number = "HAWB Number is required";
+      errors.hawb_number = "AWB Number is required";
     }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
@@ -2326,7 +2326,7 @@ function HouseCreate() {
     if (pdfBlob) {
       const link = document.createElement("a");
       link.href = pdfBlob;
-      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "HAWB"}.pdf`;
+      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "AWB"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2342,7 +2342,7 @@ function HouseCreate() {
       <Group justify="space-between" mb="lg">
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
-            {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
+            {isEditMode ? "Edit AWB Details" : "Create AWB Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
             <Badge color="#105476" size="md" variant="light">
@@ -2439,7 +2439,7 @@ function HouseCreate() {
               }
             }}
           >
-            Save HAWB
+            Save AWB
           </Button>
           <Menu shadow="md" width={220} position="bottom-end">
             <Menu.Target>
@@ -2774,9 +2774,9 @@ function HouseCreate() {
             <Grid>
               <Grid.Col span={4}>
                 <FormTextInput
-                  label="HAWB Number"
+                  label="AWB Number"
                   required
-                  placeholder="Enter HAWB Number"
+                  placeholder="Enter AWB Number"
                   {...form.getInputProps("hawb_number")}
                   error={form.errors.hawb_number}
                 />
@@ -5476,7 +5476,7 @@ function HouseCreate() {
               color="#105476"
               onClick={handleNext}
             >
-              Save HAWB
+              Save AWB
             </Button>
           )}
         </Group>

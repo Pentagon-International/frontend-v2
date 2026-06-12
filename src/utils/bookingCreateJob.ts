@@ -497,16 +497,25 @@ export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
 ): Record<string, unknown> {
-  const isAir = mode === "air-export" || mode === "inland-export" || mode === "air-import";
+  const isInlandExport = mode === "inland-export";
+  const isAir =
+    mode === "air-export" || isInlandExport || mode === "air-import";
   const serviceType =
     mode === "air-import" || mode === "ocean-import" ? "Import" : "Export";
-  const service = String(booking.service || (isAir ? "AIR" : "FCL"));
+  const service = isInlandExport
+    ? "INLAND"
+    : String(booking.service || (isAir ? "AIR" : "FCL"));
   const routingTransport = isAir ? "Air" : "Sea";
   const oceanRoutings = mapOceanRoutings(booking, routingTransport);
 
   const base: Record<string, unknown> = {
     service,
-    service_type: normalizeJobServiceType(booking.service_type, serviceType),
+    service_type: isInlandExport
+      ? "EXPORT"
+      : normalizeJobServiceType(booking.service_type, serviceType),
+    ...(isInlandExport
+      ? { service_code: String(booking.service_code ?? "").trim() }
+      : {}),
     agent:
       booking.destination_agent_code ||
       booking.origin_agent ||
