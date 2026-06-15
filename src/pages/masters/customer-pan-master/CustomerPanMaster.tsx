@@ -10,19 +10,35 @@ import {
   TextInput,
   Badge,
 } from "@mantine/core";
-import { IconSearch } from "@tabler/icons-react";
+import { IconPaperclip, IconSearch } from "@tabler/icons-react";
+import { useDisclosure } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { ToastNotification } from "../../../components";
-import { postAPICall } from "../../../service/postApiCall";
+import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import { getAPICall } from "../../../service/getApiCall";
+import { postAPICall } from "../../../service/postApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import {
-  searchGstinByPan,
+  // searchGstinByPan, // uncomment when switching from hardcoded test data to live API
   buildAddressLine,
   type AttestrGstinRecord,
 } from "../../../service/attestrGstin.service";
+import {
+  submitCustomerVerification,
+  extractApiErrorMessage,
+} from "../../../service/customerPanApproval.service";
+import {
+  EMPTY_SUPPORTING_DOCUMENT,
+  validateSupportingDocumentSizes,
+  type SupportingDocument,
+} from "../../../utils/customerVerificationFormData";
+import {
+  extractDocumentsListFromResponse,
+  mapDocumentsListToSupportingDocuments,
+  type CustomerDocumentListItem,
+} from "../../../utils/customerDocuments";
 
 const DUMMY_EMAIL = "customer@dummy.local";
 const DUMMY_PHONE = "9999999999";
@@ -140,15 +156,6 @@ function buildCustomerPayload(
   };
 }
 
-function extractApiErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) {
-    const msg = (error as { message?: unknown }).message;
-    if (typeof msg === "string" && msg.trim()) return msg;
-  }
-  return "Failed to create customer";
-}
-
 function formatCustomerCreateError(message: string): string {
   const lower = message.toLowerCase();
   if (
@@ -169,6 +176,13 @@ export default function CustomerPanMaster() {
   const [records, setRecords] = useState<AttestrGstinRecord[]>([]);
   const [selectedGstins, setSelectedGstins] = useState<Set<string>>(new Set());
   const [searchMessage, setSearchMessage] = useState("");
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    SupportingDocument[]
+  >([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+  const [
+    documentsModalOpened,
+    { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
 
   const { data: customerTypes = [] } = useQuery({
     queryKey: ["customerTypes", "pan-master"],
@@ -257,7 +271,164 @@ export default function CustomerPanMaster() {
       setRecords([]);
       setSearchMessage("");
 
-      const response = await searchGstinByPan(pan);
+      // Live API — uncomment searchGstinByPan import and line below when testing is done:
+      // const response = await searchGstinByPan(pan);
+      const response = {
+    "valid": true,
+    "message": null,
+    "records": [
+        {
+            "gstin": "27AAGCP4765J1ZY",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "01-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
+                "buildingName": "",
+                "floor": "204",
+                "street": "ANDHERI KURLA ROAD",
+                "locality": "Mumbai",
+                "district": "Mumbai Suburban",
+                "state": "Maharashtra",
+                "zip": "400059",
+                "latitude": "19.1124590000001",
+                "longitude": "72.8738440000001",
+                "nature": "Service Provision, Supplier of Services"
+            }
+        },
+        {
+            "gstin": "07AAGCP4765J1Z0",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "14-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "A-50",
+                "buildingName": "",
+                "floor": "GROUND FLOOR",
+                "street": "STREET NO 09,ROAD NO 4",
+                "locality": "MAHIPALPUR EXTENTION",
+                "district": "New Delhi",
+                "state": "Delhi",
+                "zip": "110037",
+                "latitude": "",
+                "longitude": "",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "33AAGCP4765J1Z5",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "26-07-2017",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "OLD NO 6,",
+                "buildingName": "",
+                "floor": "NEW NO 15",
+                "street": "DR GOPALA MENON TOAD",
+                "locality": "KODAMBAKKAM",
+                "district": "Chennai",
+                "state": "Tamil Nadu",
+                "zip": "600024",
+                "latitude": "",
+                "longitude": "",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "27AAGCP4765J2ZX",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "01-04-2025",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Input Service Distributor (ISD)",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "SATELLITE SILVER CO OP PREMISES SOC LTD",
+                "buildingName": "",
+                "floor": "204",
+                "street": "ANDHERI KURLA ROAD",
+                "locality": "Mumbai",
+                "district": "Mumbai Suburban",
+                "state": "Maharashtra",
+                "zip": "400059",
+                "latitude": "19.1113500000001",
+                "longitude": "72.869313",
+                "nature": "Recipient of Goods or Services"
+            }
+        },
+        {
+            "gstin": "29AAGCP4765J2ZT",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "26-12-2024",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "Building No.3",
+                "buildingName": "Srinidhi Envoy",
+                "floor": "1st Floor",
+                "street": "3A, 4th Cross",
+                "locality": "Bengaluru",
+                "district": "Bengaluru Urban",
+                "state": "Karnataka",
+                "zip": "560043",
+                "latitude": "13.010323",
+                "longitude": "77.659339",
+                "nature": "Supplier of Services"
+            }
+        },
+        {
+            "gstin": "24AAGCP4765J1Z4",
+            "active": true,
+            "pan": "AAGCP4765J",
+            "registered": "12-08-2022",
+            "legalName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "tradeName": "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PRIVATE LIMITED",
+            "status": "Active",
+            "type": "Regular",
+            "constitution": "Private Limited Company",
+            "primaryAddress": {
+                "type": "PRIMARY",
+                "building": "Office No.10",
+                "buildingName": "Plot No.211, Ward 12-B",
+                "floor": "1st floor",
+                "street": "Shah Avenue-1",
+                "locality": "Gandhidham",
+                "district": "Kachchh",
+                "state": "Gujarat",
+                "zip": "370201",
+                "latitude": "23.061393",
+                "longitude": "70.126118",
+                "nature": "Supplier of Services"
+            }
+        }
+    ]
+};
 
       if (!response.valid) {
         ToastNotification({
@@ -316,17 +487,30 @@ export default function CustomerPanMaster() {
     setIsCreating(true);
 
     try {
+      const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+      if (sizeError) {
+        ToastNotification({ type: "error", message: sizeError });
+        return;
+      }
+
       const payload = buildCustomerPayload(
         selected,
         panNumber.trim().toUpperCase(),
         customerTypeCode,
         assignedTo,
       );
-      const response = (await postAPICall(
-        URL.customerVerification,
+      const response = (await submitCustomerVerification(
         payload,
-        API_HEADER,
-      )) as { message?: string } | null;
+        supportingDocuments,
+      )) as { message?: string; documents_list?: CustomerDocumentListItem[] } | null;
+
+      const uploadedDocs = extractDocumentsListFromResponse(response);
+      if (uploadedDocs.length > 0) {
+        setSupportingDocuments([
+          ...mapDocumentsListToSupportingDocuments(uploadedDocs),
+          { ...EMPTY_SUPPORTING_DOCUMENT },
+        ]);
+      }
 
       const apiMessage =
         response &&
@@ -345,6 +529,9 @@ export default function CustomerPanMaster() {
             : `Customer verification submitted with ${selected.length} addresses.`),
       });
       setSelectedGstins(new Set());
+      if (uploadedDocs.length === 0) {
+        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+      }
     } catch (error) {
       ToastNotification({
         type: "error",
@@ -495,6 +682,14 @@ export default function CustomerPanMaster() {
       {records.length > 0 && (
         <Group justify="flex-end" mt="xl">
           <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconPaperclip size={16} />}
+            onClick={openDocumentsModal}
+          >
+            Attach Documents
+          </Button>
+          <Button
             color="#105476"
             onClick={handleCreateCustomers}
             disabled={selectedGstins.size === 0}
@@ -505,6 +700,14 @@ export default function CustomerPanMaster() {
           </Button>
         </Group>
       )}
+
+      <SupportingDocumentsModal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        documents={supportingDocuments}
+        onChange={setSupportingDocuments}
+        title="Attach Supporting Documents"
+      />
     </Card>
   );
 }

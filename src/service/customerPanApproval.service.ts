@@ -2,6 +2,12 @@ import { apiCallProtected } from "../api/axios";
 import { URL } from "../api/serverUrls";
 import { postAPICall } from "./postApiCall";
 import { API_HEADER } from "../store/storeKeys";
+import {
+  buildCustomerVerificationFormData,
+  MULTIPART_FORM_HEADERS,
+  type SupportingDocument,
+} from "../utils/customerVerificationFormData";
+import type { CustomerDocumentListItem } from "../utils/customerDocuments";
 
 export type CustomerPanApprovalAddress = {
   id?: number;
@@ -51,6 +57,7 @@ export type CustomerPanApprovalRow = {
   customer_code?: string | null;
   customer_types?: unknown[];
   addresses_data?: CustomerPanApprovalAddress[];
+  documents_list?: CustomerDocumentListItem[];
   /** Derived summaries for list display */
   address_count?: number;
   gstin_count?: number;
@@ -228,4 +235,34 @@ export function extractApiErrorMessage(error: unknown): string {
     if (typeof msg === "string" && msg.trim()) return msg;
   }
   return "Request failed";
+}
+
+export async function submitCustomerVerification(
+  customerData: Record<string, unknown>,
+  documents: SupportingDocument[] = [],
+): Promise<unknown> {
+  const formData = buildCustomerVerificationFormData(customerData, documents);
+  return apiCallProtected.post(URL.customerVerification, formData, {
+    ...MULTIPART_FORM_HEADERS,
+  });
+}
+
+export async function submitCustomerMultipart(
+  payload: Record<string, unknown>,
+  documents: SupportingDocument[] = [],
+  method: "post" | "put" = "post",
+): Promise<unknown> {
+  const formData = buildCustomerVerificationFormData(payload, documents);
+  if (method === "put") {
+    const id = payload.id;
+    if (id == null) {
+      throw new Error("Customer id is required for update");
+    }
+    return apiCallProtected.put(`${URL.customer}${id}/`, formData, {
+      ...MULTIPART_FORM_HEADERS,
+    });
+  }
+  return apiCallProtected.post(URL.customer, formData, {
+    ...MULTIPART_FORM_HEADERS,
+  });
 }

@@ -52,6 +52,7 @@ import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerD
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
+import type { CustomerDocumentListItem } from "../../../utils/customerDocuments";
 
 type AddressData = {
   id?: number;
@@ -93,6 +94,7 @@ type CustomerData = {
   assigned_to?: string | null;
   assigned_to_display?: string | null;
   addresses_data?: AddressData[];
+  documents_list?: CustomerDocumentListItem[];
 };
 
 type CustomerApiResponse = {

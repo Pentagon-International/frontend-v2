@@ -36,14 +36,26 @@ import {
   IconCheck,
   IconArrowRight,
   IconX,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { putAPICall } from "../../../service/putApiCall";
+import { useDisclosure } from "@mantine/hooks";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import useAuthStore from "../../../store/authStore";
+import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
+import { submitCustomerMultipart } from "../../../service/customerPanApproval.service";
+import {
+  EMPTY_SUPPORTING_DOCUMENT,
+  validateSupportingDocumentSizes,
+  type SupportingDocument,
+} from "../../../utils/customerVerificationFormData";
+import {
+  mapDocumentsListToSupportingDocuments,
+  type CustomerDocumentListItem,
+} from "../../../utils/customerDocuments";
 
 function parseYesNoBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -575,6 +587,7 @@ type CustomerDetailRecord = CustomerFormData & {
     valid_to?: string | null;
     tds_lower_limit?: string;
   }>;
+  documents_list?: CustomerDocumentListItem[];
 };
 
 const emptyAddressDefaults = (): AddressData => ({
@@ -1537,6 +1550,13 @@ function CustomerCreate() {
   const [tdsType, setTdsType] = useState<
     "Company" | "Individual" | "Partnership" | ""
   >("");
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    SupportingDocument[]
+  >([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+  const [
+    documentsModalOpened,
+    { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -1948,6 +1968,19 @@ function CustomerCreate() {
       setSelectedStates(newSelectedStates);
       setCustomCities(newCustomCities);
       setCitySearchValues(newCitySearchValues);
+
+      const documentsList = Array.isArray(record.documents_list)
+        ? record.documents_list
+        : [];
+      if (documentsList.length > 0) {
+        setSupportingDocuments([
+          ...mapDocumentsListToSupportingDocuments(documentsList),
+          { ...EMPTY_SUPPORTING_DOCUMENT },
+        ]);
+      } else {
+        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+      }
+
       setIsFormInitialized(true);
     },
     [
@@ -2182,7 +2215,7 @@ function CustomerCreate() {
     [applyCustomerRecordToForms, customerTypes],
   );
 
-  // Edit/view from list: populate forms from navigation state (no extra API call)
+  // Edit/view from list: use list row data (includes documents_list)
   useEffect(() => {
     if (
       customerData &&
@@ -2559,11 +2592,23 @@ function CustomerCreate() {
           : {}),
       };
 
-      const res = await postAPICall(URL.customer, payload, API_HEADER);
+      const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+      if (sizeError) {
+        ToastNotification({ type: "error", message: sizeError });
+        return;
+      }
+
+      const res = await submitCustomerMultipart(
+        payload,
+        supportingDocuments,
+        "post",
+      );
       if (res) {
         ToastNotification({
           type: "success",
-          message: "Customer created successfully",
+          message: isVendorMasterRoute
+            ? "Vendor created successfully"
+            : "Customer created successfully",
         });
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
@@ -2662,11 +2707,23 @@ function CustomerCreate() {
         // },
       };
 
-      const res = await putAPICall(URL.customer, payload, API_HEADER);
+      const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+      if (sizeError) {
+        ToastNotification({ type: "error", message: sizeError });
+        return;
+      }
+
+      const res = await submitCustomerMultipart(
+        payload,
+        supportingDocuments,
+        "put",
+      );
       if (res) {
         ToastNotification({
           type: "success",
-          message: "Customer updated successfully",
+          message: isVendorMasterRoute
+            ? "Vendor updated successfully"
+            : "Customer updated successfully",
         });
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
@@ -3692,23 +3749,37 @@ function CustomerCreate() {
             </Group>
 
             <Group gap="sm">
-              {active === 1 && !isViewMode && (isCreateMode || isEditMode) && (
-                <Button
-                  bg="#105476"
-                  onClick={handleRelationshipMapping}
-                  disabled={isSubmitting}
-                  style={{ border: "1px solid #105476" }}
-                  color="white"
-                  size="sm"
-                >
-                  {isCreateMode
-                    ? isVendorMasterRoute
-                      ? "Add Vendor Relationships"
-                      : "Add Customer Relationships"
-                    : isVendorMasterRoute
-                      ? "Edit Vendor Relationships"
-                      : "Edit Customer Relationships"}
-                </Button>
+              {active === 1 && (isCreateMode || isEditMode || isViewMode) && (
+                <>
+                  {!isViewMode && (isCreateMode || isEditMode) && (
+                    <Button
+                      bg="#105476"
+                      onClick={handleRelationshipMapping}
+                      disabled={isSubmitting}
+                      style={{ border: "1px solid #105476" }}
+                      color="white"
+                      size="sm"
+                    >
+                      {isCreateMode
+                        ? isVendorMasterRoute
+                          ? "Add Vendor Relationships"
+                          : "Add Customer Relationships"
+                        : isVendorMasterRoute
+                          ? "Edit Vendor Relationships"
+                          : "Edit Customer Relationships"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    size="sm"
+                    leftSection={<IconPaperclip size={16} />}
+                    onClick={openDocumentsModal}
+                    disabled={isSubmitting}
+                  >
+                    {isViewMode ? "View Documents" : "Attach Documents"}
+                  </Button>
+                </>
               )}
 
               {active < maxStep && (
@@ -3764,6 +3835,17 @@ function CustomerCreate() {
           </Group>
         </Box>
       </Box>
+
+      <SupportingDocumentsModal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        documents={supportingDocuments}
+        onChange={setSupportingDocuments}
+        title={
+          isViewMode ? "Supporting Documents" : "Attach Supporting Documents"
+        }
+        readOnly={isViewMode}
+      />
     </Box>
   );
 }

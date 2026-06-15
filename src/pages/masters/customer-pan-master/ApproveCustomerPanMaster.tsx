@@ -53,6 +53,7 @@ import {
   type CustomerPanApprovalRow,
   type RelatedCustomer,
 } from "../../../service/customerPanApproval.service";
+import CustomerDocumentsList from "../../../components/CustomerDocumentsList";
 
 type TableRow = CustomerPanApprovalRow & { sno: number };
 
@@ -218,6 +219,12 @@ function CustomerPanApprovalDetails({
         <Text size="sm" c="dimmed" ta="center" py="sm">
           No address details available.
         </Text>
+      )}
+
+      {row.documents_list && row.documents_list.length > 0 && (
+        <Card withBorder padding="md" radius="md" bg="#fafbfc">
+          <CustomerDocumentsList documents={row.documents_list} />
+        </Card>
       )}
     </Stack>
   );

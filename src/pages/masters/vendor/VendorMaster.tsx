@@ -100,6 +100,7 @@ type CustomerData = {
   assigned_to?: string | null;
   assigned_to_display?: string | null;
   addresses_data?: AddressData[];
+  documents_list?: CustomerDocumentListItem[];
 };
 
 type CustomerApiResponse = {
