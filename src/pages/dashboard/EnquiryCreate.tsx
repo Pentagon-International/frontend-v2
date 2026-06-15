@@ -543,14 +543,17 @@ const fetchContainerType = async () => {
 };
 
 const fetchIcdData = async () => {
-  // In production, this would be: const response = await getAPICall(URL.ICD_MASTER, API_HEADER);
-  const response = [
-    {
-      label: "Tumb",
-      value: "Tumb",
-    },
-  ];
-  return response;
+  try {
+    const response = (await postAPICall(
+      URL.icdMasterFilter,
+      { filters: {} },
+      API_HEADER,
+    )) as { data?: Array<{ icd_name?: string; icd_code?: string }> };
+    return response?.data ?? [];
+  } catch (error) {
+    console.error("Error fetching ICD master:", error);
+    return [];
+  }
 };
 
 const fetchSalespersons = async (customerId: string = "") => {
@@ -655,9 +658,9 @@ function EnquiryCreate() {
 
   const icdOptions = useMemo(() => {
     if (!Array.isArray(icdData) || !icdData.length) return [];
-    return icdData.map((item: any) => ({
-      value: item.value || item.label || "",
-      label: item.label || item.value || "",
+    return icdData.map((item: { icd_name?: string; icd_code?: string }) => ({
+      value: item.icd_code ? String(item.icd_code) : "",
+      label: item.icd_name || item.icd_code || "",
     }));
   }, [icdData]);
 

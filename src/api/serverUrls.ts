@@ -132,6 +132,7 @@ export const URL = {
   tdsRateSectionMasterFilter: "filter/tds_rate_master/",
   cfsMaster: "cfs-master/",
   cfsMasterFilter: "filter/cfs-master/",
+  icdMasterFilter: "filter/icd-master/",
   networkMaster: "network-master/",
   chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",

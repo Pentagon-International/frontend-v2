@@ -471,8 +471,14 @@ export const generateDeliveryOrderPDF = (
       ? `${igmNo} / ${igmDate}`
       : igmNo || igmDate || "";
     
-    const itemLineNo = housingData?.item_line_no || "";
-    const subItemLineNo = housingData?.sub_item_line_no || "";
+    const itemLineNo =
+      housingData?.item_line_no ||
+      housingData?.item_no ||
+      "";
+    const subItemLineNo =
+      housingData?.sub_item_line_no ||
+      housingData?.sub_item_no ||
+      "";
     const unstuffPlace = housingData?.unstuff_place || "";
 
     // Service for LCL/FCL - from consol_details (jobData)
