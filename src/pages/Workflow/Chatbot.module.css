@@ -47,7 +47,7 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  background: #f7f7f8;
+  background: #ffffff;
   border-right: 1px solid var(--border, #e5e7eb);
   overflow: hidden;
 }
@@ -72,7 +72,7 @@
   top: 0;
   z-index: 2;
   padding: 10px 12px 9.2px;
-  background: #f7f7f8;
+  background: #ffffff;
   border-bottom: 1px solid var(--border, #e5e7eb);
 }
 
@@ -95,13 +95,14 @@
 
 .newChatBtn {
   border: 1px solid var(--border, #d1d5db) !important;
-  background: #ffffff !important;
-  color: var(--text-primary, #1e293b) !important;
+  background: #105476 !important;
+  color: #ffffff !important;
   font-weight: 500 !important;
+  border-radius: 8px !important;
 }
 
 .newChatBtn:hover {
-  background: #ececf1 !important;
+  background: #105476df !important;
 }
 
 .sidebarSessions {
@@ -235,7 +236,7 @@
 .messagesArea {
   flex: 1;
   min-height: 0;
-  background: var(--surface, #ffffff);
+  background: #f7f7f8;
 }
 
 .messagesInner {
@@ -306,7 +307,7 @@
 }
 
 .assistantBubbleCard {
-  background: #f7f7f8;
+  background: #ffffff;
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
   padding: 0.75rem 1rem;

@@ -81,9 +81,14 @@ import {
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
 import {
+  fetchAirExportAirPdfByJob,
   fetchAirWayBillLabelPdf,
-  resolveAirExportHouseMenuLabel,
+  AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS,
+  getAirExportAirPdfMenuTitle,
+  resolveAirExportMasterMenuLabel,
   resolveHousingDetailsPrimaryKey,
+  resolveJobPrimaryKey,
+  type AirExportAirPdfDocument,
 } from "../../../utils/airWayBillPdf";
 
 // Type definitions
@@ -2054,14 +2059,24 @@ function AirExportJobCreate() {
     }
   };
 
-  const handleAirWayBillPreview = async (
-    housingId: number,
-    previewTitle: string,
-  ) => {
-    if (!housingId) {
+  const handleAirExportAirPdfPreview = async ({
+    previewTitle,
+    document,
+    housingId,
+    jobId,
+  }: {
+    previewTitle: string;
+    document: AirExportAirPdfDocument;
+    housingId?: number;
+    jobId?: number;
+  }) => {
+    const housingPk = housingId ? resolveHousingDetailsPrimaryKey({ id: housingId }) : 0;
+    const jobPk = jobId ? resolveJobPrimaryKey({ id: jobId }) : 0;
+
+    if (!housingPk && !jobPk) {
       ToastNotification({
         type: "error",
-        message: "House ID not found for Air Way Bill.",
+        message: "Job or house ID not found for PDF.",
       });
       return;
     }
@@ -2071,14 +2086,16 @@ function AirExportJobCreate() {
     setAirWayBillPdfBlob(null);
 
     try {
-      const blob = await fetchAirWayBillLabelPdf(housingId);
+      const blob = housingPk
+        ? await fetchAirWayBillLabelPdf(housingPk, document)
+        : await fetchAirExportAirPdfByJob(jobPk, document);
       const pdfUrl = window.URL.createObjectURL(blob);
       setAirWayBillPdfBlob(pdfUrl);
     } catch (error) {
-      console.error("Error fetching Air Way Bill PDF:", error);
+      console.error("Error fetching Air PDF:", error);
       ToastNotification({
         type: "error",
-        message: "Failed to load Air Way Bill PDF",
+        message: `Failed to load ${previewTitle}`,
       });
       setAirWayBillPreviewOpen(false);
     }
@@ -2722,18 +2739,21 @@ function AirExportJobCreate() {
                   >
                     Cargo Manifest
                   </Menu.Item>
-                  {mode === "edit" &&
-                    hawbDetails
-                      .filter((hawb) => hawb.id > 0)
-                      .map((hawb, index) => {
-                        const houseLabel = resolveAirExportHouseMenuLabel(
-                          hawb,
-                          index,
+                  {jobData?.id != null && (
+                    <>
+                      {AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS.map((document) => {
+                        const masterLabel = resolveAirExportMasterMenuLabel(
+                          jobData,
+                          carrierDetailsForm.values.mawb_number,
                         );
-                        const previewTitle = `Air Way Bill - ${houseLabel}`;
+                        const previewTitle = getAirExportAirPdfMenuTitle(
+                          document,
+                          masterLabel,
+                          { includeReference: true },
+                        );
                         return (
                           <Menu.Item
-                            key={`master-air-way-bill-${hawb.id}`}
+                            key={`master-air-pdf-${document}`}
                             leftSection={
                               <Box
                                 style={{
@@ -2768,13 +2788,19 @@ function AirExportJobCreate() {
                               },
                             }}
                             onClick={() =>
-                              handleAirWayBillPreview(hawb.id, previewTitle)
+                              handleAirExportAirPdfPreview({
+                                previewTitle,
+                                document,
+                                jobId: Number(jobData.id),
+                              })
                             }
                           >
                             {previewTitle}
                           </Menu.Item>
                         );
                       })}
+                    </>
+                  )}
                   <Menu.Item
                     leftSection={
                       <Box
@@ -5020,7 +5046,7 @@ function AirExportJobCreate() {
                   border: "none",
                   borderRadius: "8px",
                 }}
-                title="Air Way Bill"
+                title={airWayBillPreviewTitle}
               />
               <Group
                 justify="flex-end"
@@ -5047,7 +5073,7 @@ function AirExportJobCreate() {
             <Center h="100%">
               <Stack align="center">
                 <Loader size="lg" color="#105476" />
-                <Text c="dimmed">Generating Air Way Bill PDF...</Text>
+                <Text c="dimmed">Generating {airWayBillPreviewTitle}...</Text>
               </Stack>
             </Center>
           )}
@@ -5295,43 +5321,56 @@ function AirExportJobCreate() {
                           Proforma
                         </Menu.Item>
                         {mode === "edit" && hawb.id > 0 && (
-                          <Menu.Item
-                            leftSection={
-                              <Box
-                                style={{
-                                  backgroundColor: "#E7F5FF",
-                                  borderRadius: "6px",
-                                  padding: "6px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                <IconFileInvoice size={14} color="#105476" />
-                              </Box>
-                            }
-                            styles={{
-                              item: {
-                                fontFamily: "Inter",
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                borderRadius: "6px",
-                                padding: "10px 12px",
-                                "&:hover": { backgroundColor: "#F8F9FA" },
-                              },
-                              itemLabel: {
-                                fontFamily: "Inter",
-                                fontSize: "13px",
-                                fontWeight: 500,
-                                color: "#424242",
-                              },
-                            }}
-                            onClick={() =>
-                              handleAirWayBillPreview(hawb.id, "Air Way Bill")
-                            }
-                          >
-                            Air Way Bill
-                          </Menu.Item>
+                          <>
+                            {AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS.map((document) => {
+                              const previewTitle =
+                                getAirExportAirPdfMenuTitle(document);
+                              return (
+                                <Menu.Item
+                                  key={`house-air-pdf-${hawb.id}-${document}`}
+                                  leftSection={
+                                    <Box
+                                      style={{
+                                        backgroundColor: "#E7F5FF",
+                                        borderRadius: "6px",
+                                        padding: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IconFileInvoice size={14} color="#105476" />
+                                    </Box>
+                                  }
+                                  styles={{
+                                    item: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      borderRadius: "6px",
+                                      padding: "10px 12px",
+                                      "&:hover": { backgroundColor: "#F8F9FA" },
+                                    },
+                                    itemLabel: {
+                                      fontFamily: "Inter",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: "#424242",
+                                    },
+                                  }}
+                                  onClick={() =>
+                                    handleAirExportAirPdfPreview({
+                                      previewTitle,
+                                      document,
+                                      housingId: hawb.id,
+                                    })
+                                  }
+                                >
+                                  {previewTitle}
+                                </Menu.Item>
+                              );
+                            })}
+                          </>
                         )}
                       </Menu.Dropdown>
                     </Menu>

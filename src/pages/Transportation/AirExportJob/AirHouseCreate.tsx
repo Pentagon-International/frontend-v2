@@ -85,7 +85,10 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
   fetchAirWayBillLabelPdf,
+  AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS,
+  getAirExportAirPdfMenuTitle,
   resolveHousingDetailsPrimaryKey,
+  type AirExportAirPdfDocument,
 } from "../../../utils/airWayBillPdf";
 
 // Type definitions
@@ -399,6 +402,8 @@ function HouseCreate() {
   const [airWayBillPdfBlob, setAirWayBillPdfBlob] = useState<string | null>(
     null,
   );
+  const [airWayBillPreviewTitle, setAirWayBillPreviewTitle] =
+    useState("Air Way Bill");
 
   // Accounts tab: invoice list from filter/invoice API
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -443,7 +448,7 @@ function HouseCreate() {
     () => resolveHousingDetailsPrimaryKey(editData as { id?: unknown }),
     [editData],
   );
-  const canShowAirWayBill =
+  const canShowAirExportAirDocs =
     isEditMode && savedHousingId > 0 && Boolean(location.state?.job?.id);
 
   useEffect(() => {
@@ -2361,27 +2366,31 @@ function HouseCreate() {
     }
   };
 
-  const handleAirWayBillPreview = async () => {
+  const handleAirExportAirPdfPreview = async (
+    document: AirExportAirPdfDocument,
+  ) => {
     if (!savedHousingId) {
       ToastNotification({
         type: "error",
-        message: "House ID not found for Air Way Bill.",
+        message: "House ID not found for PDF.",
       });
       return;
     }
 
+    const previewTitle = getAirExportAirPdfMenuTitle(document);
+    setAirWayBillPreviewTitle(previewTitle);
     setAirWayBillPreviewOpen(true);
     setAirWayBillPdfBlob(null);
 
     try {
-      const blob = await fetchAirWayBillLabelPdf(savedHousingId);
+      const blob = await fetchAirWayBillLabelPdf(savedHousingId, document);
       const pdfUrl = window.URL.createObjectURL(blob);
       setAirWayBillPdfBlob(pdfUrl);
     } catch (error) {
-      console.error("Error fetching Air Way Bill PDF:", error);
+      console.error("Error fetching Air PDF:", error);
       ToastNotification({
         type: "error",
-        message: "Failed to load Air Way Bill PDF",
+        message: `Failed to load ${previewTitle}`,
       });
       setAirWayBillPreviewOpen(false);
     }
@@ -2399,7 +2408,7 @@ function HouseCreate() {
     if (airWayBillPdfBlob) {
       const link = document.createElement("a");
       link.href = airWayBillPdfBlob;
-      link.download = `Air-Way-Bill-${form.values.hawb_number || savedHousingId}.pdf`;
+      link.download = `${airWayBillPreviewTitle.replace(/\s+/g, "-")}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2655,45 +2664,53 @@ function HouseCreate() {
                 Job Ledger
               </Menu.Item>
 
-              {canShowAirWayBill && (
-                <Menu.Item
-                  leftSection={
-                    <Box
-                      style={{
-                        backgroundColor: "#E7F5FF",
-                        borderRadius: "6px",
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <IconFileInvoice size={16} color="#105476" />
-                    </Box>
-                  }
-                  styles={{
-                    item: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      borderRadius: "6px",
-                      padding: "10px 12px",
-                      marginBottom: "4px",
-                      "&:hover": {
-                        backgroundColor: "#F8F9FA",
-                      },
-                    },
-                    itemLabel: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                    },
-                  }}
-                  onClick={handleAirWayBillPreview}
-                >
-                  Air Way Bill
-                </Menu.Item>
+              {canShowAirExportAirDocs && (
+                <>
+                  {AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS.map((document) => {
+                    const previewTitle = getAirExportAirPdfMenuTitle(document);
+                    return (
+                      <Menu.Item
+                        key={`house-air-pdf-${document}`}
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconFileInvoice size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            borderRadius: "6px",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
+                          },
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() => handleAirExportAirPdfPreview(document)}
+                      >
+                        {previewTitle}
+                      </Menu.Item>
+                    );
+                  })}
+                </>
               )}
             </Menu.Dropdown>
           </Menu>
@@ -5595,7 +5612,7 @@ function HouseCreate() {
       <Modal
         opened={airWayBillPreviewOpen}
         onClose={handleAirWayBillClosePreview}
-        title="Air Way Bill"
+        title={airWayBillPreviewTitle}
         centered
         size="95%"
         overlayProps={{
@@ -5624,7 +5641,7 @@ function HouseCreate() {
                   border: "none",
                   borderRadius: "8px",
                 }}
-                title="Air Way Bill"
+                title={airWayBillPreviewTitle}
               />
               <Group
                 justify="flex-end"
@@ -5651,7 +5668,7 @@ function HouseCreate() {
             <Center h="100%">
               <Stack align="center">
                 <Loader size="lg" color="#105476" />
-                <Text c="dimmed">Generating Air Way Bill PDF...</Text>
+                <Text c="dimmed">Generating {airWayBillPreviewTitle}...</Text>
               </Stack>
             </Center>
           )}
