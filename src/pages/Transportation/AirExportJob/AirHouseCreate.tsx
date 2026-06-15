@@ -15,6 +15,7 @@ import {
   Stack,
   ScrollArea,
   Select,
+  Radio,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -127,6 +128,8 @@ type HAWBDetailsForm = {
   notify2_customer_address: string;
   notify2_customer_email: string;
   commodity_description: string;
+  handling_information: string;
+  is_agreed_charges: boolean;
   marks_no: string;
   item_no: string;
   sub_item_no: string;
@@ -472,6 +475,16 @@ function HouseCreate() {
     return "";
   };
 
+  const parseBoolean = (value: unknown): boolean => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    if (typeof value === "string") {
+      const s = value.trim().toLowerCase();
+      return s === "true" || s === "1" || s === "yes" || s === "y";
+    }
+    return false;
+  };
+
   // Form with all fields - pre-fill if in edit mode, auto-set from MAWB in create mode
   const form = useForm<HAWBDetailsForm>({
     initialValues: {
@@ -557,6 +570,13 @@ function HouseCreate() {
         (editData as { notify2_customer_email?: string })
           ?.notify2_customer_email ?? "",
       commodity_description: editData?.commodity_description || "",
+      handling_information:
+        (editData as { handling_information?: string } | undefined)
+          ?.handling_information || "",
+      is_agreed_charges: parseBoolean(
+        (editData as { is_agreed_charges?: unknown } | undefined)
+          ?.is_agreed_charges,
+      ),
       marks_no: editData?.marks_no || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
@@ -852,6 +872,12 @@ function HouseCreate() {
           (editData as { notify2_customer_email?: string })
             .notify2_customer_email ?? "",
         commodity_description: editData.commodity_description || "",
+        handling_information:
+          (editData as { handling_information?: string }).handling_information ||
+          "",
+        is_agreed_charges: parseBoolean(
+          (editData as { is_agreed_charges?: unknown }).is_agreed_charges,
+        ),
         marks_no: editData.marks_no || "",
         ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
@@ -2112,6 +2138,8 @@ function HouseCreate() {
       notify2_customer_address: v.notify2_customer_address,
       notify2_customer_email: v.notify2_customer_email,
       commodity_description: v.commodity_description,
+      handling_information: v.handling_information,
+      is_agreed_charges: v.is_agreed_charges,
       marks_no: v.marks_no,
       item_no: v.item_no,
       sub_item_no: v.sub_item_no,
@@ -2192,6 +2220,8 @@ function HouseCreate() {
       notify2_customer_address: currentFormValues.notify2_customer_address,
       notify2_customer_email: currentFormValues.notify2_customer_email,
       commodity_description: currentFormValues.commodity_description,
+      handling_information: currentFormValues.handling_information,
+      is_agreed_charges: currentFormValues.is_agreed_charges,
       marks_no: currentFormValues.marks_no,
       item_no: currentFormValues.item_no,
       sub_item_no: currentFormValues.sub_item_no,
@@ -2241,6 +2271,9 @@ function HouseCreate() {
         ...(location.state?.estimates && {
           estimates: location.state.estimates,
         }),
+        ...(location.state?.cargoDetails && {
+          cargoDetails: location.state.cargoDetails,
+        }),
       },
     });
   };
@@ -2283,6 +2316,8 @@ function HouseCreate() {
         notify2_customer_address: form.values.notify2_customer_address,
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
+        handling_information: form.values.handling_information,
+        is_agreed_charges: form.values.is_agreed_charges,
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
@@ -3901,6 +3936,21 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={6}>
                 <FormTextArea
+                  label="Handling Information"
+                  placeholder="Enter Handling Information"
+                  minRows={3}
+                  value={form.values.handling_information}
+                  onChange={(e) => {
+                    form.setFieldValue(
+                      "handling_information",
+                      e.currentTarget.value,
+                    );
+                  }}
+                  error={form.errors.handling_information}
+                />
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
                   minRows={3}
@@ -3910,6 +3960,28 @@ function HouseCreate() {
                   }}
                   error={form.errors.marks_no}
                 />
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Radio.Group
+                  label="Agreed Charges"
+                  value={form.values.is_agreed_charges ? "true" : "false"}
+                  onChange={(value) => {
+                    form.setFieldValue("is_agreed_charges", value === "true");
+                  }}
+                  styles={{
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                    },
+                  }}
+                >
+                  <Group mt="xs">
+                    <Radio value="true" label="Yes" />
+                    <Radio value="false" label="No" />
+                  </Group>
+                </Radio.Group>
               </Grid.Col>
             </Grid>
 
@@ -5569,6 +5641,9 @@ function HouseCreate() {
                 }),
                 ...(location.state?.estimates && {
                   estimates: location.state.estimates,
+                }),
+                ...(location.state?.cargoDetails && {
+                  cargoDetails: location.state.cargoDetails,
                 }),
               },
             });

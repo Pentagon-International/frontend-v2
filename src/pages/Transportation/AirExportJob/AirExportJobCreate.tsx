@@ -68,6 +68,7 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   formatHouseCargoChargeableForPayload,
@@ -131,6 +132,12 @@ type CarrierDetailsForm = {
   mawb_date: Date | null;
 };
 
+type CargoDetailsForm = {
+  commodity_description: string;
+  handling_information: string;
+  is_agreed_charges: boolean;
+};
+
 type RoutingDetail = {
   id?: number;
   transport_type: string;
@@ -180,6 +187,8 @@ type HAWBDetail = {
   notify_customer1_address: string;
   notify_customer1_email: string;
   commodity_description?: string;
+  handling_information?: string;
+  is_agreed_charges?: boolean;
   marks_no?: string;
   item_no?: string;
   sub_item_no?: string;
@@ -730,6 +739,24 @@ function AirExportJobCreate() {
       : undefined,
   );
 
+  const cargoDetailsForm = useForm<CargoDetailsForm>({
+    initialValues: {
+      commodity_description:
+        jobData?.commodity_description ||
+        location.state?.cargoDetails?.commodity_description ||
+        "",
+      handling_information:
+        jobData?.handling_information ||
+        location.state?.cargoDetails?.handling_information ||
+        "",
+      is_agreed_charges: parseBoolean(
+        jobData?.is_agreed_charges ??
+          location.state?.cargoDetails?.is_agreed_charges ??
+          false,
+      ),
+    },
+  });
+
   // Note: Container Details are not used for Air Export Jobs
 
   // Load job data if in edit or view mode - Only initialize once from jobData
@@ -879,6 +906,12 @@ function AirExportJobCreate() {
         // Use setValues to update all fields at once
         carrierDetailsForm.setValues(carrierInitialValues);
 
+        cargoDetailsForm.setValues({
+          commodity_description: String(jobData.commodity_description || ""),
+          handling_information: String(jobData.handling_information || ""),
+          is_agreed_charges: parseBoolean(jobData.is_agreed_charges),
+        });
+
         console.log(
           "✅ Carrier Details initialized - Form values after setValues:",
           {
@@ -1003,6 +1036,10 @@ function AirExportJobCreate() {
               commodity_description: house.commodity_description
                 ? String(house.commodity_description)
                 : "",
+              handling_information: house.handling_information
+                ? String(house.handling_information)
+                : "",
+              is_agreed_charges: parseBoolean(house.is_agreed_charges),
               marks_no: house.marks_no ? String(house.marks_no) : "",
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
@@ -1552,6 +1589,7 @@ function AirExportJobCreate() {
             carrierDetails: carrierDetailsForm.values,
             routings: routingsForm.values.routings,
             estimates: estimatesForm.values.estimates,
+            cargoDetails: cargoDetailsForm.values,
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
             }),
@@ -1575,6 +1613,7 @@ function AirExportJobCreate() {
             carrierDetails: carrierDetailsForm.values,
             routings: routingsForm.values.routings,
             estimates: estimatesForm.values.estimates,
+            cargoDetails: cargoDetailsForm.values,
             ...(location.state?.hawbDetails && {
               hawbDetails: location.state.hawbDetails,
             }),
@@ -1595,6 +1634,27 @@ function AirExportJobCreate() {
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
           estimates: estimatesForm.values.estimates,
+          cargoDetails: cargoDetailsForm.values,
+          ...(location.state?.hawbDetails && {
+            hawbDetails: location.state.hawbDetails,
+          }),
+          ...(location.state?.housingDetails && {
+            housingDetails: location.state.housingDetails,
+          }),
+          ...(location.state?.job && { job: location.state.job }),
+        },
+      });
+      setActive(4);
+    } else if (active === 4) {
+      navigate(location.pathname, {
+        replace: true,
+        state: {
+          ...location.state,
+          mawbDetails: getMawbDetailsSnapshot(),
+          carrierDetails: carrierDetailsForm.values,
+          routings: routingsForm.values.routings,
+          estimates: estimatesForm.values.estimates,
+          cargoDetails: cargoDetailsForm.values,
           ...(location.state?.hawbDetails && {
             hawbDetails: location.state.hawbDetails,
           }),
@@ -1622,6 +1682,7 @@ function AirExportJobCreate() {
           routings: routingsForm.values.routings,
           // Save current Estimates form values
           estimates: estimatesForm.values.estimates,
+          cargoDetails: cargoDetailsForm.values,
           // Preserve all other state
           ...(location.state?.hawbDetails && {
             hawbDetails: location.state.hawbDetails,
@@ -1884,6 +1945,15 @@ function AirExportJobCreate() {
           location.state.estimates as typeof estimatesForm.values.estimates,
         );
       }
+
+      if (hasMawbDetailsInState && location.state?.cargoDetails) {
+        const savedCargoDetails = location.state.cargoDetails as CargoDetailsForm;
+        cargoDetailsForm.setValues({
+          commodity_description: savedCargoDetails.commodity_description || "",
+          handling_information: savedCargoDetails.handling_information || "",
+          is_agreed_charges: parseBoolean(savedCargoDetails.is_agreed_charges),
+        });
+      }
     } catch (error) {
       console.error("Error restoring form state:", error);
     }
@@ -1895,6 +1965,7 @@ function AirExportJobCreate() {
     location.state?.carrierDetails,
     location.state?.routings,
     location.state?.estimates,
+    location.state?.cargoDetails,
     active, // Add active to dependencies to restore when navigating back to step 0
     mode, // Add mode to dependencies
   ]);
@@ -1984,6 +2055,7 @@ function AirExportJobCreate() {
           routings: routingsForm.values.routings,
           // Preserve master-level estimates so they can be restored on the job screen
           estimates: estimatesForm.values.estimates,
+          cargoDetails: cargoDetailsForm.values,
         },
       });
 
@@ -1997,6 +2069,7 @@ function AirExportJobCreate() {
       carrierDetailsForm.values,
       routingsForm.values.routings,
       estimatesForm.values.estimates,
+      cargoDetailsForm.values,
       hawbDetails,
       jobData,
       location.state,
@@ -2367,6 +2440,11 @@ function AirExportJobCreate() {
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        commodity_description:
+          cargoDetailsForm.values.commodity_description || null,
+        handling_information:
+          cargoDetailsForm.values.handling_information || null,
+        is_agreed_charges: cargoDetailsForm.values.is_agreed_charges,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const normalizedTransportType = String(
             routing.transport_type || "",
@@ -2467,6 +2545,8 @@ function AirExportJobCreate() {
           notify2_customer_address: hawb.notify2_customer_address ?? "",
           notify2_customer_email: hawb.notify2_customer_email ?? "",
           commodity_description: hawb.commodity_description || null,
+          handling_information: hawb.handling_information || null,
+          is_agreed_charges: hawb.is_agreed_charges ?? false,
           marks_no: hawb.marks_no || null,
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
@@ -2609,9 +2689,9 @@ function AirExportJobCreate() {
     }
   };
 
-  // Fetch invoice list when Accounts tab (active === 4) is active
+  // Fetch invoice list when Accounts tab (active === 5) is active
   useEffect(() => {
-    if (active !== 4) return;
+    if (active !== 5) return;
     if (!jobData?.id) return;
     setInvoiceListLoading(true);
     postAPICall(
@@ -3059,19 +3139,33 @@ function AirExportJobCreate() {
               fontWeight: active === 3 ? 600 : 400,
             }}
           >
+            Cargo Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="4"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 4 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 4 ? 600 : 400,
+            }}
+          >
             Estimates
           </Tabs.Tab>
           {jobData?.id != null && (
             <Tabs.Tab
-              value="4"
+              value="5"
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: active === 4 ? "3px solid #105476" : "none",
+                borderBottom: active === 5 ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: active === 4 ? 600 : 400,
+                fontWeight: active === 5 ? 600 : 400,
               }}
             >
               Accounts
@@ -3953,8 +4047,84 @@ function AirExportJobCreate() {
           </Box>
         </Tabs.Panel>
 
-        {/* Tab 4: Estimates */}
+        {/* Tab 4: Cargo Details */}
         <Tabs.Panel value="3">
+          <Box mt="md">
+            <Text size="lg" fw={600} c="#105476" mb="md">
+              Cargo Details
+            </Text>
+            <Grid>
+              <Grid.Col span={12}>
+                <FormTextArea
+                  label="Commodity Description"
+                  placeholder="Enter commodity description"
+                  minRows={3}
+                  value={cargoDetailsForm.values.commodity_description}
+                  onChange={(e) => {
+                    cargoDetailsForm.setFieldValue(
+                      "commodity_description",
+                      e.currentTarget.value,
+                    );
+                  }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={12}>
+                <FormTextArea
+                  label="Handling Information"
+                  placeholder="Enter handling information"
+                  minRows={3}
+                  value={cargoDetailsForm.values.handling_information}
+                  onChange={(e) => {
+                    cargoDetailsForm.setFieldValue(
+                      "handling_information",
+                      e.currentTarget.value,
+                    );
+                  }}
+                  disabled={isReadOnly}
+                />
+              </Grid.Col>
+              <Grid.Col span={12}>
+                <Radio.Group
+                  label="Agreed Charges"
+                  value={
+                    cargoDetailsForm.values.is_agreed_charges ? "true" : "false"
+                  }
+                  onChange={(value) => {
+                    cargoDetailsForm.setFieldValue(
+                      "is_agreed_charges",
+                      value === "true",
+                    );
+                  }}
+                  styles={{
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                    },
+                  }}
+                >
+                  <Group mt="xs">
+                    <Radio
+                      value="true"
+                      label="Yes"
+                      disabled={isReadOnly}
+                    />
+                    <Radio
+                      value="false"
+                      label="No"
+                      disabled={isReadOnly}
+                    />
+                  </Group>
+                </Radio.Group>
+              </Grid.Col>
+            </Grid>
+          </Box>
+        </Tabs.Panel>
+
+        {/* Tab 5: Estimates */}
+        <Tabs.Panel value="4">
           <Box mt="md">
             <Group justify="space-between" align="center" mb="md" wrap="nowrap">
               <Text size="lg" fw={600} c="#105476">
@@ -4164,7 +4334,7 @@ function AirExportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="4">
+          <Tabs.Panel value="5">
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -4855,7 +5025,11 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            active === 4) &&
+            !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -4907,6 +5081,16 @@ function AirExportJobCreate() {
           )}
 
           {active === 3 && !isReadOnly && (
+            <Button
+              rightSection={<IconChevronRight size={16} />}
+              color="#105476"
+              onClick={handleNext}
+            >
+              Next
+            </Button>
+          )}
+
+          {active === 4 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
