@@ -133,8 +133,8 @@ const fetchGetEffectiveSac = async (
 
 // Same endpoint as InvoiceCreate (invoice/calculate-gst-breakup/), payload: { customer_id, reverse_invoice_id }
 const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
-  // customer_id: number;
   reverse_invoice_id: number;
+  vat?: boolean;
 }) => {
   try {
     const response = await postAPICall(
@@ -142,17 +142,11 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
       payload,
       API_HEADER,
     );
-    return response as {
-      sac_wise_totals?: Array<{
-        sac_code?: string;
-        charge_name?: string;
-        total_amount?: number;
-        rate?: number;
-        rate_type?: string;
-        charge_id?: number;
-      }>;
-      total?: string;
+    const raw = response as {
+      data?: InvoiceTaxBreakup;
+      [k: string]: unknown;
     };
+    return (raw?.data ?? response) as InvoiceTaxBreakup;
   } catch (error) {
     console.error(
       "Error fetching calculate-gst-breakup for reverse invoice:",
@@ -170,6 +164,171 @@ function clampAmount(value: number | null | undefined): number | null {
   return parseFloat(n.toFixed(2));
 }
 
+function clampSumAmounts(parts: Array<number | null | undefined>): number {
+  const sum = parts.reduce<number>(
+    (acc, v) =>
+      Number.isFinite(Number(v)) ? acc + (Number(v) as number) : acc,
+    0,
+  );
+  return clampAmount(sum) ?? 0;
+}
+
+function calcTaxAmountFromRate(
+  base: number | null | undefined,
+  rate: number | null | undefined,
+): number {
+  if (base == null || rate == null || rate <= 0) return 0;
+  return clampAmount(base * (rate / 100)) ?? 0;
+}
+
+function calcTaxRowAmountsFromBreakupTotal(
+  totalAmount: number,
+  billingRoe: number,
+): {
+  amountInLocal: number;
+  amountInHeader: number;
+  currencyAmount: number;
+} {
+  const amountInLocal = clampAmount(totalAmount) ?? 0;
+  const roe = billingRoe > 0 ? billingRoe : 1;
+  const amountInHeader = clampAmount(amountInLocal / roe) ?? amountInLocal;
+  return {
+    amountInLocal,
+    amountInHeader,
+    currencyAmount: amountInLocal,
+  };
+}
+
+function resolveCurrencyIdByCode(
+  currencyDataArr: {
+    id?: number;
+    code?: string;
+    currency_code?: string;
+  }[],
+  currencyCode: string,
+  fallbackCurrencyId: number | null,
+): number | null {
+  const code = currencyCode.trim().toUpperCase();
+  if (!code) return fallbackCurrencyId;
+  const item = currencyDataArr?.find(
+    (c) =>
+      (c.code || c.currency_code || "").toString().trim().toUpperCase() ===
+      code,
+  );
+  return item?.id != null ? Number(item.id) : fallbackCurrencyId;
+}
+
+const parseGstRatesPayload = (res: unknown): GstRates | null => {
+  const resObj = res as {
+    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as GstRatesBySacResponse | null | undefined;
+  const igstRaw = data?.igst_percent;
+  const cgstRaw = data?.cgst_percent;
+  const sgstRaw = data?.sgst_percent;
+  const sameState = data?.same_state ?? false;
+  return {
+    igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
+    cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
+    sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+    same_state: sameState,
+  };
+};
+
+type InvoiceTaxBreakup = {
+  sac_wise_totals?: Array<{
+    sac_code?: string;
+    charge_name?: string;
+    total_amount?: number;
+    rate?: number;
+    rate_type?: string;
+    charge_id?: number;
+  }>;
+  percentage_wise_totals?: Array<{
+    charge_id?: number;
+    charge_name?: string;
+    vat_charge_id?: number;
+    rate_name?: string;
+    rate?: number;
+    tax_rate?: number;
+    rate_type?: string;
+    taxable_total?: number;
+    total_amount?: number;
+  }>;
+  charges?: Array<{
+    charge_id?: number;
+    tax_rate?: number;
+    rate?: number;
+  }>;
+  vat_total?: string;
+  total?: string;
+};
+
+const getVatBreakupRows = (breakup: InvoiceTaxBreakup | null) => [
+  ...(breakup?.charges ?? []),
+  ...(breakup?.percentage_wise_totals ?? []),
+];
+
+const getVatRateFromBreakup = (
+  breakup: InvoiceTaxBreakup | null,
+  chargeId: number | null | undefined,
+): number | null => {
+  if (chargeId == null) return null;
+  const match = getVatBreakupRows(breakup).find((r) => r.charge_id === chargeId);
+  if (!match) return null;
+  const rate = match.tax_rate ?? match.rate;
+  if (rate == null) return null;
+  const parsed = Number(rate);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveVatTaxRate = (
+  breakup: InvoiceTaxBreakup | null,
+  chargeId: number | null | undefined,
+  chargeTaxRate: number | null | undefined,
+): number => {
+  if (chargeTaxRate != null && chargeTaxRate > 0) return chargeTaxRate;
+  return getVatRateFromBreakup(breakup, chargeId) ?? 0;
+};
+
+function isUnitedStatesCountry(
+  countryCode?: string | null,
+  countryName?: string | null,
+): boolean {
+  const code = (countryCode ?? "").trim().toUpperCase();
+  const name = (countryName ?? "").trim().toUpperCase();
+  return (
+    code === "US" || name.includes("UNITED STATES") || name.includes("USA")
+  );
+}
+
+function isUnitedStatesBranchUser(
+  user?: {
+    country?: { country_code?: string; country_name?: string };
+    branches?: Array<{
+      is_default?: boolean;
+      country?: { country_code?: string; country_name?: string };
+    }>;
+  } | null,
+): boolean {
+  if (!user) return false;
+  if (
+    isUnitedStatesCountry(
+      user.country?.country_code,
+      user.country?.country_name,
+    )
+  ) {
+    return true;
+  }
+  const defaultBranch = user.branches?.find((b) => b.is_default === true);
+  return isUnitedStatesCountry(
+    defaultBranch?.country?.country_code,
+    defaultBranch?.country?.country_name,
+  );
+}
+
 type ChargeItem = {
   id?: number | null;
   charge_id: number | null;
@@ -184,6 +343,8 @@ type ChargeItem = {
   header_amount: number | null;
   amount_in_local: number | null;
   tax_code: string;
+  tax_rate?: number | null;
+  tax_amount?: number | null;
   dr_cr: "Cr" | "Dr";
 };
 
@@ -200,6 +361,7 @@ type InvoiceFormData = {
   roe: number | null;
   narration: string;
   irn_no: string;
+  fapiao_no: string;
   charges: ChargeItem[];
 };
 
@@ -245,11 +407,13 @@ type ReversableDataResponse = {
   day_book_id?: number;
   day_book_name?: string;
   document_no?: string;
+  reverse_document_no?: string;
   document_date?: string;
   due_date?: string;
   roe?: string | number;
   narration?: string;
   irn_no?: string;
+  fapiao_no?: string;
   status?: string;
   total?: string | number;
   header_total?: string | number;
@@ -281,6 +445,7 @@ function applyReversableDataToReverseForm(
     setIsAgentInvoice: (v: boolean) => void;
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
+    preserveChargeIds?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -309,6 +474,7 @@ function applyReversableDataToReverseForm(
     roe: Number.isFinite(roeNum) ? roeNum : null,
     narration: data.narration ?? "",
     irn_no: data.irn_no ?? "",
+    fapiao_no: data.fapiao_no ?? "",
     charges:
       data.charges && data.charges.length > 0
         ? data.charges.map((c) => {
@@ -349,7 +515,9 @@ function applyReversableDataToReverseForm(
                   : c.amount_in_header
                 : null;
             return {
-              id: c.id ?? null,
+              ...(opts.preserveChargeIds && c.id != null && c.id > 0
+                ? { id: c.id }
+                : {}),
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
               shipment_id: c.shipment_id ?? c.shipment_no ?? "",
@@ -373,17 +541,20 @@ function applyReversableDataToReverseForm(
   });
 }
 
-function firstNonEmptyString(...vals: unknown[]): string {
-  const junk = new Set(["false", "true", "null", "undefined", "none"]);
-  for (const v of vals) {
-    if (v === false || v === true) continue;
-    if (v == null) continue;
-    const s = String(v).trim();
-    if (!s) continue;
-    if (junk.has(s.toLowerCase())) continue;
-    return s;
-  }
-  return "";
+function pickReverseDocumentNo(source: unknown): string {
+  if (!source || typeof source !== "object") return "";
+  const rec = source as Record<string, unknown>;
+  const value = rec.reverse_document_no ?? rec.reverse_document_number;
+  return value != null ? String(value).trim() : "";
+}
+
+function reverseChargeIdPayload(
+  charge: ChargeItem,
+  includeChargeIds: boolean,
+): { id?: number } {
+  if (!includeChargeIds) return {};
+  if (charge.id == null || charge.id <= 0) return {};
+  return { id: charge.id };
 }
 
 function InvoiceReverse() {
@@ -404,33 +575,20 @@ function InvoiceReverse() {
     else navigate(-1);
   }, [returnTo, navigate]);
 
-  const [reverseDocLabel, setReverseDocLabel] = useState("");
-  const [invoiceDocLabel, setInvoiceDocLabel] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [documentNo, setDocumentNo] = useState<string | null>(null);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     customer_id?: number;
-    document_no?: string;
+    reverse_document_no?: string;
     status?: string;
   } | null>(null);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [chargesTabActive, setChargesTabActive] = useState<string>("charges");
-  const [gstBreakup, setGstBreakup] = useState<{
-    sac_wise_totals?: Array<{
-      sac_code?: string;
-      charge_name?: string;
-      total_amount?: number;
-      rate?: number;
-      rate_type?: string;
-      charge_id?: number;
-    }>;
-    total?: string;
-  } | null>(null);
+  const [gstBreakup, setGstBreakup] = useState<InvoiceTaxBreakup | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
@@ -442,6 +600,71 @@ function InvoiceReverse() {
     { value: string; label: string }[]
   >([]);
   const [isAgentInvoice, setIsAgentInvoice] = useState(false);
+
+  const isAgentInvoiceRef = useRef(false);
+  const isVatInvoiceRef = useRef(false);
+  const isUsInvoiceRef = useRef(false);
+
+  const isChinaUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "CN" || countryName === "CHINA";
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
+  const isKenyaUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "KE" || countryName.includes("KENYA");
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
+  const isVatInvoiceUser = useMemo(() => {
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return (
+      countryCode === "CN" ||
+      countryName === "CHINA" ||
+      countryCode === "KE" ||
+      countryName.includes("KENYA")
+    );
+  }, [user?.country?.country_code, user?.country?.country_name]);
+
+  const isUsInvoiceUser = useMemo(
+    () => isUnitedStatesBranchUser(user),
+    [user],
+  );
+
+  const isGstInvoiceUser = useMemo(
+    () => !isAgentInvoice && !isVatInvoiceUser && !isUsInvoiceUser,
+    [isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
+  );
+
+  const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
+
+  useEffect(() => {
+    isAgentInvoiceRef.current = isAgentInvoice;
+  }, [isAgentInvoice]);
+
+  useEffect(() => {
+    isVatInvoiceRef.current = isVatInvoiceUser;
+  }, [isVatInvoiceUser]);
+
+  useEffect(() => {
+    isUsInvoiceRef.current = isUsInvoiceUser;
+  }, [isUsInvoiceUser]);
+
+  const defaultBranchCurrencyCode =
+    (
+      user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      ) as { currency?: { currency_code?: string } } | undefined
+    )?.currency?.currency_code ?? "";
+
+  const userLocalCurrency = useMemo(() => {
+    const code = user?.country?.country_code;
+    if (code === "IN") return "INR";
+    if (code === "AE") return "AED";
+    return "";
+  }, [user?.country?.country_code]);
 
   const [gstRatesByChargeIndex, setGstRatesByChargeIndex] = useState<
     Record<number, GstRates | null>
@@ -482,12 +705,20 @@ function InvoiceReverse() {
       roe: null,
       narration: "",
       irn_no: "",
+      fapiao_no: "",
       charges: [],
     },
     validate: {
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
-      state: (value) => (!value ? "State is required" : null),
+      state: (value) =>
+        isAgentInvoiceRef.current ||
+        isVatInvoiceRef.current ||
+        isUsInvoiceRef.current
+          ? null
+          : !value
+            ? "State is required"
+            : null,
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
@@ -699,8 +930,13 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmounts, chargeRoesForLocal]);
 
-  // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
+  // Fetch GST rates by State + SAC for each charge (India GST only)
   useEffect(() => {
+    if (!isGstInvoiceUser) {
+      setGstRatesLoadingByIndex({});
+      return;
+    }
+
     const stateId = form.values.state ? Number(form.values.state) : null;
     if (!stateId || Number.isNaN(stateId)) {
       setGstRatesLoadingByIndex({});
@@ -756,26 +992,12 @@ function InvoiceReverse() {
         if (cached) return { idx, rates: cached, fromCache: true };
 
         try {
-          const res = (await fetchGstRatesByStateSac({
+          const res = await fetchGstRatesByStateSac({
             state_id: stateId,
             sac_code: sac,
-          })) as any;
-          const payload = res?.data?.data ?? res?.data ?? res;
-          const data = payload as GstRatesBySacResponse | null | undefined;
-
-          const igstRaw = data?.igst_percent;
-          const cgstRaw = data?.cgst_percent;
-          const sgstRaw = data?.sgst_percent;
-          const sameState = data?.same_state ?? false;
-
-          const rates: GstRates = {
-            igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-            cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-            sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-            same_state: sameState,
-          };
-
-          gstRatesCacheRef.current.set(cacheKey, rates);
+          });
+          const rates = parseGstRatesPayload(res);
+          if (rates) gstRatesCacheRef.current.set(cacheKey, rates);
           return { idx, rates, fromCache: false };
         } catch {
           return { idx, rates: null, fromCache: false };
@@ -808,7 +1030,18 @@ function InvoiceReverse() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.state, form.values.charges]);
+  }, [form.values.state, form.values.charges, isGstInvoiceUser]);
+
+  useEffect(() => {
+    if (!isVatInvoiceUser || !gstBreakup) return;
+    form.values.charges.forEach((charge, idx) => {
+      const rate = getVatRateFromBreakup(gstBreakup, charge.charge_id);
+      if (rate != null && rate !== charge.tax_rate) {
+        form.setFieldValue(`charges.${idx}.tax_rate`, rate);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gstBreakup, isVatInvoiceUser]);
 
   // Auto-calculate header_amount: same currency → header_amount = amount_in_local; different → amount_in_local / header ROE
   const headerBillingCurrency = form.values.currency;
@@ -878,35 +1111,16 @@ function InvoiceReverse() {
         setIsAgentInvoice,
         setBillToDisplayName,
         emptyDaybook: false,
+        preserveChargeIds: true,
       });
       setDocumentNo(String(prebuilt.document_no ?? st?.document_no ?? ""));
-      const p = prebuilt as Record<string, unknown>;
-      setReverseDocLabel(
-        firstNonEmptyString(
-          st?.reverse_document_no,
-          p.reverse_document_no,
-          p.document_no,
-        ),
-      );
-      setInvoiceDocLabel(
-        firstNonEmptyString(
-          st?.invoice_document_no,
-          p.invoice_document_no,
-          p.invoice_no,
-          p.original_invoice_no,
-          p.reference_document_no,
-          p.ref_invoice_no,
-          typeof p.invoice === "object" &&
-            p.invoice !== null &&
-            (p.invoice as Record<string, unknown>).document_no,
-        ),
-      );
       if (prebuilt.id != null && Number(prebuilt.id) > 0) {
         setSaveResponse({
           id: Number(prebuilt.id),
           customer_id:
             prebuilt.customer_id != null ? Number(prebuilt.customer_id) : undefined,
-          document_no: String(prebuilt.document_no ?? ""),
+          reverse_document_no:
+            pickReverseDocumentNo(st) || pickReverseDocumentNo(prebuilt),
           status: String(prebuilt.status ?? "UNPOSTED"),
         });
         setInvoiceIsPosted(
@@ -928,13 +1142,9 @@ function InvoiceReverse() {
         "Document number is required. Open this screen from a job invoice, or from Unposted Documents with a valid document.",
       );
       setLoading(false);
-      setReverseDocLabel("");
-      setInvoiceDocLabel("");
       return;
     }
     setDocumentNo(docNo);
-    setInvoiceDocLabel(firstNonEmptyString(docNo));
-    setReverseDocLabel("");
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
@@ -947,14 +1157,8 @@ function InvoiceReverse() {
           setIsAgentInvoice,
           setBillToDisplayName,
           emptyDaybook: true,
+          preserveChargeIds: false,
         });
-        const dr = data as unknown as Record<string, unknown>;
-        setInvoiceDocLabel(
-          firstNonEmptyString(data.document_no, docNo, dr.ref_invoice_no),
-        );
-        setReverseDocLabel(
-          firstNonEmptyString(dr.reverse_document_no, dr.reverse_document_number),
-        );
       })
       .catch((err) => {
         if (!cancelled) {
@@ -978,19 +1182,12 @@ function InvoiceReverse() {
   }, [location.state]);
 
   useEffect(() => {
-    if (!saveResponse?.document_no) return;
-    setReverseDocLabel((prev) =>
-      firstNonEmptyString(saveResponse.document_no, prev),
-    );
-  }, [saveResponse?.document_no]);
-
-  useEffect(() => {
     // if (
     //   chargesTabActive !== "tax" ||
     //   !saveResponse?.id ||
     //   saveResponse?.customer_id == null
     // ) {
-    if (chargesTabActive !== "tax" || !saveResponse?.id) {
+    if (chargesTabActive !== "tax" || !saveResponse?.id || !showTaxTab) {
       return;
     }
     let cancelled = false;
@@ -998,6 +1195,7 @@ function InvoiceReverse() {
     setGstBreakup(null);
     fetchReverseInvoiceCalculateGstBreakup({
       reverse_invoice_id: saveResponse.id,
+      ...(isVatInvoiceUser ? { vat: true } : {}),
     })
       .then((data) => {
         if (!cancelled) setGstBreakup(data);
@@ -1011,10 +1209,9 @@ function InvoiceReverse() {
     return () => {
       cancelled = true;
     };
-  }, [chargesTabActive, saveResponse?.id, saveResponse?.customer_id]);
+  }, [chargesTabActive, saveResponse?.id, showTaxTab, isVatInvoiceUser]);
 
   const handlePostInvoiceReverse = async () => {
-    // if (!saveResponse?.id || saveResponse?.customer_id == null) {
     if (!saveResponse?.id) {
       ToastNotification({
         message:
@@ -1026,7 +1223,7 @@ function InvoiceReverse() {
     setIsPosting(true);
     try {
       const values = form.values;
-      const stateId = Number(values.state);
+      const stateId = values.state ? Number(values.state) : null;
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
       )?.find(
@@ -1034,77 +1231,109 @@ function InvoiceReverse() {
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
-      if (!stateId || stateId <= 0 || currencyId == null || currencyId <= 0) {
+      const isVatPost = isVatInvoiceUser;
+      const isUsPost = isUsInvoiceUser;
+      const stateValid = stateId != null && stateId > 0;
+      const needsStateForPost =
+        !isAgentInvoice && !isVatPost && !isUsPost;
+      if (
+        (needsStateForPost && !stateValid) ||
+        currencyId == null ||
+        currencyId <= 0
+      ) {
         ToastNotification({
-          message: "Please ensure State and Currency are valid.",
+          message: needsStateForPost
+            ? "Please ensure State and Currency are valid."
+            : "Please ensure Currency is valid.",
           type: "error",
         });
         setIsPosting(false);
         return;
       }
-      const total = values.charges.reduce(
-        (sum, c) => sum + (c.header_amount ?? 0),
-        0,
-      );
-      const header_total = total;
-      const local_total = values.charges.reduce(
-        (sum, c) => sum + (c.amount_in_local ?? 0),
-        0,
-      );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
         const year = d.getFullYear();
         return `${day}-${month}-${year}`;
       };
-      let breakupData = gstBreakup;
-      if (!breakupData?.sac_wise_totals?.length) {
-        breakupData = (await fetchReverseInvoiceCalculateGstBreakup({
-          reverse_invoice_id: saveResponse.id,
-        })) as typeof gstBreakup;
+
+      let sacWiseTotals: Array<{
+        sac_code?: string;
+        charge_name?: string;
+        charge_id?: number;
+        total_amount?: number;
+        rate?: number;
+      }> = [];
+      let percentageWiseTotals: NonNullable<
+        InvoiceTaxBreakup["percentage_wise_totals"]
+      > = [];
+      let vatBreakupData: InvoiceTaxBreakup | null = gstBreakup;
+      if (isVatPost) {
+        if (!vatBreakupData?.percentage_wise_totals?.length) {
+          vatBreakupData = await fetchReverseInvoiceCalculateGstBreakup({
+            reverse_invoice_id: saveResponse.id,
+            vat: true,
+          });
+        }
+        percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
+      } else if (!isAgentInvoice && !isUsPost) {
+        let breakupData = gstBreakup;
+        if (!breakupData?.sac_wise_totals?.length) {
+          breakupData = await fetchReverseInvoiceCalculateGstBreakup({
+            reverse_invoice_id: saveResponse.id,
+          });
+        }
+        sacWiseTotals = breakupData?.sac_wise_totals ?? [];
       }
-      const sacWiseTotals = breakupData?.sac_wise_totals ?? [];
+
       const topRoe =
         values.roe != null && values.roe > 0 ? Number(values.roe) : 1;
-      const taxes = sacWiseTotals.map((row) => ({
-        tax_code: row.sac_code ?? "",
-        rate: row.rate ?? 0,
-        amount: row.total_amount ?? 0,
-      }));
-      // Resolve GST rates per charge for post payload
-      const gstRatesForPostCharges: (GstRates | null)[] = await Promise.all(
-        values.charges.map(async (charge, idx) => {
-          const cached = gstRatesByChargeIndex[idx];
-          if (cached) return cached;
-          const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId <= 0) return null;
-          try {
-            const res = (await fetchGstRatesByStateSac({
-              state_id: stateId,
-              sac_code: sacCode,
-            })) as any;
-            const pl = res?.data?.data ?? res?.data ?? res;
-            const gstData = pl as GstRatesBySacResponse | null | undefined;
-            return {
-              igst:
-                gstData?.igst_percent == null || gstData.igst_percent === ""
-                  ? null
-                  : Number(gstData.igst_percent),
-              cgst:
-                gstData?.cgst_percent == null || gstData.cgst_percent === ""
-                  ? null
-                  : Number(gstData.cgst_percent),
-              sgst:
-                gstData?.sgst_percent == null || gstData.sgst_percent === ""
-                  ? null
-                  : Number(gstData.sgst_percent),
-              same_state: gstData?.same_state ?? false,
-            };
-          } catch {
-            return null;
-          }
-        }),
+      const currencyDataArr = currencyData as {
+        id?: number;
+        code?: string;
+        currency_code?: string;
+      }[];
+      const localCurrencyCode = (
+        defaultBranchCurrencyCode ||
+        userLocalCurrency ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+      const taxRowCurrencyId = resolveCurrencyIdByCode(
+        currencyDataArr,
+        localCurrencyCode,
+        currencyId,
       );
+      const taxes = isVatPost
+        ? []
+        : sacWiseTotals.map((row) => ({
+            tax_code: row.sac_code ?? "",
+            rate: row.rate ?? 0,
+            amount: row.total_amount ?? 0,
+          }));
+
+      const gstRatesForPostCharges: (GstRates | null)[] = !isGstInvoiceUser
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                });
+                return parseGstRatesPayload(res);
+              } catch {
+                return null;
+              }
+            }),
+          );
+
+      const includeChargeIds = Boolean(saveResponse?.id);
 
       const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = (
@@ -1126,6 +1355,37 @@ function InvoiceReverse() {
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
         const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+
+        if (isVatPost) {
+          const taxRate = resolveVatTaxRate(
+            vatBreakupData,
+            charge.charge_id,
+            charge.tax_rate,
+          );
+          const taxBase = charge.amount_in_local ?? headerAmount;
+          const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+          return {
+            ...reverseChargeIdPayload(charge, includeChargeIds),
+            shipment_no:
+              charge.shipment_id != null &&
+              String(charge.shipment_id).trim() !== ""
+                ? String(charge.shipment_id)
+                : null,
+            charge_id: charge.charge_id ?? null,
+            unit_id: unitId,
+            no_of_unit: charge.no_of_unit ?? 0,
+            currency_id: chargeCurrencyId,
+            roe: charge.roe ?? 0,
+            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_in_header: headerAmount,
+            Dr_Cr: charge.dr_cr ?? "Dr",
+            tax_rate: taxRate,
+            tax_amount: taxAmount,
+          };
+        }
+
         const rates = gstRatesForPostCharges[idx];
         const igstRate = rates?.igst ?? 0;
         const cgstRate = rates?.cgst ?? 0;
@@ -1144,7 +1404,7 @@ function InvoiceReverse() {
             ? clampAmount(headerAmount * (sgstRate / 100))
             : 0;
         return {
-          ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
+          ...reverseChargeIdPayload(charge, includeChargeIds),
           shipment_no:
             charge.shipment_id != null &&
             String(charge.shipment_id).trim() !== ""
@@ -1160,35 +1420,87 @@ function InvoiceReverse() {
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
           amount_in_header: headerAmount,
-          tax_code: charge.tax_code ?? "",
+          ...(isGstInvoiceUser ? { tax_code: charge.tax_code ?? "" } : {}),
           Dr_Cr: charge.dr_cr ?? "Dr",
-          igst_rate: igstRate,
-          cgst_rate: cgstRate,
-          sgst_rate: sgstRate,
-          igst: igstAmt,
-          cgst: cgstAmt,
-          sgst: sgstAmt,
+          ...(isGstInvoiceUser
+            ? {
+                igst_rate: igstRate,
+                cgst_rate: cgstRate,
+                sgst_rate: sgstRate,
+                igst: igstAmt,
+                cgst: cgstAmt,
+                sgst: sgstAmt,
+              }
+            : {}),
         };
       });
-      const taxCharges = sacWiseTotals.map((row) => {
-        const amt = clampAmount(row.total_amount ?? 0) ?? 0;
-        const amountInLocal = clampAmount(amt * topRoe) ?? 0;
-        return {
-          shipment_no: values.shipment_no,
-          charge_id: row.charge_id ?? null,
-          unit_id: null,
-          no_of_unit: 0,
-          currency_id: currencyId,
-          roe: topRoe,
-          amount_per_unit: 0,
-          amount: amt,
-          amount_in_local: amountInLocal,
-          amount_in_header: amountInLocal,
-          tax_code: row.sac_code ?? "",
-          Dr_Cr: "Dr",
-        };
-      });
-      const allChargesPayload = [...chargesPayload, ...taxCharges];
+      const taxCharges = isVatPost
+        ? percentageWiseTotals
+            .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
+            .map((row) => {
+              const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+              const { amountInLocal, amountInHeader, currencyAmount } =
+                calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
+              return {
+                shipment_no: values.shipment_no,
+                charge_id: row.vat_charge_id ?? null,
+                unit_id: null,
+                no_of_unit: 0,
+                currency_id: taxRowCurrencyId,
+                roe: 1,
+                amount_per_unit: 0,
+                amount: currencyAmount,
+                amount_in_local: amountInLocal,
+                amount_in_header: amountInHeader,
+                Dr_Cr: "Dr",
+              };
+            })
+        : isAgentInvoice || isUsPost
+          ? []
+          : sacWiseTotals
+              .filter((row) => {
+                const name = String(row.charge_name ?? "")
+                  .trim()
+                  .toUpperCase();
+                const rate = Number(row.rate ?? 0);
+                if (
+                  (name === "IGST" || name === "CGST" || name === "SGST") &&
+                  rate <= 0
+                ) {
+                  return false;
+                }
+                return true;
+              })
+              .map((row) => {
+                const totalAmount = clampAmount(row.total_amount ?? 0) ?? 0;
+                const { amountInLocal, amountInHeader, currencyAmount } =
+                  calcTaxRowAmountsFromBreakupTotal(totalAmount, topRoe);
+                return {
+                  shipment_no: values.shipment_no,
+                  charge_id: row.charge_id ?? null,
+                  unit_id: null,
+                  no_of_unit: 0,
+                  currency_id: taxRowCurrencyId,
+                  roe: topRoe,
+                  amount_per_unit: 0,
+                  amount: currencyAmount,
+                  amount_in_local: amountInLocal,
+                  amount_in_header: amountInHeader,
+                  tax_code: row.sac_code ?? "",
+                  Dr_Cr: "Dr",
+                };
+              });
+      const appendTaxRows = isGstInvoiceUser || isVatPost;
+      const allChargesPayload = appendTaxRows
+        ? [...chargesPayload, ...taxCharges]
+        : chargesPayload;
+      const total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_header) || 0),
+      );
+      const header_total = total;
+      const local_total = clampSumAmounts(
+        allChargesPayload.map((c) => Number(c.amount_in_local) || 0),
+      );
       const addressLabelForPayload =
         addressOptions.find((opt) => opt.value === values.address)?.label ??
         values.address;
@@ -1198,8 +1510,15 @@ function InvoiceReverse() {
         bill_to: values.bill_to,
         is_agent: isAgentInvoice,
         address: addressLabelForPayload,
-        state_id: stateId,
-        gstn: values.gstn || null,
+        state_id:
+          isAgentInvoice || isUsPost
+            ? stateId != null && stateId > 0
+              ? stateId
+              : null
+            : isVatPost
+              ? null
+              : stateId,
+        gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_no: documentNo,
@@ -1212,14 +1531,15 @@ function InvoiceReverse() {
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: values.irn_no || null,
+        irn_no: isKenyaUser ? null : values.irn_no || null,
+        fapiao_no: values.fapiao_no || null,
         status: "POSTED",
         total,
         header_total,
         local_total,
         Dr_Cr: "Cr",
         charges: allChargesPayload,
-        taxes,
+        taxes: isVatPost ? [] : taxes,
       };
       const response = (await putAPICall(
         URL.reverseInvoice,
@@ -1254,7 +1574,8 @@ function InvoiceReverse() {
           ...prev,
           id: response.id,
           customer_id: response.customer_id ?? prev?.customer_id,
-          document_no: response.document_no ?? "",
+          reverse_document_no:
+            pickReverseDocumentNo(response) || prev?.reverse_document_no || "",
           status: response.status ?? "POSTED",
         }));
         setInvoiceIsPosted(true);
@@ -1356,7 +1677,10 @@ function InvoiceReverse() {
     if (isCleared) {
       setAddressOptions([]);
       form.setFieldValue("address", "");
-      form.setFieldValue("state", "");
+      if (isGstInvoiceUser || isKenyaUser) {
+        if (isGstInvoiceUser) form.setFieldValue("state", "");
+        form.setFieldValue("gstn", "");
+      }
       return;
     }
 
@@ -1369,6 +1693,8 @@ function InvoiceReverse() {
         id: number;
         address: string;
         state_id?: number;
+        address_type?: string | null;
+        gst_id?: string | null;
       }>;
       const newAddressOptions = (addressesData || []).map(
         (addr: { id: number; address: string }) => ({
@@ -1380,11 +1706,28 @@ function InvoiceReverse() {
       setAddressOptions(newAddressOptions);
       form.setFieldValue("address", "");
 
-      const addrWithState = (addressesData || []).find(
-        (a: { state_id?: number }) => a.state_id != null,
-      );
-      if (addrWithState?.state_id != null) {
-        form.setFieldValue("state", String(addrWithState.state_id));
+      if (isGstInvoiceUser || isKenyaUser) {
+        if (isGstInvoiceUser) {
+          const primaryAddress = (addressesData || []).find(
+            (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+          );
+          const addrForState =
+            primaryAddress ||
+            (addressesData || []).find((a) => a.state_id != null);
+          if (addrForState?.state_id != null) {
+            form.setFieldValue("state", String(addrForState.state_id));
+          }
+        }
+
+        const primaryAddress = (addressesData || []).find(
+          (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+        );
+        const addrForGst =
+          primaryAddress ||
+          (addressesData || []).find((a) => a.gst_id != null);
+        if (addrForGst?.gst_id) {
+          form.setFieldValue("gstn", String(addrForGst.gst_id));
+        }
       }
     } else {
       setAddressOptions([]);
@@ -1400,7 +1743,7 @@ function InvoiceReverse() {
       });
       return;
     }
-    // Validate charges: charge, currency, roe, amount, amount_in_local, tax_code
+    // Validate charges: charge, currency, roe, amount, amount_in_local, SAC (India GST only)
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
@@ -1416,7 +1759,8 @@ function InvoiceReverse() {
         charge.amount_in_local === undefined
       )
         err.amount_in_local = "Local Amount is required";
-      if (!charge.tax_code?.trim()) err.tax_code = "SAC Code is required";
+      if (isGstInvoiceUser && !charge.tax_code?.trim())
+        err.tax_code = "SAC Code is required";
       if (Object.keys(err).length > 0) {
         chargeErrs[index] = err;
         return true;
@@ -1426,8 +1770,9 @@ function InvoiceReverse() {
     if (invalidCharges) {
       setChargeErrors(chargeErrs);
       ToastNotification({
-        message:
-          "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount, SAC Code).",
+        message: isGstInvoiceUser
+          ? "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount, SAC Code)."
+          : "Please fill all required fields in charges section.",
         type: "error",
       });
       return;
@@ -1435,7 +1780,7 @@ function InvoiceReverse() {
     setChargeErrors({});
     setIsSubmitting(true);
     try {
-      const stateId = Number(values.state);
+      const stateId = values.state ? Number(values.state) : null;
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
       )?.find(
@@ -1443,22 +1788,35 @@ function InvoiceReverse() {
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
-      if (!stateId || stateId <= 0 || currencyId == null || currencyId <= 0) {
+      const isVatSave = isVatInvoiceUser;
+      const isUsSave = isUsInvoiceUser;
+      if (
+        !isAgentInvoice &&
+        !isVatSave &&
+        !isUsSave &&
+        (!stateId || stateId <= 0)
+      ) {
         ToastNotification({
-          message: "Please select valid State and Billing Currency.",
+          message: "Please select a valid State",
           type: "error",
         });
         setIsSubmitting(false);
         return;
       }
-      const total = values.charges.reduce(
-        (sum, c) => sum + (c.header_amount ?? 0),
-        0,
+      if (currencyId == null || currencyId <= 0) {
+        ToastNotification({
+          message: "Please select a valid Billing Currency",
+          type: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      const total = clampSumAmounts(
+        values.charges.map((c) => c.header_amount ?? 0),
       );
       const header_total = total;
-      const local_total = values.charges.reduce(
-        (sum, c) => sum + (c.amount_in_local ?? 0),
-        0,
+      const local_total = clampSumAmounts(
+        values.charges.map((c) => c.amount_in_local ?? 0),
       );
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
@@ -1468,40 +1826,25 @@ function InvoiceReverse() {
       };
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
 
-      // Resolve GST rates per charge (use cached or fetch)
-      const gstRatesForCharges: (GstRates | null)[] = await Promise.all(
-        values.charges.map(async (charge, idx) => {
-          const cached = gstRatesByChargeIndex[idx];
-          if (cached) return cached;
-          const sacCode = (charge.tax_code ?? "").trim();
-          if (!sacCode || stateId <= 0) return null;
-          try {
-            const res = (await fetchGstRatesByStateSac({
-              state_id: stateId,
-              sac_code: sacCode,
-            })) as any;
-            const pl = res?.data?.data ?? res?.data ?? res;
-            const gstData = pl as GstRatesBySacResponse | null | undefined;
-            return {
-              igst:
-                gstData?.igst_percent == null || gstData.igst_percent === ""
-                  ? null
-                  : Number(gstData.igst_percent),
-              cgst:
-                gstData?.cgst_percent == null || gstData.cgst_percent === ""
-                  ? null
-                  : Number(gstData.cgst_percent),
-              sgst:
-                gstData?.sgst_percent == null || gstData.sgst_percent === ""
-                  ? null
-                  : Number(gstData.sgst_percent),
-              same_state: gstData?.same_state ?? false,
-            };
-          } catch {
-            return null;
-          }
-        }),
-      );
+      const gstRatesForCharges: (GstRates | null)[] = !isGstInvoiceUser
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                });
+                return parseGstRatesPayload(res);
+              } catch {
+                return null;
+              }
+            }),
+          );
 
       const chargesPayload = values.charges.map((charge, idx) => {
         const chargeCurrencyItem = (
@@ -1523,6 +1866,37 @@ function InvoiceReverse() {
         );
         const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
         const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+
+        if (isVatSave) {
+          const taxRate = resolveVatTaxRate(
+            gstBreakup,
+            charge.charge_id,
+            charge.tax_rate,
+          );
+          const taxBase = charge.amount_in_local ?? headerAmount;
+          const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+          return {
+            ...reverseChargeIdPayload(charge, isUpdate),
+            shipment_no:
+              charge.shipment_id != null &&
+              String(charge.shipment_id).trim() !== ""
+                ? String(charge.shipment_id)
+                : null,
+            charge_id: charge.charge_id ?? null,
+            unit_id: unitId,
+            no_of_unit: charge.no_of_unit ?? 0,
+            currency_id: chargeCurrencyId,
+            roe: charge.roe ?? 0,
+            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_in_header: headerAmount,
+            Dr_Cr: charge.dr_cr ?? "Dr",
+            tax_rate: taxRate,
+            tax_amount: taxAmount,
+          };
+        }
+
         const rates = gstRatesForCharges[idx];
         const igstRate = rates?.igst ?? 0;
         const cgstRate = rates?.cgst ?? 0;
@@ -1541,9 +1915,7 @@ function InvoiceReverse() {
             ? clampAmount(headerAmount * (sgstRate / 100))
             : 0;
         return {
-          ...(isUpdate && charge.id != null && charge.id > 0
-            ? { id: charge.id }
-            : {}),
+          ...reverseChargeIdPayload(charge, isUpdate),
           shipment_no:
             charge.shipment_id != null &&
             String(charge.shipment_id).trim() !== ""
@@ -1559,14 +1931,18 @@ function InvoiceReverse() {
           amount: clampAmount(charge.amount ?? 0) ?? 0,
           amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
           amount_in_header: headerAmount,
-          tax_code: charge.tax_code ?? "",
+          ...(isGstInvoiceUser ? { tax_code: charge.tax_code ?? "" } : {}),
           Dr_Cr: charge.dr_cr ?? "Dr",
-          igst_rate: igstRate,
-          cgst_rate: cgstRate,
-          sgst_rate: sgstRate,
-          igst: igstAmt,
-          cgst: cgstAmt,
-          sgst: sgstAmt,
+          ...(isGstInvoiceUser
+            ? {
+                igst_rate: igstRate,
+                cgst_rate: cgstRate,
+                sgst_rate: sgstRate,
+                igst: igstAmt,
+                cgst: cgstAmt,
+                sgst: sgstAmt,
+              }
+            : {}),
         };
       });
       const payload = {
@@ -1577,8 +1953,15 @@ function InvoiceReverse() {
         address:
           addressOptions.find((opt) => opt.value === values.address)?.label ??
           values.address,
-        state_id: stateId,
-        gstn: values.gstn || null,
+        state_id:
+          isAgentInvoice || isUsSave
+            ? stateId != null && stateId > 0
+              ? stateId
+              : null
+            : isVatSave
+              ? null
+              : stateId,
+        gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
         document_no: documentNo,
@@ -1591,7 +1974,8 @@ function InvoiceReverse() {
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: values.irn_no || null,
+        irn_no: isKenyaUser ? null : values.irn_no || null,
+        fapiao_no: values.fapiao_no || null,
         status: "UNPOSTED",
         total,
         header_total,
@@ -1621,14 +2005,15 @@ function InvoiceReverse() {
             ...prev,
             id: res.id ?? prev?.id,
             customer_id: res.customer_id ?? prev?.customer_id,
-            document_no: res.document_no ?? prev?.document_no ?? "",
+            reverse_document_no:
+              pickReverseDocumentNo(res) || prev?.reverse_document_no || "",
             status: res.status ?? prev?.status ?? "UNPOSTED",
           }));
           // Merge returned charge ids into form (e.g. new charges created by this PUT)
           if (res.charges && Array.isArray(res.charges)) {
             const updatedCharges = form.values.charges.map((c, i) => ({
               ...c,
-              id: res.charges![i]?.id ?? c.id,
+              id: res.charges?.[i]?.id ?? null,
             }));
             form.setFieldValue("charges", updatedCharges);
           }
@@ -1658,14 +2043,14 @@ function InvoiceReverse() {
           setSaveResponse({
             id: res.id,
             customer_id: res.customer_id,
-            document_no: res.document_no ?? "",
+            reverse_document_no: pickReverseDocumentNo(res),
             status: res.status ?? "UNPOSTED",
           });
           // Merge returned charge ids into form so Update (PUT) sends id for existing charges
           if (res.charges && Array.isArray(res.charges)) {
             const updatedCharges = form.values.charges.map((c, i) => ({
               ...c,
-              id: res.charges![i]?.id ?? c.id,
+              id: res.charges?.[i]?.id ?? null,
             }));
             form.setFieldValue("charges", updatedCharges);
           }
@@ -1774,10 +2159,10 @@ function InvoiceReverse() {
             {reversalPageTitle}
           </Text>
           <Group gap="md" wrap="wrap" justify="flex-end">
-            {firstNonEmptyString(reverseDocLabel, saveResponse?.document_no) && (
+            {saveResponse?.reverse_document_no?.trim() && (
               <Group gap="xs" wrap="nowrap">
                 <Text size="sm" fw={500} c="dimmed">
-                  Reverse document no
+                  Reverse Invoice document no
                 </Text>
                 <Badge
                   size="sm"
@@ -1785,28 +2170,10 @@ function InvoiceReverse() {
                   color="#105476"
                   styles={{ root: { textTransform: "none" } }}
                 >
-                  {firstNonEmptyString(
-                    reverseDocLabel,
-                    saveResponse?.document_no,
-                  ) || "—"}
+                  {saveResponse.reverse_document_no}
                 </Badge>
               </Group>
             )}
-            {firstNonEmptyString(invoiceDocLabel) ? (
-              <Group gap="xs" wrap="nowrap">
-                <Text size="sm" fw={500} c="dimmed">
-                  Invoice document no
-                </Text>
-                <Badge
-                  size="sm"
-                  variant="light"
-                  color="#105476"
-                  styles={{ root: { textTransform: "none" } }}
-                >
-                  {firstNonEmptyString(invoiceDocLabel)}
-                </Badge>
-              </Group>
-            ) : null}
             {saveResponse && (
               <Group gap="xs" wrap="nowrap">
                 <Text size="sm" fw={500} c="dimmed">
@@ -1879,31 +2246,45 @@ function InvoiceReverse() {
                 }
               />
             </Grid.Col>
-            <Grid.Col span={2}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading states" : "Select state"}
-                data={stateOptions}
-                value={form.values.state || null}
-                onChange={(value) => form.setFieldValue("state", value ?? "")}
-                searchable
-                withAsterisk
-                // disabled={isStateLoading || isReadOnly}
-                readOnly={isStateLoading || isReadOnly}
-                error={form.errors.state}
-              />
-            </Grid.Col>
-            <Grid.Col span={2}>
-              <FormTextInput
-                label="GSTN"
-                placeholder="GSTN"
-                value={form.values.gstn}
-                onChange={(e) => form.setFieldValue("gstn", e.target.value)}
-                // disabled={isReadOnly}
-                readOnly={isReadOnly}
-                error={form.errors.gstn}
-              />
-            </Grid.Col>
+            {isGstInvoiceUser && (
+              <>
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label="State"
+                    placeholder={isStateLoading ? "Loading states" : "Select state"}
+                    data={stateOptions}
+                    value={form.values.state || null}
+                    onChange={(value) => form.setFieldValue("state", value ?? "")}
+                    searchable
+                    withAsterisk
+                    readOnly={isStateLoading || isReadOnly}
+                    error={form.errors.state}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label="GSTN"
+                    placeholder="GSTN"
+                    value={form.values.gstn}
+                    onChange={(e) => form.setFieldValue("gstn", e.target.value)}
+                    readOnly={isReadOnly}
+                    error={form.errors.gstn}
+                  />
+                </Grid.Col>
+              </>
+            )}
+            {isKenyaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="PIN number"
+                  placeholder="PIN number"
+                  value={form.values.gstn}
+                  onChange={(e) => form.setFieldValue("gstn", e.target.value)}
+                  readOnly={isReadOnly}
+                  error={form.errors.gstn}
+                />
+              </Grid.Col>
+            )}
             <Grid.Col span={2}>
               <FormTextInput
                 label={isAgentInvoice ? "Job id" : "Shipment No"}
@@ -2009,17 +2390,28 @@ function InvoiceReverse() {
                 error={form.errors.roe}
               />
             </Grid.Col>
-            <Grid.Col span={2}>
-              <FormTextInput
-                label="IRN No"
-                placeholder="IRN No"
-                value={form.values.irn_no}
-                onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                // disabled={isReadOnly}
-                readOnly={isReadOnly}
-                error={form.errors.irn_no}
-              />
-            </Grid.Col>
+            {!isKenyaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="IRN No"
+                  placeholder="IRN No"
+                  value={form.values.irn_no}
+                  onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
+                  readOnly={isReadOnly}
+                  error={form.errors.irn_no}
+                />
+              </Grid.Col>
+            )}
+            {isChinaUser && (
+              <Grid.Col span={2}>
+                <FormTextInput
+                  label="Fapiao No"
+                  placeholder="Fapiao No"
+                  value={form.values.fapiao_no}
+                  readOnly
+                />
+              </Grid.Col>
+            )}
             <Grid.Col span={6}>
               {addressOptions.length > 0 ? (
                 <Dropdown
@@ -2078,7 +2470,7 @@ function InvoiceReverse() {
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
             >
-              {saveResponse && (
+              {saveResponse && showTaxTab && (
                 <Tabs.List>
                   <Tabs.Tab value="charges">Charges</Tabs.Tab>
                   <Tabs.Tab value="tax">Tax</Tabs.Tab>
@@ -2137,23 +2529,35 @@ function InvoiceReverse() {
                     <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Local Amount
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
-                      SAC Code
-                    </Grid.Col>
+                    {isGstInvoiceUser && (
+                      <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                        SAC Code
+                      </Grid.Col>
+                    )}
                     <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                       Dr/Cr
                     </Grid.Col>
-                    {headerSameState === true && (
+                    {isVatInvoiceUser && (
+                      <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                        VAT Rate %
+                      </Grid.Col>
+                    )}
+                    {isVatInvoiceUser && (
+                      <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                        VAT Amount
+                      </Grid.Col>
+                    )}
+                    {isGstInvoiceUser && headerSameState === true && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         CGST
                       </Grid.Col>
                     )}
-                    {headerSameState === true && (
+                    {isGstInvoiceUser && headerSameState === true && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         SGST
                       </Grid.Col>
                     )}
-                    {headerSameState === false && (
+                    {isGstInvoiceUser && headerSameState === false && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         IGST
                       </Grid.Col>
@@ -2227,7 +2631,7 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
-                            if (chargeId != null && jobServiceId != null) {
+                            if (chargeId != null && jobServiceId != null && isGstInvoiceUser) {
                               fetchGetEffectiveSac([
                                 {
                                   charge_id: chargeId,
@@ -2466,24 +2870,24 @@ function InvoiceReverse() {
                           error={chargeErrors[index]?.amount_in_local}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.8}>
-                        <FormTextInput
-                          placeholder="SAC Code"
-                          withAsterisk
-                          // readOnly
-                          value={charge.tax_code}
-                          //disabled={isReadOnly}
-                          readOnly={isReadOnly}
-                          error={chargeErrors[index]?.tax_code}
-                          rightSection={
-                            gstRatesLoadingByIndex[index] &&
-                            (!charge.tax_code ||
-                              charge.tax_code.trim() === "") ? (
-                              <Loader size="xs" color="#105476" />
-                            ) : null
-                          }
-                        />
-                      </Grid.Col>
+                      {isGstInvoiceUser && (
+                        <Grid.Col span={0.8}>
+                          <FormTextInput
+                            placeholder="SAC Code"
+                            withAsterisk
+                            value={charge.tax_code}
+                            readOnly={isReadOnly}
+                            error={chargeErrors[index]?.tax_code}
+                            rightSection={
+                              gstRatesLoadingByIndex[index] &&
+                              (!charge.tax_code ||
+                                charge.tax_code.trim() === "") ? (
+                                <Loader size="xs" color="#105476" />
+                              ) : null
+                            }
+                          />
+                        </Grid.Col>
+                      )}
                       <Grid.Col span={0.55}>
                         <Dropdown
                           placeholder="Dr/Cr"
@@ -2498,11 +2902,58 @@ function InvoiceReverse() {
                               (value === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
                             )
                           }
-                          // disabled={isReadOnly}
                           readOnly={isReadOnly}
                         />
                       </Grid.Col>
-                      {headerSameState === true && (
+                      {isVatInvoiceUser && (
+                        <Grid.Col span={0.8}>
+                          <FormNumberInput
+                            placeholder="VAT %"
+                            min={0}
+                            max={100}
+                            hideControls
+                            readOnly={isReadOnly}
+                            value={(() => {
+                              const rate = resolveVatTaxRate(
+                                gstBreakup,
+                                charge.charge_id,
+                                charge.tax_rate,
+                              );
+                              return rate > 0 ? rate : undefined;
+                            })()}
+                            onChange={(value) => {
+                              const parsed = clampAmount(value as number | null);
+                              form.setFieldValue(
+                                `charges.${index}.tax_rate`,
+                                parsed,
+                              );
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
+                      {isVatInvoiceUser && (
+                        <Grid.Col span={0.8}>
+                          <FormNumberInput
+                            placeholder="VAT Amount"
+                            min={0}
+                            hideControls
+                            readOnly
+                            value={(() => {
+                              const rate = resolveVatTaxRate(
+                                gstBreakup,
+                                charge.charge_id,
+                                charge.tax_rate,
+                              );
+                              const taxBase =
+                                charge.amount_in_local ?? charge.header_amount;
+                              if (rate <= 0 || taxBase == null) return undefined;
+                              const amount = calcTaxAmountFromRate(taxBase, rate);
+                              return amount > 0 ? amount : undefined;
+                            })()}
+                          />
+                        </Grid.Col>
+                      )}
+                      {isGstInvoiceUser && headerSameState === true && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="CGST"
@@ -2542,7 +2993,7 @@ function InvoiceReverse() {
                           />
                         </Grid.Col>
                       )}
-                      {headerSameState === true && (
+                      {isGstInvoiceUser && headerSameState === true && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="SGST"
@@ -2582,7 +3033,7 @@ function InvoiceReverse() {
                           />
                         </Grid.Col>
                       )}
-                      {headerSameState === false && (
+                      {isGstInvoiceUser && headerSameState === false && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="IGST"
@@ -2702,119 +3153,239 @@ function InvoiceReverse() {
                     </Grid>
                   ))}
                 </Box>
-                {/* Totals Section */}
-                <Box
-                  mt="xl"
-                  p="md"
-                  style={{
-                    backgroundColor: "#f8f9fa",
-                    borderRadius: 8,
-                    border: "1px solid #dee2e6",
-                  }}
-                >
-                  <Grid gutter="md">
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          Local Amount Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce(
-                              (sum, c) => sum + (c.amount_in_local ?? 0),
-                              0,
-                            )
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          IGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.igst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          CGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.cgst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    <Grid.Col span={3}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          SGST Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {form.values.charges
-                            .reduce((sum, c, idx) => {
-                              const rate = gstRatesByChargeIndex[idx]?.sgst;
-                              const localAmount = c.amount_in_local;
-                              if (rate == null || localAmount == null)
-                                return sum;
-                              const amount = clampAmount(
-                                (localAmount * rate) / 100,
-                              );
-                              return sum + (amount ?? 0);
-                            }, 0)
-                            .toFixed(2)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                  </Grid>
-                </Box>
+                {/* Totals — GST customer invoice or VAT (China/Kenya) */}
+                {(isGstInvoiceUser || isVatInvoiceUser) && (
+                  <Box
+                    mt="xl"
+                    p="md"
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: 8,
+                      border: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Grid gutter="md">
+                      <Grid.Col span={isVatInvoiceUser ? 6 : 3}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            Local Amount Total
+                          </Text>
+                          <Text size="lg" fw={600} c="#105476">
+                            {form.values.charges
+                              .reduce(
+                                (sum, c) => sum + (c.amount_in_local ?? 0),
+                                0,
+                              )
+                              .toFixed(2)}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
+                      {isVatInvoiceUser && (
+                        <Grid.Col span={6}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              VAT Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {gstBreakup?.vat_total != null
+                                ? Number(gstBreakup.vat_total).toFixed(2)
+                                : form.values.charges
+                                    .reduce((sum, c) => {
+                                      const rate = resolveVatTaxRate(
+                                        gstBreakup,
+                                        c.charge_id,
+                                        c.tax_rate,
+                                      );
+                                      const taxBase =
+                                        c.amount_in_local ?? c.header_amount;
+                                      return (
+                                        sum +
+                                        calcTaxAmountFromRate(taxBase, rate)
+                                      );
+                                    }, 0)
+                                    .toFixed(2)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      )}
+                      {isGstInvoiceUser && (
+                        <>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                IGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.igst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                CGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.cgst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                SGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {form.values.charges
+                                  .reduce((sum, c, idx) => {
+                                    const rate =
+                                      gstRatesByChargeIndex[idx]?.sgst;
+                                    const localAmount = c.amount_in_local;
+                                    if (rate == null || localAmount == null)
+                                      return sum;
+                                    const amount = clampAmount(
+                                      (localAmount * rate) / 100,
+                                    );
+                                    return sum + (amount ?? 0);
+                                  }, 0)
+                                  .toFixed(2)}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                        </>
+                      )}
+                    </Grid>
+                  </Box>
+                )}
               </Tabs.Panel>
 
-              {saveResponse && (
+              {saveResponse && showTaxTab && (
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
                       <Loader size="md" color="#105476" />
                       <Text size="sm" c="dimmed">
-                        Loading GST breakup...
+                        {isVatInvoiceUser
+                          ? "Loading VAT breakup..."
+                          : "Loading GST breakup..."}
                       </Text>
                     </Stack>
                   )}
                   {!gstBreakupLoading &&
                     !gstBreakup &&
                     chargesTabActive === "tax" &&
-                    saveResponse?.id &&
-                    saveResponse?.customer_id != null && (
+                    saveResponse?.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        No GST breakup data.
+                        {isVatInvoiceUser
+                          ? "No VAT breakup data."
+                          : "No GST breakup data."}
                       </Text>
                     )}
-                  {!gstBreakupLoading && gstBreakup && (
+                  {!gstBreakupLoading && gstBreakup && isVatInvoiceUser && (
+                    <>
+                      <ScrollArea mt="md">
+                        <Table
+                          withTableBorder
+                          withColumnBorders
+                          striped
+                          highlightOnHover
+                          style={{ minWidth: 520 }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Name
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Rate
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Amount
+                              </Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {(gstBreakup.percentage_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.rate_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {(() => {
+                                      const rateVal = row.rate ?? row.tax_rate;
+                                      const rateType = row.rate_type ?? "";
+                                      if (
+                                        rateVal == null ||
+                                        String(rateVal).trim() === ""
+                                      )
+                                        return "—";
+                                      const typeStr = String(rateType).trim();
+                                      if (typeStr === "%" || typeStr === "％")
+                                        return `${rateVal}%`;
+                                      if (typeStr !== "")
+                                        return `${rateVal}${typeStr}`;
+                                      return String(rateVal);
+                                    })()}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.taxable_total != null
+                                      ? Number(row.taxable_total).toFixed(2)
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
+                          </Table.Tbody>
+                          <Table.Tfoot>
+                            <Table.Tr>
+                              <Table.Td colSpan={2} />
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
+                                Total: {gstBreakup.total ?? "0.00"}
+                              </Table.Td>
+                            </Table.Tr>
+                          </Table.Tfoot>
+                        </Table>
+                      </ScrollArea>
+                    </>
+                  )}
+                  {!gstBreakupLoading && gstBreakup && isGstInvoiceUser && (
                     <>
                       <ScrollArea mt="md">
                         <Table

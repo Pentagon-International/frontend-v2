@@ -907,6 +907,20 @@ function InvoiceCreate({
 
   const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
 
+  // China: fapiao_no remains editable after POSTED; Update saves without unposting
+  const canEditChinaFapiaoAfterPost = useMemo(
+    () =>
+      isChinaUser &&
+      invoiceIsPosted &&
+      !isViewMode &&
+      saveResponse?.id != null &&
+      saveResponse.id > 0,
+    [isChinaUser, invoiceIsPosted, isViewMode, saveResponse?.id],
+  );
+  const fapiaoReadOnly = isReadOnly && !canEditChinaFapiaoAfterPost;
+  const canSubmitInvoiceForm = !isReadOnly;
+  const isFormVisuallyLocked = isReadOnly && !canEditChinaFapiaoAfterPost;
+
   // Helper function to calculate ROE based on currency and user's country
   const getRoeValue = useCallback(
     (currency: string): number => {
@@ -2441,6 +2455,44 @@ function InvoiceCreate({
     }
   };
 
+  const handleChinaPostedFapiaoUpdate = async () => {
+    if (!saveResponse?.id) {
+      ToastNotification({
+        message: "Save the invoice first before updating fapiao number.",
+        type: "error",
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const response = (await putAPICall(
+        URL.invoice,
+        {
+          id: saveResponse.id,
+          fapiao_no: form.values.fapiao_no?.trim() || null,
+        },
+        API_HEADER,
+      )) as { fapiao_no?: string | null } | undefined;
+      if (response?.fapiao_no != null) {
+        form.setFieldValue("fapiao_no", response.fapiao_no ?? "");
+      }
+      ToastNotification({
+        message: "Fapiao number updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      console.error("Error updating fapiao number:", error);
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ||
+          "Failed to update fapiao number",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (values: InvoiceFormData) => {
     console.log("values---", values);
@@ -3632,10 +3684,12 @@ function InvoiceCreate({
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            canSubmitInvoiceForm
+              ? form.onSubmit(handleSubmit)
+              : (e) => e.preventDefault()
           }
           style={
-            isReadOnly
+            isFormVisuallyLocked
               ? {
                   opacity: 0.92,
                   backgroundColor: "#f5f5f5",
@@ -3902,7 +3956,7 @@ function InvoiceCreate({
                   onChange={(e) =>
                     form.setFieldValue("fapiao_no", e.target.value)
                   }
-                  readOnly={false}
+                  readOnly={fapiaoReadOnly}
                 />
               </Grid.Col>
             )}
@@ -5465,6 +5519,17 @@ function InvoiceCreate({
                     </Button>
                   )}
               </>
+            )}
+            {canEditChinaFapiaoAfterPost && (
+              <Button
+                type="button"
+                color="#105476"
+                rightSection={<IconChevronRight size={16} />}
+                loading={isSubmitting}
+                onClick={handleChinaPostedFapiaoUpdate}
+              >
+                {`Update ${resolvedDocumentLabel}`}
+              </Button>
             )}
           </Group>
         </Box>
