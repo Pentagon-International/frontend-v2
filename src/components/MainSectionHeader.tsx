@@ -196,6 +196,9 @@ function MainSectionHeader() {
         if (sub === "ocean_import")
           return { path: `/SeaExport/import-job/invoice/edit/${id}`, needsState: false };
         return null;
+      case "reverse_invoice":
+        // Reverse invoice: fetch via filter/reverse-invoice/ then open InvoiceReverse
+        return { path: "/invoice-reverse", needsState: true };
       case "journal_voucher":
         return { path: `/journal-voucher/edit/${id}`, needsState: false };
       case "receipt":
@@ -296,6 +299,28 @@ function MainSectionHeader() {
             // Booking edit pages expect `job` in location.state (same as list→edit flow)
             job: record,
             bookingId,
+          },
+        });
+        return;
+      }
+
+      if (module === "reverse_invoice") {
+        const rec = record as Record<string, unknown>;
+        navigate(target.path, {
+          state: {
+            ...baseState,
+            financeReverseRecord: record,
+            document_no: String(rec.document_no ?? item.display_id ?? ""),
+            reverse_document_no: String(
+              rec.reverse_document_no ?? rec.document_no ?? "",
+            ).trim(),
+            invoice_document_no: String(
+              rec.invoice_document_no ??
+                rec.invoice_no ??
+                rec.original_invoice_no ??
+                rec.reference_document_no ??
+                "",
+            ).trim(),
           },
         });
         return;
