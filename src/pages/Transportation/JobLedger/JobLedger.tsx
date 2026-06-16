@@ -35,7 +35,7 @@ interface JobLedgerData {
   job: string;
   sno: number;
   subjob: string;
-  daybookCode: string;
+  documentType: string;
   daybookName: string;
   documentNo: string;
   date: string;
@@ -229,7 +229,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             sno:d?.sno ?? 0,
             // Response doesn't have "subjob" like the UI. Using HBL/AWB as a closest match.
             subjob: (d?.hbl_hawb_no ?? "").toString(),
-            daybookCode: (d?.day_book_code ?? "").toString(),
+            documentType: (d?.document_type ?? "").toString(),
             daybookName: (d?.day_book_name ?? "").toString(),
             documentNo: (d?.document_no ?? "").toString(),
             date: (d?.date ?? "").toString(),
@@ -382,8 +382,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
-        accessorKey: "daybookCode",
-        header: "Daybook Code",
+        accessorKey: "documentType",
+        header: "Daybook Type",
         size: 115,
         enableColumnFilter: false,
         enableSorting: false,
