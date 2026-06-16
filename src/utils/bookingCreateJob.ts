@@ -13,6 +13,7 @@ import {
 export type BookingCreateJobMode =
   | "air-export"
   | "inland-export"
+  | "inland-import"
   | "air-import"
   | "ocean-export"
   | "ocean-import";
@@ -20,6 +21,7 @@ export type BookingCreateJobMode =
 const JOB_EDIT_PATH: Record<BookingCreateJobMode, string> = {
   "air-export": "/air/export-job/edit",
   "inland-export": "/inland/export-job/edit",
+  "inland-import": "/inland/import-job/edit",
   "air-import": "/air/import-job/edit",
   "ocean-export": "/SeaExport/export-job/edit",
   "ocean-import": "/SeaExport/import-job/edit",
@@ -498,11 +500,17 @@ export function buildJobCreatePayloadFromBooking(
   mode: BookingCreateJobMode,
 ): Record<string, unknown> {
   const isInlandExport = mode === "inland-export";
+  const isInlandImport = mode === "inland-import";
+  const isInland = isInlandExport || isInlandImport;
   const isAir =
-    mode === "air-export" || isInlandExport || mode === "air-import";
+    mode === "air-export" || isInland || mode === "air-import";
   const serviceType =
-    mode === "air-import" || mode === "ocean-import" ? "Import" : "Export";
-  const service = isInlandExport
+    mode === "air-import" ||
+    mode === "ocean-import" ||
+    isInlandImport
+      ? "Import"
+      : "Export";
+  const service = isInland
     ? "INLAND"
     : String(booking.service || (isAir ? "AIR" : "FCL"));
   const routingTransport = isAir ? "Air" : "Sea";
@@ -512,8 +520,10 @@ export function buildJobCreatePayloadFromBooking(
     service,
     service_type: isInlandExport
       ? "EXPORT"
-      : normalizeJobServiceType(booking.service_type, serviceType),
-    ...(isInlandExport
+      : isInlandImport
+        ? "IMPORT"
+        : normalizeJobServiceType(booking.service_type, serviceType),
+    ...(isInland
       ? { service_code: String(booking.service_code ?? "").trim() }
       : {}),
     agent:
@@ -541,7 +551,9 @@ export function buildJobCreatePayloadFromBooking(
       isAir
         ? buildAirHousing(
             booking,
-            mode === "air-export" || mode === "inland-export" ? "Re Export" : "Import",
+            mode === "air-export" || mode === "inland-export"
+              ? "Re Export"
+              : "Import",
           )
         : buildOceanHousing(
             booking,

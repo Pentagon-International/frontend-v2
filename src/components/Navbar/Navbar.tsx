@@ -723,6 +723,34 @@ const Navbar = ({
                 >
                   <SubNavLink
                     parent="Transportation"
+                    label="Inland Import Booking"
+                    icon={IconTruck}
+                    path="/inland/import-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Inland Import Job"
+                    icon={IconTruck}
+                    path="/inland/import-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
                     label="Inland Export Booking"
                     icon={IconTruck}
                     path="/inland/export-booking"
@@ -739,7 +767,7 @@ const Navbar = ({
                     parent="Transportation"
                     label="Inland Export Job Generation"
                     icon={IconTruck}
-                    path="/inland/job-generation"
+                    path="/inland/export-job-generation"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,

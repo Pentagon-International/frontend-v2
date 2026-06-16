@@ -1,4 +1,4 @@
-import {
+﻿import {
   Box,
   Button,
   Grid,
@@ -82,19 +82,19 @@ import {
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
 import {
-  buildInlandExportJobServicePayload,
-  resolveInlandExportJobServiceFields,
-  withInlandExportJobServiceFields,
-} from "./inlandExportJobService";
+  buildInlandImportJobServicePayload,
+  resolveInlandImportJobServiceFields,
+  withInlandImportJobServiceFields,
+} from "./inlandImportJobService";
 
 type ServiceMasterItem = {
   service_code: string;
   service_name: string;
 };
 
-const fetchInlandExportServices = async (): Promise<ServiceMasterItem[]> => {
+const fetchInlandImportServices = async (): Promise<ServiceMasterItem[]> => {
   const response = await getAPICall(
-    `${URL.serviceMaster}?filter=inland_export`,
+    `${URL.serviceMaster}?filter=inland_import`,
     API_HEADER,
   );
   return Array.isArray(response) ? response : [];
@@ -178,7 +178,7 @@ type RoutingDetail = {
   rail_no: string;
 };
 
-// ContainerDetail removed for Inland Export Jobs
+// ContainerDetail removed for Inland Import Jobs
 
 type HAWBDetail = {
   id: number;
@@ -329,7 +329,7 @@ const carrierDetailsSchema = yup.object({
   mawb_date: yup.date().nullable(),
 });
 
-// Container schemas removed for Inland Export Jobs
+// Container schemas removed for Inland Import Jobs
 
 // const routingSchema = yup.object({
 //   transport_type: yup.string().required("Transport Type is required"),
@@ -368,21 +368,20 @@ const parseBoolean = (value: unknown): boolean => {
   return false;
 };
 
-function InlandExportJobCreate() {
+function InlandImportJobCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const jobData = location.state?.job;
   const jobServiceFields = useMemo(
     () =>
-      resolveInlandExportJobServiceFields(
+      resolveInlandImportJobServiceFields(
         jobData as Record<string, unknown> | undefined,
       ),
     [jobData],
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
-  const lastFetchedJobIdRef = useRef<number | null>(null);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
     location.state?.hawbDetails && Array.isArray(location.state.hawbDetails)
       ? location.state.hawbDetails
@@ -410,6 +409,8 @@ function InlandExportJobCreate() {
   const navigationInProgressRef = useRef(false);
   // Track the last restored mawbDetails to prevent duplicate restorations
   const lastRestoredMawbDetailsRef = useRef<string | null>(null);
+  // Track the last restored carrierDetails snapshot (restored independently of MAWB)
+  const lastRestoredCarrierDetailsRef = useRef<string | null>(null);
 
   // Accounts tab state
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -450,9 +451,9 @@ function InlandExportJobCreate() {
 
   const isReadOnly = mode === "view";
 
-  const { data: inlandExportServices = [] } = useQuery({
-    queryKey: ["serviceMaster", "inland_export"],
-    queryFn: fetchInlandExportServices,
+  const { data: inlandImportServices = [] } = useQuery({
+    queryKey: ["serviceMaster", "inland_import"],
+    queryFn: fetchInlandImportServices,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -461,11 +462,11 @@ function InlandExportJobCreate() {
 
   const inlandServiceOptions = useMemo(
     () =>
-      inlandExportServices.map((item) => ({
+      inlandImportServices.map((item) => ({
         value: item.service_code,
         label: item.service_name || item.service_code,
       })),
-    [inlandExportServices],
+    [inlandImportServices],
   );
 
   const resolvedServiceCode = jobServiceFields.service_code;
@@ -487,7 +488,7 @@ function InlandExportJobCreate() {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate("/inland/export-job");
+    navigate("/inland/import-job");
   };
 
   // Fetch full job when only jobId is provided, or list row is missing service_code.
@@ -499,18 +500,16 @@ function InlandExportJobCreate() {
     if (jobId == null) return;
 
     const listServiceCode =
-      resolveInlandExportJobServiceFields(jobFromState).service_code;
+      resolveInlandImportJobServiceFields(jobFromState).service_code;
     const shouldFetch =
       location.state?.jobId != null ||
       !location.state?.job ||
       !listServiceCode;
 
     if (!shouldFetch) return;
-    if (lastFetchedJobIdRef.current === jobId) return;
 
     let cancelled = false;
     const fetchAndReplace = async () => {
-      lastFetchedJobIdRef.current = jobId;
       setIsFetchingJobById(true);
       try {
         const jobListRes = await getAPICall(
@@ -525,12 +524,12 @@ function InlandExportJobCreate() {
             : [];
         const job =
           list.length > 0
-            ? withInlandExportJobServiceFields(
+            ? withInlandImportJobServiceFields(
                 list[0] as Record<string, unknown>,
               )
             : null;
         if (!cancelled && job) {
-          navigate("/inland/export-job/edit", {
+          navigate("/inland/import-job/edit", {
             state: {
               job,
               returnTo: location.state?.returnTo,
@@ -553,9 +552,7 @@ function InlandExportJobCreate() {
           });
         }
       } finally {
-        // Always clear loader, even if effect cleanup marked this request cancelled.
-        // Route-state replace during successful fetch can otherwise leave the page stuck.
-        setIsFetchingJobById(false);
+        if (!cancelled) setIsFetchingJobById(false);
       }
     };
     fetchAndReplace();
@@ -828,7 +825,7 @@ function InlandExportJobCreate() {
       : undefined,
   );
 
-  // Note: Container Details are not used for Inland Export Jobs
+  // Note: Container Details are not used for Inland Import Jobs
 
   // Load job data if in edit or view mode - Only initialize once from jobData
   // This effect runs FIRST to ensure forms are initialized before restoration logic
@@ -956,22 +953,53 @@ function InlandExportJobCreate() {
           },
         );
 
+        const hasHawbDetailsInState =
+          (location.state?.hawbDetails &&
+            Array.isArray(location.state.hawbDetails) &&
+            location.state.hawbDetails.length > 0) ||
+          (location.state?.housingDetails &&
+            Array.isArray(location.state.housingDetails) &&
+            location.state.housingDetails.length > 0);
+
+        const stateCarrierDetails = location.state?.carrierDetails as
+          | Partial<CarrierDetailsForm>
+          | undefined;
+        const carrierSource =
+          hasHawbDetailsInState && stateCarrierDetails ? stateCarrierDetails : jobData;
+
         // Populate Carrier Details using setValues
         const carrierInitialValues = {
-          schedule_id: jobData.schedule_id || "",
-          carrier_code: jobData.carrier_code || "",
-          carrier_name: jobData.carrier_name || "",
-          flight_name: jobData.vessel_name || jobData.flight_name || "",
-          flight_number:
-            jobData.flight_number ||
-            jobData.voyage_number ||
-            jobData.flightno ||
+          schedule_id: carrierSource.schedule_id || "",
+          carrier_code: carrierSource.carrier_code || "",
+          carrier_name: carrierSource.carrier_name || "",
+          flight_name:
+            (carrierSource as Record<string, unknown>).vessel_name ||
+            (carrierSource as Record<string, unknown>).flight_name ||
             "",
-          mawb_number: jobData.mawb_no || jobData.mawb_number || "",
+          flight_number:
+            carrierSource.flight_number ||
+            (carrierSource as Record<string, unknown>).voyage_number ||
+            (carrierSource as Record<string, unknown>).flightno ||
+            "",
+          mawb_number:
+            (carrierSource as Record<string, unknown>).mawb_no ||
+            carrierSource.mawb_number ||
+            "",
           mawb_date:
-            (jobData.mawb_date || jobData.mbl_date) &&
-            dayjs(jobData.mawb_date || jobData.mbl_date).isValid()
-              ? dayjs(jobData.mawb_date || jobData.mbl_date).toDate()
+            ((carrierSource as Record<string, unknown>).mawb_date ||
+              (carrierSource as Record<string, unknown>).mbl_date) &&
+            dayjs(
+              ((carrierSource as Record<string, unknown>).mawb_date ||
+                (carrierSource as Record<string, unknown>).mbl_date) as
+                | string
+                | Date,
+            ).isValid()
+              ? dayjs(
+                  ((carrierSource as Record<string, unknown>).mawb_date ||
+                    (carrierSource as Record<string, unknown>).mbl_date) as
+                    | string
+                    | Date,
+                ).toDate()
               : null,
         };
 
@@ -991,11 +1019,6 @@ function InlandExportJobCreate() {
         // Populate Housing Details from jobData if exists
         // Only load from jobData if location.state doesn't have hawbDetails with actual data
         // (meaning we're on initial edit load, not coming back from HAWBCreate)
-        const hasHawbDetailsInState =
-          location.state?.hawbDetails &&
-          Array.isArray(location.state.hawbDetails) &&
-          location.state.hawbDetails.length > 0;
-
         // Support both hawb_details and housing_details for backward compatibility
         const housingDetailsData =
           jobData.housing_details ||
@@ -1325,7 +1348,7 @@ function InlandExportJobCreate() {
           "✅ Routings initialized - Form values after setValues:",
           routingsForm.values,
         );
-        // Note: Container Details are not used for Inland Export Jobs
+        // Note: Container Details are not used for Inland Import Jobs
 
         // Populate Estimates (master level) from jobData if exists
         const estimatesFromApi = (jobData as unknown as { estimates?: unknown })
@@ -1898,9 +1921,11 @@ function InlandExportJobCreate() {
           }, 50);
         }
 
-        // Restore Carrier Details - Always restore when coming back from HAWB (only if changed)
-        if (shouldRestore && savedCarrierDetails) {
-          carrierDetailsForm.setValues({
+        // Restore Carrier Details when coming back from HAWB.
+        // This must not be tied to `mawbDetailsKey` because jobData re-initialization can wipe
+        // unsaved carrier details while MAWB stays unchanged.
+        if (savedCarrierDetails) {
+          const savedCarrierKey = JSON.stringify({
             schedule_id: savedCarrierDetails.schedule_id || "",
             carrier_code: savedCarrierDetails.carrier_code || "",
             carrier_name: savedCarrierDetails.carrier_name || "",
@@ -1908,15 +1933,36 @@ function InlandExportJobCreate() {
               savedCarrierDetails.flight_number ||
               savedCarrierDetails.voyage_number ||
               "",
-            mawb_number:
-              savedCarrierDetails.mawb_number ||
-              savedCarrierDetails.mawb_number ||
-              "",
-            mawb_date:
-              savedCarrierDetails.mawb_date ||
-              savedCarrierDetails.mawb_date ||
-              null,
+            mawb_number: savedCarrierDetails.mawb_number || "",
+            mawb_date: savedCarrierDetails.mawb_date || null,
           });
+
+          const currentCarrierKey = JSON.stringify({
+            schedule_id: carrierDetailsForm.values.schedule_id || "",
+            carrier_code: carrierDetailsForm.values.carrier_code || "",
+            carrier_name: carrierDetailsForm.values.carrier_name || "",
+            flight_number: carrierDetailsForm.values.flight_number || "",
+            mawb_number: carrierDetailsForm.values.mawb_number || "",
+            mawb_date: carrierDetailsForm.values.mawb_date || null,
+          });
+
+          if (
+            savedCarrierKey !== currentCarrierKey &&
+            savedCarrierKey !== lastRestoredCarrierDetailsRef.current
+          ) {
+            carrierDetailsForm.setValues({
+              schedule_id: savedCarrierDetails.schedule_id || "",
+              carrier_code: savedCarrierDetails.carrier_code || "",
+              carrier_name: savedCarrierDetails.carrier_name || "",
+              flight_number:
+                savedCarrierDetails.flight_number ||
+                savedCarrierDetails.voyage_number ||
+                "",
+              mawb_number: savedCarrierDetails.mawb_number || "",
+              mawb_date: savedCarrierDetails.mawb_date || null,
+            });
+            lastRestoredCarrierDetailsRef.current = savedCarrierKey;
+          }
         }
       }
 
@@ -2000,7 +2046,7 @@ function InlandExportJobCreate() {
     mode, // Add mode to dependencies
   ]);
 
-  // Note: Container details restoration removed for Inland Export Jobs
+  // Note: Container details restoration removed for Inland Import Jobs
 
   // Remove housing detail
   const removeHawbDetail = (index: number) => {
@@ -2071,7 +2117,7 @@ function InlandExportJobCreate() {
         fromLocationState: !!location.state?.mawbDetails?.agent_data,
       });
 
-      navigate("/inland/export-job/house-create", {
+      navigate("/inland/import-job/house-create", {
         state: {
           hawbDetails: hawbDetails,
           // Support legacy housingDetails key for backward compatibility
@@ -2353,7 +2399,7 @@ function InlandExportJobCreate() {
     }
     try {
       const payload = {
-        ...buildInlandExportJobServicePayload(
+        ...buildInlandImportJobServicePayload(
           mawbDetailsForm.values.service_code,
         ),
         is_direct: mawbDetailsForm.values.is_direct,
@@ -2632,11 +2678,11 @@ function InlandExportJobCreate() {
 
       ToastNotification({
         type: "success",
-        message: `Inland Export Job ${mode === "edit" ? "updated" : "created"} successfully`,
+        message: `Inland Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
       });
 
       // Clear hawb details from state when navigating and trigger refetch
-      navigate("/inland/export-job", {
+      navigate("/inland/import-job", {
         state: { hawbDetails: [], refreshData: true },
       });
     } catch (err) {
@@ -2843,7 +2889,7 @@ function InlandExportJobCreate() {
                         },
                       ];
 
-                      navigate("/inland/export-job/invoice", {
+                      navigate("/inland/import-job/invoice", {
                         state: {
                           serviceType: "AIR",
                           hawbDetails: housingDetailsForInvoice,
@@ -3078,7 +3124,7 @@ function InlandExportJobCreate() {
                   value={mawbDetailsForm.values.service_code || null}
                   onChange={(value) => {
                     const code = value ?? "";
-                    const selected = inlandExportServices.find(
+                    const selected = inlandImportServices.find(
                       (item) => item.service_code === code,
                     );
                     mawbDetailsForm.setFieldValue("service_code", code);
@@ -4374,7 +4420,7 @@ function InlandExportJobCreate() {
                                         }}
                                         onClick={() =>
                                           navigate(
-                                            `/inland/export-job/invoice/view/${row.invoice_id ?? row.id}`,
+                                            `/inland/import-job/invoice/view/${row.invoice_id ?? row.id}`,
                                             {
                                               state: {
                                                 invoiceData: row,
@@ -4429,7 +4475,7 @@ function InlandExportJobCreate() {
                                           }}
                                           onClick={() =>
                                             navigate(
-                                              `/inland/export-job/invoice/edit/${row.invoice_id ?? row.id}`,
+                                              `/inland/import-job/invoice/edit/${row.invoice_id ?? row.id}`,
                                               {
                                                 state: {
                                                   invoiceData: row,
@@ -4484,7 +4530,7 @@ function InlandExportJobCreate() {
                                           }}
                                           onClick={() =>
                                             navigate(
-                                              "/inland/export-job/invoice/reverse",
+                                              "/inland/import-job/invoice/reverse",
                                               {
                                                 state: {
                                                   document_no:
@@ -4754,7 +4800,7 @@ function InlandExportJobCreate() {
                                                                 )
                                                                   .reverse_invoice_id) as number;
                                                             navigate(
-                                                              `/inland/export-job/invoice/view/${targetId}`,
+                                                              `/inland/import-job/invoice/view/${targetId}`,
                                                               {
                                                                 state: {
                                                                   invoiceData: {
@@ -4922,7 +4968,7 @@ function InlandExportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate("/inland/export-job");
+              navigate("/inland/import-job");
             }}
           >
             Yes, close
@@ -5291,4 +5337,4 @@ function InlandExportJobCreate() {
   );
 }
 
-export default InlandExportJobCreate;
+export default InlandImportJobCreate;

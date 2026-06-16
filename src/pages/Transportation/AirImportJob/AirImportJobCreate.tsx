@@ -371,6 +371,8 @@ function AirImportJobCreate() {
   const navigationInProgressRef = useRef(false);
   // Track the last restored mawbDetails to prevent duplicate restorations
   const lastRestoredMawbDetailsRef = useRef<string | null>(null);
+  // Track the last restored carrierDetails snapshot (restored independently of MAWB)
+  const lastRestoredCarrierDetailsRef = useRef<string | null>(null);
 
   // Accounts tab state
   const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
@@ -774,21 +776,49 @@ function AirImportJobCreate() {
           },
         );
 
+        const hasHawbDetailsInState =
+          (location.state?.hawbDetails &&
+            Array.isArray(location.state.hawbDetails) &&
+            location.state.hawbDetails.length > 0) ||
+          (location.state?.housingDetails &&
+            Array.isArray(location.state.housingDetails) &&
+            location.state.housingDetails.length > 0);
+
+        const stateCarrierDetails = location.state?.carrierDetails as
+          | Partial<CarrierDetailsForm>
+          | undefined;
+        const carrierSource =
+          hasHawbDetailsInState && stateCarrierDetails ? stateCarrierDetails : jobData;
+
         // Populate Carrier Details using setValues
         const carrierInitialValues = {
-          schedule_id: jobData.schedule_id || "",
-          carrier_code: jobData.carrier_code || "",
-          carrier_name: jobData.carrier_name || "",
+          schedule_id: carrierSource.schedule_id || "",
+          carrier_code: carrierSource.carrier_code || "",
+          carrier_name: carrierSource.carrier_name || "",
           flight_number:
-            jobData.flight_number ||
-            jobData.voyage_number ||
-            jobData.flightno ||
+            carrierSource.flight_number ||
+            (carrierSource as Record<string, unknown>).voyage_number ||
+            (carrierSource as Record<string, unknown>).flightno ||
             "",
-          mawb_number: jobData.mawb_no || jobData.mawb_number || "",
+          mawb_number:
+            (carrierSource as Record<string, unknown>).mawb_no ||
+            carrierSource.mawb_number ||
+            "",
           mawb_date:
-            (jobData.mawb_date || jobData.mbl_date) &&
-            dayjs(jobData.mawb_date || jobData.mbl_date).isValid()
-              ? dayjs(jobData.mawb_date || jobData.mbl_date).toDate()
+            ((carrierSource as Record<string, unknown>).mawb_date ||
+              (carrierSource as Record<string, unknown>).mbl_date) &&
+            dayjs(
+              ((carrierSource as Record<string, unknown>).mawb_date ||
+                (carrierSource as Record<string, unknown>).mbl_date) as
+                | string
+                | Date,
+            ).isValid()
+              ? dayjs(
+                  ((carrierSource as Record<string, unknown>).mawb_date ||
+                    (carrierSource as Record<string, unknown>).mbl_date) as
+                    | string
+                    | Date,
+                ).toDate()
               : null,
         };
 
@@ -808,11 +838,6 @@ function AirImportJobCreate() {
         // Populate Housing Details from jobData if exists
         // Only load from jobData if location.state doesn't have hawbDetails with actual data
         // (meaning we're on initial edit load, not coming back from HAWBCreate)
-        const hasHawbDetailsInState =
-          location.state?.hawbDetails &&
-          Array.isArray(location.state.hawbDetails) &&
-          location.state.hawbDetails.length > 0;
-
         // Support both hawb_details and housing_details for backward compatibility
         const housingDetailsData =
           jobData.housing_details ||
@@ -1920,9 +1945,11 @@ function AirImportJobCreate() {
           }, 50);
         }
 
-        // Restore Carrier Details - Always restore when coming back from HAWB (only if changed)
-        if (shouldRestore && savedCarrierDetails) {
-          carrierDetailsForm.setValues({
+        // Restore Carrier Details when coming back from HAWB.
+        // This must not be tied to `mawbDetailsKey` because jobData re-initialization can wipe
+        // unsaved carrier details while MAWB stays unchanged.
+        if (savedCarrierDetails) {
+          const savedCarrierKey = JSON.stringify({
             schedule_id: savedCarrierDetails.schedule_id || "",
             carrier_code: savedCarrierDetails.carrier_code || "",
             carrier_name: savedCarrierDetails.carrier_name || "",
@@ -1930,15 +1957,36 @@ function AirImportJobCreate() {
               savedCarrierDetails.flight_number ||
               savedCarrierDetails.voyage_number ||
               "",
-            mawb_number:
-              savedCarrierDetails.mawb_number ||
-              savedCarrierDetails.mawb_number ||
-              "",
-            mawb_date:
-              savedCarrierDetails.mawb_date ||
-              savedCarrierDetails.mawb_date ||
-              null,
+            mawb_number: savedCarrierDetails.mawb_number || "",
+            mawb_date: savedCarrierDetails.mawb_date || null,
           });
+
+          const currentCarrierKey = JSON.stringify({
+            schedule_id: carrierDetailsForm.values.schedule_id || "",
+            carrier_code: carrierDetailsForm.values.carrier_code || "",
+            carrier_name: carrierDetailsForm.values.carrier_name || "",
+            flight_number: carrierDetailsForm.values.flight_number || "",
+            mawb_number: carrierDetailsForm.values.mawb_number || "",
+            mawb_date: carrierDetailsForm.values.mawb_date || null,
+          });
+
+          if (
+            savedCarrierKey !== currentCarrierKey &&
+            savedCarrierKey !== lastRestoredCarrierDetailsRef.current
+          ) {
+            carrierDetailsForm.setValues({
+              schedule_id: savedCarrierDetails.schedule_id || "",
+              carrier_code: savedCarrierDetails.carrier_code || "",
+              carrier_name: savedCarrierDetails.carrier_name || "",
+              flight_number:
+                savedCarrierDetails.flight_number ||
+                savedCarrierDetails.voyage_number ||
+                "",
+              mawb_number: savedCarrierDetails.mawb_number || "",
+              mawb_date: savedCarrierDetails.mawb_date || null,
+            });
+            lastRestoredCarrierDetailsRef.current = savedCarrierKey;
+          }
         }
 
         // Restore Estimates (master-level) when coming back from HouseCreate in CREATE mode
