@@ -490,7 +490,9 @@ function InlandExportJobCreate() {
     navigate("/inland/export-job");
   };
 
-  // Fetch full job when only jobId is provided, or list row is missing service_code.
+  // Fetch full job only when explicit `jobId` is provided or `job` is absent.
+  // Do not refetch just because service_code is missing; this allows master-level
+  // state passed back from House (Save AWB) to remain displayed without reload.
   useEffect(() => {
     const jobFromState = location.state?.job as Record<string, unknown> | undefined;
     const jobId =
@@ -498,12 +500,9 @@ function InlandExportJobCreate() {
       (jobFromState?.id as number | undefined);
     if (jobId == null) return;
 
-    const listServiceCode =
-      resolveInlandExportJobServiceFields(jobFromState).service_code;
     const shouldFetch =
       location.state?.jobId != null ||
-      !location.state?.job ||
-      !listServiceCode;
+      !location.state?.job;
 
     if (!shouldFetch) return;
     if (lastFetchedJobIdRef.current === jobId) return;
