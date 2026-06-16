@@ -46,16 +46,18 @@ import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import useAuthStore from "../../../store/authStore";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
-import { submitCustomerMultipart } from "../../../service/customerPanApproval.service";
+import { submitCustomerMultipart, submitCustomerVerification } from "../../../service/customerPanApproval.service";
 import {
   EMPTY_SUPPORTING_DOCUMENT,
   validateSupportingDocumentSizes,
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
 import {
+  extractDocumentsListFromResponse,
   mapDocumentsListToSupportingDocuments,
   type CustomerDocumentListItem,
 } from "../../../utils/customerDocuments";
+import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
 function parseYesNoBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -1499,6 +1501,7 @@ function CustomerCreate() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const userCountry = useAuthStore((s) => s.user?.country);
   const userBranches = useAuthStore((s) => s.user?.branches);
+  const isIndiaUser = isIndianUserFromProfile(userCountry);
   const isKenyaUser = useMemo(() => {
     const defaultBranch = userBranches?.find((b) => b.is_default);
     const byBranch =
@@ -1510,11 +1513,6 @@ function CustomerCreate() {
         .includes("KENYA");
     return byBranch || byCountry;
   }, [userBranches, userCountry]);
-  const isIndiaUser =
-    String(userCountry?.country_code ?? "").toUpperCase() === "IN" ||
-    String(userCountry?.country_name ?? "")
-      .toLowerCase()
-      .includes("india");
   const isDubaiUser =
     String(userCountry?.country_code ?? "").toUpperCase() === "AE" ||
     String(userCountry?.country_name ?? "")
@@ -1560,13 +1558,17 @@ function CustomerCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const isVerificationCreateRoute =
+    location.pathname === "/master/create-customer";
   const customerData = location.state?.customerData as
     | CustomerDetailRecord
     | undefined;
   const isVendorMasterRoute = location.pathname.includes("/master/vendor");
-  const baseMasterPath = isVendorMasterRoute
-    ? "/master/vendor"
-    : "/master/customer";
+  const baseMasterPath = isVerificationCreateRoute
+    ? "/master"
+    : isVendorMasterRoute
+      ? "/master/vendor"
+      : "/master/customer";
 
   // Determine the mode based on route parameters
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
@@ -1995,6 +1997,12 @@ function CustomerCreate() {
       isViewMode,
     ],
   );
+
+  useEffect(() => {
+    if (isVerificationCreateRoute && isIndiaUser) {
+      navigate("/master/create-customer-pan", { replace: true });
+    }
+  }, [isVerificationCreateRoute, isIndiaUser, navigate]);
 
   // Re-resolve Assign To once salesperson options load (initial load only — do not overwrite user edits)
   useEffect(() => {
@@ -2598,6 +2606,41 @@ function CustomerCreate() {
         return;
       }
 
+      if (isVerificationCreateRoute) {
+        const response = (await submitCustomerVerification(
+          payload,
+          supportingDocuments,
+        )) as
+          | { message?: string; documents_list?: CustomerDocumentListItem[] }
+          | null;
+
+        const uploadedDocs = extractDocumentsListFromResponse(response);
+        if (uploadedDocs.length > 0) {
+          setSupportingDocuments([
+            ...mapDocumentsListToSupportingDocuments(uploadedDocs),
+            { ...EMPTY_SUPPORTING_DOCUMENT },
+          ]);
+        } else {
+          setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+        }
+
+        const apiMessage =
+          response &&
+          typeof response === "object" &&
+          typeof response.message === "string" &&
+          response.message.trim()
+            ? response.message.trim()
+            : null;
+
+        ToastNotification({
+          type: "success",
+          message:
+            apiMessage ?? "Customer verification submitted successfully.",
+        });
+        navigate("/master");
+        return;
+      }
+
       const res = await submitCustomerMultipart(
         payload,
         supportingDocuments,
@@ -2917,13 +2960,15 @@ function CustomerCreate() {
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text c="dimmed" fw={500}>
-              {isCreateMode
-                ? isVendorMasterRoute
-                  ? "Creating Vendor..."
-                  : "Creating Customer..."
-                : isVendorMasterRoute
-                  ? "Updating Vendor..."
-                  : "Updating Customer..."}
+              {isVerificationCreateRoute && isCreateMode
+                ? "Submitting Customer for Approval..."
+                : isCreateMode
+                  ? isVendorMasterRoute
+                    ? "Creating Vendor..."
+                    : "Creating Customer..."
+                  : isVendorMasterRoute
+                    ? "Updating Vendor..."
+                    : "Updating Customer..."}
             </Text>
           </Stack>
         </Box>
@@ -2952,9 +2997,11 @@ function CustomerCreate() {
           <Group justify="space-between" align="center" mb="lg">
             <Text size="xl" fw={600} c="#105476">
               {isCreateMode
-                ? isVendorMasterRoute
-                  ? "Create Vendor"
-                  : "Create Customer"
+                ? isVerificationCreateRoute
+                  ? "Customer for Approval"
+                  : isVendorMasterRoute
+                    ? "Create Vendor"
+                    : "Create Customer"
                 : isEditMode
                   ? isVendorMasterRoute
                     ? "Edit Vendor"
@@ -2997,7 +3044,7 @@ function CustomerCreate() {
                   fontWeight: active === 0 ? 600 : 400,
                 }}
               >
-                {isVendorMasterRoute ? "Vendor Master" : "Customer Master"}
+                {isVendorMasterRoute ? "Vendor" : "Customer"}
               </Tabs.Tab>
 
               <Tabs.Tab
@@ -3751,7 +3798,9 @@ function CustomerCreate() {
             <Group gap="sm">
               {active === 1 && (isCreateMode || isEditMode || isViewMode) && (
                 <>
-                  {!isViewMode && (isCreateMode || isEditMode) && (
+                  {!isViewMode &&
+                    (isCreateMode || isEditMode) &&
+                    !isVerificationCreateRoute && (
                     <Button
                       bg="#105476"
                       onClick={handleRelationshipMapping}
@@ -3819,16 +3868,20 @@ function CustomerCreate() {
                   disabled={isSubmitting}
                 >
                   {isSubmitting
-                    ? isCreateMode
-                      ? isVendorMasterRoute
-                        ? "Creating Vendor..."
-                        : "Creating Customer..."
-                      : isVendorMasterRoute
-                        ? "Updating Vendor..."
-                        : "Updating Customer..."
-                    : isCreateMode
-                      ? "Create"
-                      : "Update"}
+                    ? isVerificationCreateRoute
+                      ? "Submitting for Approval..."
+                      : isCreateMode
+                        ? isVendorMasterRoute
+                          ? "Creating Vendor..."
+                          : "Creating Customer..."
+                        : isVendorMasterRoute
+                          ? "Updating Vendor..."
+                          : "Updating Customer..."
+                    : isVerificationCreateRoute
+                      ? "Submit for Approval"
+                      : isCreateMode
+                        ? "Create"
+                        : "Update"}
                 </Button>
               )}
             </Group>

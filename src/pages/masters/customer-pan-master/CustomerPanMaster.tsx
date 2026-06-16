@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -13,6 +13,7 @@ import {
 import { IconPaperclip, IconSearch } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import { getAPICall } from "../../../service/getApiCall";
@@ -39,6 +40,7 @@ import {
   mapDocumentsListToSupportingDocuments,
   type CustomerDocumentListItem,
 } from "../../../utils/customerDocuments";
+import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
 const DUMMY_EMAIL = "customer@dummy.local";
 const DUMMY_PHONE = "9999999999";
@@ -169,7 +171,16 @@ function formatCustomerCreateError(message: string): string {
 }
 
 export default function CustomerPanMaster() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const isIndiaUser = isIndianUserFromProfile(user?.country);
+
+  useEffect(() => {
+    if (!isIndiaUser) {
+      navigate("/master/create-customer", { replace: true });
+    }
+  }, [isIndiaUser, navigate]);
+
   const [panNumber, setPanNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -384,6 +395,10 @@ export default function CustomerPanMaster() {
       setIsCreating(false);
     }
   };
+
+  if (!isIndiaUser) {
+    return null;
+  }
 
   return (
     <Card shadow="sm" padding="lg" radius="md">

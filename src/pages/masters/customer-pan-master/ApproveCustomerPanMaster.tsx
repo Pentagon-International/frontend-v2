@@ -54,6 +54,7 @@ import {
   type RelatedCustomer,
 } from "../../../service/customerPanApproval.service";
 import CustomerDocumentsList from "../../../components/CustomerDocumentsList";
+import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
 type TableRow = CustomerPanApprovalRow & { sno: number };
 
@@ -80,7 +81,9 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 function getStatusBadgeColor(status?: string): string {
-  const normalized = String(status ?? "").trim().toLowerCase();
+  const normalized = String(status ?? "")
+    .trim()
+    .toLowerCase();
   if (normalized === "active") return "green";
   if (normalized === "approved") return "teal";
   if (normalized === "rejected") return "red";
@@ -151,11 +154,7 @@ function DetailSection({
   );
 }
 
-function CustomerPanApprovalDetails({
-  row,
-}: {
-  row: CustomerPanApprovalRow;
-}) {
+function CustomerPanApprovalDetails({ row }: { row: CustomerPanApprovalRow }) {
   const addresses = row.addresses_data ?? [];
 
   return (
@@ -296,7 +295,9 @@ function SimilarCustomerCard({
             </Box>
           )}
           {customer.email && (
-            <Box style={{ gridColumn: customer.phone_no ? undefined : "1 / -1" }}>
+            <Box
+              style={{ gridColumn: customer.phone_no ? undefined : "1 / -1" }}
+            >
               <Text size="xs" c="dimmed" fw={500} mb={2}>
                 Email
               </Text>
@@ -369,7 +370,7 @@ function CustomerPanAddressDetails({
               label: "GST Registration Status",
               value: address.gst_registration_status,
             },
-            { label: "GSTIN", value: address.gst_id },
+            { label: "Tax ID / GSTIN", value: address.gst_id },
             { label: "TAN", value: address.tan_no },
             { label: "ARN", value: address.arn_no },
             { label: "UIN", value: address.uin_no },
@@ -399,16 +400,20 @@ function CustomerPanAddressDetails({
 export default function ApproveCustomerPanMaster() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const isIndiaUser = isIndianUserFromProfile(user?.country);
   const hasCustomerApprovalScreen = Boolean(
-    user?.screen_permissions?.customer_approval_screen
+    user?.screen_permissions?.customer_approval_screen,
   );
+  const canAccessApproval = hasCustomerApprovalScreen || !isIndiaUser;
 
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
   const [paginationTotal, setPaginationTotal] = useState(1);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
+    null,
+  );
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] =
@@ -485,25 +490,28 @@ export default function ApproveCustomerPanMaster() {
     setPageIndex(0);
   };
 
-  const handleShowSimilarCustomers = useCallback(async (customerName: string) => {
-    setSimilarModalOpen(true);
-    setSimilarLoading(true);
-    setSimilarCustomers([]);
-    setSimilarSearchName(customerName);
+  const handleShowSimilarCustomers = useCallback(
+    async (customerName: string) => {
+      setSimilarModalOpen(true);
+      setSimilarLoading(true);
+      setSimilarCustomers([]);
+      setSimilarSearchName(customerName);
 
-    try {
-      const result = await fetchRelatedCustomers(customerName);
-      setSimilarCustomers(result.data ?? []);
-    } catch (error) {
-      ToastNotification({
-        type: "error",
-        message: extractApiErrorMessage(error),
-      });
-      setSimilarModalOpen(false);
-    } finally {
-      setSimilarLoading(false);
-    }
-  }, []);
+      try {
+        const result = await fetchRelatedCustomers(customerName);
+        setSimilarCustomers(result.data ?? []);
+      } catch (error) {
+        ToastNotification({
+          type: "error",
+          message: extractApiErrorMessage(error),
+        });
+        setSimilarModalOpen(false);
+      } finally {
+        setSimilarLoading(false);
+      }
+    },
+    [],
+  );
 
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
@@ -528,13 +536,13 @@ export default function ApproveCustomerPanMaster() {
         await approveCustomerPan(pendingAction.row.id);
         ToastNotification({
           type: "success",
-          message: "Customer PAN approved successfully.",
+          message: "Customer approved successfully.",
         });
       } else {
         await rejectCustomerPan(pendingAction.row.id);
         ToastNotification({
           type: "success",
-          message: "Customer PAN rejected successfully.",
+          message: "Customer rejected successfully.",
         });
       }
       setPendingAction(null);
@@ -752,12 +760,12 @@ export default function ApproveCustomerPanMaster() {
   const tableLoading = isLoading || isFetching;
 
   useEffect(() => {
-    if (!hasCustomerApprovalScreen) {
+    if (!canAccessApproval) {
       navigate("/master", { replace: true });
     }
-  }, [hasCustomerApprovalScreen, navigate]);
+  }, [canAccessApproval, navigate]);
 
-  if (!hasCustomerApprovalScreen) {
+  if (!canAccessApproval) {
     return null;
   }
 
@@ -765,9 +773,14 @@ export default function ApproveCustomerPanMaster() {
     <>
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c="#105476">
-            Approve Customers
-          </Text>
+          <Box>
+            <Text size="md" fw={600} c="#105476">
+              Approve Customers
+            </Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              Review and approve pending customer verification requests
+            </Text>
+          </Box>
 
           <Button
             variant="outline"
@@ -870,7 +883,9 @@ export default function ApproveCustomerPanMaster() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading pending customer PAN records...</Text>
+              <Text c="dimmed">
+                Loading pending customer verification records...
+              </Text>
             </Stack>
           </Center>
         ) : (
@@ -932,9 +947,7 @@ export default function ApproveCustomerPanMaster() {
               size="sm"
               onClick={() => {
                 const totalPages = Math.max(1, paginationTotal);
-                handlePageIndexChange(
-                  Math.min(totalPages - 1, pageIndex + 1),
-                );
+                handlePageIndexChange(Math.min(totalPages - 1, pageIndex + 1));
               }}
               disabled={pageIndex >= paginationTotal - 1}
             >

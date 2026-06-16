@@ -29,15 +29,21 @@ import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import useAuthStore from "../../store/authStore";
+import { isIndianUserFromProfile } from "../../utils/userNumberFormat";
 
 export default function MastersPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const isIndiaUser = isIndianUserFromProfile(user?.country);
   const hasCustomerApprovalScreen = Boolean(
-    user?.screen_permissions?.customer_approval_screen
+    user?.screen_permissions?.customer_approval_screen,
   );
+  const showApproveCustomers = hasCustomerApprovalScreen || !isIndiaUser;
 
-  const formatRoute = (label: string) => label.toLowerCase().replace(/\s+/g, "-");
+  const formatRoute = (label: string) => {
+    if (label === "Customer for Approval") return "create-customer";
+    return label.toLowerCase().replace(/\s+/g, "-");
+  };
 
   //Master page child routing
   const { pathname } = useLocation();
@@ -71,7 +77,10 @@ export default function MastersPage() {
             label: "Company",
           },
           { icon: <IconSitemap size={28} color="#105476" />, label: "Branch" },
-          { icon: <IconUserHexagon size={28} color="#105476" />, label: "User" },
+          {
+            icon: <IconUserHexagon size={28} color="#105476" />,
+            label: "User",
+          },
         ],
       },
       {
@@ -86,7 +95,10 @@ export default function MastersPage() {
             icon: <IconUsersGroup size={28} color="#105476" />,
             label: "Customer Type",
           },
-          { icon: <IconInfinity size={28} color="#105476" />, label: "Follow-up" },
+          {
+            icon: <IconInfinity size={28} color="#105476" />,
+            label: "Follow-up",
+          },
           {
             icon: <IconSquareRotated size={28} color="#105476" />,
             label: "Frequency",
@@ -139,11 +151,20 @@ export default function MastersPage() {
             icon: <IconBrandRedux size={28} color="#105476" />,
             label: "Call Mode",
           },
-          {
-            icon: <IconFileStack size={28} color="#105476" />,
-            label: "Create Customer-PAN",
-          },
-          ...(hasCustomerApprovalScreen
+          ...(isIndiaUser
+            ? [
+                {
+                  icon: <IconFileStack size={28} color="#105476" />,
+                  label: "Create Customer-PAN",
+                },
+              ]
+            : [
+                {
+                  icon: <IconFileStack size={28} color="#105476" />,
+                  label: "Customer for Approval",
+                },
+              ]),
+          ...(showApproveCustomers
             ? [
                 {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
@@ -191,7 +212,7 @@ export default function MastersPage() {
         ],
       },
     ],
-    [hasManagerOrStaffAccess, hasCustomerApprovalScreen]
+    [hasManagerOrStaffAccess, isIndiaUser, showApproveCustomers],
   );
 
   // function onClick() {

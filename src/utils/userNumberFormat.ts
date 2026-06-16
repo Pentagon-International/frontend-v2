@@ -11,6 +11,23 @@ export function isIndianUserCountry(
   return String(countryCode ?? "").trim().toUpperCase() === "IN";
 }
 
+export type UserCountryProfile = {
+  country_code?: string | null;
+  country_name?: string | null;
+} | null | undefined;
+
+/** True when the logged-in user's profile country is India. */
+export function isIndianUserFromProfile(
+  country?: UserCountryProfile,
+): boolean {
+  return (
+    isIndianUserCountry(country?.country_code) ||
+    String(country?.country_name ?? "")
+      .toLowerCase()
+      .includes("india")
+  );
+}
+
 export function getDefaultUserBranch(
   branches?: BranchCurrencyContext[] | null,
 ): BranchCurrencyContext | undefined {

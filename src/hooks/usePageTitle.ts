@@ -82,6 +82,7 @@ const pathTitleMap: Record<string, string> = {
   "/debit-credit-note-trade": "Debit/Credit Note Trade",
   "/debit-credit-note-non-trade": "Debit/Credit Note Non Trade",
   "/master": "Masters",
+  "/master/create-customer": "Customer for Approval",
   "/reports": "Reports",
   "/help": "Help",
   "/collapse": "Collapse",
