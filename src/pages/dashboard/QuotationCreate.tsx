@@ -595,6 +595,7 @@ function QuotationCreate({
   const actualEnquiryDataRef = useRef<any>(null);
   const selectedServiceRef = useRef<any>(null);
   const fetchedDefaultChargesRef = useRef<Record<string, true>>({});
+  const directQuoteChargesFilterRef = useRef<Record<number, string>>({});
   const lastInlineSyncKeyRef = useRef<string>("");
   console.log("location value-----", location);
   console.log("quotationId from params-----", quotationId);
@@ -4019,6 +4020,20 @@ function QuotationCreate({
         (charge) => charge.charge_name && charge.charge_name.trim() !== "",
       );
 
+    const hasUserEditedChargePricing = (
+      charges: Array<{
+        sell_per_unit?: string;
+        cost_per_unit?: string;
+        min_sell?: string;
+      }>,
+    ) =>
+      charges.some(
+        (charge) =>
+          String(charge.sell_per_unit ?? "").trim() !== "" ||
+          String(charge.cost_per_unit ?? "").trim() !== "" ||
+          String(charge.min_sell ?? "").trim() !== "",
+      );
+
     const fetchDefaultCharges = async () => {
       // Only fetch for create mode (not edit mode)
       if (isEditMode) {
@@ -4051,30 +4066,57 @@ function QuotationCreate({
         return;
       }
 
+      const filterSignature = `${selectedService.trade}|${selectedService.service}`;
+      const serviceTabId = selectedService.id;
+      const previousFilter =
+        directQuoteChargesFilterRef.current[serviceTabId];
+      const directTradeOrServiceChanged =
+        isDirectQuoteFromList &&
+        previousFilter !== undefined &&
+        previousFilter !== filterSignature;
+
       const defaultChargesKey = isDirectQuoteFromList
-        ? `direct-${selectedService.id}-${selectedService.trade}-${selectedService.service}`
+        ? `direct-${serviceTabId}-${selectedService.trade}-${selectedService.service}`
         : `${actualEnquiryData?.id ?? ""}-${selectedService.id}`;
-      if (fetchedDefaultChargesRef.current[defaultChargesKey]) {
+      const isSameDirectFilter =
+        isDirectQuoteFromList && previousFilter === filterSignature;
+      if (
+        fetchedDefaultChargesRef.current[defaultChargesKey] &&
+        !(isDirectQuoteFromList && !isSameDirectFilter)
+      ) {
         return;
       }
 
-      // Don't fetch if service already has saved quotation data with meaningful charges
       const savedData = serviceQuotationData[selectedService.id];
-      if (savedData && savedData.dynamicForm.charges.length > 0) {
-        if (hasMeaningfulQuotationCharges(savedData.dynamicForm.charges)) {
-          console.log("Service already has charges data, skipping fetch");
+      const currentCharges = dynamicForm.values.charges;
+      const userEditedCurrentPricing =
+        hasUserEditedChargePricing(currentCharges);
+      const userEditedSavedPricing =
+        savedData != null &&
+        hasUserEditedChargePricing(savedData.dynamicForm.charges);
+
+      if (isDirectQuoteFromList && directTradeOrServiceChanged) {
+        if (userEditedCurrentPricing || userEditedSavedPricing) {
+          directQuoteChargesFilterRef.current[serviceTabId] = filterSignature;
           return;
         }
-      }
+      } else {
+        // Don't fetch if service already has saved quotation data with meaningful charges
+        if (savedData && savedData.dynamicForm.charges.length > 0) {
+          if (hasMeaningfulQuotationCharges(savedData.dynamicForm.charges)) {
+            console.log("Service already has charges data, skipping fetch");
+            return;
+          }
+        }
 
-      // Don't fetch if current form already has meaningful charges
-      const currentCharges = dynamicForm.values.charges;
-      if (
-        currentCharges.length > 0 &&
-        hasMeaningfulQuotationCharges(currentCharges)
-      ) {
-        console.log("Form already has charges data, skipping fetch");
-        return;
+        // Don't fetch if current form already has meaningful charges
+        if (
+          currentCharges.length > 0 &&
+          hasMeaningfulQuotationCharges(currentCharges)
+        ) {
+          console.log("Form already has charges data, skipping fetch");
+          return;
+        }
       }
 
       const payload = isDirectQuoteFromList
@@ -4148,12 +4190,55 @@ function QuotationCreate({
 
           console.log("Mapped default charges:", mappedCharges);
 
-          // Set charges only when the user has not started filling them
-          if (
+          const latestCharges = dynamicForm.values.charges;
+          const userHasEditedPricing =
+            hasUserEditedChargePricing(latestCharges);
+          const emptyChargeRow = {
+            charge_name: "",
+            charge_id: null,
+            currency_country_code: "",
+            roe: 1,
+            unit: "",
+            no_of_units: "",
+            sell_per_unit: "",
+            min_sell: "",
+            cost_per_unit: "",
+            total_cost: "",
+            total_sell: "",
+            toBeDisabled: false,
+          };
+
+          if (isDirectQuoteFromList && !userHasEditedPricing) {
+            const shouldReplaceDirectCharges =
+              directTradeOrServiceChanged ||
+              !hasMeaningfulQuotationCharges(latestCharges);
+
+            if (shouldReplaceDirectCharges) {
+              const chargesToApply =
+                mappedCharges.length > 0 ? mappedCharges : [emptyChargeRow];
+
+              dynamicForm.setValues({ charges: chargesToApply });
+              if (selectedService.id) {
+                setServiceQuotationData((prev) => ({
+                  ...prev,
+                  [selectedService.id]: {
+                    quotationForm: { ...quotationForm.values },
+                    dynamicForm: { charges: chargesToApply },
+                    hasQuotation: mappedCharges.length > 0,
+                  },
+                }));
+              }
+            }
+          } else if (
+            !isDirectQuoteFromList &&
             mappedCharges.length > 0 &&
-            !hasMeaningfulQuotationCharges(dynamicForm.values.charges)
+            !hasMeaningfulQuotationCharges(latestCharges)
           ) {
             dynamicForm.setValues({ charges: mappedCharges });
+          }
+
+          if (isDirectQuoteFromList) {
+            directQuoteChargesFilterRef.current[serviceTabId] = filterSignature;
           }
         }
         fetchedDefaultChargesRef.current[defaultChargesKey] = true;
