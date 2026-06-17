@@ -47,12 +47,14 @@ interface ServiceDetailsSliderProps {
   services: ServiceDetail[];
   selectedServiceIndex: number;
   onServiceSelect: (index: number) => void;
+  hideTitle?: boolean;
 }
 
 const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
   services,
   selectedServiceIndex,
   onServiceSelect,
+  hideTitle = false,
 }) => {
   const handlePrevious = () => {
     const newIndex =
@@ -117,18 +119,22 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
   }
 
   return (
-    <Box mb="lg">
-      {/* Header */}
-      <Group justify="space-between" align="center" mb="md">
-        <Text size="md" fw={600} c="#105476">
-          Service Details ({services.length})
-        </Text>
-        {services.length > 3 && (
-          <Text size="xs" c="bo">
-            {selectedServiceIndex + 1} of {services.length}
-          </Text>
-        )}
-      </Group>
+    <Box mb={hideTitle ? "sm" : "lg"}>
+      {!hideTitle && (
+        <>
+          {/* Header */}
+          <Group justify="space-between" align="center" mb="md">
+            <Text size="md" fw={600} c="#105476">
+              Service Details ({services.length})
+            </Text>
+            {services.length > 3 && (
+              <Text size="xs" c="bo">
+                {selectedServiceIndex + 1} of {services.length}
+              </Text>
+            )}
+          </Group>
+        </>
+      )}
 
       {/* Slider Container */}
       <Box
@@ -287,16 +293,17 @@ const ServiceDetailsSlider: React.FC<ServiceDetailsSliderProps> = ({
         </Group>
       </Box>
 
-      {/* Separator Line */}
-      <Box
-        style={{
-          height: "2px",
-          background:
-            "linear-gradient(90deg, transparent 0%, #105476 20%, #105476 80%, transparent 100%)",
-          margin: "24px 0",
-          borderRadius: "1px",
-        }}
-      />
+      {!hideTitle && (
+        <Box
+          style={{
+            height: "2px",
+            background:
+              "linear-gradient(90deg, transparent 0%, #105476 20%, #105476 80%, transparent 100%)",
+            margin: "24px 0",
+            borderRadius: "1px",
+          }}
+        />
+      )}
     </Box>
   );
 };

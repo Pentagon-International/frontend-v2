@@ -4,6 +4,7 @@ import EnquiryConversionPage from "./dashboard/DashboardMaster/EnquiryConversion
 import CallEntry from "./dashboard/CallEntryMaster";
 import CallEntryNew from "./dashboard/CallEntryNew";
 import QuotationCreate from "./dashboard/QuotationCreate";
+import QuotationCreatePage from "./dashboard/QuotationCreatePage";
 import QuotationApprovalPublic from "./dashboard/QuotationApprovalPublic";
 import GetRate from "./dashboard/GetRate";
 import PotentialCustomers from "./dashboard/PotentialCustomers";
@@ -275,6 +276,7 @@ export {
   CFSMaster,
   CFSCreate,
   QuotationCreate,
+  QuotationCreatePage,
   QuotationApprovalPublic,
   GetRate,
   PotentialCustomers,

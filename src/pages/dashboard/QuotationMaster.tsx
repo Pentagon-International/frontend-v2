@@ -21,6 +21,7 @@ import {
   ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS,
   ERP_LIST_FILTER_FIELD_COL_SPAN_TWO_FIFTHS,
   erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
   type ErpListTheme,
   type ERPListColumnToggleItem,
 } from "../../components";
@@ -64,6 +65,7 @@ import {
   IconFileDescription,
   IconShieldCheck,
   IconTrendingUp,
+  IconPlus,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -2503,6 +2505,30 @@ console.log("currentQuotation: ", currentQuotation);
     }
   };
 
+  const handleCreateQuotationDirect = () => {
+    saveFiltersToStore();
+    const currentFilterState = {
+      filters,
+      filtersApplied,
+      fromDate,
+      toDate,
+      searchQuery,
+      displayValues: {
+        customer_code: customerDisplayValue,
+        origin_code: originDisplayValue,
+        destination_code: destinationDisplayValue,
+      },
+    };
+    useListFilterStore.getState().setShouldRestore(currentListKey, true);
+    navigate("/quotation-create", {
+      state: {
+        actionType: "createQuote",
+        fromQuotationList: true,
+        preserveFilters: currentFilterState,
+      },
+    });
+  };
+
   const handleEditQuotation = (rowData: any) => {
     // Preserve filters and search in store before navigation
     saveFiltersToStore();
@@ -3144,6 +3170,16 @@ console.log("currentQuotation: ", currentQuotation);
                   >
                     {showFilters ? "Hide filters" : "Filters"}
                   </Button>
+                  {!isApprovalMode && (
+                    <Button
+                      size="xs"
+                      leftSection={<IconPlus size={14} />}
+                      styles={erpToolbarPrimaryButtonStyles(erpTheme)}
+                      onClick={handleCreateQuotationDirect}
+                    >
+                      Create Quotation
+                    </Button>
+                  )}
                   {user?.is_staff && (
                     <DownloadComponent
                       columns={downloadColumns}

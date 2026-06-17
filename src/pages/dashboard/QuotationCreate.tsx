@@ -75,6 +75,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
+import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
 const QUOTATION_MASTER_PATH = "/quotation";
@@ -433,6 +434,54 @@ type CarrierComparisonData = {
   total_carriers_found: number;
 };
 
+type EnquiryCreateApiResponse = {
+  success?: boolean;
+  message?: string;
+  data?: {
+    id?: number;
+    enquiry_id?: string;
+    services?: Array<{
+      id: number;
+      service: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  };
+  id?: number;
+  enquiry_id?: string;
+  services?: Array<{
+    id: number;
+    service: string;
+    [key: string]: unknown;
+  }>;
+};
+
+function normalizeEnquiryCreateResponse(response: EnquiryCreateApiResponse | null) {
+  if (!response) return null;
+  if (response.data?.enquiry_id) return response.data;
+  if (response.enquiry_id) return response;
+  return null;
+}
+
+function resolveEnquiryServiceId(
+  originalServiceId: string | number,
+  enquiryServices: Array<{ id: number }>,
+): number {
+  const numericId = Number(originalServiceId);
+  if (!enquiryServices.length || Number.isNaN(numericId)) return numericId;
+
+  const directMatch = enquiryServices.find((service) => service.id === numericId);
+  if (directMatch) return directMatch.id;
+
+  // Direct-quote flow uses 1-based temp ids aligned with service order
+  const orderIndex = numericId - 1;
+  if (orderIndex >= 0 && orderIndex < enquiryServices.length) {
+    return enquiryServices[orderIndex].id;
+  }
+
+  return numericId;
+}
+
 const INPUT_CONTAINER_MAX_HEIGHT = 360;
 
 function QuotationCreate({
@@ -531,18 +580,49 @@ function QuotationCreate({
   const navigate = useNavigate();
   const location = useLocation();
   const { id: quotationId } = useParams<{ id: string }>();
+  const isDirectQuoteFromList = Boolean(
+    !enquiryData &&
+      !goToStep &&
+      location.state?.actionType === "createQuote" &&
+      location.state?.fromQuotationList,
+  );
+  const [inlineEnquiryData, setInlineEnquiryData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const validateEnquiryRef = useRef<(() => boolean) | null>(null);
+  const enquirySectionRef = useRef<HTMLDivElement>(null);
+  const actualEnquiryDataRef = useRef<any>(null);
+  const selectedServiceRef = useRef<any>(null);
+  const fetchedDefaultChargesRef = useRef<Record<string, true>>({});
+  const lastInlineSyncKeyRef = useRef<string>("");
   console.log("location value-----", location);
   console.log("quotationId from params-----", quotationId);
 
   // Handle both scenarios: component usage and standalone route
   const quotationData = location.state;
-  const actualEnquiryData =
-    enquiryData || quotationData || fetchedQuotationData;
+  const baseEnquiryData = enquiryData || quotationData || fetchedQuotationData;
+  const actualEnquiryData = useMemo(() => {
+    if (isDirectQuoteFromList && inlineEnquiryData) {
+      return { ...quotationData, ...inlineEnquiryData };
+    }
+    return baseEnquiryData;
+  }, [baseEnquiryData, inlineEnquiryData, isDirectQuoteFromList, quotationData]);
+  const isDirectQuoteCreateFlow = Boolean(
+    (location.state?.actionType === "createQuote" &&
+      (location.state?.fromDestination || location.state?.fromQuotationList)) ||
+      (enquiryData?.actionType === "createQuote" &&
+        (enquiryData?.fromDestination || enquiryData?.fromQuotationList)),
+  );
   const isRemarkRequired =
     actualEnquiryData?.actionType === "edit" ||
     actualEnquiryData?.actionType === "editQuotation";
 
   console.log("Whole enquiry data---", actualEnquiryData);
+
+  useEffect(() => {
+    actualEnquiryDataRef.current = actualEnquiryData;
+  }, [actualEnquiryData]);
 
   // Check if this is view mode (read-only) from dashboard
   const isViewMode = Boolean(
@@ -719,6 +799,67 @@ function QuotationCreate({
   const selectedService = useMemo(() => {
     return services[selectedServiceIndex] || null;
   }, [services, selectedServiceIndex]);
+
+  useEffect(() => {
+    selectedServiceRef.current = selectedService;
+  }, [selectedService]);
+
+  const isDirectEnquiryComplete = useMemo(() => {
+    if (!isDirectQuoteFromList) return true;
+    const enq: any = actualEnquiryData;
+    if (!enq?.customer_code || !enq?.enquiry_received_date || !enq?.sales_person)
+      return false;
+    const srv = Array.isArray(enq?.services) ? enq.services : [];
+    if (!srv.length) return false;
+    const isNonEmpty = (v: any) => String(v ?? "").trim().length > 0;
+
+    for (const s of srv) {
+      if (!isNonEmpty(s?.service)) return false;
+      if (!isNonEmpty(s?.trade)) return false;
+      if (!isNonEmpty(s?.origin_code_read ?? s?.origin_code)) return false;
+      if (!isNonEmpty(s?.destination_code_read ?? s?.destination_code))
+        return false;
+      if (!isNonEmpty(s?.shipment_terms_code_read ?? s?.shipment_terms_code))
+        return false;
+
+      const cargo = Array.isArray(s?.cargo_details) ? s.cargo_details : [];
+      if (!cargo.length) return false;
+      for (const c of cargo) {
+        if (!isNonEmpty(c?.hazardous_cargo)) return false;
+        if (String(c?.hazardous_cargo) === "Yes") {
+          if (!isNonEmpty(c?.un_no)) return false;
+          if (!isNonEmpty(c?.class)) return false;
+          if (!isNonEmpty(c?.pkg_group)) return false;
+        }
+
+        const serviceType = String(s?.service || "").toUpperCase();
+        if (serviceType === "AIR") {
+          if (!isNonEmpty(c?.no_of_packages)) return false;
+          if (!isNonEmpty(c?.gross_weight)) return false;
+          if (!isNonEmpty(c?.volume_weight)) return false;
+        } else if (serviceType === "LCL") {
+          if (!isNonEmpty(c?.no_of_packages)) return false;
+          if (!isNonEmpty(c?.gross_weight)) return false;
+          if (!isNonEmpty(c?.volume)) return false;
+        } else if (serviceType === "FCL") {
+          if (!isNonEmpty(c?.container_type_code)) return false;
+          if (!isNonEmpty(c?.no_of_containers)) return false;
+          if (!isNonEmpty(c?.gross_weight)) return false;
+        }
+      }
+    }
+    return true;
+  }, [actualEnquiryData, isDirectQuoteFromList]);
+
+  const handleInlineEnquirySync = useCallback(
+    (next: Record<string, unknown>) => {
+      const key = JSON.stringify(next);
+      if (key === lastInlineSyncKeyRef.current) return;
+      lastInlineSyncKeyRef.current = key;
+      setInlineEnquiryData(next);
+    },
+    [],
+  );
 
   // Get current service ID for API calls
   const currentServiceId = useMemo(() => {
@@ -1888,19 +2029,32 @@ function QuotationCreate({
   const quotationSubmit = async () => {
     console.log("quotationSubmit called");
 
-    // Check if this is from destination flow - only validate mandatory fields
-    if (
-      location.state?.fromDestination &&
-      location.state?.actionType === "createQuote"
-    ) {
+    // Check if this is from destination or direct quotation-list create flow
+    if (isDirectQuoteCreateFlow) {
       setIsSubmittingQuotation(true);
-      console.log("Validating mandatory fields for destination flow...");
-      console.log("Current enquiryData:", enquiryData);
+      console.log("Validating mandatory fields for direct quote flow...");
+      console.log("Current enquiryData:", actualEnquiryData);
 
-      // Check mandatory enquiry details from the merged enquiryData prop
-      const hasCustomer = enquiryData?.customer_code;
-      const hasSalesPerson = enquiryData?.sales_person;
-      const hasEnquiryDate = enquiryData?.enquiry_received_date;
+      if (location.state?.fromQuotationList && validateEnquiryRef.current) {
+        const enquiryFormsValid = validateEnquiryRef.current();
+        if (!enquiryFormsValid) {
+          setIsSubmittingQuotation(false);
+          ToastNotification({
+            type: "warning",
+            message: "Please fill mandatory enquiry details",
+          });
+          enquirySectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+          return;
+        }
+      }
+
+      // Check mandatory enquiry details from the merged enquiry data
+      const hasCustomer = actualEnquiryData?.customer_code;
+      const hasSalesPerson = actualEnquiryData?.sales_person;
+      const hasEnquiryDate = actualEnquiryData?.enquiry_received_date;
 
       console.log("Validation check:", {
         hasCustomer,
@@ -1914,8 +2068,12 @@ function QuotationCreate({
           type: "warning",
           message: "Please fill mandatory enquiry details",
         });
-        // Navigate to stepper 1 (customer details)
-        if (goToStep) {
+        if (location.state?.fromQuotationList) {
+          enquirySectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        } else if (goToStep) {
           goToStep(0);
         }
         return;
@@ -1936,7 +2094,7 @@ function QuotationCreate({
           // Map field names to user-friendly labels
           const fieldLabels: { [key: string]: string } = {
             quote_currency_country_code: "Quote Currency",
-            valid_upto: "Valid Upto Date",
+            valid_upto: "Quotation Date",
             quote_type: "Quote Type",
             status: "Status",
           };
@@ -1990,23 +2148,23 @@ function QuotationCreate({
       console.log("✅ All mandatory fields validated for destination flow");
 
       // First, create the enquiry if it doesn't exist
-      if (!enquiryData?.enquiry_id && !enquiryData?.id) {
-        console.log("Creating enquiry first for destination flow...");
+      if (!actualEnquiryData?.enquiry_id && !actualEnquiryData?.id) {
+        console.log("Creating enquiry first for direct quote flow...");
 
         try {
-          // Get services from enquiryData
+          // Get services from enquiry data
           const services =
-            enquiryData?.services || location.state?.services || [];
+            actualEnquiryData?.services || location.state?.services || [];
 
           console.log("Services data before mapping:", services);
 
           // Prepare enquiry payload in the correct format
           const enquiryPayload = {
-            customer_code: enquiryData?.customer_code,
-            enquiry_received_date: enquiryData?.enquiry_received_date,
-            sales_person: enquiryData?.sales_person,
-            sales_coordinator: enquiryData?.sales_coordinator || null,
-            customer_services: enquiryData?.customer_services || null,
+            customer_code: actualEnquiryData?.customer_code,
+            enquiry_received_date: actualEnquiryData?.enquiry_received_date,
+            sales_person: actualEnquiryData?.sales_person,
+            sales_coordinator: actualEnquiryData?.sales_coordinator || null,
+            customer_services: actualEnquiryData?.customer_services || null,
             services: services.map((serviceDetail: any) => {
               console.log("Processing service detail:", serviceDetail);
               console.log("FCL details:", serviceDetail.fcl_details);
@@ -2109,19 +2267,14 @@ function QuotationCreate({
             URL.enquiry,
             enquiryPayload,
             API_HEADER,
-          )) as {
-            enquiry_id?: string;
-            id?: number;
-            services?: Array<{
-              id: number;
-              service: string;
-              [key: string]: any;
-            }>;
-          };
+          )) as EnquiryCreateApiResponse;
 
           console.log("Enquiry created successfully:", enquiryResponse);
 
-          if (!enquiryResponse || !enquiryResponse.enquiry_id) {
+          const createdEnquiry = normalizeEnquiryCreateResponse(enquiryResponse);
+
+          if (!createdEnquiry?.enquiry_id) {
+            setIsSubmittingQuotation(false);
             ToastNotification({
               type: "error",
               message: "Failed to create enquiry. Please try again.",
@@ -2144,28 +2297,62 @@ function QuotationCreate({
           });
           await queryClient.invalidateQueries({ queryKey: ["previewSearch"] });
 
-          ToastNotification({
-            type: "success",
-            message: "Enquiry created successfully. Now creating quotation...",
-          });
+          const enquiryUpdate = {
+            enquiry_id: createdEnquiry.enquiry_id,
+            id: createdEnquiry.id,
+            services: createdEnquiry.services ?? actualEnquiryData?.services,
+          };
 
-          // Update actualEnquiryData with the new enquiry_id and service details
-          (actualEnquiryData as any).enquiry_id = enquiryResponse.enquiry_id;
-          (actualEnquiryData as any).id = enquiryResponse.id;
+          Object.assign(actualEnquiryData as object, enquiryUpdate);
+          actualEnquiryDataRef.current = {
+            ...actualEnquiryDataRef.current,
+            ...enquiryUpdate,
+          };
+          setInlineEnquiryData((prev) => ({
+            ...(prev ?? {}),
+            ...enquiryUpdate,
+          }));
 
-          // Update services with the new service IDs from the response
-          if (
-            enquiryResponse.services &&
-            Array.isArray(enquiryResponse.services)
-          ) {
-            (actualEnquiryData as any).services = enquiryResponse.services;
-            console.log(
-              "Updated services with new IDs:",
-              enquiryResponse.services,
-            );
+          const oldServices =
+            (actualEnquiryData?.services as Array<{ id: number }> | undefined) ||
+            [];
+          const newServices = createdEnquiry.services || [];
+          if (newServices.length > 0) {
+            setServiceQuotationData((prev) => {
+              if (!Object.keys(prev).length) return prev;
+
+              const remapped: typeof prev = {};
+              Object.entries(prev).forEach(([key, value]) => {
+                const numericKey = Number(key);
+                if (newServices.some((service) => service.id === numericKey)) {
+                  remapped[numericKey] = value;
+                  return;
+                }
+
+                const orderIndex = oldServices.findIndex(
+                  (service) => service.id === numericKey,
+                );
+                const index =
+                  orderIndex >= 0
+                    ? orderIndex
+                    : numericKey >= 1 && numericKey <= newServices.length
+                      ? numericKey - 1
+                      : -1;
+
+                if (index >= 0 && newServices[index]) {
+                  remapped[newServices[index].id] = value;
+                } else {
+                  remapped[numericKey] = value;
+                }
+              });
+              return remapped;
+            });
           }
 
-          console.log("Updated enquiry data with ID:", actualEnquiryData);
+          console.log("Updated enquiry data with ID:", {
+            ...actualEnquiryData,
+            ...enquiryUpdate,
+          });
 
           // Now proceed with quotation submission using the new enquiry_id
           await submitQuotation();
@@ -2378,16 +2565,11 @@ function QuotationCreate({
     // Get the correct service_id - use from enquiry response if available, otherwise current
     let serviceId = currentServiceId;
 
-    // For destination flow, get service_id from the enquiry response
-    if (
-      location.state?.fromDestination &&
-      location.state?.actionType === "createQuote"
-    ) {
-      // Find the service_id from the enquiry response services
+    // For destination or direct quotation-list create flow, get service_id from enquiry response
+    if (isDirectQuoteCreateFlow) {
       const enquiryServices = actualEnquiryData?.services || [];
-      if (enquiryServices.length > 0) {
-        // For destination flow, we typically have only one service
-        serviceId = enquiryServices[0]?.id || currentServiceId;
+      if (enquiryServices.length > 0 && currentServiceId != null) {
+        serviceId = resolveEnquiryServiceId(currentServiceId, enquiryServices);
         console.log("Using service_id from enquiry response:", serviceId);
       }
     }
@@ -2469,16 +2651,15 @@ function QuotationCreate({
         );
         const serviceProfit = serviceNetSell - serviceNetCost;
 
-        // For destination flow, use the service_id from enquiry response
+        // For destination or direct quotation-list create flow, use service_id from enquiry response
         let finalServiceId = parseInt(originalServiceId);
-        if (
-          location.state?.fromDestination &&
-          location.state?.actionType === "createQuote"
-        ) {
+        if (isDirectQuoteCreateFlow) {
           const enquiryServices = actualEnquiryData?.services || [];
           if (enquiryServices.length > 0) {
-            finalServiceId =
-              enquiryServices[0]?.id || parseInt(originalServiceId);
+            finalServiceId = resolveEnquiryServiceId(
+              originalServiceId,
+              enquiryServices,
+            );
           }
         }
 
@@ -2628,7 +2809,7 @@ function QuotationCreate({
 
           ToastNotification({
             type: "success",
-            message: "Quotation is successfully created.",
+            message: "Quotation created successfully",
           });
           // Navigate back to appropriate list page with preserved filters if available
           const preserveFilters = location.state?.preserveFilters;
@@ -3720,8 +3901,7 @@ function QuotationCreate({
   );
 
   // Fetch unit data based on service type
-  const fetchUnitData = useCallback(
-    async (serviceType: string, serviceId?: number) => {
+  const fetchUnitData = useCallback(async (serviceType: string, serviceId?: number) => {
       setIsLoadingUnitData(true);
       try {
         const payload = {
@@ -3747,12 +3927,14 @@ function QuotationCreate({
           if (serviceType === "FCL") {
             // Resolve container details for the currently selected service step.
             let cargoDetails: any[] = [];
+            const currentEnquiryData = actualEnquiryDataRef.current;
+            const currentSelectedService = selectedServiceRef.current;
             const selectedServiceData: any =
               (serviceId &&
-                actualEnquiryData?.services?.find(
+                currentEnquiryData?.services?.find(
                   (service: any) => service.id === serviceId,
                 )) ||
-              selectedService;
+              currentSelectedService;
 
             if (Array.isArray(selectedServiceData?.cargo_details)) {
               cargoDetails = selectedServiceData.cargo_details;
@@ -3813,19 +3995,30 @@ function QuotationCreate({
       } finally {
         setIsLoadingUnitData(false);
       }
-    },
-    [actualEnquiryData, selectedService],
-  );
+    }, []);
 
   // Fetch unit data when selected service changes
   useEffect(() => {
-    if (selectedService?.service) {
-      fetchUnitData(selectedService.service, selectedService.id);
-    }
-  }, [selectedService, fetchUnitData]);
+    if (!selectedService?.service) return;
+    if (isDirectQuoteFromList && !isDirectEnquiryComplete) return;
+    fetchUnitData(selectedService.service, selectedService.id);
+  }, [
+    fetchUnitData,
+    isDirectEnquiryComplete,
+    isDirectQuoteFromList,
+    selectedService?.id,
+    selectedService?.service,
+  ]);
 
   // Fetch default charges for create mode only - per selected service
   useEffect(() => {
+    const hasMeaningfulQuotationCharges = (
+      charges: Array<{ charge_name?: string }>,
+    ) =>
+      charges.some(
+        (charge) => charge.charge_name && charge.charge_name.trim() !== "",
+      );
+
     const fetchDefaultCharges = async () => {
       // Only fetch for create mode (not edit mode)
       if (isEditMode) {
@@ -3833,27 +4026,42 @@ function QuotationCreate({
         return;
       }
 
-      // Check if we have the necessary data
-      if (!selectedService || !actualEnquiryData) {
-        console.log("No selected service or enquiry data found");
+      if (!selectedService) {
+        console.log("No selected service found");
         return;
       }
 
-      // Check if service data has required fields
-      if (!selectedService.trade || !selectedService.id) {
-        console.log("Service data incomplete", selectedService);
+      if (!isDirectQuoteFromList && !actualEnquiryData) {
+        console.log("No enquiry data found");
+        return;
+      }
+
+      if (!selectedService.trade || !selectedService.service) {
+        console.log("Service trade/type incomplete", selectedService);
+        return;
+      }
+
+      if (!isDirectQuoteFromList && !selectedService.id) {
+        console.log("Service id missing for enquiry quotation flow");
+        return;
+      }
+
+      if (!isDirectQuoteFromList && !actualEnquiryData?.id) {
+        console.log("Enquiry id missing for default charges fetch");
+        return;
+      }
+
+      const defaultChargesKey = isDirectQuoteFromList
+        ? `direct-${selectedService.id}-${selectedService.trade}-${selectedService.service}`
+        : `${actualEnquiryData?.id ?? ""}-${selectedService.id}`;
+      if (fetchedDefaultChargesRef.current[defaultChargesKey]) {
         return;
       }
 
       // Don't fetch if service already has saved quotation data with meaningful charges
       const savedData = serviceQuotationData[selectedService.id];
       if (savedData && savedData.dynamicForm.charges.length > 0) {
-        // Check if saved charges have meaningful data (at least one charge with a name)
-        const hasMeaningfulCharges = savedData.dynamicForm.charges.some(
-          (charge: any) =>
-            charge.charge_name && charge.charge_name.trim() !== "",
-        );
-        if (hasMeaningfulCharges) {
+        if (hasMeaningfulQuotationCharges(savedData.dynamicForm.charges)) {
           console.log("Service already has charges data, skipping fetch");
           return;
         }
@@ -3861,25 +4069,28 @@ function QuotationCreate({
 
       // Don't fetch if current form already has meaningful charges
       const currentCharges = dynamicForm.values.charges;
-      if (currentCharges.length > 0) {
-        const hasMeaningfulCharges = currentCharges.some(
-          (charge: any) =>
-            charge.charge_name && charge.charge_name.trim() !== "",
-        );
-        if (hasMeaningfulCharges) {
-          console.log("Form already has charges data, skipping fetch");
-          return;
-        }
+      if (
+        currentCharges.length > 0 &&
+        hasMeaningfulQuotationCharges(currentCharges)
+      ) {
+        console.log("Form already has charges data, skipping fetch");
+        return;
       }
 
-      // Build the payload
-      const payload = {
-        filter: {
-          trade: selectedService.trade.toUpperCase(), // Convert "Import" to "IMPORT"
-          enquiry_id: actualEnquiryData.id,
-          service_id: selectedService.id,
-        },
-      };
+      const payload = isDirectQuoteFromList
+        ? {
+            filter: {
+              trade: selectedService.trade,
+              service: selectedService.service,
+            },
+          }
+        : {
+            filter: {
+              trade: selectedService.trade.toUpperCase(),
+              enquiry_id: actualEnquiryData!.id,
+              service_id: selectedService.id,
+            },
+          };
 
       console.log(
         "Fetching default charges for service:",
@@ -3937,11 +4148,15 @@ function QuotationCreate({
 
           console.log("Mapped default charges:", mappedCharges);
 
-          // Set the charges in the form
-          if (mappedCharges.length > 0) {
+          // Set charges only when the user has not started filling them
+          if (
+            mappedCharges.length > 0 &&
+            !hasMeaningfulQuotationCharges(dynamicForm.values.charges)
+          ) {
             dynamicForm.setValues({ charges: mappedCharges });
           }
         }
+        fetchedDefaultChargesRef.current[defaultChargesKey] = true;
       } catch (error) {
         console.error("Error fetching default charges:", error);
         // Don't show error toast as this is optional functionality
@@ -3950,7 +4165,17 @@ function QuotationCreate({
 
     fetchDefaultCharges();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedService, actualEnquiryData, isEditMode, serviceQuotationData]);
+  }, [
+    actualEnquiryData?.id,
+    dynamicForm,
+    getRoeValue,
+    isDirectQuoteFromList,
+    isEditMode,
+    selectedService?.id,
+    selectedService?.service,
+    selectedService?.trade,
+    serviceQuotationData,
+  ]);
 
   // Fetch notes and conditions for create mode only - per selected service
   useEffect(() => {
@@ -4254,7 +4479,8 @@ function QuotationCreate({
         {/* Always show layout with fixed footer for edit mode or when embedded in EnquiryCreate (goToStep exists) */}
         {(() => {
           // Show the main two-pane layout for edit mode, embedded-in-enquiry mode, **and** view mode
-          const shouldShowLayout = isEditMode || goToStep || isViewMode;
+          const shouldShowLayout =
+            isEditMode || goToStep || isViewMode || isDirectQuoteFromList;
           console.log("QuotationCreate Layout Debug:", {
             isEditMode,
             goToStep: !!goToStep,
@@ -4272,7 +4498,8 @@ function QuotationCreate({
           >
             {/* Left Pane - Stepper Titles - Show for edit mode without goToStep or when goToStep exists (embedded in EnquiryCreate) */}
             {(() => {
-              const shouldShowLeftPane = (isEditMode && !goToStep) || goToStep;
+              const shouldShowLeftPane =
+                ((isEditMode && !goToStep) || goToStep) && !isDirectQuoteFromList;
               console.log("QuotationCreate Left Pane Debug:", {
                 isEditMode,
                 goToStep: !!goToStep,
@@ -4596,6 +4823,22 @@ function QuotationCreate({
                 position: "relative",
               }}
             >
+              {isDirectQuoteFromList && (
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  px="md"
+                  py="sm"
+                  style={{
+                    fontFamily: "Inter",
+                    borderBottom: "1px solid #e9ecef",
+                    flexShrink: 0,
+                  }}
+                >
+                  Create Quotation
+                </Text>
+              )}
               <Box
                 style={{
                   flex: 1,
@@ -4605,18 +4848,49 @@ function QuotationCreate({
                   minHeight: 0,
                 }}
               >
-                <Box style={{ backgroundColor: "#FFFFFF", padding: "24px" }}>
-                  {/* Service Details Slider */}
-                  {services.length > 0 && (
-                    <ServiceDetailsSlider
-                      services={services}
-                      selectedServiceIndex={selectedServiceIndex}
-                      onServiceSelect={handleServiceSelect}
+                {isDirectQuoteFromList && (
+                  <Box
+                    ref={enquirySectionRef}
+                    style={{
+                      backgroundColor: "#FFFFFF",
+                    }}
+                  >
+                    <DirectQuoteEnquiryFields
+                      onEnquiryDataSync={handleInlineEnquirySync}
+                      validateEnquiryRef={validateEnquiryRef}
                     />
-                  )}
+                  </Box>
+                )}
+                <Box
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    padding: isDirectQuoteFromList ? "8px 24px 24px" : "24px",
+                  }}
+                >
+                  <Box>
+                      {isDirectQuoteFromList && (
+                        <Text
+                          fw={600}
+                          c="#105476"
+                          mb="sm"
+                          size="sm"
+                          style={{ fontFamily: "Inter" }}
+                        >
+                          Quotation Details
+                        </Text>
+                      )}
+                      {/* Service Details Slider */}
+                      {services.length > 0 && (
+                        <ServiceDetailsSlider
+                          services={services}
+                          selectedServiceIndex={selectedServiceIndex}
+                          onServiceSelect={handleServiceSelect}
+                          hideTitle={isDirectQuoteFromList}
+                        />
+                      )}
 
-                  {/* Tariff Submission Loading Overlay */}
-                  {isSubmittingTariff && (
+                      {/* Tariff Submission Loading Overlay */}
+                      {isSubmittingTariff && (
                     <Box
                       style={{
                         position: "fixed",
@@ -4645,8 +4919,8 @@ function QuotationCreate({
                     </Box>
                   )}
 
-                  {/* Quotation Form */}
-                  <Grid mb={30} key={`quotation-form-${currentServiceId}`}>
+                      {/* Quotation Form */}
+                      <Grid mb={30} key={`quotation-form-${currentServiceId}`}>
                     <Grid.Col span={1.75}>
                       <Dropdown
                         key={`${currentServiceId}-quote-currency`}
@@ -5728,7 +6002,7 @@ function QuotationCreate({
                               )}
                             </Grid.Col>
                           )}
-                        </Grid>
+                      </Grid>
                       </Box>
                     ))}
 
@@ -5784,6 +6058,7 @@ function QuotationCreate({
                       </Grid>
                     )}
                   </Stack>
+                    </Box>
                 </Box>
               </Box>
 
@@ -5798,6 +6073,42 @@ function QuotationCreate({
               >
                 <Group justify="space-between">
                   <Group>
+                    {isDirectQuoteFromList && (
+                      <>
+                        <Button
+                          variant="outline"
+                          color="gray"
+                          size="sm"
+                          styles={{
+                            root: {
+                              borderColor: "#d0d0d0",
+                              color: "#666",
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                            },
+                          }}
+                          onClick={() => {
+                            const preserveFilters =
+                              location.state?.preserveFilters;
+                            if (preserveFilters) {
+                              navigate("/quotation", {
+                                state: {
+                                  restoreFilters: preserveFilters,
+                                  refreshData: true,
+                                },
+                              });
+                            } else {
+                              navigate("/quotation", {
+                                state: { refreshData: true },
+                              });
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    )}
                     {/* Show Cancel and Clear all for createQuote flow */}
                     {goToStep && enquiryData?.actionType === "createQuote" && (
                       <>

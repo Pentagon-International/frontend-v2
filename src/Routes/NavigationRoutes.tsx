@@ -50,7 +50,7 @@ import {
   ServiceMasterEdit,
   ServiceMasterNew,
   ServiceMasterView,
-  QuotationCreate,
+  QuotationCreatePage,
   PotentialCustomers,
   LeadList,
   CreateLead,
@@ -566,8 +566,8 @@ const NavigationRoutes = () => {
         <Route path="/rfq-create" element={<RFQCreate />} />
         <Route path="/last-enquiries" element={<LastEnquiriesList />} />
         <Route path="/get-rate" element={<GetRate />} />
-        <Route path="/quotation-create" element={<QuotationCreate />} />
-        <Route path="/quotation-create/:id" element={<QuotationCreate />} />
+        <Route path="/quotation-create" element={<QuotationCreatePage />} />
+        <Route path="/quotation-create/:id" element={<QuotationCreatePage />} />
         <Route
           path="/quotation-approval"
           element={<QuotationApprovalMaster />}
