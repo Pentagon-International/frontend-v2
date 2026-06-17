@@ -55,6 +55,7 @@ import {
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -178,6 +179,7 @@ type ChargeDetail = {
 type ReverseInvoiceItem = {
   id?: number;
   reverse_invoice_id?: number;
+  reverse_document_no?: string;
   document_no?: string;
   document_date?: string;
   total?: string | number;
@@ -4963,7 +4965,7 @@ function HouseCreate() {
                           Daybook
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
-                          Invoice number
+                          Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
@@ -4996,9 +4998,6 @@ function HouseCreate() {
                           const isUnposted =
                             statusUpper === "UNPOSTED" ||
                             row.status === "unpost";
-                          const isReversed =
-                            statusUpper === "PARTIALLY REVERSED" ||
-                            statusUpper === "FULLY REVERSED";
                           const rowKey = `${row.id}-${idx}`;
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
@@ -5008,7 +5007,7 @@ function HouseCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  isReversed ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5018,7 +5017,7 @@ function HouseCreate() {
                                   )
                                     return;
 
-                                  if (!isReversed) {
+                                  if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
@@ -5032,7 +5031,7 @@ function HouseCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   <Group gap="xs" wrap="nowrap">
-                                    {isReversed && (
+                                    {hasReverseInvoices && (
                                       <Box
                                         component="span"
                                         style={{ display: "inline-flex" }}
@@ -5292,7 +5291,7 @@ function HouseCreate() {
                                   </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                              {isReversed && isExpanded && (
+                              {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
                                     px={8}
@@ -5340,7 +5339,7 @@ function HouseCreate() {
                                                 width: "20%",
                                               }}
                                             >
-                                              Invoice number
+                                              Document Number
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5398,7 +5397,7 @@ function HouseCreate() {
                                                     width: "20%",
                                                   }}
                                                 >
-                                                  {rev.document_no ?? "-"}
+                                                  {formatInvoiceDocumentNo(rev)}
                                                 </Table.Td>
                                                 <Table.Td
                                                   style={{
@@ -5537,10 +5536,7 @@ function HouseCreate() {
                                                                   ...row,
                                                                   ...rev,
                                                                   id: targetId,
-                                                                  document_no:
-                                                                    rev.document_no ??
-                                                                    (row as any)
-                                                                      .document_no,
+                                                                  document_no: getInvoiceDocumentNo(rev, (row as any).document_no),
                                                                   document_date:
                                                                     rev.document_date ??
                                                                     (row as any)

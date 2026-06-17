@@ -1,4 +1,4 @@
-﻿import {
+import {
   Box,
   Button,
   Grid,
@@ -70,6 +70,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -248,6 +249,7 @@ type HAWBDetail = {
 type ReverseInvoiceItem = {
   id?: number;
   reverse_invoice_id?: number;
+  reverse_document_no?: string;
   document_no?: string;
   document_date?: string;
   total?: string | number;
@@ -833,7 +835,7 @@ function InlandImportJobCreate() {
     // Only proceed if we have jobData and are in edit/view mode
     if (jobData && (mode === "edit" || mode === "view")) {
       try {
-        console.log("🔧 [EDIT MODE] Initializing forms from jobData:", {
+        console.log("?? [EDIT MODE] Initializing forms from jobData:", {
           jobData,
           hasOriginAgent: !!jobData.agent_name || !!jobData.agent_code,
           originCode: jobData.origin_code,
@@ -889,7 +891,7 @@ function InlandImportJobCreate() {
           carrier_agent_address: String(jobData.carrier_agent_address || ""),
         };
 
-        console.log("🔧 Setting MAWB form values:", mawbInitialValues);
+        console.log("?? Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
 
@@ -942,7 +944,7 @@ function InlandImportJobCreate() {
         }
 
         console.log(
-          "✅ MAWB Details initialized - Form values after setValues:",
+          "? MAWB Details initialized - Form values after setValues:",
           {
             agent_code: mawbDetailsForm.values.agent_code,
             origin_code: mawbDetailsForm.values.origin_code,
@@ -1003,12 +1005,12 @@ function InlandImportJobCreate() {
               : null,
         };
 
-        console.log("🔧 Setting Carrier form values:", carrierInitialValues);
+        console.log("?? Setting Carrier form values:", carrierInitialValues);
         // Use setValues to update all fields at once
         carrierDetailsForm.setValues(carrierInitialValues);
 
         console.log(
-          "✅ Carrier Details initialized - Form values after setValues:",
+          "? Carrier Details initialized - Form values after setValues:",
           {
             carrier_code: carrierDetailsForm.values.carrier_code,
             carrier_name: carrierDetailsForm.values.carrier_name,
@@ -1345,7 +1347,7 @@ function InlandImportJobCreate() {
           routingStateInitializedRef.current = true;
         }
         console.log(
-          "✅ Routings initialized - Form values after setValues:",
+          "? Routings initialized - Form values after setValues:",
           routingsForm.values,
         );
         // Note: Container Details are not used for Inland Import Jobs
@@ -1403,7 +1405,7 @@ function InlandImportJobCreate() {
             };
           });
           console.log(
-            "🧾 [AIR_EXPORT_JOB] mappedEstimates (before setValues)",
+            "?? [AIR_EXPORT_JOB] mappedEstimates (before setValues)",
             {
               mappedEstimates,
             },
@@ -1433,7 +1435,7 @@ function InlandImportJobCreate() {
           );
 
           console.log(
-            "🧾 [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied",
+            "?? [AIR_EXPORT_JOB] estimatesForm.setFieldValue applied",
             {
               sanitizedEstimates,
             },
@@ -1470,7 +1472,7 @@ function InlandImportJobCreate() {
       // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
         if (!formsInitializedFromJobDataRef.current && jobData) {
-          console.log("🔄 Re-initializing forms after delay:", jobData);
+          console.log("?? Re-initializing forms after delay:", jobData);
           // Trigger initialization again
           formsInitializedFromJobDataRef.current = false;
         }
@@ -1785,7 +1787,7 @@ function InlandImportJobCreate() {
       (mode === "edit" || mode === "view") &&
       !formsInitializedFromJobDataRef.current
     ) {
-      console.log("⏳ Waiting for jobData initialization to complete...");
+      console.log("? Waiting for jobData initialization to complete...");
       return;
     }
 
@@ -2059,7 +2061,7 @@ function InlandImportJobCreate() {
     (editIndex?: number, editData?: HAWBDetail) => {
       // Prevent multiple navigations
       if (navigationInProgressRef.current) {
-        console.log("⚠️ Navigation already in progress, skipping...");
+        console.log("?? Navigation already in progress, skipping...");
         return;
       }
 
@@ -2109,7 +2111,7 @@ function InlandImportJobCreate() {
 
       const mawbDetailsToPass = getMawbDetailsSnapshot();
 
-      console.log("🚀 Navigating to HAWBCreate with mawbDetails:", {
+      console.log("?? Navigating to HAWBCreate with mawbDetails:", {
         mawbDetailsToPass,
         agent_data: mawbDetailsToPass.agent_data,
         hasAddressesData: mawbDetailsToPass.agent_data?.addresses_data,
@@ -3160,7 +3162,7 @@ function InlandImportJobCreate() {
                       selectedData?.label || "",
                     );
 
-                    console.log("🔍 MAWB Destination Agent Selected:", {
+                    console.log("?? MAWB Destination Agent Selected:", {
                       agentCode: value,
                       agentName: selectedData?.label,
                       originalData,
@@ -4221,7 +4223,7 @@ function InlandImportJobCreate() {
                           Daybook
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
-                          Invoice Number
+                          Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
@@ -4254,9 +4256,6 @@ function InlandImportJobCreate() {
                           const isUnposted =
                             statusUpper === "UNPOSTED" ||
                             row.status === "unpost";
-                          const isReversed =
-                            statusUpper === "PARTIALLY REVERSED" ||
-                            statusUpper === "FULLY REVERSED";
                           const rowKey = `${row.id}-${idx}`;
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
@@ -4266,7 +4265,7 @@ function InlandImportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  isReversed ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -4275,7 +4274,7 @@ function InlandImportJobCreate() {
                                     )
                                   )
                                     return;
-                                  if (!isReversed) {
+                                  if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
@@ -4288,7 +4287,7 @@ function InlandImportJobCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   <Group gap="xs" wrap="nowrap">
-                                    {isReversed && (
+                                    {hasReverseInvoices && (
                                       <Box
                                         component="span"
                                         style={{ display: "inline-flex" }}
@@ -4550,7 +4549,7 @@ function InlandImportJobCreate() {
                                   </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                              {isReversed && isExpanded && (
+                              {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
                                     px={8}
@@ -4598,7 +4597,7 @@ function InlandImportJobCreate() {
                                                 width: "20%",
                                               }}
                                             >
-                                              Invoice Number
+                                              Document Number
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -4659,7 +4658,7 @@ function InlandImportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {rev.document_no ?? "-"}
+                                                    {formatInvoiceDocumentNo(rev)}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -4807,9 +4806,7 @@ function InlandImportJobCreate() {
                                                                     ...row,
                                                                     ...rev,
                                                                     id: targetId,
-                                                                    document_no:
-                                                                      rev.document_no ??
-                                                                      row.document_no,
+                                                                    document_no: getInvoiceDocumentNo(rev, row.document_no),
                                                                     document_date:
                                                                       rev.document_date ??
                                                                       row.document_date,

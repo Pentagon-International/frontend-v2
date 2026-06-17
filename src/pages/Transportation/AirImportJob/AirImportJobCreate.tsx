@@ -69,6 +69,7 @@ import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNotice
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -244,6 +245,7 @@ const getAddressOptions = (
 type ReverseInvoiceItem = {
   id?: number;
   reverse_invoice_id?: number;
+  reverse_document_no?: string;
   document_no?: string;
   document_date?: string;
   total?: string | number;
@@ -4970,7 +4972,7 @@ function AirImportJobCreate() {
                           Daybook
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
-                          Invoice Number
+                          Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
@@ -5003,9 +5005,6 @@ function AirImportJobCreate() {
                           const isUnposted =
                             statusUpper === "UNPOSTED" ||
                             row.status === "unpost";
-                          const isReversed =
-                            statusUpper === "PARTIALLY REVERSED" ||
-                            statusUpper === "FULLY REVERSED";
                           const rowKey = `${row.id}-${idx}`;
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
@@ -5015,7 +5014,7 @@ function AirImportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  isReversed ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5024,7 +5023,7 @@ function AirImportJobCreate() {
                                     )
                                   )
                                     return;
-                                  if (!isReversed) {
+                                  if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
@@ -5037,7 +5036,7 @@ function AirImportJobCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   <Group gap="xs" wrap="nowrap">
-                                    {isReversed && (
+                                    {hasReverseInvoices && (
                                       <Box
                                         component="span"
                                         style={{ display: "inline-flex" }}
@@ -5299,7 +5298,7 @@ function AirImportJobCreate() {
                                   </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                              {isReversed && isExpanded && (
+                              {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
                                     px={8}
@@ -5347,7 +5346,7 @@ function AirImportJobCreate() {
                                                 width: "20%",
                                               }}
                                             >
-                                              Invoice Number
+                                              Document Number
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5408,7 +5407,7 @@ function AirImportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {rev.document_no ?? "-"}
+                                                    {formatInvoiceDocumentNo(rev)}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -5556,9 +5555,7 @@ function AirImportJobCreate() {
                                                                     ...row,
                                                                     ...rev,
                                                                     id: targetId,
-                                                                    document_no:
-                                                                      rev.document_no ??
-                                                                      row.document_no,
+                                                                    document_no: getInvoiceDocumentNo(rev, row.document_no),
                                                                     document_date:
                                                                       rev.document_date ??
                                                                       row.document_date,

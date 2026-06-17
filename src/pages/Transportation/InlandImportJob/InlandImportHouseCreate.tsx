@@ -1,4 +1,4 @@
-﻿import {
+import {
   Box,
   Button,
   Grid,
@@ -54,6 +54,7 @@ import {
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -169,6 +170,7 @@ type ChargeDetail = {
 type ReverseInvoiceItem = {
   id?: number;
   reverse_invoice_id?: number;
+  reverse_document_no?: string;
   document_no?: string;
   document_date?: string;
   total?: string | number;
@@ -1630,13 +1632,13 @@ function HouseCreate() {
 
   // Function to update Trade field based on destination comparison
   const updateTradeField = (hawbDestinationCode: string) => {
-    console.log("🔄 updateTradeField called with:", hawbDestinationCode);
+    console.log("?? updateTradeField called with:", hawbDestinationCode);
     const mawbDestinationCode =
       location.state?.mawbDetails?.destination_code ||
       location.state?.mawbDetails?.destination_code ||
       "";
 
-    console.log("🔍 updateTradeField comparison:", {
+    console.log("?? updateTradeField comparison:", {
       hawbDestinationCode,
       mawbDestinationCode,
       currentTradeValue: form.values.trade,
@@ -1650,10 +1652,10 @@ function HouseCreate() {
           ? "Import"
           : "Transshipment";
 
-      console.log("💡 updateTradeField calculated value:", newTradeValue);
+      console.log("?? updateTradeField calculated value:", newTradeValue);
 
       // Always update to ensure dropdown re-renders
-      console.log("✏️ updateTradeField updating Trade to:", newTradeValue);
+      console.log("?? updateTradeField updating Trade to:", newTradeValue);
       form.setFieldValue("trade", newTradeValue);
       // Force form state update by setting values directly
       form.setValues({
@@ -1661,12 +1663,12 @@ function HouseCreate() {
         trade: newTradeValue,
       });
       console.log(
-        "📊 updateTradeField after update, form.values.trade:",
+        "?? updateTradeField after update, form.values.trade:",
         form.values.trade,
       );
     } else if (!hawbDestinationCode && form.values.trade) {
       // Clear trade if HAWB destination is cleared
-      console.log("🧹 updateTradeField clearing Trade");
+      console.log("?? updateTradeField clearing Trade");
       form.setFieldValue("trade", "");
     }
   };
@@ -1675,7 +1677,7 @@ function HouseCreate() {
   useEffect(() => {
     const mawbDestinationCode =
       location.state?.mawbDetails?.destination_code || "";
-    console.log("🔄 useEffect triggered for Trade update:", {
+    console.log("?? useEffect triggered for Trade update:", {
       destinationCode: form.values.destination_code,
       mawbDestinationCode,
       currentTradeValue: form.values.trade,
@@ -1728,7 +1730,7 @@ function HouseCreate() {
     const mawbOriginAgentData = (mawbDetails as { agent_data?: unknown })
       ?.agent_data as Record<string, unknown> | null | undefined;
 
-    console.log("🔍 MAWB Origin Agent Auto-fill:", {
+    console.log("?? MAWB Origin Agent Auto-fill:", {
       mawbOriginAgent,
       hasMawbOriginAgentData: !!mawbOriginAgentData,
       mawbOriginAgentData,
@@ -1750,7 +1752,7 @@ function HouseCreate() {
             }>)
           : null;
 
-        console.log("📍 Processed Addresses Data:", addressesData);
+        console.log("?? Processed Addresses Data:", addressesData);
 
         // Auto-select the first address if available
         if (
@@ -1759,15 +1761,15 @@ function HouseCreate() {
           addressesData[0].address
         ) {
           const firstAddress = addressesData[0].address;
-          console.log("✅ Setting HBL origin agent address:", firstAddress);
+          console.log("? Setting HBL origin agent address:", firstAddress);
           form.setFieldValue("agent_address", firstAddress);
         } else {
-          console.log("⚠️ No valid address found in addresses_data");
+          console.log("?? No valid address found in addresses_data");
           // Clear address if no addresses_data available
           form.setFieldValue("agent_address", "");
         }
       } else {
-        console.log("⚠️ No mawbOriginAgentData or addresses_data found");
+        console.log("?? No mawbOriginAgentData or addresses_data found");
         // Clear address if no agent_data
         form.setFieldValue("agent_address", "");
       }
@@ -2119,7 +2121,7 @@ function HouseCreate() {
     // Get current form values - ensure we're using the latest form state
     const currentFormValues = form.values;
 
-    console.log("💾 HAWB Form Save - Current Form Values:", {
+    console.log("?? HAWB Form Save - Current Form Values:", {
       origin_code: currentFormValues.origin_code,
       origin_name: currentFormValues.origin_name,
       destination_code: currentFormValues.destination_code,
@@ -2842,7 +2844,7 @@ function HouseCreate() {
                       : form.values.destination_code || null
                   }
                   onChange={(value, selectedData) => {
-                    console.log("🚀 Destination onChange triggered", {
+                    console.log("?? Destination onChange triggered", {
                       value,
                       selectedData,
                     });
@@ -2861,7 +2863,7 @@ function HouseCreate() {
                     const mawbDestinationCode =
                       location.state?.mawbDetails?.destination_code || "";
 
-                    console.log("🔍 Comparing destinations:", {
+                    console.log("?? Comparing destinations:", {
                       hblDestinationCode,
                       mawbDestinationCode,
                       match: hblDestinationCode === mawbDestinationCode,
@@ -2873,7 +2875,7 @@ function HouseCreate() {
                         hblDestinationCode === mawbDestinationCode
                           ? "Import"
                           : "Transshipment";
-                      console.log("✅ Setting Trade value:", newTradeValue);
+                      console.log("? Setting Trade value:", newTradeValue);
                       // Use setValues to ensure state is properly updated
                       form.setValues({
                         ...form.values,
@@ -2884,16 +2886,16 @@ function HouseCreate() {
                         trade: newTradeValue,
                       });
                       console.log(
-                        "📝 After setValues, form.values.trade:",
+                        "?? After setValues, form.values.trade:",
                         form.values.trade,
                       );
                     } else if (!hblDestinationCode) {
                       // Clear trade if HBL destination is cleared
-                      console.log("🧹 Clearing Trade (no HBL destination)");
+                      console.log("?? Clearing Trade (no HBL destination)");
                       form.setFieldValue("trade", "");
                     } else {
                       console.log(
-                        "⚠️ No MAWB destination found, cannot update Trade",
+                        "?? No MAWB destination found, cannot update Trade",
                       );
                     }
                   }}
@@ -4773,7 +4775,7 @@ function HouseCreate() {
                           Daybook
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
-                          Invoice number
+                          Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
@@ -4806,9 +4808,6 @@ function HouseCreate() {
                           const isUnposted =
                             statusUpper === "UNPOSTED" ||
                             row.status === "unpost";
-                          const isReversed =
-                            statusUpper === "PARTIALLY REVERSED" ||
-                            statusUpper === "FULLY REVERSED";
                           const rowKey = `${row.id}-${idx}`;
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
@@ -4818,7 +4817,7 @@ function HouseCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  isReversed ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -4828,7 +4827,7 @@ function HouseCreate() {
                                   )
                                     return;
 
-                                  if (!isReversed) {
+                                  if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
@@ -4842,7 +4841,7 @@ function HouseCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   <Group gap="xs" wrap="nowrap">
-                                    {isReversed && (
+                                    {hasReverseInvoices && (
                                       <Box
                                         component="span"
                                         style={{ display: "inline-flex" }}
@@ -5102,7 +5101,7 @@ function HouseCreate() {
                                   </Menu>
                                 </Table.Td>
                               </Table.Tr>
-                              {isReversed && isExpanded && (
+                              {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
                                     px={8}
@@ -5150,7 +5149,7 @@ function HouseCreate() {
                                                 width: "20%",
                                               }}
                                             >
-                                              Invoice number
+                                              Document Number
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5208,7 +5207,7 @@ function HouseCreate() {
                                                     width: "20%",
                                                   }}
                                                 >
-                                                  {rev.document_no ?? "-"}
+                                                  {formatInvoiceDocumentNo(rev)}
                                                 </Table.Td>
                                                 <Table.Td
                                                   style={{
@@ -5347,10 +5346,7 @@ function HouseCreate() {
                                                                   ...row,
                                                                   ...rev,
                                                                   id: targetId,
-                                                                  document_no:
-                                                                    rev.document_no ??
-                                                                    (row as any)
-                                                                      .document_no,
+                                                                  document_no: getInvoiceDocumentNo(rev, (row as any).document_no),
                                                                   document_date:
                                                                     rev.document_date ??
                                                                     (row as any)

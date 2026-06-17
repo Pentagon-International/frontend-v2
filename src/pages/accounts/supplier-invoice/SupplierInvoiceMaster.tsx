@@ -74,6 +74,9 @@ type SupplierInvoiceRow = Record<string, unknown> & {
   crj_number?: string;
   Inv_Crn_no?: string;
   agent_name?: string;
+  job_id?: string;
+  shipment_ids?: string[];
+  currency_code?: string;
   date?: string;
   Inv_crn_amount?: number | string;
   status?: string;
@@ -110,6 +113,8 @@ const LIST_KEY = "SUPPLIER_INVOICE_MASTER";
 type SupplierInvoiceFilters = {
   invoice_no: string;
   agent_name: string;
+  job_id: string;
+  shipment_id: string;
   date_from: Date | null;
   date_to: Date | null;
   status: string;
@@ -119,7 +124,10 @@ type SupplierInvoiceColumnVisibility = {
   sno: boolean;
   invoice_no: boolean;
   agent_name: boolean;
+  job_id: boolean;
+  shipment_ids: boolean;
   date: boolean;
+  currency_code: boolean;
   Inv_crn_amount: boolean;
   status: boolean;
 };
@@ -128,7 +136,10 @@ const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
   sno: true,
   invoice_no: true,
   agent_name: true,
+  job_id: true,
+  shipment_ids: true,
   date: true,
+  currency_code: true,
   Inv_crn_amount: true,
   status: true,
 };
@@ -137,7 +148,10 @@ const supplierInvoiceColumnLabels: Record<keyof SupplierInvoiceColumnVisibility,
   sno: "S.No",
   invoice_no: "Invoice No",
   agent_name: "Agent / Supplier",
+  job_id: "Job Id",
+  shipment_ids: "Shipment Id",
   date: "Date",
+  currency_code: "Currency",
   Inv_crn_amount: "Amount",
   status: "Status",
 };
@@ -168,6 +182,8 @@ function SupplierInvoiceMaster() {
   const DEFAULT_FILTERS: SupplierInvoiceFilters = {
     invoice_no: "",
     agent_name: "",
+    job_id: "",
+    shipment_id: "",
     date_from: defaultDateFrom,
     date_to: defaultDateTo,
     status: "",
@@ -346,36 +362,16 @@ function SupplierInvoiceMaster() {
         const response = (await apiCallProtected.post(
           `${URL.supplierInvoiceFilter}?index=${index}&limit=${pagination.pageSize}`,
           payload,
-        )) as Record<string, unknown>;
+        )) as SupplierInvoiceFilterResponse;
 
-        const raw = response as any;
-        const bodyCandidate =
-          raw?.data != null && !Array.isArray(raw.data) ? raw.data : raw;
-        const body = bodyCandidate != null
-          ? (bodyCandidate as SupplierInvoiceFilterResponse | SupplierInvoiceRow[])
-          : null;
+        const list = Array.isArray(response?.data) ? response.data : [];
 
-        if (!body) {
-          setTotalRecords(0);
-          return { data: [], summary: undefined };
-        }
-
-        const list = Array.isArray((body as SupplierInvoiceFilterResponse).data)
-          ? ((body as SupplierInvoiceFilterResponse).data as SupplierInvoiceRow[])
-          : Array.isArray(body) ? (body as SupplierInvoiceRow[]) : [];
-
-        const totalEnvelope =
-          body != null &&
-          typeof body === "object" &&
-          !Array.isArray(body) &&
-          ("total" in body || "index" in body)
-            ? (body as unknown as Record<string, unknown>)
-            : (raw as Record<string, unknown>);
+        const totalEnvelope = response as Record<string, unknown>;
         const listTotal = getBookingShipmentFilterListTotal(totalEnvelope, list, index);
-        const rawSummary = raw?.summary;
+        const rawSummary = response?.summary;
         const summary: SupplierInvoiceListSummary | undefined =
           rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
-            ? (rawSummary as SupplierInvoiceListSummary)
+            ? rawSummary
             : undefined;
         const summaryTotal = summary?.total_shipments;
         const total =
@@ -533,6 +529,77 @@ function SupplierInvoiceMaster() {
         ),
       },
       {
+        accessorKey: "job_id",
+        header: "Job Id",
+        size: 150,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Job Id"
+            value={appliedFilters.job_id}
+            displayValue={appliedFilters.job_id}
+            theme={erpTheme}
+            placeholder="Filter Job Id"
+            isEditing={editingHeaderId === "job_id"}
+            onStartEdit={() => openHeaderEditor("job_id")}
+            onStopEdit={() => collapseHeaderEditor("job_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, job_id: next }))
+            }
+          />
+        ),
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {row.original.job_id ? String(row.original.job_id) : "-"}
+          </Text>
+        ),
+      },
+      {
+        id: "shipment_ids",
+        accessorKey: "shipment_ids",
+        header: "Shipment Id",
+        size: 180,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Shipment Id"
+            value={appliedFilters.shipment_id}
+            displayValue={appliedFilters.shipment_id}
+            theme={erpTheme}
+            placeholder="Filter Shipment Id"
+            isEditing={editingHeaderId === "shipment_id"}
+            onStartEdit={() => openHeaderEditor("shipment_id")}
+            onStopEdit={() => collapseHeaderEditor("shipment_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, shipment_id: next }))
+            }
+          />
+        ),
+        Cell: ({ row }) => {
+          const shipmentIds = row.original.shipment_ids;
+          if (Array.isArray(shipmentIds) && shipmentIds.length > 0) {
+            return (
+              <Stack gap={2}>
+                {shipmentIds.map((shipmentId, shipmentIndex) => (
+                  <Text
+                    key={`${row.original.id ?? row.index}-${shipmentIndex}`}
+                    size="sm"
+                    style={{ fontFamily: erpTheme.fontSans }}
+                  >
+                    {String(shipmentId)}
+                  </Text>
+                ))}
+              </Stack>
+            );
+          }
+
+          const fallbackShipmentId = row.original.shipment_id;
+          return (
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              {fallbackShipmentId ? String(fallbackShipmentId) : "-"}
+            </Text>
+          );
+        },
+      },
+      {
         accessorKey: "date",
         header: "Date",
         size: 140,
@@ -540,6 +607,18 @@ function SupplierInvoiceMaster() {
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {row.original.date
               ? dayjs(String(row.original.date)).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "currency_code",
+        header: "Currency",
+        size: 100,
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {row.original.currency_code
+              ? String(row.original.currency_code)
               : "-"}
           </Text>
         ),
@@ -1015,7 +1094,8 @@ function SupplierInvoiceMaster() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine by invoice no., agent, date range, or status",
+            subtitle:
+              "Refine by invoice no., agent, job id, shipment id, date range, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1056,6 +1136,42 @@ function SupplierInvoiceMaster() {
                         setDraftFilters((prev) => ({
                           ...prev,
                           agent_name: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Job Id"
+                      placeholder="Type Job Id"
+                      value={draftFilters.job_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_id: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Shipment Id"
+                      placeholder="Type Shipment Id"
+                      value={draftFilters.shipment_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          shipment_id: e.currentTarget.value,
                         }))
                       }
                       size="xs"

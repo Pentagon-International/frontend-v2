@@ -61,6 +61,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -161,6 +162,7 @@ type ContainerDetail = {
 type ReverseInvoiceItem = {
   id?: number;
   reverse_invoice_id?: number;
+  reverse_document_no?: string;
   document_no?: string;
   document_date?: string;
   total?: string | number;
@@ -4831,7 +4833,7 @@ function ExportJobCreate() {
                           Daybook
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
-                          Invoice number
+                          Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
@@ -4864,9 +4866,6 @@ function ExportJobCreate() {
                           const isUnposted =
                             statusUpper === "UNPOSTED" ||
                             row.status === "unpost";
-                          const isReversed =
-                            statusUpper === "PARTIALLY REVERSED" ||
-                            statusUpper === "FULLY REVERSED";
                           const rowKey = `${row.id}-${idx}`;
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
@@ -4877,7 +4876,7 @@ function ExportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  isReversed ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -4887,7 +4886,7 @@ function ExportJobCreate() {
                                   )
                                     return;
 
-                                  if (!isReversed) {
+                                  if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
@@ -4901,7 +4900,7 @@ function ExportJobCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   <Group gap="xs" wrap="nowrap">
-                                    {isReversed && (
+                                    {hasReverseInvoices && (
                                       <Box
                                         component="span"
                                         style={{ display: "inline-flex" }}
@@ -5164,7 +5163,7 @@ function ExportJobCreate() {
                                 </Table.Td>
                               </Table.Tr>
 
-                              {isReversed && isExpanded && (
+                              {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
                                     colSpan={6}
@@ -5211,7 +5210,7 @@ function ExportJobCreate() {
                                                 width: "20%",
                                               }}
                                             >
-                                              Invoice number
+                                              Document Number
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5272,7 +5271,7 @@ function ExportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {rev.document_no ?? "-"}
+                                                    {formatInvoiceDocumentNo(rev)}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -5416,9 +5415,7 @@ function ExportJobCreate() {
                                                                     ...row,
                                                                     ...rev,
                                                                     id: targetId,
-                                                                    document_no:
-                                                                      rev.document_no ??
-                                                                      row.document_no,
+                                                                    document_no: getInvoiceDocumentNo(rev, row.document_no),
                                                                     document_date:
                                                                       rev.document_date ??
                                                                       row.document_date,
