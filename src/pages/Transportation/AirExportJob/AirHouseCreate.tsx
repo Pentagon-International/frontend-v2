@@ -3965,7 +3965,7 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={6}>
                 <Radio.Group
-                  label="Agreed Charges"
+                  label="As Agreed Charges"
                   value={form.values.is_agreed_charges ? "true" : "false"}
                   onChange={(value) => {
                     form.setFieldValue("is_agreed_charges", value === "true");

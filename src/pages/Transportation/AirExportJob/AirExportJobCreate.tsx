@@ -4088,7 +4088,7 @@ function AirExportJobCreate() {
               </Grid.Col>
               <Grid.Col span={12}>
                 <Radio.Group
-                  label="Agreed Charges"
+                  label="As Agreed Charges"
                   value={
                     cargoDetailsForm.values.is_agreed_charges ? "true" : "false"
                   }
