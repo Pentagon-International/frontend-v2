@@ -17,6 +17,7 @@ import {
   erpListStickyActionTdStyle,
   erpListStickyActionThStyle,
 } from "../ERPListPage";
+import { formatDisplayJobId } from "../../utils/displayJobId";
 import {
   BOOKING_EXPORT_MILESTONES,
   type BookingMilestoneRow,
@@ -93,6 +94,13 @@ export type BookingMasterTableRowModel<TRaw = unknown> = {
   weight: number;
   customer_service_name: string;
 };
+
+function bookingJobNoDisplay(booking: BookingMasterTableRowModel): string {
+  const raw = booking.raw as Record<string, unknown> | undefined;
+  const jobId = String(booking.job_no ?? raw?.job_id ?? raw?.job_no ?? "").trim();
+  const serviceCode = String(raw?.service_code ?? "").trim();
+  return formatDisplayJobId(jobId, serviceCode);
+}
 
 function initials(name: string | undefined | null): string {
   if (!name?.trim()) return "?";
@@ -560,7 +568,7 @@ export function BookingMasterListTable<TRaw>({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {booking.job_no?.trim() ? booking.job_no : "—"}
+                      {bookingJobNoDisplay(booking) || "—"}
                     </td>
                   )}
                   {v.volume && (

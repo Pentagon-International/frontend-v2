@@ -3417,6 +3417,7 @@ export interface PendingJobsResponse {
 export interface JobsWithoutBLReleasedItem {
   job_primary_key: number;
   job_id: string;
+  service_code?: string;
   booking_id: string;
   houseno: string;
   service?: string;

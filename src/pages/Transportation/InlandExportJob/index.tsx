@@ -76,6 +76,7 @@ import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { withInlandExportJobServiceFields } from "./inlandExportJobService";
 
@@ -1405,7 +1406,7 @@ function InlandExportJobMaster() {
                             {visibleColumns.job_id && (
                               <td style={tdPad}>
                                 <Text fw={600} size="sm" c={fg}>
-                                  {row.job_id || "—"}
+                                  {formatDisplayJobId(row.job_id, row.service_code) || "—"}
                                 </Text>
                               </td>
                             )}

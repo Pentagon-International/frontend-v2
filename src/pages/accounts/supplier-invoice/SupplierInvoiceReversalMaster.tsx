@@ -63,14 +63,21 @@ import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 
 type SupplierInvoiceReversalRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
   reverse_crj_number?: string;
+  crj_number?: string;
   Inv_Crn_no?: string;
   reverse_invoice_no?: string;
   agent_name?: string;
+  job_id?: string;
+  service_code?: string;
+  shipment_ids?: string[];
+  shipment_id?: string;
+  currency_code?: string;
   date?: string;
   Inv_crn_amount?: number | string;
   status?: string;
@@ -107,6 +114,8 @@ const LIST_KEY = "SUPPLIER_INVOICE_REVERSAL_MASTER";
 type SupplierInvoiceReversalFilters = {
   invoice_no: string;
   agent_name: string;
+  job_id: string;
+  shipment_id: string;
   date_from: Date | null;
   date_to: Date | null;
   status: string;
@@ -114,18 +123,24 @@ type SupplierInvoiceReversalFilters = {
 
 type SupplierInvoiceReversalColumnVisibility = {
   sno: boolean;
-  reverse_invoice_no: boolean;
+  invoice_no: boolean;
   agent_name: boolean;
+  job_id: boolean;
+  shipment_ids: boolean;
   date: boolean;
+  currency_code: boolean;
   Inv_crn_amount: boolean;
   status: boolean;
 };
 
 const supplierInvoiceReversalColumnDefault: SupplierInvoiceReversalColumnVisibility = {
   sno: true,
-  reverse_invoice_no: true,
+  invoice_no: true,
   agent_name: true,
+  job_id: true,
+  shipment_ids: true,
   date: true,
+  currency_code: true,
   Inv_crn_amount: true,
   status: true,
 };
@@ -135,9 +150,12 @@ const supplierInvoiceReversalColumnLabels: Record<
   string
 > = {
   sno: "S.No",
-  reverse_invoice_no: "Invoice No",
+  invoice_no: "Invoice No",
   agent_name: "Agent / Supplier",
+  job_id: "Job Id",
+  shipment_ids: "Shipment Id",
   date: "Date",
+  currency_code: "Currency",
   Inv_crn_amount: "Amount",
   status: "Status",
 };
@@ -168,6 +186,8 @@ function SupplierInvoiceReversalMaster() {
   const DEFAULT_FILTERS: SupplierInvoiceReversalFilters = {
     invoice_no: "",
     agent_name: "",
+    job_id: "",
+    shipment_id: "",
     date_from: defaultDateFrom,
     date_to: defaultDateTo,
     status: "",
@@ -498,10 +518,11 @@ function SupplierInvoiceReversalMaster() {
         Cell: ({ row }) => row.original?.sno ?? index + row.index + 1,
       },
       {
-        id: "reverse_invoice_no",
+        id: "invoice_no",
         header: "Invoice No",
         size: 160,
-        accessorFn: (row) => (row.reverse_crj_number ?? "") as string,
+        accessorFn: (row) =>
+          String(row.reverse_crj_number ?? row.crj_number ?? row.reverse_invoice_no ?? ""),
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Invoice No"
@@ -509,9 +530,9 @@ function SupplierInvoiceReversalMaster() {
             displayValue={appliedFilters.invoice_no}
             theme={erpTheme}
             placeholder="Filter Invoice No"
-            isEditing={editingHeaderId === "reverse_invoice_no"}
-            onStartEdit={() => openHeaderEditor("reverse_invoice_no")}
-            onStopEdit={() => collapseHeaderEditor("reverse_invoice_no")}
+            isEditing={editingHeaderId === "invoice_no"}
+            onStartEdit={() => openHeaderEditor("invoice_no")}
+            onStopEdit={() => collapseHeaderEditor("invoice_no")}
             onChange={(next) =>
               commitHeaderFilters((prev) => ({ ...prev, invoice_no: next }))
             }
@@ -539,6 +560,77 @@ function SupplierInvoiceReversalMaster() {
         ),
       },
       {
+        accessorKey: "job_id",
+        header: "Job Id",
+        size: 150,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Job Id"
+            value={appliedFilters.job_id}
+            displayValue={appliedFilters.job_id}
+            theme={erpTheme}
+            placeholder="Filter Job Id"
+            isEditing={editingHeaderId === "job_id"}
+            onStartEdit={() => openHeaderEditor("job_id")}
+            onStopEdit={() => collapseHeaderEditor("job_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, job_id: next }))
+            }
+          />
+        ),
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatDisplayJobId(row.original.job_id, row.original.service_code) || "-"}
+          </Text>
+        ),
+      },
+      {
+        id: "shipment_ids",
+        accessorKey: "shipment_ids",
+        header: "Shipment Id",
+        size: 180,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Shipment Id"
+            value={appliedFilters.shipment_id}
+            displayValue={appliedFilters.shipment_id}
+            theme={erpTheme}
+            placeholder="Filter Shipment Id"
+            isEditing={editingHeaderId === "shipment_id"}
+            onStartEdit={() => openHeaderEditor("shipment_id")}
+            onStopEdit={() => collapseHeaderEditor("shipment_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, shipment_id: next }))
+            }
+          />
+        ),
+        Cell: ({ row }) => {
+          const shipmentIds = row.original.shipment_ids;
+          if (Array.isArray(shipmentIds) && shipmentIds.length > 0) {
+            return (
+              <Stack gap={2}>
+                {shipmentIds.map((shipmentId, shipmentIndex) => (
+                  <Text
+                    key={`${row.original.id ?? row.index}-${shipmentIndex}`}
+                    size="sm"
+                    style={{ fontFamily: erpTheme.fontSans }}
+                  >
+                    {String(shipmentId)}
+                  </Text>
+                ))}
+              </Stack>
+            );
+          }
+
+          const fallbackShipmentId = row.original.shipment_id;
+          return (
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              {fallbackShipmentId ? String(fallbackShipmentId) : "-"}
+            </Text>
+          );
+        },
+      },
+      {
         accessorKey: "date",
         header: "Date",
         size: 140,
@@ -546,6 +638,18 @@ function SupplierInvoiceReversalMaster() {
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {row.original.date
               ? dayjs(String(row.original.date)).format(dateFormat)
+              : "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "currency_code",
+        header: "Currency",
+        size: 100,
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {row.original.currency_code
+              ? String(row.original.currency_code)
               : "-"}
           </Text>
         ),
@@ -985,7 +1089,8 @@ function SupplierInvoiceReversalMaster() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine by invoice no., agent, date range, or status",
+            subtitle:
+              "Refine by invoice no., agent, job id, shipment id, date range, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1026,6 +1131,42 @@ function SupplierInvoiceReversalMaster() {
                         setDraftFilters((prev) => ({
                           ...prev,
                           agent_name: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Job Id"
+                      placeholder="Type Job Id"
+                      value={draftFilters.job_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_id: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Shipment Id"
+                      placeholder="Type Shipment Id"
+                      value={draftFilters.shipment_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          shipment_id: e.currentTarget.value,
                         }))
                       }
                       size="xs"

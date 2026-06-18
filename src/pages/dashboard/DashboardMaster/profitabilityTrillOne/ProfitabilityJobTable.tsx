@@ -15,6 +15,7 @@ import type { ProfitabilityDrillRowKind } from "./profitabilityTrillOneApi";
 import type { ProfitabilityJob } from "./types";
 import { TruncatedAmountText } from "./TruncatedAmountText";
 import { jobMarginPct, marginTone, profitabilityTrillFonts } from "./utils";
+import { formatDisplayJobId } from "../../../../utils/displayJobId";
 
 const JL_GRID_BASE: React.CSSProperties = {
   display: "grid",
@@ -148,6 +149,9 @@ export function ProfitabilityJobTable({
                 : job.revenue > 0
                   ? jobMarginPct(job)
                   : null;
+            const displayJobId = showJobIdPrimary
+              ? formatDisplayJobId(job.id, job.serviceCode)
+              : job.id;
             return (
               <Box
                 key={job.id}
@@ -176,7 +180,7 @@ export function ProfitabilityJobTable({
                         : undefined
                     }
                   >
-                    {showJobIdPrimary ? job.id : job.customer}
+                    {showJobIdPrimary ? displayJobId : job.customer}
                   </Text>
                   <Text
                     fz={11}
@@ -187,7 +191,7 @@ export function ProfitabilityJobTable({
                     {showJobIdPrimary
                       ? [job.delivered, getLaneLabel(job.lane)].filter((s) => s && s !== "—").join(" · ") ||
                         "—"
-                      : `${job.id} · ${job.delivered}`}
+                      : `${displayJobId} · ${job.delivered}`}
                   </Text>
                 </Box>
                 {showSalesperson ? (

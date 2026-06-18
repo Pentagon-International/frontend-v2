@@ -81,11 +81,13 @@ function normalizeJobRowToJob(
       ? null
       : safeNumber(marginRaw);
   const jobId = firstString(row.job_id, row.jobId, row.label);
+  const serviceCode = firstString(row.service_code, row.serviceCode);
   const branchCode = firstString(row.branch_code).toLowerCase();
   const jobDate = firstString(row.job_date, row.jobDate);
 
   return {
     id: jobId || `job-${safeNumber(row.sno, index + 1)}`,
+    serviceCode: serviceCode || undefined,
     customer:
       firstString(row.customer_name, row.customerName, defaultCustomerName, row.label, row.job_id) ||
       "—",

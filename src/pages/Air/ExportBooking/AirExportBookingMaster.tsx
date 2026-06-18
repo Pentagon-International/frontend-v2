@@ -86,6 +86,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_EXPORT_BOOKING_MASTER";
@@ -185,6 +186,7 @@ type ExportShipmentData = {
   destination_name: string;
   customer_service_name: string;
   job_no?: string | null;
+  service_code?: string | null;
   status?: string;
   destination_agent_code?: string;
   destination_agent_address?: string;
@@ -2815,7 +2817,7 @@ function AirExportBookingMaster() {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {booking.job_no?.trim() ? booking.job_no : "—"}
+                                {formatDisplayJobId(booking.job_no, booking.service_code) || "—"}
                               </td>
                             )}
                             {visibleColumns.volume && (

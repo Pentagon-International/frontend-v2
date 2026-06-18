@@ -28,6 +28,7 @@ import {
 } from "../../../service/dashboard.service";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 
 const CARD_PREVIEW_ROWS = 5;
 const TABLE_PAGE_SIZE = 10;
@@ -549,8 +550,15 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
         maxSize: 110,
         Cell: ({ row }) => {
           const jobId = row.original.job_id;
+          const displayJobId = formatDisplayJobId(jobId, row.original.service_code);
           const path = getJobEditPath(row.original.service);
-          if (!jobId || !path) return <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>{jobId ?? "-"}</Text>;
+          if (!jobId || !path) {
+            return (
+              <Text size="sm" style={{fontSize:13, fontFamily:'Inter'}}>
+                {displayJobId || "-"}
+              </Text>
+            );
+          }
           return (
             <Badge
               size="xs"
@@ -565,7 +573,7 @@ const CustomerServiceImportReport: React.FC<CustomerServiceImportReportProps> = 
                 })
               }
             >
-              {jobId}
+              {displayJobId}
             </Badge>
           );
         },
