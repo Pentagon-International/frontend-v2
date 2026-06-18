@@ -10,13 +10,12 @@ const RIGHT_SUB_TITLE_OFFSET = 4;
 const RIGHT_SUB_BODY_OFFSET = 9;
 const TOP_ROW3_HEIGHT = RIGHT_SUB_SECTION_HEIGHT * 3;
 const TABLE_SEPARATION_GAP = 4;
-const BANNER_GAP = 1;
+const TOP_TO_MIDDLE_GAP = 3;
 
 // Document font sizes (+2pt from original layout)
 const FONT_HEADER = 11;
 const FONT_SECTION_TITLE = 9;
 const FONT_SECTION_BODY = 9;
-const FONT_BANNER = 10;
 const FONT_TABLE_HEAD = 8.5;
 const FONT_TABLE_BODY = 9;
 const FONT_LEGAL_BODY = 7;
@@ -545,22 +544,26 @@ export const generateUsBillOfLadingPDF = (
   }
 
   const topTableStartY = logoY + 18;
-  const topMetaY = topTableStartY - 8;
+  const headerAboveTableY = topTableStartY - 3;
 
-  // FMC No. and B/L No. just above the top table border; logo unchanged
   const headerCenterWidth = innerWidth * 0.36;
   const headerCenterX = innerMargin + (innerWidth - headerCenterWidth) / 2;
   const centerTextX = headerCenterX + headerCenterWidth / 2;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(FONT_HEADER);
-  doc.text(companyName, centerTextX, topMetaY, {
-    align: "center",
-  });
+  const fmcLabel = `FMC: ${US_FMC_NO}`;
+  const companyNameWidth = doc.getTextWidth(companyName);
   doc.setFontSize(FONT_FMC);
-  doc.text(`FMC: ${US_FMC_NO}`, centerTextX, topMetaY + 5, {
-    align: "center",
-  });
+  const fmcGap = "   ";
+  const fmcLabelWidth = doc.getTextWidth(`${fmcGap}${fmcLabel}`);
+  const headerTextStartX = centerTextX - (companyNameWidth + fmcLabelWidth) / 2;
+  doc.setFontSize(FONT_HEADER);
+  doc.text(companyName, headerTextStartX, headerAboveTableY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(FONT_FMC);
+  doc.text(`${fmcGap}${fmcLabel}`, headerTextStartX + companyNameWidth, headerAboveTableY);
+  doc.setFont("helvetica", "bold");
 
   const blLabel = "B/L No.";
   const blValue = billOfLadingNo || "";
@@ -571,9 +574,9 @@ export const generateUsBillOfLadingPDF = (
   const blValueWidth = doc.getTextWidth(blValue);
   const blStartX = contentRightX - boxPadding - blLabelWidth - blValueWidth;
   doc.setFont("helvetica", "bold");
-  doc.text(`${blLabel} `, blStartX, topMetaY);
+  doc.text(`${blLabel} `, blStartX, headerAboveTableY);
   doc.setFont("helvetica", "normal");
-  doc.text(blValue, blStartX + blLabelWidth, topMetaY);
+  doc.text(blValue, blStartX + blLabelWidth, headerAboveTableY);
 
   // ===== TABLE 1: TOP INFORMATION GRID =====
   const topTableHeight = TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT + TOP_ROW3_HEIGHT;
@@ -710,18 +713,6 @@ export const generateUsBillOfLadingPDF = (
     topTableStartY + topTableHeight,
   );
 
-  let yPos = topTableStartY + topTableHeight + BANNER_GAP;
-
-  // Separation title between tables (left-aligned, minimal vertical spacing)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(FONT_BANNER);
-  doc.text(
-    "PARTICULAR FURNISHED BY MERCHANTS",
-    innerMargin + boxPadding,
-    yPos + 3,
-  );
-  yPos += 5 + BANNER_GAP;
-
   // ===== TABLE 2: CARGO DETAILS — ends at Freight and charges =====
   const footerRow1Height = 10;
   const footerRow2Height = 10;
@@ -749,12 +740,28 @@ export const generateUsBillOfLadingPDF = (
     footerRow1Height + footerRow2Height + footerRow3Height;
   const footerBoxBottomY = pageHeight - PRINT_SAFE_BOTTOM_MARGIN;
   const footerTableStartY = footerBoxBottomY - footerTableHeight;
-  const wordsRowHeight = 10;
-  const tempRowHeight = 8;
   const middleTableEndY = footerTableStartY - TABLE_SEPARATION_GAP;
+  const cargoTableStartY =
+    topTableStartY + topTableHeight + TOP_TO_MIDDLE_GAP;
+  const wordsRowHeight = 10;
+  const middleTableHeaderLayout = layoutCargoHeader(
+    doc,
+    cargoTableStartY,
+    [
+      { text: "Mark & Numbers", width: innerWidth * 0.14 },
+      { text: "No. of Packages or Shipping Units", width: innerWidth * 0.18 },
+      { text: "Description of Goods & Packages", width: innerWidth * 0.38 },
+      { text: "Gross Weight", width: innerWidth * 0.15 },
+      { text: "Measurement", width: innerWidth * 0.15 },
+    ],
+    boxPadding,
+  );
+  const middleContentBelowHeader =
+    middleTableEndY - middleTableHeaderLayout.headerBottomY;
+  const freightSectionHeight = middleContentBelowHeader / 2;
+  const tempRowHeight = Math.max(8, freightSectionHeight - wordsRowHeight);
   const tempRowY = middleTableEndY - tempRowHeight;
   const wordsRowY = tempRowY - wordsRowHeight;
-  const cargoTableStartY = yPos;
 
   const col1W = innerWidth * 0.14;
   const col2W = innerWidth * 0.18;
