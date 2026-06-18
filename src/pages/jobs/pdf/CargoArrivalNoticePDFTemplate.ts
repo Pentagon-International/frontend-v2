@@ -413,8 +413,9 @@ const drawCanHeaderSection = (
   const headerStartY = 5;
   const headerHeight = 25;
   const logoWidth = 50;
-  const logoHeight = 12;
+  const logoHeight = 20;
   const logoX = margin + 5;
+  const logoTextGap = 2;
   let companyInfoX = margin + 5;
   let companyY = headerStartY + boxPadding + 3;
 
@@ -431,8 +432,8 @@ const drawCanHeaderSection = (
         undefined,
         "FAST"
       );
-      companyInfoX = logoX + logoWidth + 5;
-      companyY = logoY + 1;
+      companyInfoX = logoX + logoWidth + logoTextGap;
+      companyY = logoY + 5;
     } catch (error) {
       console.warn("Could not load logo image, continuing without logo:", error);
     }
