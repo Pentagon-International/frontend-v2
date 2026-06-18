@@ -73,9 +73,7 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
-import { useAgentStatus } from "../../../hooks/useAgentStatus";
-import OdexStatusPanel from "../../../components/OdexStatusPanel";
-import OdexAgentDownloadModal from "../../../components/OdexAgentModal";
+import OdexTriggerModal from "../../../pages/Odex/components/OdexTriggerModal";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -482,16 +480,7 @@ function ImportJobCreate() {
     string | null
   >(null);
 
-  const { recheck } = useAgentStatus({ autoCheck: false });
-  const [showAgentModal,   setShowAgentModal]   = useState(false);
-  const [odexJob,          setOdexJob]          = useState<string | null>(null);
-  const [odexJobStatus,    setOdexJobStatus]    = useState<string | null>(null);
-  const [isCheckingAgent,  setIsCheckingAgent]  = useState(false);
-  const [agentToken,       setAgentToken]       = useState<string | null>(null);
-  const [agentServerUrl,   setAgentServerUrl]   = useState<string | null>(null);
-  const wsRef      = useRef<WebSocket | null>(null);
-  const toastIdRef = useRef<string | number | null>(null);
-  const [agentModalMode, setAgentModalMode] = useState<string | null>("not_installed");
+  const [odexTriggerOpen, setOdexTriggerOpen] = useState(false);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -2699,172 +2688,6 @@ function ImportJobCreate() {
     }
   };
 
-  useEffect(() => {
-    if (!odexJobStatus) return;
-
-    const STATUS_TOASTS: Record<string, { type: "info" | "success" | "error" | "warning"; message: string }> = {
-      pending:         { type: "info",    message: "⏳ Job queued — waiting for agent..." },
-      running:         { type: "info",    message: "🤖 Automation running..." },
-      waiting_captcha: { type: "warning", message: "⚠ Solve the captcha in the browser window, then click Continue below." },
-      completed:       { type: "success", message: "✅ Submitted to Odex successfully!" },
-      failed:          { type: "error",   message: "❌ Automation failed — check agent logs." },
-    };
-
-    const cfg = STATUS_TOASTS[odexJobStatus];
-    if (cfg) {
-      ToastNotification({ type: cfg.type, message: cfg.message });
-    }
-
-    // Close WebSocket when terminal state
-    if (["completed", "failed"].includes(odexJobStatus)) {
-      wsRef.current?.close();
-      wsRef.current = null;
-    }
-  }, [odexJobStatus]);
-
-
-  const triggerOdexJob = useCallback(async () => {
-    const rowSnapshot = ((jobWithMergedHousingDetails ?? jobData ?? {}) as Record<
-      string,
-      unknown
-    >);
-    const housingFromRow = Array.isArray(rowSnapshot.housing_details)
-      ? (rowSnapshot.housing_details as unknown[])
-      : Array.isArray(rowSnapshot.hbl)
-        ? (rowSnapshot.hbl as unknown[])
-        : [];
-    const { housing_details: _ignoredHousingDetails, ...mblPayload } = rowSnapshot;
-
-    const odexPayload = {
-      job_ref:
-        String(jobData?.job_id ?? jobData?.id ?? "").trim() ||
-        `LOGIN-${Date.now()}`,
-      "odex_type": "HBL_REQUEST",
-      "payload": {
-        mbl: mblPayload,
-        hbl: housingFromRow,
-      },
-    };
-
-    try {
-      const res = await apiCallProtected.post(
-        "/job-create/odex/jobs/create/",
-        odexPayload,
-      );
-
-      const raw = res;
-      const parsed =
-        typeof raw === "string"
-          ? (() => {
-              try {
-                return JSON.parse(raw);
-              } catch {
-                return {};
-              }
-            })()
-          : raw;
-      const payload =
-        (parsed as { data?: { job_id?: string | number; status?: string } })
-          ?.data ?? (parsed as { job_id?: string | number; status?: string }) ?? parsed;
-      const jobId = payload?.job_id;
-      if (jobId == null || String(jobId).trim() === "") {
-        throw new Error("ODEX job_id not found in create response.");
-      }
-      setOdexJob(jobId as any);
-      setOdexJobStatus(
-        String(payload?.status ?? "pending")
-          .trim()
-          .toLowerCase(),
-      );
-
-      // WebSocket for real-time status
-      const apiBase = String(URL.base ?? "").trim();
-      const apiOrigin = apiBase
-        ? new globalThis.URL(apiBase, window.location.origin).origin
-        : window.location.origin;
-      const wsProtocol = apiOrigin.startsWith("https") ? "wss" : "ws";
-      const wsHost = apiOrigin.replace(/^https?:\/\//, "");
-      const ws = new WebSocket(
-        `${wsProtocol}://${wsHost}/ws/odex/job/${jobId}/`,
-      );
-      wsRef.current = ws;
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        setOdexJobStatus(data.status);
-        if (["completed", "failed"].includes(data.status)) ws.close();
-      };
-    } catch (err) {
-      console.error("Failed to create job", err);
-      const message =
-        (err as { response?: { data?: { message?: string; detail?: string } } })
-          ?.response?.data?.message ??
-        (err as { response?: { data?: { message?: string; detail?: string } } })
-          ?.response?.data?.detail ??
-        "Unable to start ODEX login automation.";
-      ToastNotification({ type: "error", message });
-    }
-  }, [jobData, jobWithMergedHousingDetails]);
-
-  const handlePushToOdexDownload = useCallback(async () => {
-    if (isCheckingAgent) return;
-    setIsCheckingAgent(true);
-
-    try {
-      ToastNotification({
-        type: "info",
-        message: "Checking agent connection...",
-      });
-
-      const latestStatus = String((await recheck()) ?? "")
-        .trim()
-        .toLowerCase();
-
-      // ── Case 1: Never installed ──────────────────────────────
-      if (latestStatus === "not_installed") {
-        ToastNotification({
-          type: "warning",
-          message: "Odex Agent is not installed. Please download and set it up.",
-        });
-        try {
-          const tokenRes = await apiCallProtected.post(
-            "/job-create/odex/agent/token/generate/"
-          );
-          const d = (tokenRes as any)?.data ?? tokenRes;
-          setAgentToken(d?.token ?? null);
-          setAgentServerUrl(d?.server_url ?? window.location.origin);
-        } catch {
-          setAgentToken(null);
-          setAgentServerUrl(window.location.origin);
-        }
-        setAgentModalMode("not_installed");  // ← new state (see Step 4)
-        setShowAgentModal(true);
-        return;
-      }
-
-      // ── Case 2: Installed but not running ────────────────────
-      if (latestStatus === "registered") {
-        ToastNotification({
-          type: "warning",
-          message: "Agent is installed but not running. Please start it.",
-        });
-        setAgentModalMode("not_running");    // ← show different modal content
-        setShowAgentModal(true);
-        return;
-      }
-
-      // ── Case 3: Online → create job ──────────────────────────
-      ToastNotification({
-        type: "success",
-        message: "✅ Agent connected! Starting automation...",
-      });
-      await triggerOdexJob();
-
-    } finally {
-      setIsCheckingAgent(false);
-    }
-  }, [isCheckingAgent, recheck, triggerOdexJob]);
-
-  
   const handleSubmit = async () => {
     // Ensure we're using the latest form values by constructing payload right before API call
     setIsSubmitting(true);
@@ -3481,8 +3304,8 @@ function ImportJobCreate() {
                         color: "#424242",
                       },
                     }}
-                    disabled={isCheckingAgent}
-                    onClick={handlePushToOdexDownload}
+                    disabled={!jobData?.id}
+                    onClick={() => setOdexTriggerOpen(true)}
                   >
                     Push To Odex
                   </Menu.Item>
@@ -6689,41 +6512,14 @@ function ImportJobCreate() {
         </Box>
       )}
 
-      {showAgentModal && (
-        <OdexAgentDownloadModal
-          opened={showAgentModal}
-          onClose={() => setShowAgentModal(false)}
-          mode={agentModalMode}
-          agentToken={agentToken ?? undefined}
-          serverUrl={agentServerUrl ?? undefined}
-          onAgentReady={() => {
-            setShowAgentModal(false);
-            triggerOdexJob();
-          }}
-        />
-      )}
-
-      {odexJobStatus && (
-        <OdexStatusPanel
-          status={odexJobStatus}
-          onCaptchaDone={async () => {
-            try {
-              await apiCallProtected.post(
-                `/job-create/odex/jobs/${odexJob}/captcha-done/`
-              );
-              ToastNotification({
-                type: "info",
-                message: "Captcha confirmed. Resuming automation...",
-              });
-            } catch {
-              ToastNotification({
-                type: "error",
-                message: "Failed to confirm captcha. Please try again.",
-              });
-            }
-          }}
-        />
-      )}
+      <OdexTriggerModal
+        opened={odexTriggerOpen}
+        onClose={() => setOdexTriggerOpen(false)}
+        consolJobId={
+          jobData?.id != null ? Number(jobData.id) : null
+        }
+        disabled={isReadOnly}
+      />
 
       {/* PDF Preview Modal */}
       <Modal

@@ -7,6 +7,12 @@ export const VENDOR_INVOICE_SEGMENT = "vendor-invoice";
 export const IMPORT_JOB_PATH = `${AUTOMATION_ROUTE_PREFIX}/${IMPORT_JOB_SEGMENT}`;
 export const VENDOR_INVOICE_PATH = `${AUTOMATION_ROUTE_PREFIX}/${VENDOR_INVOICE_SEGMENT}`;
 
+export const ODEX_JOBS_SEGMENT = "odex-jobs";
+export const ODEX_JOBS_PATH = `${AUTOMATION_ROUTE_PREFIX}/${ODEX_JOBS_SEGMENT}`;
+
+export const odexJobDetailPath = (jobId: string | number) =>
+  `${ODEX_JOBS_PATH}/${jobId}`;
+
 /** @deprecated Use IMPORT_JOB_PATH */
 export const JOB_CREATION_SEGMENT = IMPORT_JOB_SEGMENT;
 export const JOB_CREATION_PATH = IMPORT_JOB_PATH;
@@ -34,4 +40,6 @@ export const isWorkflowChatbotPath = (pathname: string): boolean =>
   pathname.startsWith(`${WORKFLOW_ROUTE_PREFIX}/chatbot-`);
 
 export const isAutomationPath = (pathname: string): boolean =>
-  pathname.startsWith(IMPORT_JOB_PATH) || pathname.startsWith(VENDOR_INVOICE_PATH);
+  pathname.startsWith(IMPORT_JOB_PATH) ||
+  pathname.startsWith(VENDOR_INVOICE_PATH) ||
+  pathname.startsWith(ODEX_JOBS_PATH);

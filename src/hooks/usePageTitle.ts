@@ -90,6 +90,7 @@ const pathTitleMap: Record<string, string> = {
   "/customer-service": "Customer Service",
   "/automation/import-job": "Import Job",
   "/automation/vendor-invoice": "Vendor Invoice",
+  "/automation/odex-jobs": "ODEX Jobs",
   "/automation/job-creation": "Import Job",
   "/automation/invoice-manager": "Vendor Invoice",
   "/workflow/hbl-document-manager": "Import Job",

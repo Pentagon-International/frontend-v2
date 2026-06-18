@@ -1,5 +1,6 @@
 import { Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
 import RootLayout from "../layout/RootLayout";
+import OdexLegacyJobRedirect from "./OdexLegacyJobRedirect";
 import {
   CallModeEdit,
   CallModeMaster,
@@ -148,6 +149,8 @@ import {
   OceanImportToExportBooking,
   HBLDocumentManager,
   Invoice,
+  OdexJobsMaster,
+  OdexJobDetail,
   Chatbot,
   ChatbotGoogleApi,
   ChatbotBrowser,
@@ -612,6 +615,13 @@ const NavigationRoutes = () => {
         <Route path="/tariff-bulk-upload" element={<TariffBulkUpload />} />
         <Route path="/automation/import-job" element={<HBLDocumentManager />} />
         <Route path="/automation/vendor-invoice" element={<Invoice />} />
+        <Route path="/automation/odex-jobs" element={<OdexJobsMaster />} />
+        <Route
+          path="/automation/odex-jobs/:jobId"
+          element={<OdexJobDetail />}
+        />
+        <Route path="/odex-jobs" element={<Navigate to="/automation/odex-jobs" replace />} />
+        <Route path="/odex-jobs/:jobId" element={<OdexLegacyJobRedirect />} />
         <Route
           path="/automation/job-creation"
           element={<Navigate to="/automation/import-job" replace />}

@@ -58,10 +58,12 @@ import {
   IconRobot,
   IconAutomation,
   IconTruck,
+  IconCloudComputing,
 } from "@tabler/icons-react";
 import {
   CHATBOT_PATH,
   IMPORT_JOB_PATH,
+  ODEX_JOBS_PATH,
   VENDOR_INVOICE_PATH,
 } from "../../pages/Workflow/jobcreation/workflowUrls";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
@@ -1218,6 +1220,17 @@ const Navbar = ({
                   label="Vendor Invoice"
                   icon={IconFileInvoice}
                   path={VENDOR_INVOICE_PATH}
+                  collapsibles={{
+                    setIsSalesOpen,
+                    setIsTariffOpen,
+                    setIsCustomerServiceOpen,
+                  }}
+                />
+                <SubNavLink
+                  parent="Automation"
+                  label="ODEX Jobs"
+                  icon={IconCloudComputing}
+                  path={ODEX_JOBS_PATH}
                   collapsibles={{
                     setIsSalesOpen,
                     setIsTariffOpen,

@@ -55,7 +55,9 @@ export const CollapsibleNav = ({
         activeSubNav === "Outstanding & Ageing" ||
         activeSubNav === "Pending Activities")) ||
     (label === "Automation" &&
-      (activeSubNav === "Import Job" || activeSubNav === "Vendor Invoice")) ||
+      (activeSubNav === "Import Job" ||
+        activeSubNav === "Vendor Invoice" ||
+        activeSubNav === "ODEX Jobs")) ||
     (parent && activeSubNav === label) ||
     (label === "Air" && activeSubNav.startsWith("Air")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
