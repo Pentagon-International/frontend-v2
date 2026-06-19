@@ -221,6 +221,12 @@ const DIMENSION_UNIT_OPTIONS = [
 ];
 
 import { customerFormSchema, serviceFormSchema } from "./enquiryFormSchemas";
+import {
+  isOtherServiceInland,
+  resolveEffectiveServiceFromTransport,
+  resolveEffectiveServiceType,
+  usesAirCargoStructure,
+} from "../../utils/otherServiceType";
 const fetchEnquiry = async () => {
   try {
     const requestBody = { filters: { status: "ACTIVE" } };
@@ -512,13 +518,10 @@ function EnquiryCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
@@ -556,7 +559,7 @@ function EnquiryCreate() {
               null
             );
           }
-        } else if (effectiveServiceType === "AIR") {
+        } else if (usesAirCargoStructure(effectiveServiceType)) {
           const grossWeight = Number(cargo.gross_weight) || null;
           const volumeWeight = Number(cargo.volume_weight) || null;
 
@@ -708,17 +711,18 @@ function EnquiryCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
-        if (effectiveServiceType !== "AIR" && effectiveServiceType !== "LCL")
+        if (
+          effectiveServiceType !== "AIR" &&
+          effectiveServiceType !== "LCL" &&
+          effectiveServiceType !== "INLAND"
+        )
           return;
 
         const key = `${serviceIndex}-${effectiveServiceType}`;
@@ -752,7 +756,7 @@ function EnquiryCreate() {
                 ? cargo?.volume || null
                 : undefined,
             volume_weight:
-              effectiveServiceType === "AIR"
+              usesAirCargoStructure(effectiveServiceType)
                 ? cargo?.volume_weight || null
                 : undefined,
           };
@@ -777,7 +781,7 @@ function EnquiryCreate() {
           );
         }
 
-        if (effectiveServiceType === "AIR") {
+        if (usesAirCargoStructure(effectiveServiceType)) {
           if (cargo.volume_weight !== totalVolRounded) {
             serviceForm.setFieldValue(
               `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
@@ -1002,9 +1006,11 @@ function EnquiryCreate() {
           cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
 
         if (serviceDetail.service === "OTHERS") {
-          servicePayload.trade = null;
           servicePayload.service_name = serviceDetail.service_name || "";
           servicePayload.service_code = serviceDetail.service_code || "";
+          servicePayload.trade = isInlandOtherService(serviceDetail.service_code)
+            ? serviceDetail.trade
+            : null;
         } else {
           servicePayload.trade = serviceDetail.trade;
         }
@@ -1032,7 +1038,10 @@ function EnquiryCreate() {
             ) {
               effectiveServiceType = "LCL";
             } else {
-              effectiveServiceType = "AIR";
+              effectiveServiceType = resolveEffectiveServiceFromTransport(
+                transportMode,
+                fullGroupage,
+              );
             }
           }
         }
@@ -1051,7 +1060,7 @@ function EnquiryCreate() {
               return fclDetail;
             }
           );
-        } else if (effectiveServiceType === "AIR") {
+        } else if (usesAirCargoStructure(effectiveServiceType)) {
           const cargo = serviceDetail.cargo_details[0];
           servicePayload.no_of_packages = Math.trunc(
             Number(cargo.no_of_packages) || 0
@@ -1154,6 +1163,18 @@ function EnquiryCreate() {
           return; // Skip if no service selected yet
         }
 
+        if (
+          serviceDetail.service === "OTHERS" &&
+          isInlandOtherService(serviceDetail.service_code) &&
+          !serviceDetail.trade
+        ) {
+          serviceForm.setFieldError(
+            `service_details.${serviceIndex}.trade`,
+            "Trade is required",
+          );
+          hasCargoErrors = true;
+        }
+
         // Determine effective service type for validation (for OTHERS, determine from selected service)
         let effectiveServiceType = serviceDetail.service;
         if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
@@ -1163,17 +1184,14 @@ function EnquiryCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
-        if (effectiveServiceType === "AIR" || effectiveServiceType === "LCL") {
+        if (effectiveServiceType === "AIR" || effectiveServiceType === "LCL" || effectiveServiceType === "INLAND") {
           if (!cargo?.no_of_packages || cargo.no_of_packages < 1) {
             serviceForm.setFieldError(
               `service_details.${serviceIndex}.cargo_details.0.no_of_packages`,
@@ -1210,6 +1228,7 @@ function EnquiryCreate() {
 
         if (
           effectiveServiceType === "AIR" ||
+          effectiveServiceType === "INLAND" ||
           effectiveServiceType === "LCL" ||
           effectiveServiceType === "FCL"
         ) {
@@ -1261,7 +1280,7 @@ function EnquiryCreate() {
           }
         }
 
-        if (effectiveServiceType === "AIR") {
+        if (usesAirCargoStructure(effectiveServiceType)) {
           if (!cargo?.volume_weight || cargo.volume_weight < 0.01) {
             serviceForm.setFieldError(
               `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
@@ -1924,6 +1943,18 @@ function EnquiryCreate() {
     }));
   }, [rawOtherServicesData]);
 
+  const getEffectiveServiceType = useCallback(
+    (service: string, serviceCode?: string | null) =>
+      resolveEffectiveServiceType(service, serviceCode, otherServicesData),
+    [otherServicesData],
+  );
+
+  const isInlandOtherService = useCallback(
+    (serviceCode?: string | null) =>
+      isOtherServiceInland(serviceCode, otherServicesData),
+    [otherServicesData],
+  );
+
   // Salespersons data query - initially with empty customer_id
   const { data: rawSalespersonsData = [], refetch: refetchSalespersons } =
     useQuery({
@@ -2149,6 +2180,7 @@ function EnquiryCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
+              let isOthersWithInland = false;
 
               if (serviceValue === "OTHERS" && serviceCodeValue) {
                 // Try to determine structure from otherServicesData if available
@@ -2166,6 +2198,8 @@ function EnquiryCreate() {
                     fullGroupage === "GROUPAGE"
                   ) {
                     isOthersWithLCL = true;
+                  } else if (transportMode === "NA") {
+                    isOthersWithInland = true;
                   } else {
                     isOthersWithAIR = true;
                   }
@@ -2227,7 +2261,7 @@ function EnquiryCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (serviceValue === "AIR" || isOthersWithAIR) {
+              } else if (serviceValue === "AIR" || isOthersWithAIR || isOthersWithInland) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -2377,6 +2411,7 @@ function EnquiryCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
+              let isOthersWithInland = false;
 
               if (service.service === "OTHERS" && service.service_code) {
                 // Try to determine structure from otherServicesData if available
@@ -2394,6 +2429,8 @@ function EnquiryCreate() {
                     fullGroupage === "GROUPAGE"
                   ) {
                     isOthersWithLCL = true;
+                  } else if (transportMode === "NA") {
+                    isOthersWithInland = true;
                   } else {
                     isOthersWithAIR = true;
                   }
@@ -2454,7 +2491,7 @@ function EnquiryCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (service.service === "AIR" || isOthersWithAIR) {
+              } else if (service.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -2596,6 +2633,7 @@ function EnquiryCreate() {
           let isOthersWithFCL = false;
           let isOthersWithAIR = false;
           let isOthersWithLCL = false;
+          let isOthersWithInland = false;
 
           if (enq?.service === "OTHERS" && enq.service_code) {
             // Try to determine structure from otherServicesData if available
@@ -2612,6 +2650,8 @@ function EnquiryCreate() {
                 fullGroupage === "GROUPAGE"
               ) {
                 isOthersWithLCL = true;
+              } else if (transportMode === "NA") {
+                isOthersWithInland = true;
               } else {
                 isOthersWithAIR = true;
               }
@@ -2671,7 +2711,7 @@ function EnquiryCreate() {
               pkg_group: enq.pkg_group || fcl.pkg_group || null,
               stackable: enq.stackable ? "Yes" : "No",
             }));
-          } else if (enq?.service === "AIR" || isOthersWithAIR) {
+          } else if (enq?.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
             // AIR service with direct cargo fields (or OTHERS with AIR structure)
             serviceDetail.cargo_details = [
               {
@@ -4521,24 +4561,27 @@ function EnquiryCreate() {
                                           selectedService.label || ""
                                         );
 
+                                        if (
+                                          (selectedService.transport_mode ||
+                                            "") !== "NA"
+                                        ) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.trade`,
+                                            "",
+                                          );
+                                        }
+
                                         // Determine cargo structure based on transport_mode and full_groupage
                                         const transportMode =
                                           selectedService.transport_mode || "";
                                         const fullGroupage =
                                           selectedService.full_groupage || "";
 
-                                        let cargoStructure = "AIR"; // Default to AIR
-                                        if (
-                                          transportMode === "SEA" &&
-                                          fullGroupage === "FULL"
-                                        ) {
-                                          cargoStructure = "FCL";
-                                        } else if (
-                                          transportMode === "SEA" &&
-                                          fullGroupage === "GROUPAGE"
-                                        ) {
-                                          cargoStructure = "LCL";
-                                        }
+                                        const cargoStructure =
+                                          resolveEffectiveServiceFromTransport(
+                                            transportMode,
+                                            fullGroupage,
+                                          );
 
                                         // Reset cargo_details based on determined structure
                                         if (cargoStructure === "FCL") {
@@ -4710,6 +4753,57 @@ function EnquiryCreate() {
                                   />
                                 )}
                               </Grid.Col>
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.service === "OTHERS" &&
+                                isInlandOtherService(
+                                  serviceForm.values.service_details[serviceIndex]
+                                    ?.service_code,
+                                ) && (
+                                  <Grid.Col span={6}>
+                                    <Dropdown
+                                      label="Trade"
+                                      styles={{
+                                        input: {
+                                          fontSize: "13px",
+                                          fontFamily: "Inter",
+                                          height: "36px",
+                                        },
+                                        label: {
+                                          fontSize: "13px",
+                                          fontWeight: 500,
+                                          color: "#424242",
+                                          marginBottom: "4px",
+                                          fontFamily: "Inter",
+                                          fontStyle: "medium",
+                                        },
+                                      }}
+                                      placeholder="Select Trade"
+                                      searchable
+                                      withAsterisk
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.trade`,
+                                      )}
+                                      data={["Export", "Import"]}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.trade
+                                      }
+                                      onChange={(value) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.trade`,
+                                          value || "",
+                                        );
+                                        setLastCheckedServiceIndex(null);
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.trade`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                )}
                               <Grid.Col span={6}>
                                 <SearchableSelect
                                   label="Origin"
@@ -5473,7 +5567,11 @@ function EnquiryCreate() {
                                     ) {
                                       effectiveServiceType = "LCL";
                                     } else {
-                                      effectiveServiceType = "AIR";
+                                      effectiveServiceType =
+                                        resolveEffectiveServiceFromTransport(
+                                          transportMode,
+                                          fullGroupage,
+                                        );
                                     }
                                   }
                                 }
@@ -5532,7 +5630,11 @@ function EnquiryCreate() {
                                           ) {
                                             effectiveServiceType = "LCL";
                                           } else {
-                                            effectiveServiceType = "AIR";
+                                            effectiveServiceType =
+                                              resolveEffectiveServiceFromTransport(
+                                                transportMode,
+                                                fullGroupage,
+                                              );
                                           }
                                         }
                                       }
@@ -5570,7 +5672,11 @@ function EnquiryCreate() {
                                           ) {
                                             effectiveServiceType = "LCL";
                                           } else {
-                                            effectiveServiceType = "AIR";
+                                            effectiveServiceType =
+                                              resolveEffectiveServiceFromTransport(
+                                                transportMode,
+                                                fullGroupage,
+                                              );
                                           }
                                         }
                                       }
@@ -5801,7 +5907,11 @@ function EnquiryCreate() {
                                                 ) {
                                                   effectiveServiceType = "LCL";
                                                 } else {
-                                                  effectiveServiceType = "AIR";
+                                                  effectiveServiceType =
+                                                    resolveEffectiveServiceFromTransport(
+                                                      transportMode,
+                                                      fullGroupage,
+                                                    );
                                                 }
                                               }
                                             }
@@ -5867,11 +5977,15 @@ function EnquiryCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }
-                                    return effectiveServiceType === "AIR";
+                                    return usesAirCargoStructure(effectiveServiceType);
                                   })() && (
                                     <Grid>
                                       <Grid.Col span={3}>
@@ -6536,7 +6650,11 @@ function EnquiryCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }
@@ -7249,7 +7367,11 @@ function EnquiryCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }

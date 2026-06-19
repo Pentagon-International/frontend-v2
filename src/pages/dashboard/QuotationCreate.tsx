@@ -76,6 +76,10 @@ import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
+import {
+  getBookingCreatePath,
+  type OtherServiceOption,
+} from "../../utils/otherServiceType";
 
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
 const QUOTATION_MASTER_PATH = "/quotation";
@@ -1887,6 +1891,14 @@ function QuotationCreate({
     }
   };
 
+  const fetchOtherServices = async () => {
+    const response = await getAPICall(
+      `${URL.serviceMaster}?filter=other_services`,
+      API_HEADER,
+    );
+    return response;
+  };
+
   const handleChatbotQuotationData = (quotationData: any) => {
     if (!quotationData) {
       console.log("No quotation data provided");
@@ -2494,35 +2506,36 @@ function QuotationCreate({
     const trade = quotationForService.trade || selectedService.trade;
     const serviceType =
       quotationForService.service_type || selectedService.service;
+    const serviceCode =
+      quotationForService.service_code ||
+      selectedService.service_code ||
+      "";
 
-    // Navigate by service and trade: Air -> /air/..., Sea (FCL/LCL) -> /SeaExport/...
-    if (serviceType === "AIR") {
-      if (trade === "Export") {
-        navigate("/air/export-booking/create", { state: { bookingData } });
-      } else if (trade === "Import") {
-        navigate("/air/import-booking/create", { state: { bookingData } });
-      } else {
-        ToastNotification({ type: "error", message: "Invalid trade type" });
-      }
-    } else if (serviceType === "FCL" || serviceType === "LCL") {
-      if (trade === "Export") {
-        navigate("/SeaExport/export-booking/create", {
-          state: { bookingData },
-        });
-      } else if (trade === "Import") {
-        navigate("/SeaExport/import-booking/create", {
-          state: { bookingData },
-        });
-      } else {
-        ToastNotification({ type: "error", message: "Invalid trade type" });
-      }
-    } else {
-      ToastNotification({
-        type: "error",
-        message:
-          "Create booking is only supported for AIR, FCL and LCL services",
-      });
+    const bookingPath = getBookingCreatePath(serviceType, trade, {
+      serviceCode,
+      otherServicesData,
+    });
+
+    if (bookingPath) {
+      navigate(bookingPath, { state: { bookingData } });
+      return;
     }
+
+    if (
+      serviceType === "OTHERS" &&
+      serviceCode &&
+      trade !== "Export" &&
+      trade !== "Import"
+    ) {
+      ToastNotification({ type: "error", message: "Invalid trade type" });
+      return;
+    }
+
+    ToastNotification({
+      type: "error",
+      message:
+        "Create booking is only supported for AIR, FCL, LCL and inland OTHERS services",
+    });
   };
 
   const submitQuotation = async () => {
@@ -2867,6 +2880,27 @@ function QuotationCreate({
     staleTime: Infinity,
   });
   // console.log("Carrier result----", carrierRes);
+
+  const { data: rawOtherServicesData = [] } = useQuery({
+    queryKey: ["otherServices"],
+    queryFn: fetchOtherServices,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const otherServicesData = useMemo((): OtherServiceOption[] => {
+    if (!Array.isArray(rawOtherServicesData) || !rawOtherServicesData.length) {
+      return [];
+    }
+    return rawOtherServicesData.map((item: any) => ({
+      value: item.service_code ? String(item.service_code) : "",
+      label: item.service_name || "",
+      transport_mode: item.transport_mode || "",
+      full_groupage: item.full_groupage || "",
+    }));
+  }, [rawOtherServicesData]);
 
   const quoteCurrency = useMemo(() => {
     const data = currencyData as any[];
