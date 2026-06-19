@@ -15,6 +15,7 @@ import RequiredLabel from "./RequiredLabel";
 import {
   applyJobChargeUnitChange,
   buildJobUnitOptions,
+  mapJobChargesWithUnits,
   toBookingCargoForNoOfUnits,
   type JobChargeNoOfUnitContext,
 } from "../utils/houseCargoChargeableWeight";
@@ -193,6 +194,35 @@ export function EstimatesSection({
 
   const jobUnitOptions = buildJobUnitOptions(unitDataRaw ?? []);
 
+  // Resolve unit_id from unit_code when master loads; only auto-fill no_of_unit when empty.
+  useEffect(() => {
+    if (!jobUnitDefaults?.service || !jobUnitOptions.length) return;
+    const estimates = form.values.estimates ?? [];
+    if (!estimates.length) return;
+
+    const bookingCargo = toBookingCargoForNoOfUnits(
+      jobUnitDefaults.jobCargoDetails ?? [],
+    );
+    const updated = mapJobChargesWithUnits(
+      estimates,
+      jobUnitDefaults.service,
+      bookingCargo,
+      jobUnitOptions,
+      {
+        containerDetails: jobUnitDefaults.containerDetails,
+        jobCargoDetails: jobUnitDefaults.jobCargoDetails,
+      },
+    );
+    if (updated) {
+      form.setFieldValue("estimates", updated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    jobUnitOptions,
+    jobUnitDefaults?.service,
+    jobUnitDefaults?.containerDetails,
+  ]);
+
   useEffect(() => {
     if (!debugTag) return;
     const estimates = form.values.estimates ?? [];
@@ -333,6 +363,9 @@ export function EstimatesSection({
               value={selectStringId(row.unit_id)}
               onChange={(value) => {
                 const unitId = value ?? "";
+                const currentUnitId = selectStringId(row.unit_id) ?? "";
+                if (unitId === currentUnitId) return;
+
                 if (jobUnitDefaults?.service && jobUnitOptions.length) {
                   const bookingCargo = toBookingCargoForNoOfUnits(
                     jobUnitDefaults.jobCargoDetails ?? [],

@@ -678,14 +678,14 @@ function isProbableFclContainerChargeUnit(
 }
 
 /**
- * FCL job: match charge unit to container_details, then no_of_packages on linked cargo.
+ * FCL job: match charge unit to container type and return the count of
+ * container_details rows for that type.
  * Returns "not-container" when the unit is not a container-type unit.
  */
 function resolveFclJobContainerChargeNoOfUnit(
   unitCode: string,
   unitLabel: string | undefined,
   containerDetails: JobContainerForNoOfUnits[],
-  cargoDetails: JobCargoForFclNoOfUnits[],
 ): number | "not-container" {
   const unitTokens = chargeUnitTokens(unitCode, unitLabel);
   const knownContainerTypeTokens = new Set(
@@ -698,31 +698,21 @@ function resolveFclJobContainerChargeNoOfUnit(
 
   if (!isContainerUnit) return "not-container";
 
-  const matchingContainer = containerDetails.find((container) => {
+  const matchingContainers = containerDetails.filter((container) => {
+    const type = String(
+      container.container_type ?? container.container_type_code ?? "",
+    ).trim();
+    if (!type) return false;
     const typeTokens = containerDetailTypeTokens(container);
     return typeTokens.some((token) => unitTokens.includes(token));
   });
 
-  if (!matchingContainer) return 1;
-
-  const containerNo = String(matchingContainer.container_no ?? "").trim();
-  if (!containerNo) return 1;
-
-  const matchingCargo = cargoDetails.find((cargo) => {
-    const cargoContainerNo = String(
-      cargo.container_number ?? cargo.container_no ?? "",
-    ).trim();
-    return cargoContainerNo && cargoContainerNo === containerNo;
-  });
-
-  if (!matchingCargo) return 1;
-
-  const packages = matchingCargo.no_of_packages;
-  if (packages === null || packages === undefined || packages === "") {
-    return 1;
+  if (matchingContainers.length > 0) {
+    return matchingContainers.length;
   }
 
-  return parseNoOfUnitForPayload(packages) ?? 1;
+  // Container-type unit selected but no matching rows in container_details
+  return 1;
 }
 
 /** Job unit dropdown: all ACTIVE rows — value = unit id, label = unit_name. */
@@ -808,7 +798,6 @@ function resolveJobChargeNoOfUnitNumber(
       unitCode,
       unitLabel,
       context.containerDetails,
-      context.jobCargoDetails ?? [],
     );
     if (fclResult !== "not-container") {
       return fclResult;
@@ -944,6 +933,8 @@ export function syncJobChargesWithCargoNoOfUnits<
 ): T[] | null {
   let hasChanges = false;
   const updated = charges.map((charge) => {
+    // Preserve existing quantity on edit/load; only auto-fill when empty.
+    if (!isJobChargeNoOfUnitEmpty(charge.no_of_unit)) return charge;
     if (!charge.unit_id && !charge.unit_code) return charge;
     const unitOpt = charge.unit_id
       ? findJobUnitOption(unitOptions, String(charge.unit_id))

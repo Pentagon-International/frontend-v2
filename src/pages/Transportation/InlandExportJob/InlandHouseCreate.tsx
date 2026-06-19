@@ -4408,6 +4408,7 @@ function HouseCreate() {
                       value={charge.unit_id || null}
                       onChange={(value) => {
                         const unitId = value ?? "";
+                        if (unitId === (charge.unit_id || "")) return;
                         const updated = applyJobChargeUnitChange(
                           charge,
                           unitId,

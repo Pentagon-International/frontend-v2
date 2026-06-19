@@ -1337,9 +1337,11 @@ function ExportJobCreate() {
               const containerTypeCode =
                 containerTypeDetails?.container_type_code
                   ? String(containerTypeDetails.container_type_code)
-                  : container.container_type
-                    ? String(container.container_type)
-                    : "";
+                  : container.container_type_input
+                    ? String(container.container_type_input)
+                    : container.container_type
+                      ? String(container.container_type)
+                      : "";
 
               // Map uploading_date to unloading_date (API uses uploading_date, form uses unloading_date)
               const unloadingDate =
@@ -1416,8 +1418,11 @@ function ExportJobCreate() {
               charge_name: String(e.charge_name ?? e.charge_code ?? ""),
               pp_cc: normalizePpCc(e.pp_cc),
               unit_id: e.unit_id != null ? String(e.unit_id) : "",
-              unit_code: String(e.unit_code ?? e.unit_name ?? ""),
-              no_of_unit: toNum(e.no_of_unit),
+              unit_code: String(
+                e.unit_code ?? e.unit_name ?? e.unit ?? "",
+              ),
+              no_of_unit:
+                toNum(e.no_of_unit) ?? toNum(e.no_of_units),
               currency_id:
                 e.currency_id != null
                   ? String(e.currency_id)
@@ -1479,8 +1484,11 @@ function ExportJobCreate() {
               charge_name: String(e.charge_name ?? e.charge_code ?? ""),
               pp_cc: normalizePpCc(e.pp_cc),
               unit_id: e.unit_id != null ? String(e.unit_id) : "",
-              unit_code: String(e.unit_code ?? ""),
-              no_of_unit: toNum(e.no_of_unit),
+              unit_code: String(
+                e.unit_code ?? e.unit_name ?? e.unit ?? "",
+              ),
+              no_of_unit:
+                toNum(e.no_of_unit) ?? toNum(e.no_of_units),
               currency_id: e.currency_id != null ? String(e.currency_id) : "",
               currency_code: String(e.currency_code ?? ""),
               roe: toNum(e.roe),
