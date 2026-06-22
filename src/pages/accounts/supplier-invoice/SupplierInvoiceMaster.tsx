@@ -67,6 +67,7 @@ import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 
 type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
@@ -75,6 +76,7 @@ type SupplierInvoiceRow = Record<string, unknown> & {
   Inv_Crn_no?: string;
   agent_name?: string;
   job_id?: string;
+  service_code?: string;
   shipment_ids?: string[];
   currency_code?: string;
   date?: string;
@@ -549,7 +551,7 @@ function SupplierInvoiceMaster() {
         ),
         Cell: ({ row }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {row.original.job_id ? String(row.original.job_id) : "-"}
+            {formatDisplayJobId(row.original.job_id, row.original.service_code) || "-"}
           </Text>
         ),
       },

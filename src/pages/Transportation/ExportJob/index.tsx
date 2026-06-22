@@ -75,6 +75,7 @@ import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
@@ -134,6 +135,7 @@ type ExportJobData = {
   mbl_date: string | null;
   status: string;
   job_id?: string;
+  service_code?: string;
   housing_details?: Array<{
     hbl_number: string;
   }>;
@@ -1338,7 +1340,7 @@ function ExportJobMaster() {
                             {visibleColumns.job_id && (
                               <td style={tdPad}>
                                 <Text fw={600} size="sm" c={fg}>
-                                  {row.job_id || "—"}
+                                  {formatDisplayJobId(row.job_id, row.service_code) || "—"}
                                 </Text>
                               </td>
                             )}

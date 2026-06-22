@@ -86,6 +86,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "INLAND_IMPORT_BOOKING_MASTER";
@@ -2823,7 +2824,7 @@ function InlandImportBookingMaster() {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {booking.job_no?.trim() ? booking.job_no : "—"}
+                                {formatDisplayJobId(booking.job_no, booking.service_code) || "—"}
                               </td>
                             )}
                             {visibleColumns.volume && (

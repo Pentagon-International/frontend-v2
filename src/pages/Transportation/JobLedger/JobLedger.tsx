@@ -13,6 +13,7 @@ import {
   Stack,
   ActionIcon,
   Loader,
+  Tooltip,
 } from "@mantine/core";
 import {
   MantineReactTable,
@@ -39,11 +40,14 @@ interface JobLedgerData {
   daybookName: string;
   documentNo: string;
   date: string;
+  partyName: string;
+  currencyCode: string;
   debit: number;
   credit: number;
   revenue: number;
   actualCost: number;
   neutral: number;
+  reversed: boolean;
 }
 
 interface JobLedgerProps {}
@@ -80,11 +84,14 @@ type JobLedgerApiRow = {
   document_type?: string;
   document_no?: string;
   date?: string;
+  party_name?: string;
+  currency_code?: string;
   debit_local_amount?: number | null;
   credit_local_amount?: number | null;
   revence?: number | null;
   cost?: number | null;
   neutral?: number | null;
+  reversed?: boolean;
 };
 
 type JobLedgerApiResponse = {
@@ -217,7 +224,6 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       );
       const result = response as JobLedgerApiResponse;
       const apiRows = Array.isArray(result?.data) ? result.data : [];
-      console.log("LLLLL: ",apiRows);
       setJobLedgerSummary(result?.summary ?? null);
       setTableData(
         apiRows.map((d, idx) => {
@@ -233,11 +239,14 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             daybookName: (d?.day_book_name ?? "").toString(),
             documentNo: (d?.document_no ?? "").toString(),
             date: (d?.date ?? "").toString(),
+            partyName: (d?.party_name ?? "").toString(),
+            currencyCode: (d?.currency_code ?? "").toString(),
             debit: toNumber(d?.debit_local_amount),
             credit: toNumber(d?.credit_local_amount),
             revenue: toNumber(d?.revence),
             actualCost: toNumber(d?.cost),
             neutral: toNumber(d?.neutral),
+            reversed: Boolean(d?.reversed),
           };
         }),
       );
@@ -403,6 +412,23 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         size: 150,
         enableColumnFilter: false,
         enableSorting: false,
+        Cell: ({ row, cell }) => {
+          const value = cell.getValue<string>();
+          if (!row.original.reversed) {
+            return value;
+          }
+          return (
+            <Tooltip label="This document is reversed" withArrow>
+              <Text
+                size="sm"
+                c="#B45309"
+                style={{ fontFamily: "Inter", cursor: "default" }}
+              >
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
         mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
         mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
@@ -412,6 +438,39 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         size: 105,
         enableColumnFilter: false,
         enableSorting: false,
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
+      },
+      {
+        accessorKey: "partyName",
+        header: "Party Name",
+        size: 220,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          if (!value) return "-";
+          return (
+            <Tooltip label={value} withArrow multiline maw={320}>
+              <Text size="sm" truncate style={{ fontFamily: "Inter", maxWidth: 220 }}>
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
+      },
+      {
+        accessorKey: "currencyCode",
+        header: "Currency",
+        size: 90,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          return value || "-";
+        },
         mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
         mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },

@@ -10,6 +10,7 @@ export type ProfitabilityJobSegment =
 
 export type ProfitabilityJob = {
   id: string;
+  serviceCode?: string;
   customer: string;
   segment: ProfitabilityJobSegment;
   branch: string;

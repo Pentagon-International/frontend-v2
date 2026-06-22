@@ -5,6 +5,11 @@ import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../../assets/images/CCIPL.png";
 import primeLogo from "../../../assets/images/prime.png";
+import {
+  CCT_BRANCH_INFO,
+  getCctLogo,
+  isCctCompany,
+} from "../../../utils/pdfCompanyBranding";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -62,6 +67,10 @@ const getLogoByCountry = (country: any): string | null => {
     if (country) {
       countryName = (country.country_name || "").toUpperCase();
       countryCode = (country.country_code || "").toUpperCase();
+    }
+
+    if (isCctCompany()) {
+      return getCctLogo();
     }
 
     const normalizedCompanyName = companyName.replace(/\s+/g, "").toUpperCase();
@@ -267,6 +276,10 @@ const drawFooterSection = (
 
 // Helper function to get branch info
 const getBranchInfo = (country?: any) => {
+  if (isCctCompany()) {
+    return { ...CCT_BRANCH_INFO, isKenya: false };
+  }
+
   if (isKenyaCountry(country)) {
     return { ...KENYA_DO_BRANCH_INFO };
   }

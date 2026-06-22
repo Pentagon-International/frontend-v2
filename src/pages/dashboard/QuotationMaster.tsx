@@ -92,6 +92,18 @@ import {
   type QuotationVisibleColumns,
 } from "./QuotationListNativeTable";
 import { useDebouncedValue } from "@mantine/hooks";
+import {
+  getBookingCreatePath,
+  type OtherServiceOption,
+} from "../../utils/otherServiceType";
+
+const fetchOtherServices = async () => {
+  const response = await getAPICall(
+    `${URL.serviceMaster}?filter=other_services`,
+    API_HEADER,
+  );
+  return response;
+};
 
 /**
  * Stable `displayFormat` references for the `SearchableSelect`s in the column
@@ -873,6 +885,27 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       refetchOnWindowFocus: false,
       refetchOnMount: false,
     });
+
+  const { data: rawOtherServicesData = [] } = useQuery({
+    queryKey: ["otherServices"],
+    queryFn: fetchOtherServices,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const otherServicesData = useMemo((): OtherServiceOption[] => {
+    if (!Array.isArray(rawOtherServicesData) || !rawOtherServicesData.length) {
+      return [];
+    }
+    return rawOtherServicesData.map((item: any) => ({
+      value: item.service_code ? String(item.service_code) : "",
+      label: item.service_name || "",
+      transport_mode: item.transport_mode || "",
+      full_groupage: item.full_groupage || "",
+    }));
+  }, [rawOtherServicesData]);
 
   const salespersonOptions = useMemo(() => {
     if (!salespersonsData || !Array.isArray(salespersonsData)) return [];
@@ -2210,34 +2243,33 @@ console.log("currentQuotation: ", currentQuotation);
 
     const trade = service.trade;
     const serviceType = service.service_type;
+    const serviceCode = service.service_code || "";
 
-    if (serviceType === "AIR") {
-      if (trade === "Export") {
-        navigate("/air/export-booking/create", { state: { bookingData } });
-      } else if (trade === "Import") {
-        navigate("/air/import-booking/create", { state: { bookingData } });
-      } else {
-        ToastNotification({ type: "error", message: "Invalid trade type" });
-      }
-    } else if (serviceType === "FCL" || serviceType === "LCL") {
-      if (trade === "Export") {
-        navigate("/SeaExport/export-booking/create", {
-          state: { bookingData },
-        });
-      } else if (trade === "Import") {
-        navigate("/SeaExport/import-booking/create", {
-          state: { bookingData },
-        });
-      } else {
-        ToastNotification({ type: "error", message: "Invalid trade type" });
-      }
-    } else {
-      ToastNotification({
-        type: "error",
-        message:
-          "Create booking is only supported for AIR, FCL and LCL services",
-      });
+    const bookingPath = getBookingCreatePath(serviceType, trade, {
+      serviceCode,
+      otherServicesData,
+    });
+
+    if (bookingPath) {
+      navigate(bookingPath, { state: { bookingData } });
+      return;
     }
+
+    if (
+      serviceType === "OTHERS" &&
+      serviceCode &&
+      trade !== "Export" &&
+      trade !== "Import"
+    ) {
+      ToastNotification({ type: "error", message: "Invalid trade type" });
+      return;
+    }
+
+    ToastNotification({
+      type: "error",
+      message:
+        "Create booking is only supported for AIR, FCL, LCL and inland OTHERS services",
+    });
   };
 
   const handleSendEmail = async () => {

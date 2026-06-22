@@ -76,6 +76,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 
 const LIST_KEY = "OCEAN_IMPORT_JOB_MASTER";
 
@@ -134,6 +135,7 @@ type ImportJobData = {
   mbl_date: string | null;
   status: string;
   job_id?: string;
+  service_code?: string;
   housing_details?: Array<{
     hbl_number: string;
   }>;
@@ -1333,7 +1335,7 @@ function ImportJobMaster() {
                             {visibleColumns.job_id && (
                               <td style={tdPad}>
                                 <Text fw={600} size="sm" c={fg}>
-                                  {row.job_id || "—"}
+                                  {formatDisplayJobId(row.job_id, row.service_code) || "—"}
                                 </Text>
                               </td>
                             )}

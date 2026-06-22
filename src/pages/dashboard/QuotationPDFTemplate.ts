@@ -4,6 +4,11 @@ import pentagonFreightInd from "../../assets/images/pentagon-freight-ind.png";
 import pentagonPrimeAmericas from "../../assets/images/PentagonPrimeUSA.png";
 import pentagonPrimeChina from "../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../assets/images/CCIPL.png";
+import {
+  CCT_BRANCH_INFO,
+  getCctLogo,
+  isCctCompany,
+} from "../../utils/pdfCompanyBranding";
 // Helper function for date formatting (YYYY-MM-DD)
 const formatDate = (dateString: any) => {
   if (!dateString) return "N/A";
@@ -38,6 +43,10 @@ const getLogoByCountry = (country: any): string | null => {
     if (country) {
       countryName = (country.country_name || "").toUpperCase();
       countryCode = (country.country_code || "").toUpperCase();
+    }
+
+    if (isCctCompany()) {
+      return getCctLogo();
     }
 
     // Check for cargoConsolidators company with India country - show CARGO CONSOLIDATORS logo
@@ -84,6 +93,9 @@ const getLogoByCountry = (country: any): string | null => {
 // Helper function to check if company is Pentagon (excluding cargoConsolidators)
 const isPentagonCompany = (): boolean => {
   try {
+    if (isCctCompany()) {
+      return false;
+    }
     const userStr = localStorage.getItem("user");
     if (userStr) {
       const user = JSON.parse(userStr);
@@ -106,6 +118,10 @@ const isPentagonCompany = (): boolean => {
 
 // Helper function to get branch info
 const getBranchInfo = (branchName: string, country?: any) => {
+  if (isCctCompany()) {
+    return { ...CCT_BRANCH_INFO };
+  }
+
   const branchNameUpper = branchName?.toUpperCase() || "";
 
   // Get company and country from localStorage (store)
