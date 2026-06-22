@@ -939,7 +939,6 @@ const Navbar = ({
                   setOpenedLocal={setIsAccountsOpen}
                   icon={IconReceipt2}
                 >
-                  {/* <ScrollArea.Autosize mah={380} type="always" offsetScrollbars scrollbarSize={6}> */}
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt"
@@ -1187,7 +1186,6 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
-                  {/* </ScrollArea.Autosize> */}
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink

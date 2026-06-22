@@ -1,6 +1,6 @@
 // CollapsibleNav.tsx
-import { NavLink, Collapse, Box, Portal, Tooltip } from "@mantine/core";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { NavLink, Collapse, Box, Portal, Tooltip, ScrollArea } from "@mantine/core";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconChevronDown,
   IconChevronLeft,
@@ -90,7 +90,11 @@ export const CollapsibleNav = ({
   // refs for positioning flyout in collapsed mode
   const navRef = useRef<HTMLDivElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const accountsSubNavRef = useRef<HTMLDivElement | null>(null);
   const [flyoutPos, setFlyoutPos] = useState({ top: 0, left: 0 });
+  const [accountsScrollMaxHeight, setAccountsScrollMaxHeight] = useState<
+    number | undefined
+  >(undefined);
   const prevActiveNavRef = useRef<string>(activeNav);
 
   // compute "opened" based on mode:
@@ -177,6 +181,45 @@ export const CollapsibleNav = ({
     }
   }, [opened, isSidebarCollapsed]);
 
+  // Keep Accounts sub-nav at natural height when it fits; scroll only when it overflows the viewport
+  useLayoutEffect(() => {
+    if (label !== "Accounts" || !opened) {
+      setAccountsScrollMaxHeight(undefined);
+      return;
+    }
+
+    const updateAccountsScrollMaxHeight = () => {
+      const el = accountsSubNavRef.current;
+      if (!el) return false;
+
+      const top = el.getBoundingClientRect().top;
+      const bottomPadding = 16;
+      setAccountsScrollMaxHeight(
+        Math.max(120, window.innerHeight - top - bottomPadding)
+      );
+      return true;
+    };
+
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      rafId = requestAnimationFrame(() => {
+        if (!updateAccountsScrollMaxHeight()) {
+          scheduleUpdate();
+        }
+      });
+    };
+
+    scheduleUpdate();
+    const collapseTimer = window.setTimeout(updateAccountsScrollMaxHeight, 220);
+    window.addEventListener("resize", updateAccountsScrollMaxHeight);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(collapseTimer);
+      window.removeEventListener("resize", updateAccountsScrollMaxHeight);
+    };
+  }, [label, opened, isSidebarCollapsed, flyoutPos.top]);
+
   // close flyout when clicking outside
   useEffect(() => {
     function handleDocClick(e: MouseEvent) {
@@ -262,6 +305,20 @@ export const CollapsibleNav = ({
   const iconColor = sectionIconColors[label] || "white";
   const iconBackground = sectionIconBackground[label] || "#105476";
 
+  const accountsSubNavContent =
+    label === "Accounts" && accountsScrollMaxHeight ? (
+      <ScrollArea.Autosize
+        mah={accountsScrollMaxHeight}
+        type="always"
+        offsetScrollbars
+        scrollbarSize={6}
+      >
+        {children}
+      </ScrollArea.Autosize>
+    ) : (
+      children
+    );
+
   const navLinkWrapped = (
     <Box ref={navRef}>
       <NavLink
@@ -334,6 +391,7 @@ export const CollapsibleNav = ({
       {!isSidebarCollapsed && (
         <Collapse in={opened}>
           <Box
+            ref={label === "Accounts" ? accountsSubNavRef : undefined}
             style={{
               // border: label === "Tariff" ? "1px solid #BADDEE" : "",
               // borderTop: "none",
@@ -343,7 +401,7 @@ export const CollapsibleNav = ({
               overflow: "hidden",
             }}
           >
-            {children}
+            {accountsSubNavContent}
           </Box>
         </Collapse>
       )}
@@ -373,7 +431,9 @@ export const CollapsibleNav = ({
               overflow: "hidden",
             }}
           >
-            {children}
+            <Box ref={label === "Accounts" ? accountsSubNavRef : undefined}>
+              {accountsSubNavContent}
+            </Box>
           </Box>
         </Portal>
       )}

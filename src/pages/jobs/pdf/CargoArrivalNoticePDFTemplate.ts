@@ -68,6 +68,17 @@ const getChargeCurrencyCode = (charge: Record<string, unknown>): string => {
   return String(currency).trim();
 };
 
+const hasChargeAmount = (charge: Record<string, unknown>): boolean => {
+  const amount = charge.amount;
+  return amount != null && amount !== "";
+};
+
+const isDisplayableCanCharge = (charge: Record<string, unknown>): boolean => {
+  const chargeName = String(charge.charge_name ?? "").trim();
+  const currency = getChargeCurrencyCode(charge);
+  return Boolean(chargeName && currency && hasChargeAmount(charge));
+};
+
 const drawCenteredTableHeader = (
   doc: jsPDF,
   text: string,
@@ -838,6 +849,9 @@ export const generateCargoArrivalNoticePDF = (
 
     const cargoRowSpacing = 4.5; // Match charges table row spacing
     const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
+    const displayableCharges = (Array.isArray(charges) ? charges : []).filter(
+      (charge: Record<string, unknown>) => isDisplayableCanCharge(charge)
+    );
 
     const notes = jobInfo?.notes || [];
     const rowHeight = 5;
@@ -851,7 +865,7 @@ export const generateCargoArrivalNoticePDF = (
     // Reduced row spacing for charges (4.5 units per row)
     const chargesRowSpacing = 4.5;
     const chargesTableHeaderHeight = 8; // Header + line + spacing
-    const chargesTableRowsHeight = charges.length > 0 ? charges.length * chargesRowSpacing : chargesRowSpacing;
+    const chargesTableRowsHeight = displayableCharges.length > 0 ? displayableCharges.length * chargesRowSpacing : chargesRowSpacing;
     const chargesTableHeight = chargesTableHeaderHeight + chargesTableRowsHeight + 2;
     
     // Draw vertical center line (only for two-column section, not cargo/charges)
@@ -1287,6 +1301,9 @@ export const generateCargoArrivalNoticePDF = (
     sectionY += 1;
     // doc.line(margin + boxPadding, sectionY - 1, pageWidth - margin - boxPadding, sectionY - 1);
 
+    const hasCharges = displayableCharges.length > 0;
+
+    if (hasCharges) {
     // Draw horizontal line separating cargo section from charges section
     sectionY += 1;
     doc.line(margin, sectionY, pageWidth - margin, sectionY);
@@ -1369,9 +1386,8 @@ export const generateCargoArrivalNoticePDF = (
 
     // Charges table rows with actual data
     doc.setFont("helvetica", "normal");
-    
-    if (charges.length > 0) {
-      charges.forEach((charge: any, rowIdx: number) => {
+
+    displayableCharges.forEach((charge: any, rowIdx: number) => {
         // Pre-calculate row data and dynamic height before the page-break check
         const chargeName = charge.charge_name || "";
         const currency = getChargeCurrencyCode(charge);
@@ -1460,28 +1476,15 @@ export const generateCargoArrivalNoticePDF = (
         });
         sectionY += dynamicChargesRowH;
       });
-    } else {
-      // Show placeholder if no charges (absolute position)
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(220, 220, 220);
-      doc.rect(chargesTableX, sectionY, chargesTableW, chargesRowH, "FD");
-      xPos = chargesTableX;
-      chargesColWidths.forEach((w, index) => {
-        if (index < chargesColWidths.length - 1) {
-          doc.line(
-            xPos + w,
-            sectionY,
-            xPos + w,
-            sectionY + chargesRowH,
-          );
-        }
-        xPos += w;
-      });
-      sectionY += chargesRowH;
-    }
     doc.line(margin, sectionY, pageWidth - margin, sectionY);
 
     sectionY += 10;
+    } else {
+      // Keep the same gap before Notes when the charges table is omitted
+      sectionY += 1;
+      doc.line(margin, sectionY, pageWidth - margin, sectionY);
+      sectionY += 10;
+    }
 
     // Update yPos for next section after the combined box
     yPos = sectionY;
