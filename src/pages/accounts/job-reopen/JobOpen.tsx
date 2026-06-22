@@ -6,7 +6,6 @@ import {
   Text,
   Stack,
   Box,
-  Menu,
   ActionIcon,
   Modal,
   Grid,
@@ -18,9 +17,6 @@ import {
   Loader,
 } from "@mantine/core";
 import {
-  IconPlus,
-  IconDotsVertical,
-  IconEdit,
   IconX,
   IconSearch,
   IconFilter,
@@ -30,7 +26,7 @@ import {
   IconStack2,
   IconArrowRight,
 } from "@tabler/icons-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,7 +45,6 @@ import {
   erpListFilterFieldCellStyle,
   ERP_LIST_FILTER_FIELD_COL_SPAN,
   erpToolbarOutlineButtonStyles,
-  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   erpListFilterUnifiedMantineStyles,
   DEFAULT_ERP_LIST_THEME,
@@ -74,12 +69,13 @@ import FormTextInput from "../../../components/FormTextInput";
 import dayjs from "dayjs";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { reopenJob } from "../../../utils/closeJob";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
-import useDateFormat from "../../../hooks/useDateFormat";
 
-const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
+const LIST_KEY = "JOB_REOPEN_MASTER";
 
 type VisibleColumnsState = {
   sno: boolean;
@@ -94,7 +90,7 @@ type VisibleColumnsState = {
   status: boolean;
 };
 
-const OCEAN_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
+const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
   sno: "S.No",
   quotation_id: "Quotation ID",
   job_id: "Job ID",
@@ -107,7 +103,7 @@ const OCEAN_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   status: "Status",
 };
 
-type ExportJobData = {
+type ImportJobData = {
   id: number;
   sno?: number;
   quotation_id?: string | null;
@@ -143,7 +139,7 @@ type ExportJobData = {
 };
 
 /** `summary` on `filterJobCreate` list (filter-scoped). */
-type ExportJobListSummary = {
+type ImportJobListSummary = {
   total_shipments?: number;
   status_counts?: {
     active?: number;
@@ -152,14 +148,14 @@ type ExportJobListSummary = {
   };
 };
 
-type ExportJobListQueryResult = {
-  data: ExportJobData[];
-  summary?: ExportJobListSummary;
+type ImportJobListQueryResult = {
+  data: ImportJobData[];
+  summary?: ImportJobListSummary;
 };
 
-/** Air Export Booking route column: origin_code_read → origin_code → origin_name (same for destination). */
-function routeEndpointsFromExportJobRow(row: ExportJobData) {
-  const ext = row as ExportJobData & {
+/** Booking-style route column: origin_code_read → origin_code → origin_name (same for destination). */
+function routeEndpointsFromImportJobRow(row: ImportJobData) {
+  const ext = row as ImportJobData & {
     origin_code_read?: string | null;
     destination_code_read?: string | null;
   };
@@ -176,7 +172,7 @@ function routeEndpointsFromExportJobRow(row: ExportJobData) {
   return { oc, dc };
 }
 
-type OceanExportJobFilters = {
+type OceanImportJobFilters = {
   job_id: string;
   mbl_number: string;
   origin_agent: string;
@@ -191,11 +187,9 @@ type OceanExportJobFilters = {
   status: string;
 };
 
-function ExportJobMaster() {
-  const navigate = useNavigate();
+function JobOpen() {
   const location = useLocation();
   const queryClient = useQueryClient();
-  const isRefreshingFromEdit = useRef(false);
   const theme = DEFAULT_ERP_LIST_THEME;
   const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
   const { muted, fg, primary } = theme;
@@ -207,7 +201,7 @@ function ExportJobMaster() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
 
-  const DEFAULT_FILTERS: OceanExportJobFilters = {
+  const DEFAULT_FILTERS: OceanImportJobFilters = {
     job_id: "",
     mbl_number: "",
     origin_agent: "",
@@ -222,9 +216,9 @@ function ExportJobMaster() {
     status: "",
   };
   const [draftFilters, setDraftFilters] =
-    useState<OceanExportJobFilters>(DEFAULT_FILTERS);
+    useState<OceanImportJobFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
-    useState<OceanExportJobFilters>(DEFAULT_FILTERS);
+    useState<OceanImportJobFilters>(DEFAULT_FILTERS);
   const [isRestoring, setIsRestoring] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -237,7 +231,7 @@ function ExportJobMaster() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 1000);
-  const [cancelConfirmRow, setCancelConfirmRow] = useState<ExportJobData | null>(
+  const [reopenConfirmRow, setReopenConfirmRow] = useState<ImportJobData | null>(
     null
   );
   const dateFormat = useDateFormat();
@@ -249,7 +243,7 @@ function ExportJobMaster() {
     },
     [dateFormat],
   );
-  const [isCancelling, setIsCancelling] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
     quotation_id: true,
@@ -271,7 +265,7 @@ function ExportJobMaster() {
   );
 
   const commitHeaderFilters = useCallback(
-    (partial: Partial<OceanExportJobFilters>) => {
+    (partial: Partial<OceanImportJobFilters>) => {
       setDraftFilters((prev) => {
         const next = { ...prev, ...partial };
         setAppliedFilters(next);
@@ -282,8 +276,6 @@ function ExportJobMaster() {
     },
     [setStoreFilters],
   );
-
-  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
 
   const getStatusBadge = (statusRaw: string | undefined | null) => {
     const statusUpper = (statusRaw || "").toUpperCase();
@@ -354,12 +346,12 @@ function ExportJobMaster() {
   };
 
   const buildFiltersPayload = (
-    filters: OceanExportJobFilters,
+    filters: OceanImportJobFilters,
     searchValue: string
   ): Record<string, string | string[]> => {
     const cleaned: Record<string, string> = {};
 
-    const entries: [keyof OceanExportJobFilters, string][] = [
+    const entries: [keyof OceanImportJobFilters, string][] = [
       ["job_id", filters.job_id],
       ["mbl_number", filters.mbl_number],
       ["origin_code", filters.origin_code],
@@ -379,36 +371,29 @@ function ExportJobMaster() {
       cleaned.agent = filters.origin_agent.trim();
     }
 
-    if (filters.status?.trim()) {
-      cleaned.status = filters.status.trim().toUpperCase();
+    if (filters.service?.trim()) {
+      cleaned.service = filters.service.trim();
     }
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
-    const serviceVal = filters.service?.trim();
-    const base: Record<string, string | string[]> = {
-      service: serviceVal ? serviceVal : ["FCL", "LCL"],
-      service_type: "Export",
-      ...cleaned,
-    };
-
-    return base;
+    return { status: "CLOSED", ...cleaned };
   };
 
   const {
-    data: exportJobListResult,
-    isLoading: exportJobLoading,
-    isFetching: exportJobFetching,
-    refetch: refetchExportJobs,
-  } = useQuery<ExportJobListQueryResult>({
+    data: importJobListResult,
+    isLoading: importJobLoading,
+    isFetching: importJobFetching,
+    refetch: refetchJobReopen,
+  } = useQuery<ImportJobListQueryResult>({
     queryKey: [
-      "oceanExportJobs",
+      "jobReopen",
       pagination.pageIndex,
       pagination.pageSize,
       JSON.stringify(appliedFilters),
       debouncedSearch,
     ],
-    queryFn: async (): Promise<ExportJobListQueryResult> => {
+    queryFn: async (): Promise<ImportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
       setIsInitialLoad(false);
@@ -418,18 +403,14 @@ function ExportJobMaster() {
         API_HEADER
       )) as Record<string, unknown>;
 
-      const result = response as {
-        status?: boolean;
-        data?: ExportJobData[];
-        total_count?: number;
-        summary?: unknown;
-      };
-      const list = Array.isArray(result?.data) ? result.data : [];
+      const list = Array.isArray(response.data)
+        ? (response.data as ImportJobData[])
+        : [];
       const listTotal = getBookingShipmentFilterListTotal(response, list, index);
       const rawSummary = response.summary;
-      const summary: ExportJobListSummary | undefined =
+      const summary: ImportJobListSummary | undefined =
         rawSummary && typeof rawSummary === "object" && !Array.isArray(rawSummary)
-          ? (rawSummary as ExportJobListSummary)
+          ? (rawSummary as ImportJobListSummary)
           : undefined;
       const summaryTotal = summary?.total_shipments;
       const total =
@@ -446,7 +427,7 @@ function ExportJobMaster() {
     refetchOnMount: true,
   });
 
-  const exportJobData = exportJobListResult?.data ?? [];
+  const importJobData = importJobListResult?.data ?? [];
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
@@ -456,7 +437,7 @@ function ExportJobMaster() {
     }
   }, [totalRecords, pageSize, pagination.pageIndex]);
 
-  const isLoading = exportJobFetching || exportJobLoading || isInitialLoad;
+  const isLoading = importJobFetching || importJobLoading || isInitialLoad;
 
   const mergeTh = (minW: number, widthPx: number) => ({
     ...erpListThStyle(theme),
@@ -485,73 +466,37 @@ function ExportJobMaster() {
   }, [debouncedSearch, isRestoring]);
 
   useEffect(() => {
-    if (location.state?.refreshData && !isRefreshingFromEdit.current) {
-      isRefreshingFromEdit.current = true;
-      queryClient.invalidateQueries({ queryKey: ["oceanExportJobs"] });
-      refetchExportJobs().finally(() => {
-        navigate(location.pathname, { replace: true, state: {} });
-        setTimeout(() => {
-          isRefreshingFromEdit.current = false;
-        }, 1000);
-      });
+    if (location.state?.refreshData) {
+      queryClient.invalidateQueries({ queryKey: ["jobReopen"] });
+      refetchJobReopen();
     }
-  }, [
-    location.state?.refreshData,
-    navigate,
-    location.pathname,
-    queryClient,
-    refetchExportJobs,
-  ]);
+  }, [location.state?.refreshData, queryClient, refetchJobReopen]);
 
-  const persistListAndNavigate = useCallback(
-    (to: string, state?: object) => {
-      setStoreFilters(LIST_KEY, appliedFilters);
-      setStoreSearch(LIST_KEY, search);
-      setShouldRestore(LIST_KEY, true);
-      navigate(to, state !== undefined ? { state } : undefined);
-    },
-    [
-      appliedFilters,
-      search,
-      navigate,
-      setStoreFilters,
-      setStoreSearch,
-      setShouldRestore,
-    ]
-  );
-
-  const handleConfirmCancel = async () => {
-    if (!cancelConfirmRow) return;
-    const rowToCancel = cancelConfirmRow;
-    setIsCancelling(true);
+  const handleConfirmReopen = async () => {
+    if (!reopenConfirmRow) return;
+    const rowToReopen = reopenConfirmRow;
+    setIsReopening(true);
     try {
-      const response = (await apiCallProtected.patch(
-        `${URL.importJob}${rowToCancel.id}/`,
-        { status: "CANCEL" },
-        API_HEADER
-      )) as { status?: boolean; message?: string };
-      if (response?.status === false) {
-        throw new Error(response?.message || "Failed to cancel job");
-      }
-      setCancelConfirmRow(null);
+      await reopenJob(rowToReopen.id);
+      setReopenConfirmRow(null);
       ToastNotification({
         type: "success",
-        message: "Job cancelled successfully",
+        message: "Job reopened successfully",
       });
-      await refetchExportJobs();
+      await refetchJobReopen();
     } catch (err: unknown) {
       ToastNotification({
         type: "error",
-        message: err instanceof Error ? err.message : "Failed to cancel job",
+        message: err instanceof Error ? err.message : "Failed to reopen job",
       });
     } finally {
-      setIsCancelling(false);
+      setIsReopening(false);
     }
   };
 
   const stats = useMemo(() => {
-    const rows = exportJobData;
-    const summary = exportJobListResult?.summary;
+    const rows = importJobData;
+    const summary = importJobListResult?.summary;
     if (summary) {
       const sc = summary.status_counts ?? {};
       return {
@@ -567,13 +512,13 @@ function ExportJobMaster() {
       closed: rows.filter((r) => (r.status ?? "").toUpperCase() === "CLOSED").length,
       cancel: rows.filter((r) => (r.status ?? "").toUpperCase() === "CANCEL").length,
     };
-  }, [exportJobData, exportJobListResult?.summary, totalRecords]);
+  }, [importJobData, importJobListResult?.summary, totalRecords]);
 
   const columnToggleItems = useMemo(
     () =>
       (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
         id: String(key),
-        label: OCEAN_EXPORT_JOB_COLUMN_LABELS[key],
+        label: OCEAN_IMPORT_JOB_COLUMN_LABELS[key],
         checked: visibleColumns[key],
         onToggle: () =>
           setVisibleColumns((prev) => ({
@@ -629,9 +574,8 @@ function ExportJobMaster() {
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
                   <Text fw={600} size="sm" c={fg} component="span">
-                    {exportJobData.length}
+                    {importJobData.length}
                   </Text>
-
                 </Group>
                 <Group gap={8} wrap="nowrap" align="center">
                   <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
@@ -675,25 +619,6 @@ function ExportJobMaster() {
                     },
                   }}
                 />
-                <Select
-                  size="xs"
-                  w={130}
-                  value={appliedFilters.status?.trim() ? appliedFilters.status : "all"}
-                  onChange={(v) => {
-                    const status = !v || v === "all" ? "" : v;
-                    setDraftFilters((p) => ({ ...p, status }));
-                    setAppliedFilters((p) => ({ ...p, status }));
-                    setPagination((p) => ({ ...p, pageIndex: 0 }));
-                  }}
-                  data={[
-                    { value: "all", label: "All Status" },
-                    { value: "Active", label: "Active" },
-                    { value: "Closed", label: "Closed" },
-                    { value: "Cancel", label: "Cancel" },
-                  ]}
-                  classNames={erpListGeistSelectClassNames}
-                  styles={erpToolbarSelectStyles(theme)}
-                />
                 <ERPListColumnToggleMenu
                   theme={theme}
                   items={columnToggleItems}
@@ -709,21 +634,13 @@ function ExportJobMaster() {
                 >
                   {showFilters ? "Hide filters" : "Filters"}
                 </Button>
-                <Button
-                  size="xs"
-                  leftSection={<IconPlus size={14} />}
-                  styles={erpToolbarPrimaryButtonStyles(theme)}
-                  onClick={() => persistListAndNavigate("/SeaExport/export-job/create")}
-                >
-                  Create New
-                </Button>
               </>
             ),
           }}
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine export jobs by reference, agent, route, or dates",
+            subtitle: "Refine jobs by reference, agent, route, or dates",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -816,7 +733,6 @@ function ExportJobMaster() {
                           origin_port_label: selectedData?.label || "",
                         }));
                       }}
-                      additionalParams={seaTransportParams}
                       minSearchLength={2}
                       dropdownZIndex={1000}
                       classNames={erpListGeistSelectClassNames}
@@ -845,7 +761,6 @@ function ExportJobMaster() {
                           destination_name: selectedData?.label || "",
                         }));
                       }}
-                      additionalParams={seaTransportParams}
                       minSearchLength={2}
                       dropdownZIndex={1000}
                       classNames={erpListGeistSelectClassNames}
@@ -861,7 +776,7 @@ function ExportJobMaster() {
                       size="xs"
                       searchable
                       clearable
-                      data={["FCL", "LCL"]}
+                      data={["FCL", "LCL", "AIR"]}
                       value={draftFilters.service || null}
                       onChange={(value) =>
                         setDraftFilters((prev) => ({ ...prev, service: value || "" }))
@@ -880,7 +795,7 @@ function ExportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="ETD"
-                      // placeholder="YYYY-MM-DD"
+                      placeholder="YYYY-MM-DD"
                       size="xs"
                       value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
                       onChange={(date) =>
@@ -898,7 +813,7 @@ function ExportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="ETA"
-                      // placeholder="YYYY-MM-DD"
+                      placeholder="YYYY-MM-DD"
                       size="xs"
                       value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
                       onChange={(date) =>
@@ -909,33 +824,6 @@ function ExportJobMaster() {
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Dropdown
-                      label="Status"
-                      placeholder="Select status"
-                      size="xs"
-                      searchable
-                      clearable
-                      data={[
-                        { value: "Active", label: "Active" },
-                        { value: "Closed", label: "Closed" },
-                        { value: "Cancel", label: "Cancel" },
-                      ]}
-                      value={draftFilters.status || null}
-                      onChange={(value) =>
-                        setDraftFilters((prev) => ({ ...prev, status: value || "" }))
-                      }
-                      styles={filterFieldStyles}
-                      classNames={{
-                        label: ERP_LIST_GEIST_ROOT_CLASS,
-                        input: ERP_LIST_GEIST_ROOT_CLASS,
-                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
-                        option: ERP_LIST_GEIST_ROOT_CLASS,
-                      }}
                     />
                   </Box>
                 </Grid.Col>
@@ -1108,7 +996,6 @@ function ExportJobMaster() {
                                         origin_port_label: selectedData?.label || "",
                                       })
                                     }
-                                    additionalParams={seaTransportParams}
                                     minSearchLength={1}
                                     dropdownZIndex={1000}
                                     classNames={erpListGeistSelectClassNames}
@@ -1133,7 +1020,6 @@ function ExportJobMaster() {
                                         destination_name: selectedData?.label || "",
                                       })
                                     }
-                                    additionalParams={seaTransportParams}
                                     minSearchLength={1}
                                     dropdownZIndex={1000}
                                     classNames={erpListGeistSelectClassNames}
@@ -1158,7 +1044,7 @@ function ExportJobMaster() {
                             onChange={() => {}}
                             renderEditor={({ autoFocus, onClose }) => (
                               <SingleDateInput
-                                // placeholder="YYYY-MM-DD"
+                                placeholder="YYYY-MM-DD"
                                 size="xs"
                                 value={appliedFilters.etd ? dayjs(appliedFilters.etd).toDate() : null}
                                 onChange={(date) => {
@@ -1188,7 +1074,7 @@ function ExportJobMaster() {
                             onChange={() => {}}
                             renderEditor={({ autoFocus, onClose }) => (
                               <SingleDateInput
-                                // placeholder="YYYY-MM-DD"
+                                placeholder="YYYY-MM-DD"
                                 size="xs"
                                 value={appliedFilters.eta ? dayjs(appliedFilters.eta).toDate() : null}
                                 onChange={(date) => {
@@ -1206,40 +1092,7 @@ function ExportJobMaster() {
                         </th>
                       )}
                       {visibleColumns.status && (
-                        <th style={mergeTh(130, 130)}>
-                          <ERPListColumnHeaderFilter
-                            label="Status"
-                            value={appliedFilters.status}
-                            displayValue={appliedFilters.status}
-                            theme={theme}
-                            isEditing={editingHeaderId === "status"}
-                            onStartEdit={() => openHeaderEditor("status")}
-                            onStopEdit={() => collapseHeaderEditor("status")}
-                            onChange={() => {}}
-                            renderEditor={({ autoFocus, onClose }) => (
-                              <Select
-                                autoFocus={autoFocus}
-                                placeholder="Status"
-                                searchable
-                                clearable
-                                size="xs"
-                                data={[
-                                  { value: "Active", label: "Active" },
-                                  { value: "Closed", label: "Closed" },
-                                  { value: "Cancel", label: "Cancel" },
-                                ]}
-                                value={appliedFilters.status || null}
-                                onChange={(value) => {
-                                  commitHeaderFilters({ status: value ?? "" });
-                                  onClose();
-                                }}
-                                comboboxProps={{ zIndex: 1000 }}
-                                classNames={erpListGeistSelectClassNames}
-                                styles={filterFieldStyles}
-                              />
-                            )}
-                          />
-                        </th>
+                        <th style={mergeTh(130, 130)}>Status</th>
                       )}
                       <th
                         style={{
@@ -1262,13 +1115,13 @@ function ExportJobMaster() {
                             <Stack align="center" gap="sm">
                               <Loader size="lg" color={primary} />
                               <Text c="dimmed" size="sm" style={{ fontFamily: theme.fontSans }}>
-                                Loading export jobs…
+                                Loading jobs…
                               </Text>
                             </Stack>
                           </Center>
                         </td>
                       </tr>
-                    ) : exportJobData.length === 0 ? (
+                    ) : importJobData.length === 0 ? (
                       <tr>
                         <td colSpan={10} style={{ padding: 60, textAlign: "center" }}>
                           <Stack align="center" gap="md">
@@ -1297,7 +1150,7 @@ function ExportJobMaster() {
                         </td>
                       </tr>
                     ) : (
-                      exportJobData.map((row, i) => {
+                      importJobData.map((row, i) => {
                         const rowProps = erpListDataRowProps(theme);
                         const sno = row.sno ?? pageIndex * pageSize + i + 1;
                         const tdPad = erpListBookingMasterBodyTd();
@@ -1392,7 +1245,7 @@ function ExportJobMaster() {
                               </td>
                             )}
                             {visibleColumns.route && (() => {
-                              const { oc, dc } = routeEndpointsFromExportJobRow(row);
+                              const { oc, dc } = routeEndpointsFromImportJobRow(row);
                               return (
                                 <td style={tdPad}>
                                   <Group gap={6} wrap="nowrap">
@@ -1419,24 +1272,11 @@ function ExportJobMaster() {
                               </td>
                             )}
                             <td style={erpListStickyActionTdStyle(theme)}>
-                              {(() => {
-                                const statusUpper = (row.status ?? "").toUpperCase();
-                                const isCancel = statusUpper === "CANCEL";
-                                const canCancel = statusUpper !== "GENERATED" && !isCancel;
-                                return (
-                                  <ERPListJobActionMenu
-                                    status={row.status}
-                                    variant="job-page"
-                                    canCancel={canCancel}
-                                    onEdit={() => {
-                                      persistListAndNavigate(`/SeaExport/export-job/edit`, {
-                                        job: row,
-                                      });
-                                    }}
-                                    onCancel={() => setCancelConfirmRow(row)}
-                                  />
-                                );
-                              })()}
+                              <ERPListJobActionMenu
+                                status={row.status}
+                                variant="reopen-page"
+                                onReopenJob={() => setReopenConfirmRow(row)}
+                              />
                             </td>
                           </tr>
                         );
@@ -1450,11 +1290,11 @@ function ExportJobMaster() {
         />
 
         <Modal
-          opened={!!cancelConfirmRow}
-          onClose={() => !isCancelling && setCancelConfirmRow(null)}
+          opened={!!reopenConfirmRow}
+          onClose={() => !isReopening && setReopenConfirmRow(null)}
           title={
             <Text fw={600} size="md" style={{ fontFamily: theme.fontSans }}>
-              Cancel job
+              Reopen job
             </Text>
           }
           centered
@@ -1465,18 +1305,18 @@ function ExportJobMaster() {
           }}
         >
           <Text size="sm" c="dimmed" mb="md" style={{ fontFamily: theme.fontSans }}>
-            Are you sure you want to cancel this job? This action cannot be undone.
+            Are you sure you want to reopen this job?
           </Text>
           <Group justify="flex-end" gap="xs">
             <Button
               variant="subtle"
-              onClick={() => setCancelConfirmRow(null)}
-              disabled={isCancelling}
+              onClick={() => setReopenConfirmRow(null)}
+              disabled={isReopening}
             >
               No
             </Button>
-            <Button color="red" onClick={handleConfirmCancel} loading={isCancelling}>
-              Yes, cancel
+            <Button color="blue" onClick={handleConfirmReopen} loading={isReopening}>
+              Yes, reopen
             </Button>
           </Group>
         </Modal>
@@ -1485,4 +1325,4 @@ function ExportJobMaster() {
   );
 }
 
-export default ExportJobMaster;
+export default JobOpen;

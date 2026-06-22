@@ -202,6 +202,8 @@ import DebitCreditNoteNonTradeMaster from "../pages/accounts/debit-credit-note-n
 import DebitCreditNoteNonTradeCreate from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeCreate";
 import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeMaster";
 import DebitCreditNoteTradeCreate from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeCreate";
+import JobClosure from "../pages/accounts/job-closure/JobClosure";
+import JobOpen from "../pages/accounts/job-reopen/JobOpen";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -548,6 +550,8 @@ const NavigationRoutes = () => {
           <Route path="edit/:id" element={<DebitCreditNoteTradeCreate />} />
           <Route path="view/:id" element={<DebitCreditNoteTradeCreate />} />
         </Route>
+        <Route path="/job-closure" element={<JobClosure />} />
+        <Route path="/job-reopen" element={<JobOpen />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
         <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />

@@ -81,6 +81,8 @@ const pathTitleMap: Record<string, string> = {
   "/document-allocation": "Document Allocation",
   "/debit-credit-note-trade": "Debit/Credit Note Trade",
   "/debit-credit-note-non-trade": "Debit/Credit Note Non Trade",
+  "/job-closure": "Job Closure",
+  "/job-reopen": "Reopen Job",
   "/master": "Masters",
   "/master/create-customer": "Customer for Approval",
   "/reports": "Reports",
