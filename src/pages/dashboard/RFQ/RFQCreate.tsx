@@ -57,6 +57,12 @@ import QuotationCreate from "../QuotationCreate";
 import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../../api/axios";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  isOtherServiceInland,
+  resolveEffectiveServiceFromTransport,
+  resolveEffectiveServiceType,
+  usesAirCargoStructure,
+} from "../../../utils/otherServiceType";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import FormNumberInput from "../../../components/FormNumberInput";
 import useAuthStore from "../../../store/authStore";
@@ -490,9 +496,14 @@ function buildExpandedRfqServicePayloadsWithContext(
       cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
 
     if (serviceDetail.service === "OTHERS") {
-      servicePayloadBase.trade = null;
       servicePayloadBase.service_name = serviceDetail.service_name || "";
       servicePayloadBase.service_code = serviceDetail.service_code || "";
+      servicePayloadBase.trade = isOtherServiceInland(
+        serviceDetail.service_code,
+        otherServicesData,
+      )
+        ? serviceDetail.trade
+        : null;
     } else {
       servicePayloadBase.trade = serviceDetail.trade;
     }
@@ -585,20 +596,11 @@ function buildExpandedRfqServicePayloadsWithContext(
 
       let effectiveServiceType = serviceDetail.service;
       if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
-        const selectedOtherService = otherServicesData.find(
-          (item) => item.value === serviceDetail.service_code
+        effectiveServiceType = resolveEffectiveServiceType(
+          serviceDetail.service,
+          serviceDetail.service_code,
+          otherServicesData,
         );
-        if (selectedOtherService) {
-          const transportMode = selectedOtherService.transport_mode || "";
-          const fullGroupage = selectedOtherService.full_groupage || "";
-          if (transportMode === "SEA" && fullGroupage === "FULL") {
-            effectiveServiceType = "FCL";
-          } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-            effectiveServiceType = "LCL";
-          } else {
-            effectiveServiceType = "AIR";
-          }
-        }
       }
 
       if (effectiveServiceType === "FCL") {
@@ -617,7 +619,7 @@ function buildExpandedRfqServicePayloadsWithContext(
             return fclDetail;
           }
         );
-      } else if (effectiveServiceType === "AIR") {
+      } else if (usesAirCargoStructure(effectiveServiceType)) {
         const cargoRow = serviceDetail.cargo_details[0];
         servicePayload.no_of_packages = Math.trunc(
           Number(cargoRow.no_of_packages) || 0
@@ -1568,13 +1570,10 @@ function RFQCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
@@ -1612,7 +1611,7 @@ function RFQCreate() {
               null
             );
           }
-        } else if (effectiveServiceType === "AIR") {
+        } else if (usesAirCargoStructure(effectiveServiceType)) {
           const grossWeight = Number(cargo.gross_weight) || null;
           const volumeWeight = Number(cargo.volume_weight) || null;
 
@@ -1764,17 +1763,18 @@ function RFQCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
-        if (effectiveServiceType !== "AIR" && effectiveServiceType !== "LCL")
+        if (
+          effectiveServiceType !== "AIR" &&
+          effectiveServiceType !== "LCL" &&
+          effectiveServiceType !== "INLAND"
+        )
           return;
 
         const key = `${serviceIndex}-${effectiveServiceType}`;
@@ -1808,7 +1808,7 @@ function RFQCreate() {
                 ? cargo?.volume || null
                 : undefined,
             volume_weight:
-              effectiveServiceType === "AIR"
+              usesAirCargoStructure(effectiveServiceType)
                 ? cargo?.volume_weight || null
                 : undefined,
           };
@@ -1833,7 +1833,7 @@ function RFQCreate() {
           );
         }
 
-        if (effectiveServiceType === "AIR") {
+        if (usesAirCargoStructure(effectiveServiceType)) {
           if (cargo.volume_weight !== totalVolRounded) {
             serviceForm.setFieldValue(
               `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
@@ -2071,6 +2071,18 @@ function RFQCreate() {
           return; // Skip if no service selected yet
         }
 
+        if (
+          serviceDetail.service === "OTHERS" &&
+          isInlandOtherService(serviceDetail.service_code) &&
+          !serviceDetail.trade
+        ) {
+          serviceForm.setFieldError(
+            `service_details.${serviceIndex}.trade`,
+            "Trade is required",
+          );
+          hasCargoErrors = true;
+        }
+
         // Determine effective service type for validation (for OTHERS, determine from selected service)
         let effectiveServiceType = serviceDetail.service;
         if (serviceDetail.service === "OTHERS" && serviceDetail.service_code) {
@@ -2080,17 +2092,14 @@ function RFQCreate() {
           if (selectedOtherService) {
             const transportMode = selectedOtherService.transport_mode || "";
             const fullGroupage = selectedOtherService.full_groupage || "";
-            if (transportMode === "SEA" && fullGroupage === "FULL") {
-              effectiveServiceType = "FCL";
-            } else if (transportMode === "SEA" && fullGroupage === "GROUPAGE") {
-              effectiveServiceType = "LCL";
-            } else {
-              effectiveServiceType = "AIR";
-            }
+            effectiveServiceType = resolveEffectiveServiceFromTransport(
+              transportMode,
+              fullGroupage,
+            );
           }
         }
 
-        if (effectiveServiceType === "AIR" || effectiveServiceType === "LCL") {
+        if (effectiveServiceType === "AIR" || effectiveServiceType === "LCL" || effectiveServiceType === "INLAND") {
           if (!cargo?.no_of_packages || cargo.no_of_packages < 1) {
             serviceForm.setFieldError(
               `service_details.${serviceIndex}.cargo_details.0.no_of_packages`,
@@ -2127,6 +2136,7 @@ function RFQCreate() {
 
         if (
           effectiveServiceType === "AIR" ||
+          effectiveServiceType === "INLAND" ||
           effectiveServiceType === "LCL" ||
           effectiveServiceType === "FCL"
         ) {
@@ -2178,7 +2188,7 @@ function RFQCreate() {
           }
         }
 
-        if (effectiveServiceType === "AIR") {
+        if (usesAirCargoStructure(effectiveServiceType)) {
           if (!cargo?.volume_weight || cargo.volume_weight < 0.01) {
             serviceForm.setFieldError(
               `service_details.${serviceIndex}.cargo_details.0.volume_weight`,
@@ -2837,6 +2847,12 @@ function RFQCreate() {
     }));
   }, [rawOtherServicesData]);
 
+  const isInlandOtherService = useCallback(
+    (serviceCode?: string | null) =>
+      isOtherServiceInland(serviceCode, otherServicesData),
+    [otherServicesData],
+  );
+
   /** One QuotationCreate tab per expanded origin/destination pair (same as enquiry submit). */
   const rfqServicesForQuotation = useMemo(() => {
     return buildExpandedRfqServicePayloadsWithContext(
@@ -3132,6 +3148,7 @@ function RFQCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
+              let isOthersWithInland = false;
 
               if (serviceValue === "OTHERS" && serviceCodeValue) {
                 // Try to determine structure from otherServicesData if available
@@ -3149,6 +3166,8 @@ function RFQCreate() {
                     fullGroupage === "GROUPAGE"
                   ) {
                     isOthersWithLCL = true;
+                  } else if (transportMode === "NA") {
+                    isOthersWithInland = true;
                   } else {
                     isOthersWithAIR = true;
                   }
@@ -3210,7 +3229,7 @@ function RFQCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (serviceValue === "AIR" || isOthersWithAIR) {
+              } else if (serviceValue === "AIR" || isOthersWithAIR || isOthersWithInland) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -3424,6 +3443,7 @@ function RFQCreate() {
               let isOthersWithFCL = false;
               let isOthersWithAIR = false;
               let isOthersWithLCL = false;
+              let isOthersWithInland = false;
 
               if (service.service === "OTHERS" && service.service_code) {
                 // Try to determine structure from otherServicesData if available
@@ -3441,6 +3461,8 @@ function RFQCreate() {
                     fullGroupage === "GROUPAGE"
                   ) {
                     isOthersWithLCL = true;
+                  } else if (transportMode === "NA") {
+                    isOthersWithInland = true;
                   } else {
                     isOthersWithAIR = true;
                   }
@@ -3501,7 +3523,7 @@ function RFQCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (service.service === "AIR" || isOthersWithAIR) {
+              } else if (service.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -3660,6 +3682,7 @@ function RFQCreate() {
           let isOthersWithFCL = false;
           let isOthersWithAIR = false;
           let isOthersWithLCL = false;
+          let isOthersWithInland = false;
 
           if (enq?.service === "OTHERS" && enq.service_code) {
             // Try to determine structure from otherServicesData if available
@@ -3676,6 +3699,8 @@ function RFQCreate() {
                 fullGroupage === "GROUPAGE"
               ) {
                 isOthersWithLCL = true;
+              } else if (transportMode === "NA") {
+                isOthersWithInland = true;
               } else {
                 isOthersWithAIR = true;
               }
@@ -3735,7 +3760,7 @@ function RFQCreate() {
               pkg_group: enq.pkg_group || fcl.pkg_group || null,
               stackable: enq.stackable ? "Yes" : "No",
             }));
-          } else if (enq?.service === "AIR" || isOthersWithAIR) {
+          } else if (enq?.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
             // AIR service with direct cargo fields (or OTHERS with AIR structure)
             serviceDetail.cargo_details = [
               {
@@ -5586,24 +5611,27 @@ function RFQCreate() {
                                           selectedService.label || ""
                                         );
 
+                                        if (
+                                          (selectedService.transport_mode ||
+                                            "") !== "NA"
+                                        ) {
+                                          serviceForm.setFieldValue(
+                                            `service_details.${serviceIndex}.trade`,
+                                            "",
+                                          );
+                                        }
+
                                         // Determine cargo structure based on transport_mode and full_groupage
                                         const transportMode =
                                           selectedService.transport_mode || "";
                                         const fullGroupage =
                                           selectedService.full_groupage || "";
 
-                                        let cargoStructure = "AIR"; // Default to AIR
-                                        if (
-                                          transportMode === "SEA" &&
-                                          fullGroupage === "FULL"
-                                        ) {
-                                          cargoStructure = "FCL";
-                                        } else if (
-                                          transportMode === "SEA" &&
-                                          fullGroupage === "GROUPAGE"
-                                        ) {
-                                          cargoStructure = "LCL";
-                                        }
+                                        const cargoStructure =
+                                          resolveEffectiveServiceFromTransport(
+                                            transportMode,
+                                            fullGroupage,
+                                          );
 
                                         // Reset cargo_details based on determined structure
                                         if (cargoStructure === "FCL") {
@@ -5752,6 +5780,42 @@ function RFQCreate() {
                                   />
                                 )}
                               </Grid.Col>
+                              {serviceForm.values.service_details[serviceIndex]
+                                ?.service === "OTHERS" &&
+                                isInlandOtherService(
+                                  serviceForm.values.service_details[serviceIndex]
+                                    ?.service_code,
+                                ) && (
+                                  <Grid.Col span={3}>
+                                    <Dropdown
+                                      label="Trade"
+                                      placeholder="Select Trade"
+                                      searchable
+                                      withAsterisk
+                                      key={serviceForm.key(
+                                        `service_details.${serviceIndex}.trade`,
+                                      )}
+                                      data={["Export", "Import"]}
+                                      value={
+                                        serviceForm.values.service_details[
+                                          serviceIndex
+                                        ]?.trade
+                                      }
+                                      onChange={(value) => {
+                                        serviceForm.setFieldValue(
+                                          `service_details.${serviceIndex}.trade`,
+                                          value || "",
+                                        );
+                                        setLastCheckedServiceIndex(null);
+                                      }}
+                                      error={
+                                        serviceForm.errors[
+                                          `service_details.${serviceIndex}.trade`
+                                        ] as string
+                                      }
+                                    />
+                                  </Grid.Col>
+                                )}
 
                               <Grid.Col span={3}>
                                 <Dropdown
@@ -6904,7 +6968,11 @@ function RFQCreate() {
                                     ) {
                                       effectiveServiceType = "LCL";
                                     } else {
-                                      effectiveServiceType = "AIR";
+                                      effectiveServiceType =
+                                        resolveEffectiveServiceFromTransport(
+                                          transportMode,
+                                          fullGroupage,
+                                        );
                                     }
                                   }
                                 }
@@ -6966,7 +7034,11 @@ function RFQCreate() {
                                           ) {
                                             effectiveServiceType = "LCL";
                                           } else {
-                                            effectiveServiceType = "AIR";
+                                            effectiveServiceType =
+                                              resolveEffectiveServiceFromTransport(
+                                                transportMode,
+                                                fullGroupage,
+                                              );
                                           }
                                         }
                                       }
@@ -7007,7 +7079,11 @@ function RFQCreate() {
                                           ) {
                                             effectiveServiceType = "LCL";
                                           } else {
-                                            effectiveServiceType = "AIR";
+                                            effectiveServiceType =
+                                              resolveEffectiveServiceFromTransport(
+                                                transportMode,
+                                                fullGroupage,
+                                              );
                                           }
                                         }
                                       }
@@ -7238,7 +7314,11 @@ function RFQCreate() {
                                                 ) {
                                                   effectiveServiceType = "LCL";
                                                 } else {
-                                                  effectiveServiceType = "AIR";
+                                                  effectiveServiceType =
+                                                    resolveEffectiveServiceFromTransport(
+                                                      transportMode,
+                                                      fullGroupage,
+                                                    );
                                                 }
                                               }
                                             }
@@ -7307,11 +7387,15 @@ function RFQCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }
-                                    return effectiveServiceType === "AIR";
+                                    return usesAirCargoStructure(effectiveServiceType);
                                   })() && (
                                     <Grid>
                                       <Grid.Col span={3}>
@@ -7979,7 +8063,11 @@ function RFQCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }
@@ -8695,7 +8783,11 @@ function RFQCreate() {
                                         ) {
                                           effectiveServiceType = "LCL";
                                         } else {
-                                          effectiveServiceType = "AIR";
+                                          effectiveServiceType =
+                                            resolveEffectiveServiceFromTransport(
+                                              transportMode,
+                                              fullGroupage,
+                                            );
                                         }
                                       }
                                     }
