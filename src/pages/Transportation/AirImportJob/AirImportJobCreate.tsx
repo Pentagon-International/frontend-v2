@@ -70,6 +70,7 @@ import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -213,6 +214,10 @@ type HAWBDetail = {
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
   events?: Array<{ id?: number; type: string; date: string }>;
+  summary?: {
+    total_local_sell?: number | string | null;
+    total_local_cost?: number | string | null;
+  };
 };
 
 type PartyAddressOption = {
@@ -953,6 +958,9 @@ function AirImportJobCreate() {
                   roe: toNum(charge.roe),
                   amount_per_unit: toNum(charge.amount_per_unit),
                   amount: toNum(charge.amount),
+                  sell_local_amount: toNum(
+                    charge.sell_local_amount ?? charge.local_amount,
+                  ),
                   local_amount: toNum(
                     charge.sell_local_amount ?? charge.local_amount,
                   ),
@@ -1110,6 +1118,25 @@ function AirImportJobCreate() {
                 // Air Export flow stores normalized charges; keep raw too for payload parity/debug.
                 charges: mappedCharges,
                 mawb_charges: mawbChargesRaw,
+                summary: (() => {
+                  const raw = house.summary;
+                  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+                    return undefined;
+                  }
+                  const s = raw as Record<string, unknown>;
+                  return {
+                    total_local_sell: s.total_local_sell as
+                      | number
+                      | string
+                      | null
+                      | undefined,
+                    total_local_cost: s.total_local_cost as
+                      | number
+                      | string
+                      | null
+                      | undefined,
+                  };
+                })(),
                 events: Array.isArray(
                   (
                     house as {
@@ -4939,6 +4966,12 @@ function AirImportJobCreate() {
               readOnly={isReadOnly}
               debugTag="AIR_IMPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
+              summaryEstimatesTotalCost={
+                (jobData as {
+                  summary?: { estimates_total_cost?: number | string | null };
+                })?.summary?.estimates_total_cost
+              }
+              userBranches={user?.branches}
             />
           </Box>
         </Tabs.Panel>
@@ -5941,6 +5974,11 @@ function AirImportJobCreate() {
                       {hawb.customer_service || "-"}
                     </Text>
                   </Grid.Col>
+
+                  <HouseCardSummaryTotals
+                    house={hawb}
+                    branches={user?.branches}
+                  />
                 </Grid>
               </Card>
             ))}

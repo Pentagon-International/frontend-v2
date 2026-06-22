@@ -76,6 +76,7 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import { useAgentStatus } from "../../../hooks/useAgentStatus";
 import OdexStatusPanel from "../../../components/OdexStatusPanel";
 import OdexAgentDownloadModal from "../../../components/OdexAgentModal";
+import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -387,6 +388,10 @@ type HousingDetail = {
     supplier_name?: string | null;
   }>;
   mbl_charges?: Array<Record<string, unknown>>;
+  summary?: {
+    total_local_sell?: number | string | null;
+    total_local_cost?: number | string | null;
+  };
 };
 
 type DoTypeOption = "carrier_agent" | "unstuff_place";
@@ -1312,6 +1317,25 @@ function ImportJobCreate() {
                         },
                       )
                     : [],
+              summary: (() => {
+                const raw = house.summary;
+                if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+                  return undefined;
+                }
+                const s = raw as Record<string, unknown>;
+                return {
+                  total_local_sell: s.total_local_sell as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                  total_local_cost: s.total_local_cost as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                };
+              })(),
             }),
           );
           setHousingDetails(mappedHousingDetails);
@@ -5580,6 +5604,11 @@ function ImportJobCreate() {
               form={estimatesForm}
               readOnly={isReadOnly}
               jobUnitDefaults={estimatesJobUnitDefaults}
+              summaryEstimatesTotalCost={
+                (jobData as { summary?: { estimates_total_cost?: unknown } })
+                  ?.summary?.estimates_total_cost
+              }
+              userBranches={user?.branches}
             />
           </Box>
         </Tabs.Panel>
@@ -6613,6 +6642,11 @@ function ImportJobCreate() {
                       {house.customer_service || "-"}
                     </Text>
                   </Grid.Col>
+
+                  <HouseCardSummaryTotals
+                    house={house}
+                    branches={user?.branches}
+                  />
 
                   {/* <Grid.Col span={12}>
                     <Divider my="sm" />

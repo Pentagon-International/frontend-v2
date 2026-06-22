@@ -82,6 +82,7 @@ import {
   JobMasterPartyDetailsPanel,
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
+import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -386,6 +387,8 @@ type HousingDetail = {
     total_gross_weight?: number | string;
     total_volume?: number | string;
     container_type?: string[];
+    total_local_sell?: number | string | null;
+    total_local_cost?: number | string | null;
   };
   cargo_details?: Array<{
     id?: number | string;
@@ -4804,6 +4807,11 @@ function ExportJobCreate() {
               form={estimatesForm}
               readOnly={isReadOnly}
               jobUnitDefaults={estimatesJobUnitDefaults}
+              summaryEstimatesTotalCost={
+                (jobData as { summary?: { estimates_total_cost?: unknown } })
+                  ?.summary?.estimates_total_cost
+              }
+              userBranches={user?.branches}
             />
           </Box>
         </Tabs.Panel>
@@ -5891,6 +5899,11 @@ function ExportJobCreate() {
                       {house.customer_service || "-"}
                     </Text>
                   </Grid.Col>
+
+                  <HouseCardSummaryTotals
+                    house={house}
+                    branches={user?.branches}
+                  />
 
                   {/* <Grid.Col span={12}>
                     <Divider my="sm" />

@@ -71,6 +71,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -225,6 +226,10 @@ type HAWBDetail = {
     supplier_name?: string | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
+  summary?: {
+    total_local_sell?: number | string | null;
+    total_local_cost?: number | string | null;
+  };
 };
 
 // Invoice-related types for Accounts tab
@@ -357,6 +362,7 @@ function AirExportJobCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const jobData = location.state?.job;
+  const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
@@ -1151,6 +1157,25 @@ function AirExportJobCreate() {
                   });
                 }
                 return [];
+              })(),
+              summary: (() => {
+                const raw = house.summary;
+                if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+                  return undefined;
+                }
+                const s = raw as Record<string, unknown>;
+                return {
+                  total_local_sell: s.total_local_sell as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                  total_local_cost: s.total_local_cost as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                };
               })(),
             }),
           );
@@ -4331,6 +4356,11 @@ function AirExportJobCreate() {
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
+              summaryEstimatesTotalCost={
+                (jobData as { summary?: { estimates_total_cost?: unknown } })
+                  ?.summary?.estimates_total_cost
+              }
+              userBranches={user?.branches}
             />
           </Box>
         </Tabs.Panel>
@@ -5598,6 +5628,11 @@ function AirExportJobCreate() {
                       {hawb.customer_service || "-"}
                     </Text>
                   </Grid.Col>
+
+                  <HouseCardSummaryTotals
+                    house={hawb}
+                    branches={user?.branches}
+                  />
                 </Grid>
               </Card>
             ))}

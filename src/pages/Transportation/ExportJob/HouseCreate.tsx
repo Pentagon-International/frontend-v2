@@ -97,6 +97,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
+import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
 
@@ -5072,6 +5073,33 @@ function HouseCreate() {
                   </Grid.Col>
                 </Grid>
               ))}
+
+              <ChargesLocalAmountTotalsRow
+                house={{
+                  charges: chargesForm.values.charges,
+                  mawb_charges: (editData as { mawb_charges?: unknown })
+                    ?.mawb_charges as
+                    | Array<{
+                        sell_local_amount?: unknown;
+                        cost_local_amount?: unknown;
+                      }>
+                    | undefined,
+                  mbl_charges: (editData as { mbl_charges?: unknown })
+                    ?.mbl_charges as
+                    | Array<{
+                        sell_local_amount?: unknown;
+                        cost_local_amount?: unknown;
+                      }>
+                    | undefined,
+                  summary: (editData as {
+                    summary?: {
+                      total_local_sell?: number | string | null;
+                      total_local_cost?: number | string | null;
+                    };
+                  })?.summary,
+                }}
+                branches={user?.branches}
+              />
             </Box>
           </Box>
         </Tabs.Panel>
