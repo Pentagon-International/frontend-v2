@@ -28,7 +28,7 @@ type HouseCardSummaryTotalsProps = {
   branches?: BranchCurrencyContext[] | null;
 };
 
-function ColumnTotal({
+function ColumnTotalValue({
   value,
   branches,
 }: {
@@ -36,14 +36,9 @@ function ColumnTotal({
   branches?: BranchCurrencyContext[] | null;
 }) {
   return (
-    <Stack gap={2}>
-      <Text size="sm" fw={600} c="#105476">
-        Total:
-      </Text>
-      <Text size="sm" fw={600}>
-        {formatJobSummaryAmount(value, branches)}
-      </Text>
-    </Stack>
+    <Text size="sm" fw={600}>
+      {formatJobSummaryAmount(value, branches)}
+    </Text>
   );
 }
 
@@ -101,8 +96,14 @@ type ChargesLocalAmountTotalsRowProps = {
   charges?: ChargeLike[];
   summary?: HousingLevelSummary | null;
   branches?: BranchCurrencyContext[] | null;
-  /** Grid span before sell local amount column (header row spans) */
+  /** Grid span before the Amount column (Total label). */
+  offsetBeforeAmountCol?: number;
+  /**
+   * @deprecated Prefer offsetBeforeAmountCol. When set, amount offset is derived as
+   * offsetBeforeSellCol - amountColSpan.
+   */
   offsetBeforeSellCol?: number;
+  amountColSpan?: number;
   sellColSpan?: number;
   /** Grid span between sell local and cost local columns */
   middleColSpan?: number;
@@ -114,7 +115,9 @@ export function ChargesLocalAmountTotalsRow({
   charges,
   summary,
   branches,
+  offsetBeforeAmountCol,
   offsetBeforeSellCol = 7.2,
+  amountColSpan = 0.85,
   sellColSpan = 0.85,
   middleColSpan = 1.7,
   costColSpan = 0.85,
@@ -128,20 +131,23 @@ export function ChargesLocalAmountTotalsRow({
     summaryData,
   );
 
+  const amountOffset =
+    offsetBeforeAmountCol ?? Math.max(0, offsetBeforeSellCol - amountColSpan);
+
   return (
-    <Grid
-      mt="xs"
-      gutter="sm"
-      style={{ color: "#105476" }}
-      align="flex-start"
-    >
-      <Grid.Col span={offsetBeforeSellCol} />
+    <Grid mt="xs" gutter="sm" style={{ color: "#105476" }} align="flex-start">
+      <Grid.Col span={amountOffset} />
+      <Grid.Col span={amountColSpan}>
+        <Text size="sm" fw={600} c="#105476" ta="right" pr={22}>
+          Total:
+        </Text>
+      </Grid.Col>
       <Grid.Col span={sellColSpan}>
-        <ColumnTotal value={totalSell} branches={branches} />
+        <ColumnTotalValue value={totalSell} branches={branches} />
       </Grid.Col>
       <Grid.Col span={middleColSpan} />
       <Grid.Col span={costColSpan}>
-        <ColumnTotal value={totalCost} branches={branches} />
+        <ColumnTotalValue value={totalCost} branches={branches} />
       </Grid.Col>
     </Grid>
   );

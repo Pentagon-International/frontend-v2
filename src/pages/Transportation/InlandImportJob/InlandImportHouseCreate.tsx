@@ -59,6 +59,7 @@ import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
   HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
+  jobChargeNoOfUnitInputProps,
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
   coerceHouseCargoWeightInput,
@@ -4496,8 +4497,12 @@ function HouseCreate() {
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
-                      decimalScale={0}
                       hideControls
+                      {...jobChargeNoOfUnitInputProps(
+                        charge.unit_code ?? "",
+                        unitOptions.find((o) => o.value === charge.unit_id)
+                          ?.label,
+                      )}
                       {...(() => {
                         const inputProps = chargesForm.getInputProps(
                           `charges.${index}.no_of_unit`,
@@ -4744,6 +4749,7 @@ function HouseCreate() {
               ))}
 
               <ChargesLocalAmountTotalsRow
+                offsetBeforeSellCol={7.1}
                 house={{
                   charges: chargesForm.values.charges,
                   mawb_charges: (editData as { mawb_charges?: unknown })

@@ -62,6 +62,7 @@ import {
   formatHouseCargoWeightForPayload,
   HOUSE_CARGO_WEIGHT_DECIMALS,
   HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS,
+  jobChargeNoOfUnitInputProps,
   houseCargoWeightValuesEqual,
   isPositiveHouseCargoWeight,
   coerceHouseCargoWeightInput,
@@ -4997,7 +4998,11 @@ function HouseCreate() {
                       placeholder="No of Unit"
                       min={0}
                       hideControls
-                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                      {...jobChargeNoOfUnitInputProps(
+                        charge.unit_code ?? "",
+                        unitOptions.find((o) => o.value === charge.unit_id)
+                          ?.label,
+                      )}
                       value={
                         chargesForm.values.charges[index].no_of_unit ??
                         undefined

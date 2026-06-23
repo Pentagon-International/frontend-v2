@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { ActionIcon, Box, Grid, Group, Stack, Text } from "@mantine/core";
+import { ActionIcon, Box, Grid, Group, Text } from "@mantine/core";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
@@ -600,18 +600,24 @@ export function EstimatesSection({
         align="flex-start"
         style={{ fontWeight: 600, color: "#105476" }}
       >
-        <Grid.Col span={8.4} />
+        <Grid.Col span={1.75} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={1} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={0.9} />
         <Grid.Col span={1}>
-          <Stack gap={2}>
-            <Text size="sm" fw={600}>
-              Total:
-            </Text>
-            <Text size="sm">
-              {formatJobSummaryAmount(displayEstimatesTotal, branches)}
-            </Text>
-          </Stack>
+          <Text size="sm" fw={600} c="#105476" ta="right">
+            Total:
+          </Text>
         </Grid.Col>
-        <Grid.Col span={2.6} />
+        <Grid.Col span={1}>
+          <Text size="sm" fw={600} ta="center" w="100%">
+            {formatJobSummaryAmount(displayEstimatesTotal, branches)}
+          </Text>
+        </Grid.Col>
+        <Grid.Col span={1.75} />
+        <Grid.Col span={0.85} />
       </Grid>
     </Box>
   );
