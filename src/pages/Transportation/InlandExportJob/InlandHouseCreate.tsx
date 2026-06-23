@@ -78,6 +78,11 @@ import { resolveHousingDetailsPrimaryKey } from "../../../utils/airWayBillPdf";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
+import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
+import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -395,12 +400,6 @@ function HouseCreate() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
 
-  // Accounts tab: invoice list from filter/invoice API
-  const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
-  const [invoiceListLoading, setInvoiceListLoading] = useState(false);
-  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
-    string | null
-  >(null);
 
   // Charges Form - Using useForm similar to routings in ExportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
@@ -433,6 +432,22 @@ function HouseCreate() {
     location.state?.hawbDetails || location.state?.housingDetails || [];
   const editIndex = location.state?.editIndex;
   const editData = location.state?.editData;
+  const {
+    invoiceList,
+    invoiceListLoading,
+    invoiceDeletingId,
+    expandedInvoiceRowId,
+    setExpandedInvoiceRowId,
+    requestDeleteInvoice,
+    requestDeleteReverseInvoice,
+    deleteConfirmProps,
+  } = useJobAccountInvoices<InvoiceListItem>({
+    activeTab: active,
+    accountsTabIndex: 4,
+    shipmentNo: editData?.shipment_id,
+    isAgent: false,
+    enabled: !!editData?.shipment_id,
+  });
   const isEditMode = editIndex !== undefined && editData !== undefined;
 
   useEffect(() => {
@@ -745,22 +760,6 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumeWeights, calculateChargeableWeight]);
 
-  // Fetch invoice list when Accounts tab is active
-  useEffect(() => {
-    if (active !== 4) return;
-    setInvoiceListLoading(true);
-    postAPICall(
-      URL.invoiceCombined,
-      { filters: { shipment_no: editData?.shipment_id, is_agent: false } },
-      API_HEADER,
-    )
-      .then((res: unknown) => {
-        const data = (res as { data?: InvoiceListItem[] })?.data;
-        setInvoiceList(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setInvoiceList([]))
-      .finally(() => setInvoiceListLoading(false));
-  }, [active]);
 
   // Track if form has been initialized from editData to prevent overwriting user changes (reset when editData id/index changes) - same as AirImportJob
   const formInitializedFromEditDataRef = useRef(false);
@@ -4847,7 +4846,7 @@ function HouseCreate() {
                           const isExpanded = expandedInvoiceRowId === rowKey;
                           const reverseInvoices = row.reverse_invoices ?? [];
                           const hasReverseInvoices = reverseInvoices.length > 0;
-
+                          const invoiceViewId = row.invoice_id ?? row.id;
                           return (
                             <Fragment key={rowKey}>
                               <Table.Tr
@@ -4861,12 +4860,10 @@ function HouseCreate() {
                                     )
                                   )
                                     return;
-
                                   if (!hasReverseInvoices) {
                                     setExpandedInvoiceRowId(null);
                                     return;
                                   }
-
                                   setExpandedInvoiceRowId((prev) =>
                                     prev === rowKey ? null : rowKey,
                                   );
@@ -4918,13 +4915,9 @@ function HouseCreate() {
                                   <Badge
                                     size="sm"
                                     variant="light"
-                                    color={
-                                      isUnposted
-                                        ? "yellow"
-                                        : isPosted
-                                          ? "green"
-                                          : "#105476"
-                                    }
+                                    color={getInvoiceStatusBadgeColor(
+                                      row.status,
+                                    )}
                                   >
                                     {row.status ?? "-"}
                                   </Badge>
@@ -5008,10 +5001,11 @@ function HouseCreate() {
                                         }}
                                         onClick={() =>
                                           navigate(
-                                            `/inland/export-job/invoice/view/${row.invoice_id}`,
+                                            `/inland/export-job/invoice/view/${invoiceViewId}`,
                                             {
                                               state: {
                                                 invoiceData: row,
+                                                fromJobLevel: true,
                                                 ...(location.state?.job && {
                                                   job: location.state.job,
                                                 }),
@@ -5023,59 +5017,73 @@ function HouseCreate() {
                                         View
                                       </Menu.Item>
                                       {isUnposted ? (
-                                        <Menu.Item
-                                          leftSection={
-                                            <Box
-                                              style={{
-                                                backgroundColor: "#E7F5FF",
+                                        <>
+                                          <Menu.Item
+                                            leftSection={
+                                              <Box
+                                                style={{
+                                                  backgroundColor: "#E7F5FF",
+                                                  borderRadius: "6px",
+                                                  padding: "6px",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                }}
+                                              >
+                                                <IconEdit
+                                                  size={16}
+                                                  color="#105476"
+                                                />
+                                              </Box>
+                                            }
+                                            styles={{
+                                              item: {
+                                                fontFamily: "Inter",
+                                                fontSize: "13px",
+                                                fontWeight: 500,
                                                 borderRadius: "6px",
-                                                padding: "6px",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                              }}
-                                            >
-                                              <IconEdit
-                                                size={16}
-                                                color="#105476"
-                                              />
-                                            </Box>
-                                          }
-                                          styles={{
-                                            item: {
-                                              fontFamily: "Inter",
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              borderRadius: "6px",
-                                              padding: "10px 12px",
-                                              marginBottom: "4px",
-                                              "&:hover": {
-                                                backgroundColor: "#F8F9FA",
-                                              },
-                                            },
-                                            itemLabel: {
-                                              fontFamily: "Inter",
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                            },
-                                          }}
-                                          onClick={() =>
-                                            navigate(
-                                              `/inland/export-job/invoice/edit/${row.invoice_id}`,
-                                              {
-                                                state: {
-                                                  invoiceData: row,
-                                                  ...(location.state?.job && {
-                                                    job: location.state.job,
-                                                  }),
+                                                padding: "10px 12px",
+                                                marginBottom: "4px",
+                                                "&:hover": {
+                                                  backgroundColor: "#F8F9FA",
                                                 },
                                               },
-                                            )
-                                          }
-                                        >
-                                          Edit
-                                        </Menu.Item>
+                                              itemLabel: {
+                                                fontFamily: "Inter",
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                              },
+                                            }}
+                                            onClick={() =>
+                                              navigate(
+                                                `/inland/export-job/invoice/edit/${row.invoice_id}`,
+                                                {
+                                                  state: {
+                                                    invoiceData: row,
+                                                    fromJobLevel: true,
+                                                    ...(location.state?.job && {
+                                                      job: location.state.job,
+                                                    }),
+                                                  },
+                                                },
+                                              )
+                                            }
+                                          >
+                                            Edit
+                                          </Menu.Item>
+                                          <JobInvoiceDeleteMenuItem
+                                            disabled={
+                                              invoiceDeletingId ===
+                                              invoiceViewId
+                                            }
+                                            onDelete={() =>
+                                              requestDeleteInvoice(
+                                                invoiceViewId as number,
+                                              )
+                                            }
+                                          />
+                                        </>
                                       ) : (
                                         <Menu.Item
                                           leftSection={
@@ -5136,10 +5144,10 @@ function HouseCreate() {
                                   </Menu>
                                 </Table.Td>
                               </Table.Tr>
+
                               {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
-                                    px={8}
                                     colSpan={6}
                                     style={{
                                       padding: 0,
@@ -5226,197 +5234,85 @@ function HouseCreate() {
                                         </Table.Thead>
                                         <Table.Tbody>
                                           {hasReverseInvoices ? (
-                                            reverseInvoices.map((rev, idx) => (
-                                              <Table.Tr key={rev.id ?? idx}>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "20%",
-                                                  }}
+                                            reverseInvoices.map(
+                                              (rev, revIdx) => (
+                                                <Table.Tr
+                                                  key={rev.id ?? revIdx}
                                                 >
-                                                  {rev.day_book_name ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "20%",
-                                                  }}
-                                                >
-                                                  {formatInvoiceDocumentNo(rev)}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  {rev.document_date ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  {rev.total ?? "-"}
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                >
-                                                  <Badge
-                                                    size="sm"
-                                                    variant="light"
-                                                    color="#105476"
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "20%",
+                                                    }}
                                                   >
-                                                    {rev.status ?? "-"}
-                                                  </Badge>
-                                                </Table.Td>
-                                                <Table.Td
-                                                  style={{
-                                                    fontSize: "12px",
-                                                    width: "15%",
-                                                  }}
-                                                  onClick={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                >
-                                                  <Menu
-                                                    shadow="md"
-                                                    width={200}
-                                                    position="bottom-end"
+                                                    {rev.day_book_name ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "20%",
+                                                    }}
                                                   >
-                                                    <Menu.Target>
-                                                      <ActionIcon
-                                                        variant="subtle"
-                                                        color="#105476"
-                                                        size="sm"
-                                                        styles={{
-                                                          root: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
-                                                            border:
-                                                              "1px solid #E9ECEF",
-                                                            borderRadius: "8px",
-                                                            "&:hover": {
-                                                              backgroundColor:
-                                                                "#F8F9FA",
-                                                            },
-                                                          },
-                                                        }}
-                                                      >
-                                                        <IconDotsVertical
-                                                          size={16}
-                                                        />
-                                                      </ActionIcon>
-                                                    </Menu.Target>
-                                                    <Menu.Dropdown
-                                                      styles={{
-                                                        dropdown: {
-                                                          border:
-                                                            "1px solid #E9ECEF",
-                                                          borderRadius: "8px",
-                                                          padding: "8px",
-                                                          boxShadow:
-                                                            "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                                        },
-                                                      }}
+                                                    {formatInvoiceDocumentNo(rev)}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    {rev.document_date ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    {rev.total ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                  >
+                                                    <Badge
+                                                      size="sm"
+                                                      variant="light"
+                                                      color={getInvoiceStatusBadgeColor(
+                                                        rev.status,
+                                                      )}
                                                     >
-                                                      <Menu.Item
-                                                        leftSection={
-                                                          <Box
-                                                            style={{
-                                                              backgroundColor:
-                                                                "#E7F5FF",
-                                                              borderRadius:
-                                                                "6px",
-                                                              padding: "6px",
-                                                              display: "flex",
-                                                              alignItems:
-                                                                "center",
-                                                              justifyContent:
-                                                                "center",
-                                                            }}
-                                                          >
-                                                            <IconEye
-                                                              size={16}
-                                                              color="#105476"
-                                                            />
-                                                          </Box>
-                                                        }
-                                                        styles={{
-                                                          item: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
-                                                            fontWeight: 500,
-                                                            borderRadius: "6px",
-                                                            padding:
-                                                              "10px 12px",
-                                                            marginBottom: "4px",
-                                                            "&:hover": {
-                                                              backgroundColor:
-                                                                "#F8F9FA",
-                                                            },
-                                                          },
-                                                          itemLabel: {
-                                                            fontFamily: "Inter",
-                                                            fontSize: "13px",
-                                                            fontWeight: 500,
-                                                            color: "#424242",
-                                                          },
-                                                        }}
-                                                        onClick={() => {
-                                                          const targetId =
-                                                            (rev.reverse_invoice_id ??
-                                                              (row as any)
-                                                                .reverse_invoice_id) as number;
-
-                                                          navigate(
-                                                            `/inland/export-job/invoice/view/${targetId}`,
-                                                            {
-                                                              state: {
-                                                                invoiceData: {
-                                                                  ...row,
-                                                                  ...rev,
-                                                                  id: targetId,
-                                                                  document_no: getInvoiceDocumentNo(rev, (row as any).document_no),
-                                                                  document_date:
-                                                                    rev.document_date ??
-                                                                    (row as any)
-                                                                      .document_date,
-                                                                  total:
-                                                                    rev.total ??
-                                                                    (row as any)
-                                                                      .total,
-                                                                  status:
-                                                                    rev.status ??
-                                                                    (row as any)
-                                                                      .status,
-                                                                  day_book_name:
-                                                                    rev.day_book_name ??
-                                                                    (row as any)
-                                                                      .day_book_name,
-                                                                },
-                                                                ...(location
-                                                                  .state
-                                                                  ?.job && {
-                                                                  job: location
-                                                                    .state.job,
-                                                                }),
-                                                              },
-                                                            },
-                                                          );
-                                                        }}
-                                                      >
-                                                        View
-                                                      </Menu.Item>
-                                                    </Menu.Dropdown>
-                                                  </Menu>
-                                                </Table.Td>
-                                              </Table.Tr>
-                                            ))
+                                                      {rev.status ?? "-"}
+                                                    </Badge>
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
+                                                      width: "15%",
+                                                    }}
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                  >
+                                                    <JobReverseInvoiceAccountMenu
+                                                      rev={rev}
+                                                      parentRow={row}
+                                                      jobBasePath="/inland/export-job"
+                                                      navigate={navigate}
+                                                      job={location.state?.job}
+                                                      deletingReverseId={
+                                                        invoiceDeletingId
+                                                      }
+                                                      onRequestDeleteReverseInvoice={
+                                                        requestDeleteReverseInvoice
+                                                      }
+                                                    />
+                                                  </Table.Td>
+                                                </Table.Tr>
+                                              ),
+                                            )
                                           ) : (
                                             <Table.Tr>
                                               <Table.Td
@@ -5450,6 +5346,8 @@ function HouseCreate() {
           </Tabs.Panel>
         )}
       </Tabs>
+
+      <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
       <Group justify="space-between" mt="xl">
         <Button

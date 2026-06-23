@@ -85,6 +85,16 @@ const getChargeDisplayAmount = (charge: Record<string, unknown>): string => {
   return amount != null && amount !== undefined ? String(amount) : "";
 };
 
+const normalizePpCcForCan = (value: unknown): string => {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return String(value ?? "").trim();
+};
+
+const isCollectCanCharge = (charge: Record<string, unknown>): boolean =>
+  normalizePpCcForCan(charge.pp_cc) === "Collect";
+
 const formatCanTaxChargeName = (row: CanSacWiseTotal): string => {
   const taxName = String(row.charge_name ?? "").trim();
   const rate = row.rate;
@@ -901,7 +911,8 @@ export const generateCargoArrivalNoticePDF = (
     const cargoRowSpacing = 4.5; // Match charges table row spacing
     const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
     const baseDisplayableCharges = (Array.isArray(charges) ? charges : []).filter(
-      (charge: Record<string, unknown>) => isDisplayableCanCharge(charge)
+      (charge: Record<string, unknown>) =>
+        isDisplayableCanCharge(charge) && isCollectCanCharge(charge),
     );
     const taxCharges = sacWiseTotalsToCanCharges(sacWiseTotals).filter(
       (charge) => isDisplayableCanCharge(charge),
