@@ -65,7 +65,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
@@ -2407,7 +2407,7 @@ function AirImportJobCreate() {
         },
       };
 
-      const blobUrl = generateCargoArrivalNoticePDF(
+      const blobUrl = await previewCargoArrivalNoticePDF(
         combinedData,
         hawb,
         defaultBranch,

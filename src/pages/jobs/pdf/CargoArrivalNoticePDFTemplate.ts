@@ -9,6 +9,7 @@ import {
   getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
+import type { CanSacWiseTotal } from "./canGstBreakup";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -69,9 +70,58 @@ const getChargeCurrencyCode = (charge: Record<string, unknown>): string => {
 };
 
 const hasChargeAmount = (charge: Record<string, unknown>): boolean => {
+  const sellLocalAmount = charge.sell_local_amount;
+  if (sellLocalAmount != null && sellLocalAmount !== "") return true;
   const amount = charge.amount;
   return amount != null && amount !== "";
 };
+
+const getChargeDisplayAmount = (charge: Record<string, unknown>): string => {
+  const sellLocalAmount = charge.sell_local_amount;
+  if (sellLocalAmount != null && sellLocalAmount !== "") {
+    return String(sellLocalAmount);
+  }
+  const amount = charge.amount;
+  return amount != null && amount !== undefined ? String(amount) : "";
+};
+
+const formatCanTaxChargeName = (row: CanSacWiseTotal): string => {
+  const taxName = String(row.charge_name ?? "").trim();
+  const rate = row.rate;
+  const rateType = row.rate_type ?? "";
+  const rateLabel = rate != null ? `${rate}${rateType}` : "";
+
+  if (taxName && rateLabel) return `${taxName} ${rateLabel}`;
+  return taxName;
+};
+
+const sacWiseTotalsToCanCharges = (
+  totals: CanSacWiseTotal[],
+): Record<string, unknown>[] =>
+  totals
+    .filter((row) => {
+      const name = String(row.charge_name ?? "")
+        .trim()
+        .toUpperCase();
+      const rate = Number(row.rate ?? 0);
+      if (
+        (name === "IGST" || name === "CGST" || name === "SGST") &&
+        rate <= 0
+      ) {
+        return false;
+      }
+      return row.total_amount != null;
+    })
+    .map((row) => ({
+      charge_name: formatCanTaxChargeName(row),
+      currency_code: row.currency_code ?? "INR",
+      currency: row.currency_code ?? "INR",
+      sell_local_amount: row.total_amount,
+      is_can_tax_row: true,
+      no_of_unit: "",
+      amount_per_unit: "",
+      roe: "",
+    }));
 
 const isDisplayableCanCharge = (charge: Record<string, unknown>): boolean => {
   const chargeName = String(charge.charge_name ?? "").trim();
@@ -628,7 +678,8 @@ export const generateCargoArrivalNoticePDF = (
   jobData: any,
   hawbData: any,
   defaultBranch: any,
-  country?: any
+  country?: any,
+  sacWiseTotals: CanSacWiseTotal[] = [],
 ): string => {
   try {
     const doc = new jsPDF();
@@ -849,9 +900,13 @@ export const generateCargoArrivalNoticePDF = (
 
     const cargoRowSpacing = 4.5; // Match charges table row spacing
     const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
-    const displayableCharges = (Array.isArray(charges) ? charges : []).filter(
+    const baseDisplayableCharges = (Array.isArray(charges) ? charges : []).filter(
       (charge: Record<string, unknown>) => isDisplayableCanCharge(charge)
     );
+    const taxCharges = sacWiseTotalsToCanCharges(sacWiseTotals).filter(
+      (charge) => isDisplayableCanCharge(charge),
+    );
+    const displayableCharges = [...baseDisplayableCharges, ...taxCharges];
 
     const notes = jobInfo?.notes || [];
     const rowHeight = 5;
@@ -1394,7 +1449,7 @@ export const generateCargoArrivalNoticePDF = (
         const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
         const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
         const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
-        const amount = charge.amount !== null && charge.amount !== undefined ? String(charge.amount) : "";
+        const amount = getChargeDisplayAmount(charge as Record<string, unknown>);
         const chargeNameCellText = doc.splitTextToSize(chargeName || "", chargesColWidths[0] - 2 * cellPadX);
         const numChargeNameLines = Math.max(1, chargeNameCellText.length);
         // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)

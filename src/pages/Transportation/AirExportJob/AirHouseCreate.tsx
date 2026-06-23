@@ -75,7 +75,7 @@ import {
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -2282,7 +2282,7 @@ function HouseCreate() {
   };
 
   // Generate PDF preview from current form data
-  const generatePDFPreview = () => {
+  const generatePDFPreview = async () => {
     try {
       setPreviewOpen(true);
 
@@ -2309,6 +2309,9 @@ function HouseCreate() {
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
+        shipment_id:
+          (editData as { shipment_id?: string } | undefined)?.shipment_id ??
+          null,
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
@@ -2364,7 +2367,7 @@ function HouseCreate() {
         notes: location.state?.job?.notes || [],
       };
 
-      const blobUrl = generateCargoArrivalNoticePDF(
+      const blobUrl = await previewCargoArrivalNoticePDF(
         jobData,
         hawbData,
         defaultBranch,

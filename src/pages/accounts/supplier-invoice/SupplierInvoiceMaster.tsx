@@ -79,11 +79,32 @@ type SupplierInvoiceRow = Record<string, unknown> & {
   service_code?: string;
   shipment_ids?: string[];
   currency_code?: string;
+  taxable_amount?: number | string;
+  non_taxable_amount?: number | string;
   date?: string;
   Inv_crn_amount?: number | string;
   status?: string;
   [key: string]: unknown;
 };
+
+function parseSupplierInvoiceAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
+
+function formatSupplierInvoiceAmount(value: unknown): string {
+  const n = parseSupplierInvoiceAmount(value);
+  if (n == null) return "-";
+  return n.toFixed(2);
+}
+
+function getSupplierInvoiceCurrencyAmount(row: SupplierInvoiceRow): number | null {
+  const taxable = parseSupplierInvoiceAmount(row.taxable_amount);
+  const nonTaxable = parseSupplierInvoiceAmount(row.non_taxable_amount);
+  if (taxable == null && nonTaxable == null) return null;
+  return (taxable ?? 0) + (nonTaxable ?? 0);
+}
 
 /** `summary` on `supplierInvoiceFilter` — totals are filter-scoped. */
 type SupplierInvoiceListSummary = {
@@ -130,6 +151,7 @@ type SupplierInvoiceColumnVisibility = {
   shipment_ids: boolean;
   date: boolean;
   currency_code: boolean;
+  currency_amount: boolean;
   Inv_crn_amount: boolean;
   status: boolean;
 };
@@ -142,6 +164,7 @@ const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
   shipment_ids: true,
   date: true,
   currency_code: true,
+  currency_amount: true,
   Inv_crn_amount: true,
   status: true,
 };
@@ -154,7 +177,8 @@ const supplierInvoiceColumnLabels: Record<keyof SupplierInvoiceColumnVisibility,
   shipment_ids: "Shipment Id",
   date: "Date",
   currency_code: "Currency",
-  Inv_crn_amount: "Amount",
+  currency_amount: "Currency Amount",
+  Inv_crn_amount: "Local Amount",
   status: "Status",
 };
 
@@ -626,14 +650,28 @@ function SupplierInvoiceMaster() {
         ),
       },
       {
-        accessorKey: "Inv_crn_amount",
-        header: "Amount",
-        size: 120,
-        Cell: ({ cell }) => {
-          const val = cell.getValue<unknown>();
-          if (val == null) return "-";
-          return typeof val === "number" ? val.toFixed(2) : String(val);
+        id: "currency_amount",
+        accessorFn: (row) => getSupplierInvoiceCurrencyAmount(row),
+        header: "Currency Amount",
+        size: 140,
+        Cell: ({ row }) => {
+          const total = getSupplierInvoiceCurrencyAmount(row.original);
+          return (
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              {total == null ? "-" : total.toFixed(2)}
+            </Text>
+          );
         },
+      },
+      {
+        accessorKey: "Inv_crn_amount",
+        header: "Local Amount",
+        size: 120,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatSupplierInvoiceAmount(cell.getValue<unknown>())}
+          </Text>
+        ),
       },
       {
         accessorKey: "status",

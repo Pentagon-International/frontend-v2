@@ -46,7 +46,7 @@ import {
   EstimatesSection,
   useEstimatesForm,
 } from "../../../components";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
@@ -2469,7 +2469,7 @@ function ImportJobCreate() {
         notes: jobData?.notes || [],
       };
 
-      const blobUrl = generateCargoArrivalNoticePDF(
+      const blobUrl = await previewCargoArrivalNoticePDF(
         combinedData,
         housing,
         defaultBranch,

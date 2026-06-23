@@ -85,7 +85,7 @@ import {
   housingEventsFromJobPatchData,
   resolveHousingEventsForHouseForm,
 } from "../../../utils/jobHousingEventsFromPatch";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -2571,7 +2571,7 @@ function HouseCreate() {
   };
 
   // Generate PDF preview from current form data
-  const generatePDFPreview = () => {
+  const generatePDFPreview = async () => {
     try {
       setPreviewOpen(true);
 
@@ -2663,7 +2663,7 @@ function HouseCreate() {
         notes: location.state?.job?.notes || [],
       };
 
-      const blobUrl = generateCargoArrivalNoticePDF(
+      const blobUrl = await previewCargoArrivalNoticePDF(
         jobData,
         housingData,
         defaultBranch,
