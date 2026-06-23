@@ -360,6 +360,7 @@ function HouseCreate() {
   const [shipperManualMode, setShipperManualMode] = useState(false);
   // Note: shipper results are derived from shipperOptions length; no extra flag needed.
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const partyUiInitializedFromEditRef = useRef(false);
 
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
@@ -779,13 +780,6 @@ function HouseCreate() {
         });
       }
 
-      // Preserve internal selection keys for UI (not sent in payload)
-      if (editData.shipper_code) {
-        form.setFieldValue("shipper_code", String(editData.shipper_code));
-      }
-      if (editData.consignee_code) {
-        form.setFieldValue("consignee_code", String(editData.consignee_code));
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, editData, editIndex, unitDataRaw, currencyData]);
@@ -861,7 +855,10 @@ function HouseCreate() {
       cha_code: (editData as { cha_code?: string })?.cha_code ?? "",
       cha_name: (editData as { cha_name?: string })?.cha_name ?? "",
       cha_address: (editData as { cha_address?: string })?.cha_address ?? "",
-      shipper_code: editData?.shipper_code || "",
+      shipper_code:
+        editData?.shipper_id != null && String(editData.shipper_id) !== ""
+          ? String(editData.shipper_id)
+          : String(editData?.shipper_code || ""),
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
@@ -907,18 +904,46 @@ function HouseCreate() {
     },
   });
 
-  // When editing and only shipper_name is present (no code/id), show it directly in manual mode
+  // Initialize shipper/consignee UI from editData once (avoid reset when unit/currency masters load)
   useEffect(() => {
-    if (
-      isEditMode &&
-      editData?.shipper_name &&
-      !editData.shipper_code &&
-      !editData.shipper_id
-    ) {
-      const name = String(editData.shipper_name);
+    if (!isEditMode || !editData || partyUiInitializedFromEditRef.current) return;
+    partyUiInitializedFromEditRef.current = true;
+
+    const shipperName = String(editData.shipper_name || "");
+    if (shipperName) {
+      setShipperSearch(shipperName);
+    }
+
+    const shipperSelectValue =
+      editData.shipper_id != null && String(editData.shipper_id) !== ""
+        ? String(editData.shipper_id)
+        : String(editData.shipper_code || "");
+    if (shipperSelectValue) {
+      form.setFieldValue("shipper_code", shipperSelectValue);
+    }
+
+    const shipperAddr = editData.shipper_address;
+    if (shipperAddr) {
+      const addrStr = toTitleCase(String(shipperAddr));
+      setShipperAddressOptions([{ value: addrStr, label: addrStr }]);
+    }
+
+    if (shipperName && !editData.shipper_code && !editData.shipper_id) {
       setShipperManualMode(true);
-      setShipperSearch(name);
-      form.setFieldValue("shipper_name", name);
+    }
+
+    const consigneeSelectValue =
+      editData.consignee_id != null && String(editData.consignee_id) !== ""
+        ? String(editData.consignee_id)
+        : String(editData.consignee_code || "");
+    if (consigneeSelectValue) {
+      form.setFieldValue("consignee_code", consigneeSelectValue);
+    }
+
+    const consigneeAddr = editData.consignee_address;
+    if (consigneeAddr) {
+      const addrStr = toTitleCase(String(consigneeAddr));
+      setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
     }
   }, [isEditMode, editData, form]);
 
@@ -3616,9 +3641,22 @@ function HouseCreate() {
                     onSearchChange={(value) => {
                       const v = toTitleCase(value);
                       setShipperSearch(v);
+                      if (!v.trim()) {
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue("shipper_name", "");
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                        setShipperAddressOptions([]);
+                        setShipperManualMode(false);
+                        setShipperOptions([]);
+                        shipperDataRef.current = {};
+                        return;
+                      }
                       debouncedShipperSearch(v);
                     }}
                     value={form.values.shipper_code || ""}
+                    clearable
                     onChange={(value) => {
                       if (!value) {
                         form.setFieldValue("shipper_code", "");
@@ -3626,7 +3664,11 @@ function HouseCreate() {
                         form.setFieldValue("shipper_address", "");
                         form.setFieldValue("shipper_email", "");
                         form.setFieldValue("shipper_state_id", "");
+                        setShipperSearch("");
                         setShipperAddressOptions([]);
+                        setShipperManualMode(false);
+                        setShipperOptions([]);
+                        shipperDataRef.current = {};
                         return;
                       }
                       const original = shipperDataRef.current[value] || {};

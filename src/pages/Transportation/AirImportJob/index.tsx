@@ -724,8 +724,8 @@ function AirImportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       apiEndpoint={URL.agent}
-                      label="Agent"
-                      placeholder="Type Agent"
+                      label="Origin Agent"
+                      placeholder="Type agent name"
                       size="xs"
                       value={draftFilters.agent_code}
                       displayValue={draftFilters.agent_name}
@@ -936,7 +936,7 @@ function AirImportJobMaster() {
                       {visibleColumns.agent && (
                         <th style={mergeTh(240)}>
                           <ERPListColumnHeaderFilter
-                            label="Destination Agent"
+                            label="Origin Agent"
                             value={appliedFilters.agent_code}
                             displayValue={appliedFilters.agent_name || appliedFilters.agent_code}
                             theme={theme}

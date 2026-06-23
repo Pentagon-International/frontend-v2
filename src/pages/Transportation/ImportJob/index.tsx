@@ -766,7 +766,7 @@ function ImportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       size="xs"
-                      label="Destination Agent"
+                      label="Origin Agent"
                       placeholder="Type agent name"
                       apiEndpoint={URL.agent}
                       searchFields={["customer_name", "customer_code"]}
@@ -1028,7 +1028,7 @@ function ImportJobMaster() {
                       {visibleColumns.agent && (
                         <th style={mergeTh(200, 200)}>
                           <ERPListColumnHeaderFilter
-                            label="Destination Agent"
+                            label="Origin Agent"
                             value={appliedFilters.origin_agent}
                             displayValue={appliedFilters.origin_agent_label || appliedFilters.origin_agent}
                             theme={theme}
