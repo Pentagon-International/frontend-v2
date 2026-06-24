@@ -45,6 +45,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
 
@@ -188,11 +189,8 @@ function JournalVoucherReversal() {
   const isViewMode = location.pathname.includes("/view/");
   const isReadOnly = isViewMode;
 
-  const financeReturnTo =
-    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const handleFinanceDocumentBack = () => {
-    if (financeReturnTo) navigate(financeReturnTo);
-    else navigate(-1);
+    navigateFinanceReturn(navigate, location.state);
   };
 
   const defaultBranch = user?.branches?.find(

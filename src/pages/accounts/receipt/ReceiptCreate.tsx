@@ -47,6 +47,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -2020,6 +2021,9 @@ export default function ReceiptCreate({
     _isReversal && pathname.includes("/reversal/create") && !financeReturnTo
       ? "/receipt"
       : financeReturnTo || backPath;
+  const handleReceiptBack = () => {
+    navigateFinanceReturn(navigate, location.state, effectiveBackPath);
+  };
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -2173,7 +2177,7 @@ export default function ReceiptCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(effectiveBackPath)}
+              onClick={() => handleReceiptBack()}
             >
               Back
             </Button>
@@ -3543,7 +3547,7 @@ export default function ReceiptCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(effectiveBackPath)}
+              onClick={() => handleReceiptBack()}
             >
               Cancel
             </Button>

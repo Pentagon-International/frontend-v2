@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Paper,
   Box,
@@ -14,6 +14,9 @@ import {
   ActionIcon,
   Loader,
   Tooltip,
+  Anchor,
+  Modal,
+  UnstyledButton,
 } from "@mantine/core";
 import {
   MantineReactTable,
@@ -29,6 +32,14 @@ import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
+import { ToastNotification } from "../../../components";
+import {
+  type GlobalSearchItem,
+  globalSearchItemsFromResponse,
+  navigateFromGlobalSearchDocumentNo,
+  openGlobalSearchItem,
+  runGlobalSearchQuery,
+} from "../../../utils/globalSearchNavigation";
 
 interface JobLedgerData {
   id: number;
@@ -135,13 +146,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     (navState?.segmentCode as string | null) ??
     null;
 
+  const inferredHblHawbFinal: string | null =
+    (navState?.hbl_hawb_no as string | null) ?? null;
+
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
     segmentCode: inferredSegmentCodeFinal,
     jobNo: inferredJobIdFinal,
     location: inferredLocationFinal,
     subjobNo: null,
-    hbl_hawb_no: null,
+    hbl_hawb_no: inferredHblHawbFinal,
     withAutoEntry: null,
     status: null,
   });
@@ -156,6 +170,109 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     { value: string; label: string }[]
   >([]);
   const [segmentOptionsLoading, setSegmentOptionsLoading] = useState(false);
+  const [documentNavLoading, setDocumentNavLoading] = useState(false);
+  const [documentSearchModalOpen, setDocumentSearchModalOpen] = useState(false);
+  const [documentSearchResults, setDocumentSearchResults] = useState<
+    GlobalSearchItem[]
+  >([]);
+
+  const getJobLedgerReturnState = useCallback(
+    () => ({
+      jobId: filters.jobNo,
+      job_id: filters.jobNo,
+      location: filters.location,
+      segment_code: filters.segmentCode,
+      segmentCode: filters.segmentCode,
+      service_name: navState?.service_name,
+      hbl_hawb_no: filters.hbl_hawb_no,
+    }),
+    [
+      filters.jobNo,
+      filters.location,
+      filters.segmentCode,
+      filters.hbl_hawb_no,
+      navState?.service_name,
+    ],
+  );
+
+  const getDocumentNavigationOptions = useCallback(
+    () => ({
+      returnTo: "/job-ledger",
+      returnToState: getJobLedgerReturnState(),
+    }),
+    [getJobLedgerReturnState],
+  );
+
+  const handleDocumentNumberClick = useCallback(
+    async (documentNo: string) => {
+      const query = documentNo.trim();
+      if (!query || documentNavLoading) return;
+
+      setDocumentNavLoading(true);
+      try {
+        const result = await navigateFromGlobalSearchDocumentNo(
+          navigate,
+          query,
+          getDocumentNavigationOptions(),
+        );
+
+        if (result === "navigated") return;
+
+        if (result === "multiple") {
+          const normalized = await runGlobalSearchQuery(query);
+          const items = globalSearchItemsFromResponse(normalized);
+          setDocumentSearchResults(items);
+          setDocumentSearchModalOpen(true);
+          return;
+        }
+
+        if (result === "not_found") {
+          ToastNotification({
+            type: "warning",
+            message: "No document found for this document number.",
+          });
+          return;
+        }
+
+        ToastNotification({
+          type: "error",
+          message: "Failed to open document. Please try again.",
+        });
+      } finally {
+        setDocumentNavLoading(false);
+      }
+    },
+    [documentNavLoading, getDocumentNavigationOptions, navigate],
+  );
+
+  const handleDocumentSearchResultPick = useCallback(
+    async (item: GlobalSearchItem) => {
+      setDocumentSearchModalOpen(false);
+      setDocumentNavLoading(true);
+      try {
+        const ok = await openGlobalSearchItem(
+          navigate,
+          item,
+          getDocumentNavigationOptions(),
+        );
+        if (!ok) {
+          ToastNotification({
+            type: "warning",
+            message: "Navigation is not configured for this document type.",
+          });
+        }
+      } catch {
+        ToastNotification({
+          type: "error",
+          message: "Failed to open document. Please try again.",
+        });
+      } finally {
+        setDocumentNavLoading(false);
+        setDocumentSearchResults([]);
+      }
+    },
+    [getDocumentNavigationOptions, navigate],
+  );
 
   // Filter functions
   const toggleFilters = () => {
@@ -335,6 +452,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         totalCredit: toNumber(jobLedgerSummary.total_credit),
         totalRevenue: toNumber(jobLedgerSummary.total_revence),
         totalActualCost: toNumber(jobLedgerSummary.total_cost),
+        grossProfit: toNumber(jobLedgerSummary.net_profit_revenue_cost),
         totalNeutral: toNumber(jobLedgerSummary.total_neutral),
       };
     }
@@ -345,12 +463,14 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     const totalRevenue = tableData.reduce((sum, row) => sum + row.revenue, 0);
     const totalActualCost = tableData.reduce((sum, row) => sum + row.actualCost, 0);
     const totalNeutral = tableData.reduce((sum, row) => sum + row.neutral, 0);
+    const grossProfit = totalRevenue - totalActualCost;
     
     return {
       totalDebit,
       totalCredit,
       totalRevenue,
       totalActualCost,
+      grossProfit,
       totalNeutral,
     };
   }, [jobLedgerSummary, tableData]);
@@ -414,18 +534,30 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ row, cell }) => {
           const value = cell.getValue<string>();
+          if (!value) return "-";
+
+          const link = (
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              c={row.original.reversed ? "#B45309" : "#105476"}
+              td="underline"
+              fw={row.original.reversed ? 500 : 400}
+              style={{ fontFamily: "Inter", cursor: "pointer" }}
+              onClick={() => void handleDocumentNumberClick(value)}
+            >
+              {value}
+            </Anchor>
+          );
+
           if (!row.original.reversed) {
-            return value;
+            return link;
           }
+
           return (
             <Tooltip label="This document is reversed" withArrow>
-              <Text
-                size="sm"
-                c="#B45309"
-                style={{ fontFamily: "Inter", cursor: "default" }}
-              >
-                {value}
-              </Text>
+              {link}
             </Tooltip>
           );
         },
@@ -560,7 +692,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         },
       },
     ],
-    []
+    [handleDocumentNumberClick],
   );
 
   // Create table instance
@@ -649,7 +781,67 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   });
 
   return (
-    <Box p="md">
+    <Box p="md" style={{ position: "relative" }}>
+      {documentNavLoading && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+              Opening document...
+            </Text>
+          </Stack>
+        </Box>
+      )}
+
+      <Modal
+        opened={documentSearchModalOpen}
+        onClose={() => {
+          setDocumentSearchModalOpen(false);
+          setDocumentSearchResults([]);
+        }}
+        title="Select document"
+        centered
+      >
+        <Stack gap="xs">
+          {documentSearchResults.map((item) => {
+            const key = `${item.module}-${item.sub_module ?? ""}-${item.id}`;
+            const label =
+              item.display_id ??
+              item.primary_code ??
+              item.id ??
+              "Unknown document";
+            return (
+              <UnstyledButton
+                key={key}
+                onClick={() => void handleDocumentSearchResultPick(item)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #E2E8F0",
+                  textAlign: "left",
+                }}
+              >
+                <Text size="sm" fw={600} style={{ fontFamily: "Inter" }}>
+                  {label}
+                </Text>
+                <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                  {[item.module, item.sub_module].filter(Boolean).join(" / ")}
+                </Text>
+              </UnstyledButton>
+            );
+          })}
+        </Stack>
+      </Modal>
       {/* Header */}
       {/* <Paper shadow="xs" p="lg" mb="md" withBorder> */}
         {/* <Group justify="space-between" mb="md">
@@ -1191,7 +1383,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               )}
               <Box>
                 <Grid gutter="md">
-                  <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
                         Total Debit
@@ -1201,7 +1393,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       </Text>
                     </Stack>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
                         Total Credit
@@ -1211,7 +1403,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       </Text>
                     </Stack>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
                         Total Revenue
@@ -1221,7 +1413,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       </Text>
                     </Stack>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
                         Total Actual Cost
@@ -1231,7 +1423,17 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       </Text>
                     </Stack>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, sm: 6, md: 2.4 }}>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
+                    <Stack gap={0}>
+                      <Text size="sm" c="dimmed">
+                        Gross Profit
+                      </Text>
+                      <Text size="lg" fw={600}>
+                        {totals.grossProfit.toFixed(2)}
+                      </Text>
+                    </Stack>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
                         Total Neutral

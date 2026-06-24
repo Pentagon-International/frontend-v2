@@ -41,6 +41,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -427,6 +428,13 @@ export default function SupplierInvoiceCreate({
     isReversalCreate && !financeReturnTo
       ? "/supplier-invoice"
       : financeReturnTo || backPath;
+  const handleSupplierInvoiceBack = () => {
+    navigateFinanceReturn(
+      navigate,
+      location.state,
+      supplierInvoiceResolvedBackPath,
+    );
+  };
   /** Loaded via `/supplier-invoice/view|edit/:id` (e.g. opened from Payment allocation modal). */
   const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
     useState<SupplierInvoiceListItem | null>(null);
@@ -1896,7 +1904,7 @@ export default function SupplierInvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(supplierInvoiceResolvedBackPath)}
+              onClick={() => handleSupplierInvoiceBack()}
             >
               Back
             </Button>

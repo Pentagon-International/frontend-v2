@@ -45,7 +45,7 @@ import {
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { apiCallProtected } from "../../../api/axios";
+import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
@@ -780,11 +780,8 @@ function InvoiceCreate({
 }: InvoiceCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
-  const financeReturnTo =
-    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const handleInvoiceBack = () => {
-    if (financeReturnTo) navigate(financeReturnTo);
-    else navigate(-1);
+    navigateFinanceReturn(navigate, location.state);
   };
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);

@@ -21,6 +21,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
+import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import {
   ToastNotification,
   SingleDateInput,
@@ -569,12 +570,9 @@ function InvoiceReverse() {
       ) as { currency?: { currency_code?: string } } | undefined
     )?.currency?.currency_code ?? "";
 
-  const returnTo =
-    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const navigateBack = useCallback(() => {
-    if (returnTo) navigate(returnTo);
-    else navigate(-1);
-  }, [returnTo, navigate]);
+    navigateFinanceReturn(navigate, location.state);
+  }, [location.state, navigate]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

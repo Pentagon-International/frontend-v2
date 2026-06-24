@@ -48,10 +48,46 @@ export async function postFinanceFilterOne(
 
 type OpenMode = "edit" | "view";
 
+export type FinanceReturnNavigation = {
+  returnTo?: string;
+  returnToState?: unknown;
+};
+
 export type OpenFinanceDocumentOptions = {
   /** e.g. `/unposted-documents` — target screen Back button will navigate here */
   returnTo?: string;
+  returnToState?: unknown;
 };
+
+export function readFinanceReturnNavigation(
+  locationState: unknown,
+): FinanceReturnNavigation {
+  const state = (locationState ?? {}) as FinanceReturnNavigation;
+  return {
+    returnTo: state.returnTo?.trim() ?? "",
+    returnToState: state.returnToState,
+  };
+}
+
+export function navigateFinanceReturn(
+  navigate: NavigateFunction,
+  locationState: unknown,
+  fallbackPath?: string,
+): void {
+  const { returnTo, returnToState } = readFinanceReturnNavigation(locationState);
+  if (returnTo) {
+    navigate(
+      returnTo,
+      returnToState != null ? { state: returnToState } : undefined,
+    );
+    return;
+  }
+  if (fallbackPath) {
+    navigate(fallbackPath);
+    return;
+  }
+  navigate(-1);
+}
 
 /**
  * POST `row.api_endpoint` with `{ filters: { [filter_id_key]: id } }` (same pattern as global search),
@@ -100,6 +136,9 @@ export async function openFinanceDocument(
   const baseExtras = {
     actionType: mode,
     ...(returnTo ? { returnTo } : {}),
+    ...(options?.returnToState != null
+      ? { returnToState: options.returnToState }
+      : {}),
   };
 
   const withRowState = (path: string) =>

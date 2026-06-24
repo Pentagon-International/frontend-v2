@@ -43,6 +43,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -684,6 +685,9 @@ export default function PaymentCreate({
     isReversalCreate && !financeReturnTo
       ? "/payment"
       : financeReturnTo || backPath;
+  const handlePaymentBack = () => {
+    navigateFinanceReturn(navigate, location.state, paymentResolvedBackPath);
+  };
 
   // Load from list: state is payment row (Payment Master or Reversal list) or source payment (reversal create from Payment Master)
   useEffect(() => {
@@ -2035,7 +2039,7 @@ export default function PaymentCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(paymentResolvedBackPath)}
+              onClick={() => handlePaymentBack()}
             >
               Back
             </Button>
@@ -3320,7 +3324,7 @@ export default function PaymentCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(paymentResolvedBackPath)}
+              onClick={() => handlePaymentBack()}
             >
               Cancel
             </Button>
