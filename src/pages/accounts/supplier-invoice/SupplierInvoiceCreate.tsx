@@ -330,6 +330,29 @@ type SupplierInvoiceListItem = Record<string, unknown> & {
   charges?: ApiCharge[];
 };
 
+/** Unwrap supplier-invoice GET/filter payload (object or single-item `data` array). */
+function resolveSupplierInvoiceApiRecord(
+  raw: unknown,
+): Record<string, unknown> | null {
+  const rawData = (raw as { data?: unknown })?.data ?? raw;
+  let record: unknown =
+    rawData &&
+    typeof rawData === "object" &&
+    "data" in (rawData as Record<string, unknown>) &&
+    (rawData as { data?: unknown }).data != null &&
+    typeof (rawData as { data?: unknown }).data === "object"
+      ? (rawData as { data?: unknown }).data
+      : rawData && typeof rawData === "object"
+        ? rawData
+        : null;
+  if (Array.isArray(record)) {
+    record = record.length > 0 ? record[0] : null;
+  }
+  return record && typeof record === "object" && !Array.isArray(record)
+    ? (record as Record<string, unknown>)
+    : null;
+}
+
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => ({
@@ -463,18 +486,8 @@ export default function SupplierInvoiceCreate({
           `${URL.supplierInvoice}${idNum}/`,
           API_HEADER,
         );
-        const rawData = (res as { data?: unknown })?.data ?? res;
-        const record =
-          rawData &&
-          typeof rawData === "object" &&
-          "data" in (rawData as Record<string, unknown>) &&
-          (rawData as { data?: unknown }).data &&
-          typeof (rawData as { data?: unknown }).data === "object"
-            ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
-            : rawData && typeof rawData === "object"
-              ? (rawData as Record<string, unknown>)
-              : null;
-        if (!cancelled && record && typeof record === "object") {
+        const record = resolveSupplierInvoiceApiRecord(res);
+        if (!cancelled && record) {
           setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
         }
       } catch (e) {
@@ -980,7 +993,7 @@ export default function SupplierInvoiceCreate({
     form.values.roe,
   ].join("|");
   useEffect(() => {
-    if (isReversal) return;
+    if (isReversal || isViewMode || isEditMode) return;
     const baseSum =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
@@ -993,14 +1006,14 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invCrnCalcKey, isReversal]);
+  }, [invCrnCalcKey, isReversal, isViewMode, isEditMode]);
 
   // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved (skipped for reversal)
   const chargesNetKey = form.values.charges_data
     .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
     .join(",");
   useEffect(() => {
-    if (isReversal) return;
+    if (isReversal || isViewMode || isEditMode) return;
     const charges = form.values.charges_data ?? [];
     const netLocal = round2(
       charges.reduce((acc, row) => {
@@ -1020,7 +1033,7 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount, isReversal]);
+  }, [chargesNetKey, form.values.Inv_crn_amount, isReversal, isViewMode, isEditMode]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
