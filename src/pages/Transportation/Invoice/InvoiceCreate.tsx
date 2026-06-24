@@ -54,6 +54,7 @@ import useAuthStore from "../../../store/authStore";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
+import useDateFormat from "../../../hooks/useDateFormat";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 
 // Fetch functions
@@ -450,9 +451,7 @@ type InvoiceFormData = {
   charges: ChargeItem[];
 };
 
-// Invoice document/due dates: always DD-MM-YYYY in UI and API payloads (all branches).
-const INVOICE_DATE_DISPLAY_FORMAT = "DD-MM-YYYY";
-
+// Invoice API payloads: document/due dates always sent as DD-MM-YYYY.
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : parseInvoiceDate(date);
@@ -540,7 +539,7 @@ const invoiceDateInputStyles = {
   },
 };
 
-/** Invoice-only date field: always DD-MM-YYYY (display + payload formatting elsewhere). */
+/** Invoice date field: display follows user country; payload uses formatDateDDMMYYYY. */
 function InvoiceDateInput({
   label,
   placeholder,
@@ -550,6 +549,8 @@ function InvoiceDateInput({
   readOnly,
   error,
 }: InvoiceDateInputProps) {
+  const dateFormat = useDateFormat();
+
   const handleDateChange = (date: Date | null) => {
     if (
       date &&
@@ -566,11 +567,12 @@ function InvoiceDateInput({
 
   return (
     <DateInput
+      key={`invoice-date-${dateFormat}`}
       label={label}
-      placeholder={placeholder ?? INVOICE_DATE_DISPLAY_FORMAT}
+      placeholder={placeholder ?? dateFormat}
       value={value}
       onChange={handleDateChange}
-      valueFormat={INVOICE_DATE_DISPLAY_FORMAT}
+      valueFormat={dateFormat}
       leftSection={<IconCalendar size={18} />}
       leftSectionPointerEvents="none"
       radius="sm"
@@ -4283,7 +4285,6 @@ function InvoiceCreate({
                   form.setFieldValue("due_date", date);
                 }}
                 withAsterisk
-                // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={
                   form.errors.document_date
@@ -4303,7 +4304,6 @@ function InvoiceCreate({
                 value={parseInvoiceDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
-                // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 error={
                   form.errors.due_date
