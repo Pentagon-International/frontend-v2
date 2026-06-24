@@ -79,6 +79,13 @@ import {
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import OdexTriggerModal from "../../../pages/Odex/components/OdexTriggerModal";
+import { odexJobDetailPath } from "../../../pages/Odex/odexUrls";
+import { useOdexConsolBackgroundJob } from "../../../hooks/useOdexBackgroundJob";
+import {
+  getActiveBranch,
+  isBranchOdexConfigured,
+  ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
+} from "../../../utils/branchOdexCredentials";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 
 // Type definitions
@@ -502,6 +509,27 @@ function ImportJobCreate() {
   });
 
   const [odexTriggerOpen, setOdexTriggerOpen] = useState(false);
+
+  const consolJobId =
+    jobData?.id != null ? Number(jobData.id) : null;
+  const {
+    odexJobId: backgroundOdexJobId,
+    isActive: isOdexRunningInBackground,
+    startBackgroundJob,
+  } = useOdexConsolBackgroundJob(consolJobId);
+
+  const handlePushToOdexClick = () => {
+    if (isOdexRunningInBackground) return;
+    const activeBranch = getActiveBranch(user?.branches);
+    if (!isBranchOdexConfigured(activeBranch)) {
+      ToastNotification({
+        type: "error",
+        message: ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
+      });
+      return;
+    }
+    setOdexTriggerOpen(true);
+  };
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -3150,6 +3178,18 @@ function ImportJobCreate() {
         </Group>
         {!isReadOnly && (
           <Group gap="xs">
+            {isOdexRunningInBackground && backgroundOdexJobId != null && (
+              <Button
+                variant="light"
+                color="#105476"
+                leftSection={<Loader size={14} color="#105476" />}
+                onClick={() =>
+                  navigate(odexJobDetailPath(backgroundOdexJobId))
+                }
+              >
+                View Odex Status
+              </Button>
+            )}
             <Button
               color="#105476"
               variant={canCreateJob ? "filled" : "outline"}
@@ -3330,8 +3370,8 @@ function ImportJobCreate() {
                         color: "#424242",
                       },
                     }}
-                    disabled={!jobData?.id}
-                    onClick={() => setOdexTriggerOpen(true)}
+                    disabled={!jobData?.id || isOdexRunningInBackground}
+                    onClick={handlePushToOdexClick}
                   >
                     Push To Odex
                   </Menu.Item>
@@ -6444,10 +6484,9 @@ function ImportJobCreate() {
       <OdexTriggerModal
         opened={odexTriggerOpen}
         onClose={() => setOdexTriggerOpen(false)}
-        consolJobId={
-          jobData?.id != null ? Number(jobData.id) : null
-        }
-        disabled={isReadOnly}
+        consolJobId={consolJobId}
+        disabled={isReadOnly || isOdexRunningInBackground}
+        onJobStarted={startBackgroundJob}
       />
 
       {/* PDF Preview Modal */}

@@ -9,17 +9,24 @@ import {
   Text,
   Textarea,
 } from "@mantine/core";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { odexApi } from "../../../services/odexApi";
+import useAuthStore from "../../../store/authStore";
+import {
+  getActiveBranch,
+  isBranchOdexConfigured,
+  ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
+} from "../../../utils/branchOdexCredentials";
 import { ODEX_JOB_TYPES } from "../odexConstants";
-import { ODEX_JOBS_PATH, odexJobDetailPath } from "../odexUrls";
+import { ODEX_JOBS_PATH } from "../odexUrls";
 
 type Props = {
   opened: boolean;
   onClose: () => void;
   consolJobId: number | null | undefined;
   disabled?: boolean;
+  onJobStarted?: (odexJobId: number | string) => void;
 };
 
 export default function OdexTriggerModal({
@@ -27,8 +34,8 @@ export default function OdexTriggerModal({
   onClose,
   consolJobId,
   disabled,
+  onJobStarted,
 }: Props) {
-  const navigate = useNavigate();
   const [odexType, setOdexType] = useState<string>(ODEX_JOB_TYPES[0].value);
   const [overridesText, setOverridesText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +45,15 @@ export default function OdexTriggerModal({
       ToastNotification({
         type: "error",
         message: "Save the consol job before starting ODEX automation.",
+      });
+      return;
+    }
+
+    const activeBranch = getActiveBranch(useAuthStore.getState().user?.branches);
+    if (!isBranchOdexConfigured(activeBranch)) {
+      ToastNotification({
+        type: "error",
+        message: ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
       });
       return;
     }
@@ -68,10 +84,10 @@ export default function OdexTriggerModal({
       }
       ToastNotification({
         type: "success",
-        message: "ODEX automation started",
+        message: "ODEX automation started in the background",
       });
+      onJobStarted?.(newJobId);
       onClose();
-      navigate(odexJobDetailPath(newJobId));
     } catch (err) {
       const message =
         (err as Error)?.message ??

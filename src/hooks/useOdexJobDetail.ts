@@ -11,7 +11,12 @@ import type {
 } from "../types/odex";
 import { normalizeOdexStatus } from "../utils/odexApiParse";
 import { mapOdexLogLine } from "../utils/odexLog";
-import { mapOdexTimelineEvent } from "../utils/odexTimeline";
+import {
+  dedupeOdexTimelineEvents,
+  extractOdexWsTimelinePayload,
+  isDuplicateOdexTimelineEvent,
+  mapOdexTimelineEvent,
+} from "../utils/odexTimeline";
 import {
   buildOdexJobWebSocketUrl,
   isOdexActiveStatus,
@@ -83,7 +88,7 @@ export function useOdexJobDetail(jobId: string | undefined) {
         screenshots,
         steps,
         logs,
-        timeline,
+        timeline: dedupeOdexTimelineEvents(timeline),
         result: result && Object.keys(result).length > 0 ? result : null,
         loading: false,
         error: null,
@@ -136,16 +141,21 @@ export function useOdexJobDetail(jobId: string | undefined) {
             }));
           }
         }
-        const wsRaw = data as Record<string, unknown>;
-        if (wsRaw.timeline_event || wsRaw.event_type) {
-          const mapped = mapOdexTimelineEvent(
-            (wsRaw.timeline_event ?? wsRaw) as Record<string, unknown>,
-          );
+        const timelinePayload = extractOdexWsTimelinePayload(
+          data as Record<string, unknown>,
+        );
+        if (timelinePayload) {
+          const mapped = mapOdexTimelineEvent(timelinePayload);
           if (mapped.type.toLowerCase() !== "log") {
-            setState((prev) => ({
-              ...prev,
-              timeline: [...prev.timeline, mapped],
-            }));
+            setState((prev) => {
+              if (isDuplicateOdexTimelineEvent(prev.timeline, mapped)) {
+                return prev;
+              }
+              return {
+                ...prev,
+                timeline: [...prev.timeline, mapped],
+              };
+            });
           }
         }
       } catch {
@@ -220,14 +230,29 @@ export function useOdexJobDetail(jobId: string | undefined) {
         pollRef.current = null;
       }
     };
-  }, [jobId, state.job?.status, connectWebSocket, refreshJob, state.job]);
+  }, [jobId, state.job?.status, connectWebSocket, refreshJob]);
 
   useEffect(() => {
     if (state.job && isOdexTerminalStatus(state.job.status)) {
       wsRef.current?.close();
       wsRef.current = null;
     }
-  }, [state.job?.status, state.job]);
+  }, [state.job?.status]);
+
+  const terminalReloadedRef = useRef(false);
+
+  useEffect(() => {
+    terminalReloadedRef.current = false;
+  }, [jobId]);
+
+  useEffect(() => {
+    const status = state.job?.status;
+    if (!status || !isOdexTerminalStatus(status) || terminalReloadedRef.current) {
+      return;
+    }
+    terminalReloadedRef.current = true;
+    loadAll();
+  }, [state.job?.status, loadAll]);
 
   return {
     ...state,

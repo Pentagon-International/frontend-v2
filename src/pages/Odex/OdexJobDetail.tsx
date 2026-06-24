@@ -30,15 +30,19 @@ import {
   IconArrowLeft,
   IconCamera,
   IconCheck,
+  IconCircleCheck,
   IconClock,
   IconDownload,
   IconFileCode,
   IconListDetails,
+  IconMessage,
+  IconMessage2Bolt,
   IconPhoto,
   IconRefresh,
   IconTimeline,
   IconX,
 } from "@tabler/icons-react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import { ToastNotification } from "../../components";
@@ -57,10 +61,8 @@ import {
 } from "../../utils/odexTimeline";
 import OdexCaptchaModal from "./components/OdexCaptchaModal";
 import OdexStatusBadge from "./components/OdexStatusBadge";
-import {
-  CONSOL_IMPORT_JOB_EDIT_PATH,
-  ODEX_JOBS_PATH,
-} from "./odexUrls";
+import { CONSOL_IMPORT_JOB_EDIT_PATH, ODEX_JOBS_PATH } from "./odexUrls";
+import useAuthStore from "../../store/authStore";
 
 const PRIMARY = "#105476";
 const PAGE_BG = "#F8F8F8";
@@ -68,13 +70,13 @@ const CARD_BG = "#FFFFFF";
 const CARD_BORDER = "1px solid #E9ECEF";
 
 const ODEX_DETAIL_TABS = [
-  { value: "summary", label: "Summary" },
-  { value: "payload", label: "Payload" },
-  { value: "fields", label: "Filled Fields" },
-  { value: "timeline", label: "Timeline" },
-  { value: "screenshots", label: "Screenshots" },
-  { value: "logs", label: "Logs" },
-  { value: "result", label: "Result" },
+  { value: "summary", label: "Summary", access: "public" },
+  { value: "payload", label: "Payload", access: "admin" },
+  { value: "fields", label: "Filled Fields", access: "public" },
+  { value: "timeline", label: "Timeline", access: "public" },
+  { value: "screenshots", label: "Screenshots", access: "public" },
+  { value: "logs", label: "Logs", access: "admin" },
+  { value: "result", label: "Result", access: "admin" },
 ] as const;
 
 type OdexDetailTab = (typeof ODEX_DETAIL_TABS)[number]["value"];
@@ -86,8 +88,8 @@ function odexTabStyle(active: boolean): CSSProperties {
     backgroundColor: "transparent",
     borderBottom: active ? `3px solid ${PRIMARY}` : "none",
     color: PRIMARY,
-    fontSize: 16,
-    fontWeight: active ? 600 : 400,
+    fontSize: 14,
+    fontWeight: active ? 700 : 500,
   };
 }
 
@@ -103,7 +105,8 @@ function formatJson(value: unknown): string {
 function timelineIcon(type: string) {
   const t = type.toLowerCase();
   if (t.includes("fail")) return <IconX size={14} />;
-  if (t.includes("complete") || t === "job_completed") return <IconCheck size={14} />;
+  if (t.includes("complete") || t === "job_completed")
+    return <IconCheck size={14} />;
   return undefined;
 }
 
@@ -169,6 +172,8 @@ export default function OdexJobDetail() {
     null,
   );
   const [cancelling, setCancelling] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const isUserAdmin = Boolean(user?.is_staff);
 
   const sortedMappings = useMemo(
     () =>
@@ -285,12 +290,19 @@ export default function OdexJobDetail() {
 
   if (error && !job) {
     return (
-      <Box p="sm" style={{ backgroundColor: PAGE_BG, minHeight: "calc(100vh - 112px)" }}>
+      <Box
+        p="sm"
+        style={{ backgroundColor: PAGE_BG, minHeight: "calc(100vh - 112px)" }}
+      >
         <Box
           maw={720}
           mx="auto"
           p="lg"
-          style={{ backgroundColor: CARD_BG, borderRadius: 8, border: CARD_BORDER }}
+          style={{
+            backgroundColor: CARD_BG,
+            borderRadius: 8,
+            border: CARD_BORDER,
+          }}
         >
           <Alert color="red" title="Error" icon={<IconAlertCircle size={16} />}>
             {error}
@@ -316,6 +328,8 @@ export default function OdexJobDetail() {
         position: "relative",
         borderRadius: 8,
         overflow: "hidden",
+        height: "100%",
+        marginTop: 8,
       }}
     >
       {loading && job ? (
@@ -331,24 +345,33 @@ export default function OdexJobDetail() {
         </Center>
       ) : null}
 
-      <Box p="sm" mx="auto" style={{ backgroundColor: PAGE_BG }}>
+      <Box
+        p="sm"
+        mx="auto"
+        style={{ backgroundColor: PAGE_BG, height: "100%" }}
+      >
         <Flex
           direction="column"
           gap={8}
-          style={{ height: "calc(100vh - 112px)", width: "100%" }}
+          style={{ height: "calc(100vh - 88px)", width: "100%" }}
         >
           {/* Header strip */}
           <Box
             style={{
               backgroundColor: CARD_BG,
               borderRadius: 8,
-              padding: "16px 24px",
+              padding: "8px 24px",
               border: CARD_BORDER,
               flexShrink: 0,
             }}
           >
-            <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
-              <Stack gap="sm" style={{ flex: 1, minWidth: 260 }}>
+            <Group
+              justify="space-between"
+              align="flex-start"
+              wrap="wrap"
+              gap="md"
+            >
+              <Stack gap="xs" style={{ flex: 1, minWidth: 260 }}>
                 <Text
                   size="md"
                   fw={600}
@@ -366,9 +389,17 @@ export default function OdexJobDetail() {
                   ) : null}
                 </Group>
                 {job?.last_log ? (
-                  <Text size="sm" c="dimmed" lineClamp={2} style={{ fontFamily: "Inter" }}>
-                    {job.last_log}
-                  </Text>
+                  <Group gap={4} align="center">
+                    <IconMessage2Bolt size={16} color="#105476" />
+                    <Text
+                      size="sm"
+                      c="dimmed"
+                      lineClamp={2}
+                      style={{ fontFamily: "Inter" }}
+                    >
+                      {job.last_log}
+                    </Text>
+                  </Group>
                 ) : null}
                 {isActiveJob && progressValue > 0 ? (
                   <Box maw={480}>
@@ -380,74 +411,89 @@ export default function OdexJobDetail() {
                         {Math.round(progressValue)}%
                       </Text>
                     </Group>
-                    <Progress value={progressValue} color={PRIMARY} size="md" radius="xl" />
+                    <Progress
+                      value={progressValue}
+                      color={PRIMARY}
+                      size="md"
+                      radius="xl"
+                    />
                   </Box>
                 ) : null}
               </Stack>
-            </Group>
-
-            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" mt="md">
-              <Box>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-                  Filled Fields
-                </Text>
-                <Text size="lg" fw={600} c={PRIMARY}>
-                  {sortedMappings.length ?? "—"}
-                </Text>
-              </Box>
-              <Box>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-                  Screenshots
-                </Text>
-                <Text size="lg" fw={600} c={PRIMARY}>
-                  {screenshots.length || job?.screenshot_count || 0}
-                </Text>
-              </Box>
-              <Box>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-                  Duration
-                </Text>
-                <Text size="lg" fw={600} c={PRIMARY}>
-                  {durationLabel}
-                </Text>
-              </Box>
-              <Box>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-                  Consol Job
-                </Text>
-                {job?.consol_job_id ? (
-                  <Anchor
-                    component={Link}
-                    to={CONSOL_IMPORT_JOB_EDIT_PATH}
-                    state={{ job: { id: job.consol_job_id } }}
-                    c={PRIMARY}
-                    size="lg"
-                    fw={600}
-                  >
-                    #{job.consol_job_id}
-                  </Anchor>
-                ) : (
-                  <Text size="lg" fw={600} c={PRIMARY}>
-                    —
+              <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="lg" mt={12}>
+                <Box>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+                    Filled Fields
                   </Text>
-                )}
-              </Box>
-            </SimpleGrid>
-
+                  <Text size="lg" fw={600} c={PRIMARY}>
+                    {sortedMappings.length ?? "—"}
+                  </Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+                    Screenshots
+                  </Text>
+                  <Text size="lg" fw={600} c={PRIMARY}>
+                    {screenshots.length || job?.screenshot_count || 0}
+                  </Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+                    Duration
+                  </Text>
+                  <Text size="lg" fw={600} c={PRIMARY}>
+                    {durationLabel}
+                  </Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+                    Consol Job
+                  </Text>
+                  {job?.consol_job_id ? (
+                    <Anchor
+                      component={Link}
+                      to={CONSOL_IMPORT_JOB_EDIT_PATH}
+                      state={{ job: { id: job.consol_job_id } }}
+                      c={PRIMARY}
+                      size="lg"
+                      fw={600}
+                    >
+                      #{job.consol_job_id}
+                    </Anchor>
+                  ) : (
+                    <Text size="lg" fw={600} c={PRIMARY}>
+                      —
+                    </Text>
+                  )}
+                </Box>
+              </SimpleGrid>
+            </Group>
             {job?.error_message ? (
               <Alert
                 color="red"
                 title="Automation failed"
-                icon={<IconAlertCircle size={16} />}
-                mt="md"
+                icon={<IconAlertCircle size={16} stroke={3} />}
                 radius="md"
+                mt="sm"
+                p={"8px 16px"}
+                h={"fit-content"}
+                styles={{ icon: { marginTop: 0, marginInlineEnd: 2 } }}
               >
                 {job.error_message}
               </Alert>
             ) : null}
 
             {referenceNumber ? (
-              <Alert color="green" title="Reference Number" mt="md" radius="md">
+              <Alert
+                color="green"
+                title="Reference Number"
+                icon={<IconCircleCheck size={16} stroke={3} />}
+                radius="md"
+                mt="sm"
+                p={"8px 16px"}
+                h={"fit-content"}
+                styles={{ icon: { marginTop: 0, marginInlineEnd: 2 } }}
+              >
                 <Text fw={700} size="xl" ff="monospace">
                   {referenceNumber}
                 </Text>
@@ -487,12 +533,14 @@ export default function OdexJobDetail() {
                   flexWrap: "wrap",
                   borderBottom: CARD_BORDER,
                   backgroundColor: CARD_BG,
-                  padding: "0 24px",
+                  padding: "0 12px",
                   borderRadius: "8px 8px 0 0",
                   flexShrink: 0,
+                  minHeight: 44,
                 }}
               >
                 {ODEX_DETAIL_TABS.map((tab) => {
+                  if (tab.access === "admin" && !isUserAdmin) return null;
                   const count = tabBadgeCount(tab.value);
                   return (
                     <Tabs.Tab
@@ -501,7 +549,7 @@ export default function OdexJobDetail() {
                       style={odexTabStyle(activeTab === tab.value)}
                       rightSection={
                         count != null ? (
-                          <Badge size="xs" circle ml={6}>
+                          <Badge size="sm" radius="xl" ml={6}>
                             {count}
                           </Badge>
                         ) : undefined
@@ -518,7 +566,7 @@ export default function OdexJobDetail() {
                   flex: 1,
                   overflowY: "auto",
                   backgroundColor: CARD_BG,
-                  padding: "24px 24px 32px",
+                  padding: "12px 24px 12px",
                   borderRadius: "0 0 8px 8px",
                   border: CARD_BORDER,
                   borderTop: "none",
@@ -572,7 +620,9 @@ export default function OdexJobDetail() {
                           <RingProgress
                             size={100}
                             thickness={10}
-                            sections={[{ value: progressValue, color: PRIMARY }]}
+                            sections={[
+                              { value: progressValue, color: PRIMARY },
+                            ]}
                             label={
                               <Center>
                                 <Text size="sm" fw={700} c={PRIMARY}>
@@ -584,7 +634,8 @@ export default function OdexJobDetail() {
                           <Stack gap={4}>
                             <OdexStatusBadge status={job?.status ?? "queued"} />
                             <Text size="sm" c="dimmed">
-                              Automation updates in real time while the job is active.
+                              Automation updates in real time while the job is
+                              active.
                             </Text>
                           </Stack>
                         </Group>
@@ -612,7 +663,9 @@ export default function OdexJobDetail() {
                                     color={
                                       s.status.toLowerCase().includes("fail")
                                         ? "red"
-                                        : s.status.toLowerCase().includes("complete")
+                                        : s.status
+                                              .toLowerCase()
+                                              .includes("complete")
                                           ? "green"
                                           : "blue"
                                     }
@@ -620,8 +673,12 @@ export default function OdexJobDetail() {
                                     {s.status}
                                   </Badge>
                                 </Table.Td>
-                                <Table.Td>{formatDateTime(s.started_at)}</Table.Td>
-                                <Table.Td>{formatDateTime(s.completed_at)}</Table.Td>
+                                <Table.Td>
+                                  {formatDateTime(s.started_at)}
+                                </Table.Td>
+                                <Table.Td>
+                                  {formatDateTime(s.completed_at)}
+                                </Table.Td>
                               </Table.Tr>
                             ))}
                           </Table.Tbody>
@@ -795,7 +852,11 @@ export default function OdexJobDetail() {
                                 </Badge>
                               ) : null}
                               {ev.step_order != null ? (
-                                <Badge size="xs" variant="outline" color={PRIMARY}>
+                                <Badge
+                                  size="xs"
+                                  variant="outline"
+                                  color={PRIMARY}
+                                >
                                   Step {ev.step_order}
                                 </Badge>
                               ) : null}
@@ -826,7 +887,12 @@ export default function OdexJobDetail() {
                     {screenshots.length === 0 ? (
                       <Center py={48}>
                         <Stack align="center" gap="xs">
-                          <ThemeIcon size={48} radius="xl" variant="light" color={PRIMARY}>
+                          <ThemeIcon
+                            size={48}
+                            radius="xl"
+                            variant="light"
+                            color={PRIMARY}
+                          >
                             <IconCamera size={24} />
                           </ThemeIcon>
                           <Text c="dimmed" size="sm">
@@ -870,11 +936,11 @@ export default function OdexJobDetail() {
                                 </Badge>
                               </Box>
                               <Stack gap={4} p="sm">
-                                {shot.step_id != null && (
+                                {/* {shot.step_id != null && (
                                   <Text size="xs" c="dimmed">
                                     Step #{shot.step_id}
                                   </Text>
-                                )}
+                                )} */}
                                 <Text size="xs" c="dimmed">
                                   {formatDateTime(shot.created_at)}
                                 </Text>
@@ -906,7 +972,12 @@ export default function OdexJobDetail() {
                           <Text c="dimmed">No logs yet</Text>
                         ) : (
                           logs.map((line, i) => (
-                            <Text key={line.id ?? i} size="xs" mb={6} component="div">
+                            <Text
+                              key={line.id ?? i}
+                              size="xs"
+                              mb={6}
+                              component="div"
+                            >
                               {line.created_at ? (
                                 <Text span c="#8b949e">
                                   [{formatDateTime(line.created_at)}]{` `}
@@ -970,7 +1041,7 @@ export default function OdexJobDetail() {
               alignItems: "center",
               justifyContent: "space-between",
               width: "100%",
-              padding: "20px 24px",
+              padding: "8px 24px",
               border: CARD_BORDER,
               flexShrink: 0,
             }}
@@ -1044,13 +1115,18 @@ export default function OdexJobDetail() {
                 {formatDateTime(screenshotModal.created_at)}
               </Text>
             </Group>
-            <Image
-              src={getOdexScreenshotSrc(screenshotModal)}
-              alt={formatOdexScreenshotLabel(screenshotModal)}
-              fit="contain"
-              radius="md"
-              mah="70vh"
-            />
+            <Box style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+              <TransformWrapper>
+                <TransformComponent>
+                  <Image
+                    src={getOdexScreenshotSrc(screenshotModal)}
+                    alt={formatOdexScreenshotLabel(screenshotModal)}
+                    fit="contain"
+                    radius="md"
+                  />
+                </TransformComponent>
+              </TransformWrapper>
+            </Box>
           </Stack>
         ) : null}
       </Modal>

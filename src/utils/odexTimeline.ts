@@ -43,6 +43,51 @@ export function mapOdexTimelineEvent(
   };
 }
 
+export function odexTimelineEventKey(event: OdexTimelineEvent): string {
+  if (event.id != null) return `id:${event.id}`;
+  const type = String(event.event_type ?? event.type ?? "");
+  const step = event.step_name ?? "";
+  const order =
+    event.step_order != null ? String(event.step_order) : "";
+  return `${type}|${step}|${order}|${event.created_at}`;
+}
+
+export function isDuplicateOdexTimelineEvent(
+  events: OdexTimelineEvent[],
+  event: OdexTimelineEvent,
+): boolean {
+  const key = odexTimelineEventKey(event);
+  return events.some((existing) => odexTimelineEventKey(existing) === key);
+}
+
+export function dedupeOdexTimelineEvents(
+  events: OdexTimelineEvent[],
+): OdexTimelineEvent[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const key = odexTimelineEventKey(event);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Extract a timeline payload from a WebSocket message envelope. */
+export function extractOdexWsTimelinePayload(
+  wsRaw: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (
+    wsRaw.timeline_event != null &&
+    typeof wsRaw.timeline_event === "object"
+  ) {
+    return wsRaw.timeline_event as Record<string, unknown>;
+  }
+  if (wsRaw.event_type != null) {
+    return wsRaw;
+  }
+  return null;
+}
+
 /** Timeline rows that belong in the milestone view (logs have their own tab). */
 export function isOdexTimelineMilestone(event: OdexTimelineEvent): boolean {
   const type = String(event.event_type ?? event.type).toLowerCase();
