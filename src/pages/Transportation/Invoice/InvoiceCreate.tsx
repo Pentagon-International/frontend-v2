@@ -18,6 +18,8 @@ import {
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
+  IconCalendar,
+  IconChevronLeft,
   IconChevronRight,
   IconPlus,
   IconTrash,
@@ -36,12 +38,12 @@ import {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { DateInput } from "@mantine/dates";
 import { URL } from "../../../api/serverUrls";
 import {
   SearchableSelect,
   Dropdown,
   ToastNotification,
-  SingleDateInput,
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -448,37 +450,141 @@ type InvoiceFormData = {
   charges: ChargeItem[];
 };
 
-// Normalize form date value to Date | null for SingleDateInput (handles string from serialization)
-function normalizeDate(value: Date | string | null | undefined): Date | null {
+// Invoice document/due dates: always DD-MM-YYYY in UI and API payloads (all branches).
+const INVOICE_DATE_DISPLAY_FORMAT = "DD-MM-YYYY";
+
+function formatDateDDMMYYYY(date: Date | null | undefined): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : parseInvoiceDate(date);
+  if (!d) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+/** Parse document/due date from API or form (DD-MM-YYYY or YYYY-MM-DD) to local Date. */
+function parseInvoiceDate(
+  value: Date | string | null | undefined,
+): Date | null {
   if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
 
-  const raw = String(value).trim();
-  if (!raw) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
 
-  // Try native parsing first (works for ISO, RFC, etc.)
-  const native = new Date(raw);
-  if (!isNaN(native.getTime())) return native;
-
-  // Handle common backend formats like:
-  // - "DD-MM-YYYY"
-  // - "DD/MM/YYYY"
-  // - "DD-MM-YYYY HH:mm" / "DD/MM/YYYY HH:mm"
-  const m = raw.match(
-    /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
-  );
-  if (m) {
-    const day = Number(m[1]);
-    const month = Number(m[2]);
-    const year = Number(m[3]);
-    const hours = m[4] != null ? Number(m[4]) : 0;
-    const minutes = m[5] != null ? Number(m[5]) : 0;
-    const seconds = m[6] != null ? Number(m[6]) : 0;
-    const d = new Date(year, month - 1, day, hours, minutes, seconds);
-    return isNaN(d.getTime()) ? null : d;
+  const p = trimmed.split("-");
+  if (p.length === 3) {
+    const a = String(p[0] ?? "").trim();
+    const b = String(p[1] ?? "").trim();
+    const c = String(p[2] ?? "").trim();
+    if (c.includes("T") || c.includes(":")) {
+      const d = new Date(trimmed);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    let y: number;
+    let m: number;
+    let d: number;
+    if (a.length === 4) {
+      y = parseInt(a, 10);
+      m = parseInt(b, 10) - 1;
+      d = parseInt(c, 10);
+    } else {
+      d = parseInt(a, 10);
+      m = parseInt(b, 10) - 1;
+      y = parseInt(c, 10);
+    }
+    if (Number.isFinite(d) && Number.isFinite(m) && Number.isFinite(y)) {
+      const date = new Date(y, m, d);
+      if (!isNaN(date.getTime())) return date;
+    }
   }
 
-  return null;
+  const slash = trimmed.match(
+    /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]);
+    const year = Number(slash[3]);
+    const date = new Date(year, month - 1, day);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  const native = new Date(trimmed);
+  return isNaN(native.getTime()) ? null : native;
+}
+
+type InvoiceDateInputProps = {
+  label: string;
+  placeholder?: string;
+  value: Date | null;
+  onChange: (date: Date | null) => void;
+  withAsterisk?: boolean;
+  readOnly?: boolean;
+  error?: string;
+};
+
+const invoiceDateInputStyles = {
+  input: {
+    fontSize: "13px",
+    fontFamily: "Inter",
+    height: "36px",
+  },
+  label: {
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "#424242",
+    marginBottom: "4px",
+    fontFamily: "Inter",
+  },
+};
+
+/** Invoice-only date field: always DD-MM-YYYY (display + payload formatting elsewhere). */
+function InvoiceDateInput({
+  label,
+  placeholder,
+  value,
+  onChange,
+  withAsterisk,
+  readOnly,
+  error,
+}: InvoiceDateInputProps) {
+  const handleDateChange = (date: Date | null) => {
+    if (
+      date &&
+      value &&
+      date.getDate() === value.getDate() &&
+      date.getMonth() === value.getMonth() &&
+      date.getFullYear() === value.getFullYear()
+    ) {
+      onChange(null);
+      return;
+    }
+    onChange(date);
+  };
+
+  return (
+    <DateInput
+      label={label}
+      placeholder={placeholder ?? INVOICE_DATE_DISPLAY_FORMAT}
+      value={value}
+      onChange={handleDateChange}
+      valueFormat={INVOICE_DATE_DISPLAY_FORMAT}
+      leftSection={<IconCalendar size={18} />}
+      leftSectionPointerEvents="none"
+      radius="sm"
+      size="sm"
+      nextIcon={<IconChevronRight size={16} />}
+      previousIcon={<IconChevronLeft size={16} />}
+      clearable
+      hideOutsideDates
+      readOnly={readOnly}
+      error={error}
+      withAsterisk={withAsterisk}
+      styles={invoiceDateInputStyles}
+    />
+  );
 }
 
 // Round monetary amounts to exactly 2 decimal places (payload / display math). No upper bound.
@@ -2120,8 +2226,9 @@ function InvoiceCreate({
       | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
 
-    const documentDate = normalizeDate(invoiceData.document_date ?? null);
-    const dueDate = normalizeDate(invoiceData.due_date ?? null) ?? documentDate;
+    const documentDate = parseInvoiceDate(invoiceData.document_date ?? null);
+    const dueDate =
+      parseInvoiceDate(invoiceData.due_date ?? null) ?? documentDate;
 
     setBillToDisplayName(invoiceData.bill_to_name ?? null);
     // Set saveResponse so Update Invoice is shown and PUT is used when editing
@@ -2947,13 +3054,6 @@ function InvoiceCreate({
         values.charges.map((c) => c.amount_in_local ?? 0),
       );
 
-      const formatDateDDMMYYYY = (d: Date) => {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}-${month}-${year}`;
-      };
-
       const isAgentSave =
         (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
         (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
@@ -3131,12 +3231,8 @@ function InvoiceCreate({
         gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
-        document_date: values.document_date
-          ? formatDateDDMMYYYY(new Date(values.document_date))
-          : null,
-        due_date: values.due_date
-          ? formatDateDDMMYYYY(new Date(values.due_date))
-          : null,
+        document_date: formatDateDDMMYYYY(values.document_date) || null,
+        due_date: formatDateDDMMYYYY(values.due_date) || null,
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
@@ -3286,12 +3382,6 @@ function InvoiceCreate({
         setIsPosting(false);
         return;
       }
-      const formatDateDDMMYYYY = (d: Date) => {
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}-${month}-${year}`;
-      };
 
       let sacWiseTotals: Array<{
         sac_code?: string;
@@ -3576,12 +3666,8 @@ function InvoiceCreate({
         gstn: isChinaUser ? null : values.gstn || null,
         shipment_no: values.shipment_no,
         daybook_id: values.daybook_id ? Number(values.daybook_id) : null,
-        document_date: values.document_date
-          ? formatDateDDMMYYYY(new Date(values.document_date))
-          : null,
-        due_date: values.due_date
-          ? formatDateDDMMYYYY(new Date(values.due_date))
-          : null,
+        document_date: formatDateDDMMYYYY(values.document_date) || null,
+        due_date: formatDateDDMMYYYY(values.due_date) || null,
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
@@ -4188,10 +4274,10 @@ function InvoiceCreate({
             </Grid.Col>
             {/* Document Date */}
             <Grid.Col span={2}>
-              <SingleDateInput
+              <InvoiceDateInput
                 label="Document Date"
                 placeholder="Select document date"
-                value={normalizeDate(form.values.document_date)}
+                value={parseInvoiceDate(form.values.document_date)}
                 onChange={(date) => {
                   form.setFieldValue("document_date", date);
                   form.setFieldValue("due_date", date);
@@ -4211,10 +4297,10 @@ function InvoiceCreate({
 
             {/* Due Date - same value/onChange pattern as Document Date */}
             <Grid.Col span={2}>
-              <SingleDateInput
+              <InvoiceDateInput
                 label="Due Date"
                 placeholder="Select due date"
-                value={normalizeDate(form.values.due_date)}
+                value={parseInvoiceDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
                 // disabled={isReadOnly}
