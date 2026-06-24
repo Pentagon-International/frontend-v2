@@ -203,6 +203,12 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/debit-credit-note-non-trade")) {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");
+    } else if (path.startsWith("/job-closure")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Job Closure");
+    } else if (path.startsWith("/job-reopen")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Reopen Job");
     } else if (path.startsWith("/automation/import-job") || path.startsWith("/automation/job-creation")) {
       setActiveNav("Automation");
       setActiveSubNav("Import Job");

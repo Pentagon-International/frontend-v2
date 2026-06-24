@@ -9,6 +9,8 @@ import {
   getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
+import type { CanSacWiseTotal } from "./canGstBreakup";
+import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -66,6 +68,151 @@ const getChargeCurrencyCode = (charge: Record<string, unknown>): string => {
   if (isNumericId(currency)) return "";
 
   return String(currency).trim();
+};
+
+const hasChargeAmount = (charge: Record<string, unknown>): boolean => {
+  const sellLocalAmount = charge.sell_local_amount;
+  if (sellLocalAmount != null && sellLocalAmount !== "") return true;
+  const amount = charge.amount;
+  return amount != null && amount !== "";
+};
+
+const getChargeDisplayAmount = (charge: Record<string, unknown>): string => {
+  const sellLocalAmount = charge.sell_local_amount;
+  if (sellLocalAmount != null && sellLocalAmount !== "") {
+    return String(sellLocalAmount);
+  }
+  const amount = charge.amount;
+  return amount != null && amount !== undefined ? String(amount) : "";
+};
+
+const normalizePpCcForCan = (value: unknown): string => {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return String(value ?? "").trim();
+};
+
+const isCollectCanCharge = (charge: Record<string, unknown>): boolean =>
+  normalizePpCcForCan(charge.pp_cc) === "Collect";
+
+const formatCanTaxChargeName = (row: CanSacWiseTotal): string => {
+  const taxName = String(row.charge_name ?? "").trim();
+  const rate = row.rate;
+  const rateType = row.rate_type ?? "";
+  const rateLabel = rate != null ? `${rate}${rateType}` : "";
+
+  if (taxName && rateLabel) return `${taxName} ${rateLabel}`;
+  return taxName;
+};
+
+const normalizeCanChargeNameForTaxMatch = (name: unknown): string =>
+  String(name ?? "").trim().toLowerCase();
+
+/** Union of base charge names referenced in calculate-gst-breakup sac_wise_totals. */
+const buildCanTaxableChargeNamesSet = (
+  totals: CanSacWiseTotal[],
+): Set<string> => {
+  const names = new Set<string>();
+  for (const row of totals) {
+    for (const chargeName of row.charge_names ?? []) {
+      const normalized = normalizeCanChargeNameForTaxMatch(chargeName);
+      if (normalized) names.add(normalized);
+    }
+  }
+  return names;
+};
+
+const isCanBaseChargeTaxable = (
+  charge: Record<string, unknown>,
+  taxableChargeNames: Set<string>,
+): boolean => {
+  if (charge.is_can_tax_row === true) return false;
+  const name = normalizeCanChargeNameForTaxMatch(charge.charge_name);
+  return Boolean(name && taxableChargeNames.has(name));
+};
+
+const drawCanTaxTickMark = (
+  doc: jsPDF,
+  x: number,
+  colWidth: number,
+  y: number,
+) => {
+  doc.setFont("zapfdingbats", "normal");
+  doc.text("4", x + colWidth / 2, y, { align: "center" });
+  doc.setFont("helvetica", "normal");
+};
+
+const buildCanChargesColumnWidths = (
+  tableWidth: number,
+  includeTaxColumn: boolean,
+): number[] => {
+  if (!includeTaxColumn) {
+    const w0 = Math.round(tableWidth * 0.38);
+    const w1 = Math.round(tableWidth * 0.14);
+    const w2 = Math.round(tableWidth * 0.12);
+    const w3 = Math.round(tableWidth * 0.14);
+    const w4 = Math.round(tableWidth * 0.1);
+    const w5 = tableWidth - (w0 + w1 + w2 + w3 + w4);
+    return [w0, w1, w2, w3, w4, w5];
+  }
+
+  const w0 = Math.round(tableWidth * 0.34);
+  const w1 = Math.round(tableWidth * 0.13);
+  const w2 = Math.round(tableWidth * 0.11);
+  const w3 = Math.round(tableWidth * 0.13);
+  const w4 = Math.round(tableWidth * 0.09);
+  const w5 = Math.round(tableWidth * 0.12);
+  const w6 = tableWidth - (w0 + w1 + w2 + w3 + w4 + w5);
+  return [w0, w1, w2, w3, w4, w5, w6];
+};
+
+const CAN_CHARGES_HEADERS_BASE = [
+  "Charges",
+  "Currency",
+  "Units",
+  "Per unit",
+  "ROE",
+  "Amt",
+] as const;
+
+const getCanChargesHeaders = (includeTaxColumn: boolean): string[] =>
+  includeTaxColumn
+    ? [...CAN_CHARGES_HEADERS_BASE, "Tax"]
+    : [...CAN_CHARGES_HEADERS_BASE];
+
+const sacWiseTotalsToCanCharges = (
+  totals: CanSacWiseTotal[],
+): Record<string, unknown>[] =>
+  totals
+    .filter((row) => {
+      const name = String(row.charge_name ?? "")
+        .trim()
+        .toUpperCase();
+      const rate = Number(row.rate ?? 0);
+      if (
+        (name === "IGST" || name === "CGST" || name === "SGST") &&
+        rate <= 0
+      ) {
+        return false;
+      }
+      return row.total_amount != null;
+    })
+    .map((row) => ({
+      charge_name: formatCanTaxChargeName(row),
+      currency_code: row.currency_code ?? "INR",
+      currency: row.currency_code ?? "INR",
+      sell_local_amount: row.total_amount,
+      is_can_tax_row: true,
+      no_of_unit: "",
+      amount_per_unit: "",
+      roe: "",
+    }));
+
+const isDisplayableCanCharge = (charge: Record<string, unknown>): boolean => {
+  const chargeName = String(charge.charge_name ?? "").trim();
+  const currency = getChargeCurrencyCode(charge);
+  return Boolean(chargeName && currency && hasChargeAmount(charge));
 };
 
 const drawCenteredTableHeader = (
@@ -617,7 +764,8 @@ export const generateCargoArrivalNoticePDF = (
   jobData: any,
   hawbData: any,
   defaultBranch: any,
-  country?: any
+  country?: any,
+  sacWiseTotals: CanSacWiseTotal[] = [],
 ): string => {
   try {
     const doc = new jsPDF();
@@ -636,6 +784,9 @@ export const generateCargoArrivalNoticePDF = (
     const branchName = defaultBranch?.branch_name || "CHENNAI";
     const branchInfo = getBranchInfo(branchName, country);
     const logoImage = getLogoByCountry(country);
+    const isIndiaCan = isIndianUserFromProfile(country);
+    const indiaSacWiseTotals = isIndiaCan ? sacWiseTotals : [];
+    const includeCanTaxColumn = isIndiaCan;
 
     // Extract data from jobData and hawbData (supports both Air and Ocean)
     // Support both mawbDetails (Air) and mblDetails (Ocean)
@@ -838,6 +989,15 @@ export const generateCargoArrivalNoticePDF = (
 
     const cargoRowSpacing = 4.5; // Match charges table row spacing
     const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
+    const baseDisplayableCharges = (Array.isArray(charges) ? charges : []).filter(
+      (charge: Record<string, unknown>) =>
+        isDisplayableCanCharge(charge) && isCollectCanCharge(charge),
+    );
+    const taxCharges = sacWiseTotalsToCanCharges(indiaSacWiseTotals).filter(
+      (charge) => isDisplayableCanCharge(charge),
+    );
+    const displayableCharges = [...baseDisplayableCharges, ...taxCharges];
+    const taxableChargeNames = buildCanTaxableChargeNamesSet(indiaSacWiseTotals);
 
     const notes = jobInfo?.notes || [];
     const rowHeight = 5;
@@ -851,7 +1011,7 @@ export const generateCargoArrivalNoticePDF = (
     // Reduced row spacing for charges (4.5 units per row)
     const chargesRowSpacing = 4.5;
     const chargesTableHeaderHeight = 8; // Header + line + spacing
-    const chargesTableRowsHeight = charges.length > 0 ? charges.length * chargesRowSpacing : chargesRowSpacing;
+    const chargesTableRowsHeight = displayableCharges.length > 0 ? displayableCharges.length * chargesRowSpacing : chargesRowSpacing;
     const chargesTableHeight = chargesTableHeaderHeight + chargesTableRowsHeight + 2;
     
     // Draw vertical center line (only for two-column section, not cargo/charges)
@@ -1287,6 +1447,9 @@ export const generateCargoArrivalNoticePDF = (
     sectionY += 1;
     // doc.line(margin + boxPadding, sectionY - 1, pageWidth - margin - boxPadding, sectionY - 1);
 
+    const hasCharges = displayableCharges.length > 0;
+
+    if (hasCharges) {
     // Draw horizontal line separating cargo section from charges section
     sectionY += 1;
     doc.line(margin, sectionY, pageWidth - margin, sectionY);
@@ -1312,22 +1475,13 @@ export const generateCargoArrivalNoticePDF = (
 
     // Charges table setup
     doc.setFontSize(CAN_BODY_FONT_SIZE);
-    const chargesHeaders = ["Charges", "Currency", "Units", "Per unit", "ROE", "Amt"];
+    const chargesHeaders = getCanChargesHeaders(includeCanTaxColumn);
     const chargesTableX = margin + boxPadding;
     const chargesTableW = pageWidth - 2 * margin - 2 * boxPadding;
-    const chargesColWidths = [
-      Math.round(chargesTableW * 0.38),
-      Math.round(chargesTableW * 0.14),
-      Math.round(chargesTableW * 0.12),
-      Math.round(chargesTableW * 0.14),
-      Math.round(chargesTableW * 0.10),
-      chargesTableW -
-        (Math.round(chargesTableW * 0.38) +
-          Math.round(chargesTableW * 0.14) +
-          Math.round(chargesTableW * 0.12) +
-          Math.round(chargesTableW * 0.14) +
-          Math.round(chargesTableW * 0.10)),
-    ];
+    const chargesColWidths = buildCanChargesColumnWidths(
+      chargesTableW,
+      includeCanTaxColumn,
+    );
     const chargesHeaderH = CAN_TABLE_HEADER_H;
     const chargesRowH = CAN_TABLE_ROW_H;
 
@@ -1369,16 +1523,15 @@ export const generateCargoArrivalNoticePDF = (
 
     // Charges table rows with actual data
     doc.setFont("helvetica", "normal");
-    
-    if (charges.length > 0) {
-      charges.forEach((charge: any, rowIdx: number) => {
+
+    displayableCharges.forEach((charge: any, rowIdx: number) => {
         // Pre-calculate row data and dynamic height before the page-break check
         const chargeName = charge.charge_name || "";
         const currency = getChargeCurrencyCode(charge);
         const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
         const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
         const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
-        const amount = charge.amount !== null && charge.amount !== undefined ? String(charge.amount) : "";
+        const amount = getChargeDisplayAmount(charge as Record<string, unknown>);
         const chargeNameCellText = doc.splitTextToSize(chargeName || "", chargesColWidths[0] - 2 * cellPadX);
         const numChargeNameLines = Math.max(1, chargeNameCellText.length);
         // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)
@@ -1435,17 +1588,30 @@ export const generateCargoArrivalNoticePDF = (
         doc.rect(chargesTableX, sectionY, chargesTableW, dynamicChargesRowH, "FD");
 
         xPos = chargesTableX;
-        const chargeRowData = [chargeName, currency, units, perUnit, roe, amount];
+        const showTaxTick =
+          includeCanTaxColumn &&
+          isCanBaseChargeTaxable(
+            charge as Record<string, unknown>,
+            taxableChargeNames,
+          );
+        const chargeRowData = includeCanTaxColumn
+          ? [chargeName, currency, units, perUnit, roe, amount, ""]
+          : [chargeName, currency, units, perUnit, roe, amount];
         chargeRowData.forEach((cell, index) => {
           const w = chargesColWidths[index];
-          drawCenteredTableCell(
-            doc,
-            String(cell ?? ""),
-            xPos,
-            w,
-            sectionY + CAN_TABLE_CELL_Y_OFFSET,
-            cellPadX
-          );
+          const cellY = sectionY + CAN_TABLE_CELL_Y_OFFSET;
+          if (index === chargeRowData.length - 1 && showTaxTick) {
+            drawCanTaxTickMark(doc, xPos, w, cellY);
+          } else {
+            drawCenteredTableCell(
+              doc,
+              String(cell ?? ""),
+              xPos,
+              w,
+              cellY,
+              cellPadX,
+            );
+          }
 
           // Column separators span the full dynamic row height
           if (index < chargeRowData.length - 1) {
@@ -1460,28 +1626,15 @@ export const generateCargoArrivalNoticePDF = (
         });
         sectionY += dynamicChargesRowH;
       });
-    } else {
-      // Show placeholder if no charges (absolute position)
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(220, 220, 220);
-      doc.rect(chargesTableX, sectionY, chargesTableW, chargesRowH, "FD");
-      xPos = chargesTableX;
-      chargesColWidths.forEach((w, index) => {
-        if (index < chargesColWidths.length - 1) {
-          doc.line(
-            xPos + w,
-            sectionY,
-            xPos + w,
-            sectionY + chargesRowH,
-          );
-        }
-        xPos += w;
-      });
-      sectionY += chargesRowH;
-    }
     doc.line(margin, sectionY, pageWidth - margin, sectionY);
 
     sectionY += 10;
+    } else {
+      // Keep the same gap before Notes when the charges table is omitted
+      sectionY += 1;
+      doc.line(margin, sectionY, pageWidth - margin, sectionY);
+      sectionY += 10;
+    }
 
     // Update yPos for next section after the combined box
     yPos = sectionY;

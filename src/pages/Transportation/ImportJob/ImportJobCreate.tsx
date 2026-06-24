@@ -46,7 +46,12 @@ import {
   EstimatesSection,
   useEstimatesForm,
 } from "../../../components";
-import { generateCargoArrivalNoticePDF } from "../../jobs/pdf/CargoArrivalNoticePDFTemplate";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
+import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
+import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
@@ -74,6 +79,7 @@ import {
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import OdexTriggerModal from "../../../pages/Odex/components/OdexTriggerModal";
+import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -385,6 +391,10 @@ type HousingDetail = {
     supplier_name?: string | null;
   }>;
   mbl_charges?: Array<Record<string, unknown>>;
+  summary?: {
+    total_local_sell?: number | string | null;
+    total_local_cost?: number | string | null;
+  };
 };
 
 type DoTypeOption = "carrier_agent" | "unstuff_place";
@@ -474,11 +484,22 @@ function ImportJobCreate() {
     useState<DoDeliverToOption | null>(null);
 
   // Accounts tab: invoice list from filter/invoice API
-  const [invoiceList, setInvoiceList] = useState<InvoiceListItem[]>([]);
-  const [invoiceListLoading, setInvoiceListLoading] = useState(false);
-  const [expandedInvoiceRowId, setExpandedInvoiceRowId] = useState<
-    string | null
-  >(null);
+  const {
+    invoiceList,
+    invoiceListLoading,
+    invoiceDeletingId,
+    expandedInvoiceRowId,
+    setExpandedInvoiceRowId,
+    requestDeleteInvoice,
+    requestDeleteReverseInvoice,
+    deleteConfirmProps,
+  } = useJobAccountInvoices<InvoiceListItem>({
+    activeTab: active,
+    accountsTabIndex: 5,
+    shipmentNo: jobData?.job_id,
+    isAgent: true,
+    enabled: !!jobData?.id,
+  });
 
   const [odexTriggerOpen, setOdexTriggerOpen] = useState(false);
 
@@ -1301,6 +1322,25 @@ function ImportJobCreate() {
                         },
                       )
                     : [],
+              summary: (() => {
+                const raw = house.summary;
+                if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+                  return undefined;
+                }
+                const s = raw as Record<string, unknown>;
+                return {
+                  total_local_sell: s.total_local_sell as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                  total_local_cost: s.total_local_cost as
+                    | number
+                    | string
+                    | null
+                    | undefined,
+                };
+              })(),
             }),
           );
           setHousingDetails(mappedHousingDetails);
@@ -1451,9 +1491,11 @@ function ImportJobCreate() {
               const containerTypeCode =
                 containerTypeDetails?.container_type_code
                   ? String(containerTypeDetails.container_type_code)
-                  : container.container_type
-                    ? String(container.container_type)
-                    : "";
+                  : container.container_type_input
+                    ? String(container.container_type_input)
+                    : container.container_type
+                      ? String(container.container_type)
+                      : "";
 
               // Map uploading_date to unloading_date (API uses uploading_date, form uses unloading_date)
               const unloadingDate =
@@ -1544,8 +1586,11 @@ function ImportJobCreate() {
               charge_name: String(e.charge_name ?? e.charge_code ?? ""),
               pp_cc: normalizePpCc(e.pp_cc),
               unit_id: e.unit_id != null ? String(e.unit_id) : "",
-              unit_code: String(e.unit_code ?? e.unit_name ?? ""),
-              no_of_unit: toNum(e.no_of_unit),
+              unit_code: String(
+                e.unit_code ?? e.unit_name ?? e.unit ?? "",
+              ),
+              no_of_unit:
+                toNum(e.no_of_unit) ?? toNum(e.no_of_units),
               currency_id:
                 e.currency_id != null
                   ? String(e.currency_id)
@@ -1596,25 +1641,6 @@ function ImportJobCreate() {
   useEffect(() => {
     if (mode !== "edit" && active === 5) setActive(0);
   }, [active, mode]);
-
-  // Fetch invoice list when Accounts tab is active
-  useEffect(() => {
-    if (active !== 5) return;
-    if (!jobData?.id) return;
-    setInvoiceListLoading(true);
-    postAPICall(
-      URL.invoiceCombined,
-      { filters: { shipment_no: jobData.job_id, is_agent: true } },
-      API_HEADER,
-    )
-      .then((res: unknown) => {
-        const data = (res as { data?: InvoiceListItem[] })?.data;
-        setInvoiceList(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setInvoiceList([]))
-      .finally(() => setInvoiceListLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
 
   // Restore form values from location.state when navigating back from HouseCreate
   // This runs after the jobData loading effect to avoid conflicts
@@ -2429,7 +2455,7 @@ function ImportJobCreate() {
         notes: jobData?.notes || [],
       };
 
-      const blobUrl = generateCargoArrivalNoticePDF(
+      const blobUrl = await previewCargoArrivalNoticePDF(
         combinedData,
         housing,
         defaultBranch,
@@ -5398,6 +5424,11 @@ function ImportJobCreate() {
               form={estimatesForm}
               readOnly={isReadOnly}
               jobUnitDefaults={estimatesJobUnitDefaults}
+              summaryEstimatesTotalCost={
+                (jobData as { summary?: { estimates_total_cost?: unknown } })
+                  ?.summary?.estimates_total_cost
+              }
+              userBranches={user?.branches}
             />
           </Box>
         </Tabs.Panel>
@@ -5537,13 +5568,9 @@ function ImportJobCreate() {
                                   <Badge
                                     size="sm"
                                     variant="light"
-                                    color={
-                                      isUnposted
-                                        ? "yellow"
-                                        : isPosted
-                                          ? "green"
-                                          : "#105476"
-                                    }
+                                    color={getInvoiceStatusBadgeColor(
+                                      row.status,
+                                    )}
                                   >
                                     {row.status ?? "-"}
                                   </Badge>
@@ -5643,60 +5670,73 @@ function ImportJobCreate() {
                                         View
                                       </Menu.Item>
                                       {isUnposted ? (
-                                        <Menu.Item
-                                          leftSection={
-                                            <Box
-                                              style={{
-                                                backgroundColor: "#E7F5FF",
+                                        <>
+                                          <Menu.Item
+                                            leftSection={
+                                              <Box
+                                                style={{
+                                                  backgroundColor: "#E7F5FF",
+                                                  borderRadius: "6px",
+                                                  padding: "6px",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                }}
+                                              >
+                                                <IconEdit
+                                                  size={16}
+                                                  color="#105476"
+                                                />
+                                              </Box>
+                                            }
+                                            styles={{
+                                              item: {
+                                                fontFamily: "Inter",
+                                                fontSize: "13px",
+                                                fontWeight: 500,
                                                 borderRadius: "6px",
-                                                padding: "6px",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                              }}
-                                            >
-                                              <IconEdit
-                                                size={16}
-                                                color="#105476"
-                                              />
-                                            </Box>
-                                          }
-                                          styles={{
-                                            item: {
-                                              fontFamily: "Inter",
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              borderRadius: "6px",
-                                              padding: "10px 12px",
-                                              marginBottom: "4px",
-                                              "&:hover": {
-                                                backgroundColor: "#F8F9FA",
-                                              },
-                                            },
-                                            itemLabel: {
-                                              fontFamily: "Inter",
-                                              fontSize: "13px",
-                                              fontWeight: 500,
-                                              color: "#424242",
-                                            },
-                                          }}
-                                          onClick={() =>
-                                            navigate(
-                                              `/SeaExport/import-job/invoice/edit/${row.invoice_id}`,
-                                              {
-                                                state: {
-                                                  invoiceData: row,
-                                                  fromJobLevel: true,
-                                                  ...(location.state?.job && {
-                                                    job: location.state.job,
-                                                  }),
+                                                padding: "10px 12px",
+                                                marginBottom: "4px",
+                                                "&:hover": {
+                                                  backgroundColor: "#F8F9FA",
                                                 },
                                               },
-                                            )
-                                          }
-                                        >
-                                          Edit
-                                        </Menu.Item>
+                                              itemLabel: {
+                                                fontFamily: "Inter",
+                                                fontSize: "13px",
+                                                fontWeight: 500,
+                                                color: "#424242",
+                                              },
+                                            }}
+                                            onClick={() =>
+                                              navigate(
+                                                `/SeaExport/import-job/invoice/edit/${row.invoice_id}`,
+                                                {
+                                                  state: {
+                                                    invoiceData: row,
+                                                    fromJobLevel: true,
+                                                    ...(location.state?.job && {
+                                                      job: location.state.job,
+                                                    }),
+                                                  },
+                                                },
+                                              )
+                                            }
+                                          >
+                                            Edit
+                                          </Menu.Item>
+                                          <JobInvoiceDeleteMenuItem
+                                            disabled={
+                                              invoiceDeletingId ===
+                                              invoiceViewId
+                                            }
+                                            onDelete={() =>
+                                              requestDeleteInvoice(
+                                                invoiceViewId as number,
+                                              )
+                                            }
+                                          />
+                                        </>
                                       ) : (
                                         <Menu.Item
                                           leftSection={
@@ -5893,7 +5933,9 @@ function ImportJobCreate() {
                                                     <Badge
                                                       size="sm"
                                                       variant="light"
-                                                      color="#105476"
+                                                      color={getInvoiceStatusBadgeColor(
+                                                        rev.status,
+                                                      )}
                                                     >
                                                       {rev.status ?? "-"}
                                                     </Badge>
@@ -5907,139 +5949,19 @@ function ImportJobCreate() {
                                                       e.stopPropagation()
                                                     }
                                                   >
-                                                    <Menu
-                                                      shadow="md"
-                                                      width={200}
-                                                      position="bottom-end"
-                                                    >
-                                                      <Menu.Target>
-                                                        <ActionIcon
-                                                          variant="subtle"
-                                                          color="#105476"
-                                                          size="sm"
-                                                          styles={{
-                                                            root: {
-                                                              fontFamily:
-                                                                "Inter",
-                                                              fontSize: "13px",
-                                                              border:
-                                                                "1px solid #E9ECEF",
-                                                              borderRadius:
-                                                                "8px",
-                                                              "&:hover": {
-                                                                backgroundColor:
-                                                                  "#F8F9FA",
-                                                              },
-                                                            },
-                                                          }}
-                                                        >
-                                                          <IconDotsVertical
-                                                            size={16}
-                                                          />
-                                                        </ActionIcon>
-                                                      </Menu.Target>
-                                                      <Menu.Dropdown
-                                                        styles={{
-                                                          dropdown: {
-                                                            border:
-                                                              "1px solid #E9ECEF",
-                                                            borderRadius: "8px",
-                                                            padding: "8px",
-                                                            boxShadow:
-                                                              "0 4px 12px rgba(0, 0, 0, 0.1)",
-                                                          },
-                                                        }}
-                                                      >
-                                                        <Menu.Item
-                                                          leftSection={
-                                                            <Box
-                                                              style={{
-                                                                backgroundColor:
-                                                                  "#E7F5FF",
-                                                                borderRadius:
-                                                                  "6px",
-                                                                padding: "6px",
-                                                                display: "flex",
-                                                                alignItems:
-                                                                  "center",
-                                                                justifyContent:
-                                                                  "center",
-                                                              }}
-                                                            >
-                                                              <IconEye
-                                                                size={16}
-                                                                color="#105476"
-                                                              />
-                                                            </Box>
-                                                          }
-                                                          styles={{
-                                                            item: {
-                                                              fontFamily:
-                                                                "Inter",
-                                                              fontSize: "13px",
-                                                              fontWeight: 500,
-                                                              borderRadius:
-                                                                "6px",
-                                                              padding:
-                                                                "10px 12px",
-                                                              marginBottom:
-                                                                "4px",
-                                                              "&:hover": {
-                                                                backgroundColor:
-                                                                  "#F8F9FA",
-                                                              },
-                                                            },
-                                                            itemLabel: {
-                                                              fontFamily:
-                                                                "Inter",
-                                                              fontSize: "13px",
-                                                              fontWeight: 500,
-                                                              color: "#424242",
-                                                            },
-                                                          }}
-                                                          onClick={() => {
-                                                            const targetId =
-                                                              (rev.reverse_invoice_id ??
-                                                                row.reverse_invoice_id) as number;
-                                                            navigate(
-                                                              `/SeaExport/import-job/invoice/view/${targetId}`,
-                                                              {
-                                                                state: {
-                                                                  invoiceData: {
-                                                                    ...row,
-                                                                    ...rev,
-                                                                    id: targetId,
-                                                                    document_no: getInvoiceDocumentNo(rev, row.document_no),
-                                                                    document_date:
-                                                                      rev.document_date ??
-                                                                      row.document_date,
-                                                                    total:
-                                                                      rev.total ??
-                                                                      row.total,
-                                                                    status:
-                                                                      rev.status ??
-                                                                      row.status,
-                                                                    day_book_name:
-                                                                      rev.day_book_name ??
-                                                                      row.day_book_name,
-                                                                  },
-                                                                  fromJobLevel: true,
-                                                                  ...(location
-                                                                    .state
-                                                                    ?.job && {
-                                                                    job: location
-                                                                      .state
-                                                                      .job,
-                                                                  }),
-                                                                },
-                                                              },
-                                                            );
-                                                          }}
-                                                        >
-                                                          View
-                                                        </Menu.Item>
-                                                      </Menu.Dropdown>
-                                                    </Menu>
+                                                    <JobReverseInvoiceAccountMenu
+                                                      rev={rev}
+                                                      parentRow={row}
+                                                      jobBasePath="/SeaExport/import-job"
+                                                      navigate={navigate}
+                                                      job={location.state?.job}
+                                                      deletingReverseId={
+                                                        invoiceDeletingId
+                                                      }
+                                                      onRequestDeleteReverseInvoice={
+                                                        requestDeleteReverseInvoice
+                                                      }
+                                                    />
                                                   </Table.Td>
                                                 </Table.Tr>
                                               ),
@@ -6077,6 +5999,8 @@ function ImportJobCreate() {
           </Tabs.Panel>
         )}
       </Tabs>
+
+      <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
       <Group justify="space-between" mt="xl">
         <Group>
@@ -6431,6 +6355,11 @@ function ImportJobCreate() {
                       {house.customer_service || "-"}
                     </Text>
                   </Grid.Col>
+
+                  <HouseCardSummaryTotals
+                    house={house}
+                    branches={user?.branches}
+                  />
 
                   {/* <Grid.Col span={12}>
                     <Divider my="sm" />

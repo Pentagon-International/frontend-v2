@@ -29,9 +29,10 @@ import {
   IconFiles,
   IconFilter,
   IconSearch,
+  IconTrash,
   IconX,
 } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useLocation, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
@@ -65,6 +66,14 @@ import {
   type FinanceDocumentListRow,
   openFinanceDocument,
 } from "./financeDocumentNavigation";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { ToastNotification } from "../../../components";
+import { deactivateInvoice } from "../../../utils/deactivateInvoice";
+import { deactivateReverseInvoice } from "../../../utils/deactivateReverseInvoice";
+
+type UnpostedDeleteTarget =
+  | { kind: "invoice"; id: number }
+  | { kind: "reverse"; id: number };
 
 const LIST_KEY = "UNPOSTED_DOCUMENTS_LIST";
 
@@ -174,6 +183,7 @@ function humanizeRecordType(recordType: string): string {
 export default function UnpostedDocumentsList() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -229,6 +239,49 @@ export default function UnpostedDocumentsList() {
     ...EMPTY_UNPOSTED_FILTERS,
   });
   const [openingKey, setOpeningKey] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<UnpostedDeleteTarget | null>(
+    null,
+  );
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const cancelDelete = useCallback(() => {
+    if (deletingId != null) return;
+    setPendingDelete(null);
+  }, [deletingId]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setDeletingId(target.id);
+    try {
+      if (target.kind === "reverse") {
+        await deactivateReverseInvoice(target.id, API_HEADER);
+      } else {
+        await deactivateInvoice(target.id, API_HEADER);
+      }
+      ToastNotification({
+        type: "success",
+        message:
+          target.kind === "reverse"
+            ? "Reverse invoice deleted successfully"
+            : "Invoice deleted successfully",
+      });
+      setPendingDelete(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["finance-unposted-documents"],
+      });
+    } catch {
+      ToastNotification({
+        type: "error",
+        message:
+          target.kind === "reverse"
+            ? "Failed to delete reverse invoice. Please try again."
+            : "Failed to delete invoice. Please try again.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }, [pendingDelete, queryClient]);
 
   const appliedFiltersKey = useMemo(
     () =>
@@ -693,6 +746,12 @@ export default function UnpostedDocumentsList() {
           }
           const status = String(r.status ?? "").toUpperCase();
           const canEdit = status === "" || status === "UNPOSTED";
+          const recordType = String(r.record_type ?? "")
+            .trim()
+            .toLowerCase();
+          const canDelete =
+            canEdit &&
+            (recordType === "invoice" || recordType === "reverse_invoice");
 
           const run = async (mode: "edit" | "view") => {
             setStoreFilters(LIST_KEY, appliedFilters);
@@ -753,6 +812,32 @@ export default function UnpostedDocumentsList() {
                     </UnstyledButton>
                   </Box>
                 )}
+                {canDelete && (
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      disabled={deletingId === id}
+                      onClick={() =>
+                        setPendingDelete({
+                          kind:
+                            recordType === "reverse_invoice"
+                              ? "reverse"
+                              : "invoice",
+                          id: Number(id),
+                        })
+                      }
+                    >
+                      <Group gap="sm">
+                        <IconTrash size={16} color="#C92A2A" />
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: erpTheme.fontSans }}
+                        >
+                          Delete
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                )}
               </Menu.Dropdown>
             </Menu>
           );
@@ -764,6 +849,7 @@ export default function UnpostedDocumentsList() {
       commitHeaderFilters,
       collapseHeaderEditor,
       daybookFilterOptions,
+      deletingId,
       editingHeaderId,
       erpTheme,
       filterFieldStyles,
@@ -1208,6 +1294,22 @@ export default function UnpostedDocumentsList() {
               <MantineReactTable table={table} />
             ),
           }}
+        />
+        <JobInvoiceDeleteConfirmModal
+          opened={pendingDelete != null}
+          loading={deletingId != null}
+          title={
+            pendingDelete?.kind === "reverse"
+              ? "Delete reverse invoice"
+              : "Delete invoice"
+          }
+          message={
+            pendingDelete?.kind === "reverse"
+              ? "Are you sure you want to delete this reverse invoice? This action cannot be undone."
+              : "Are you sure you want to delete this invoice? This action cannot be undone."
+          }
+          onClose={cancelDelete}
+          onConfirm={() => void confirmDelete()}
         />
       </Box>
     </MantineProvider>

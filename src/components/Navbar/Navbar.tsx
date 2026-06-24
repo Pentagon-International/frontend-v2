@@ -58,6 +58,7 @@ import {
   IconRobot,
   IconAutomation,
   IconTruck,
+  IconLockOpen,
   IconCloudComputing,
 } from "@tabler/icons-react";
 import {
@@ -125,7 +126,9 @@ const Navbar = ({
       location.pathname.startsWith("/subledger-enquiry") ||
       location.pathname.startsWith("/document-allocation") ||
       location.pathname.startsWith("/debit-credit-note-trade") ||
-      location.pathname.startsWith("/debit-credit-note-non-trade")
+      location.pathname.startsWith("/debit-credit-note-non-trade") ||
+      location.pathname.startsWith("/job-closure") ||
+      location.pathname.startsWith("/job-reopen")
     ) {
       setIsAccountsOpen(true);
     }
@@ -938,7 +941,6 @@ const Navbar = ({
                   setOpenedLocal={setIsAccountsOpen}
                   icon={IconReceipt2}
                 >
-                  {/* <ScrollArea.Autosize mah={380} type="always" offsetScrollbars scrollbarSize={6}> */}
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt"
@@ -1160,7 +1162,32 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
-                  {/* </ScrollArea.Autosize> */}
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Job Closure"
+                      icon={IconCircleCheck}
+                      path="/job-closure"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Reopen Job"
+                      icon={IconLockOpen}
+                      path="/job-reopen"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink

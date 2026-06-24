@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { ActionIcon, Box, Grid, Group } from "@mantine/core";
+import { useEffect, useMemo } from "react";
+import { ActionIcon, Box, Grid, Group, Text } from "@mantine/core";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
@@ -15,9 +15,16 @@ import RequiredLabel from "./RequiredLabel";
 import {
   applyJobChargeUnitChange,
   buildJobUnitOptions,
+  mapJobChargesWithUnits,
   toBookingCargoForNoOfUnits,
   type JobChargeNoOfUnitContext,
 } from "../utils/houseCargoChargeableWeight";
+import {
+  calcEstimatesTotalCost,
+  formatJobSummaryAmount,
+  parseSummaryAmount,
+} from "../utils/jobSummaryTotals";
+import type { BranchCurrencyContext } from "../utils/userNumberFormat";
 
 export type EstimateRow = {
   id?: number | string;
@@ -136,6 +143,10 @@ export type EstimatesSectionProps = {
   unitMasterFilters?: Record<string, unknown>;
   /** Optional debug tag; logs form values when provided */
   debugTag?: string;
+  /** From filter/list API summary on edit — used until estimates are changed */
+  summaryEstimatesTotalCost?: number | string | null;
+  /** User branches for amount formatting */
+  userBranches?: BranchCurrencyContext[] | null;
   /** When set, auto-fills no_of_unit on unit selection (job create/edit). */
   jobUnitDefaults?: {
     service: string;
@@ -149,9 +160,12 @@ export function EstimatesSection({
   supplierEndpoint = URL.supplierByType,
   chargeEndpoint = URL.chargeMaster,
   debugTag,
+  summaryEstimatesTotalCost,
+  userBranches,
   jobUnitDefaults,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
+  const branches = userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
   const serviceTypeValue = Array.isArray(serviceType)
     ? (serviceType[0] ?? "")
     : (serviceType ?? "");
@@ -192,6 +206,44 @@ export function EstimatesSection({
     .filter(Boolean) as Array<{ value: string; label: string }>;
 
   const jobUnitOptions = buildJobUnitOptions(unitDataRaw ?? []);
+
+  const computedEstimatesTotal = useMemo(
+    () => calcEstimatesTotalCost(form.values.estimates),
+    [form.values.estimates],
+  );
+
+  const displayEstimatesTotal =
+    computedEstimatesTotal ??
+    parseSummaryAmount(summaryEstimatesTotalCost);
+
+  // Resolve unit_id from unit_code when master loads; only auto-fill no_of_unit when empty.
+  useEffect(() => {
+    if (!jobUnitDefaults?.service || !jobUnitOptions.length) return;
+    const estimates = form.values.estimates ?? [];
+    if (!estimates.length) return;
+
+    const bookingCargo = toBookingCargoForNoOfUnits(
+      jobUnitDefaults.jobCargoDetails ?? [],
+    );
+    const updated = mapJobChargesWithUnits(
+      estimates,
+      jobUnitDefaults.service,
+      bookingCargo,
+      jobUnitOptions,
+      {
+        containerDetails: jobUnitDefaults.containerDetails,
+        jobCargoDetails: jobUnitDefaults.jobCargoDetails,
+      },
+    );
+    if (updated) {
+      form.setFieldValue("estimates", updated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    jobUnitOptions,
+    jobUnitDefaults?.service,
+    jobUnitDefaults?.containerDetails,
+  ]);
 
   useEffect(() => {
     if (!debugTag) return;
@@ -333,6 +385,9 @@ export function EstimatesSection({
               value={selectStringId(row.unit_id)}
               onChange={(value) => {
                 const unitId = value ?? "";
+                const currentUnitId = selectStringId(row.unit_id) ?? "";
+                if (unitId === currentUnitId) return;
+
                 if (jobUnitDefaults?.service && jobUnitOptions.length) {
                   const bookingCargo = toBookingCargoForNoOfUnits(
                     jobUnitDefaults.jobCargoDetails ?? [],
@@ -539,6 +594,31 @@ export function EstimatesSection({
         </Grid>
       ))}
 
+      <Grid
+        mt="sm"
+        gutter="sm"
+        align="flex-start"
+        style={{ fontWeight: 600, color: "#105476" }}
+      >
+        <Grid.Col span={1.75} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={1} />
+        <Grid.Col span={1.25} />
+        <Grid.Col span={0.9} />
+        <Grid.Col span={1}>
+          <Text size="sm" fw={600} c="#105476" ta="right">
+            Total:
+          </Text>
+        </Grid.Col>
+        <Grid.Col span={1}>
+          <Text size="sm" fw={600} ta="center" w="100%">
+            {formatJobSummaryAmount(displayEstimatesTotal, branches)}
+          </Text>
+        </Grid.Col>
+        <Grid.Col span={1.75} />
+        <Grid.Col span={0.85} />
+      </Grid>
     </Box>
   );
 }

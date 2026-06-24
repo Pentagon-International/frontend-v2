@@ -77,6 +77,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "AIR_IMPORT_JOB_MASTER";
@@ -514,9 +515,9 @@ function AirImportJobMaster() {
     const rows = importJobData;
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+      active: rows.filter((r) => (r.status ?? "").toUpperCase() === "ACTIVE").length,
+      closed: rows.filter((r) => (r.status ?? "").toUpperCase() === "CLOSED").length,
+      cancel: rows.filter((r) => (r.status ?? "").toUpperCase() === "CANCEL").length,
     };
   }, [importJobData, totalRecords, listSummary]);
 
@@ -723,8 +724,8 @@ function AirImportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       apiEndpoint={URL.agent}
-                      label="Agent"
-                      placeholder="Type Agent"
+                      label="Origin Agent"
+                      placeholder="Type agent name"
                       size="xs"
                       value={draftFilters.agent_code}
                       displayValue={draftFilters.agent_name}
@@ -935,7 +936,7 @@ function AirImportJobMaster() {
                       {visibleColumns.agent && (
                         <th style={mergeTh(240)}>
                           <ERPListColumnHeaderFilter
-                            label="Destination Agent"
+                            label="Origin Agent"
                             value={appliedFilters.agent_code}
                             displayValue={appliedFilters.agent_name || appliedFilters.agent_code}
                             theme={theme}
@@ -1334,51 +1335,22 @@ function AirImportJobMaster() {
                             <td style={erpListStickyActionTdStyle(theme)}>
                               {(() => {
                                 const statusUpper = (row.status ?? "").toUpperCase();
-                                const isCancel = statusUpper === "CANCEL";
-                                const canCancel = statusUpper !== "GENERATED" && !isCancel;
+                                const canCancel = statusUpper !== "GENERATED" && statusUpper !== "CANCEL";
                                 return (
-                                  <Menu
-                                    withinPortal
-                                    position="bottom-end"
-                                    shadow="md"
-                                    width={200}
-                                    styles={erpListGeistMenuDropdownStyles}
-                                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  >
-                                    <Menu.Target>
-                                      <ActionIcon variant="subtle" color="gray" size="sm">
-                                        <IconDotsVertical size={16} />
-                                      </ActionIcon>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                      <Menu.Item
-                                        leftSection={<IconEdit size={14} />}
-                                        disabled={isCancel}
-                                        onClick={() => {
-                                          if (!isCancel) {
-                                            setStoreFilters(LIST_KEY, appliedFilters);
-                                            setStoreSearch(LIST_KEY, search);
-                                            setShouldRestore(LIST_KEY, true);
-                                            navigate(`/air/import-job/edit`, {
-                                              state: { job: row },
-                                            });
-                                          }
-                                        }}
-                                      >
-                                        Edit
-                                      </Menu.Item>
-                                      <Menu.Item
-                                        leftSection={<IconX size={14} />}
-                                        color="red"
-                                        disabled={!canCancel}
-                                        onClick={() => {
-                                          if (canCancel) setCancelConfirmRow(row);
-                                        }}
-                                      >
-                                        Cancel
-                                      </Menu.Item>
-                                    </Menu.Dropdown>
-                                  </Menu>
+                                  <ERPListJobActionMenu
+                                    status={row.status}
+                                    variant="job-page"
+                                    canCancel={canCancel}
+                                    onEdit={() => {
+                                      setStoreFilters(LIST_KEY, appliedFilters);
+                                      setStoreSearch(LIST_KEY, search);
+                                      setShouldRestore(LIST_KEY, true);
+                                      navigate(`/air/import-job/edit`, {
+                                        state: { job: row },
+                                      });
+                                    }}
+                                    onCancel={() => setCancelConfirmRow(row)}
+                                  />
                                 );
                               })()}
                             </td>

@@ -10,10 +10,63 @@ export const HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS = {
   decimalScale: HOUSE_CARGO_WEIGHT_DECIMALS,
 } as const;
 
+/** Cargo-derived charge no_of_unit (KG, W/M, CBM, CBM(S)) — always show 3 decimal places. */
+export const JOB_CHARGE_CARGO_NO_OF_UNIT_INPUT_PROPS = {
+  decimalScale: HOUSE_CARGO_WEIGHT_DECIMALS,
+  fixedDecimalScale: true,
+} as const;
+
 const PARTIAL_DECIMAL_PATTERN = /^\d*\.?\d{0,3}$/;
 
 function houseCargoWeightNumberToString(num: number): string {
   return String(num);
+}
+
+/** Auto-calculated chargeable weight/volume — always exactly 3 decimal places (e.g. 1.520). */
+export function formatCalculatedHouseCargoWeight(
+  value: HouseCargoWeightValue,
+): HouseCargoWeightValue {
+  const num = parseHouseCargoWeightInput(value);
+  if (num === null || num <= 0) return null;
+  const rounded = roundToDecimals(num, HOUSE_CARGO_WEIGHT_DECIMALS);
+  if (rounded === null || rounded === undefined) return null;
+  return rounded.toFixed(HOUSE_CARGO_WEIGHT_DECIMALS);
+}
+
+/** Units whose no_of_unit is auto-filled from cargo chargeable weight/volume. */
+export function isCargoDerivedChargeUnit(
+  unitCode: string,
+  unitLabel?: string,
+): boolean {
+  return (
+    isKgChargeUnit(unitCode, unitLabel) ||
+    isWmChargeUnit(unitCode, unitLabel) ||
+    isPlainCbmChargeUnit(unitCode, unitLabel) ||
+    isCbmsChargeUnit(unitCode, unitLabel)
+  );
+}
+
+/** NumberInput props for job charge no_of_unit based on unit type. */
+export function jobChargeNoOfUnitInputProps(
+  unitCode: string,
+  unitLabel?: string,
+): { decimalScale: number; fixedDecimalScale?: boolean } {
+  if (isCargoDerivedChargeUnit(unitCode, unitLabel)) {
+    return JOB_CHARGE_CARGO_NO_OF_UNIT_INPUT_PROPS;
+  }
+  if (isShipmentOrDocChargeUnit(unitCode, unitLabel)) {
+    return { decimalScale: 0 };
+  }
+  return { decimalScale: 2 };
+}
+
+/** Round cargo-derived no_of_unit to 3 decimals for job charges. */
+export function formatJobChargeNoOfUnitFromCargo(
+  value: string | number | null | undefined,
+): number | null {
+  const parsed = parseNoOfUnitForPayload(value);
+  if (parsed === null) return null;
+  return roundToDecimals(parsed, HOUSE_CARGO_WEIGHT_DECIMALS) ?? null;
 }
 
 /** Load from API/edit data — keep string literals (e.g. 32.100); never force 2 dp. */
@@ -138,9 +191,9 @@ export function applyOceanChargeableWeightMinimum(
   const num = parseHouseCargoWeightInput(value);
   if (num === null || num <= 0) return value;
   if (num < OCEAN_CHARGEABLE_WEIGHT_MIN) {
-    return coerceHouseCargoWeightInput(OCEAN_CHARGEABLE_WEIGHT_MIN);
+    return formatCalculatedHouseCargoWeight(OCEAN_CHARGEABLE_WEIGHT_MIN);
   }
-  return value;
+  return formatCalculatedHouseCargoWeight(value);
 }
 
 function normalizeChargeUnitToken(value: string): string {
@@ -678,14 +731,14 @@ function isProbableFclContainerChargeUnit(
 }
 
 /**
- * FCL job: match charge unit to container_details, then no_of_packages on linked cargo.
+ * FCL job: match charge unit to container type and return the count of
+ * container_details rows for that type.
  * Returns "not-container" when the unit is not a container-type unit.
  */
 function resolveFclJobContainerChargeNoOfUnit(
   unitCode: string,
   unitLabel: string | undefined,
   containerDetails: JobContainerForNoOfUnits[],
-  cargoDetails: JobCargoForFclNoOfUnits[],
 ): number | "not-container" {
   const unitTokens = chargeUnitTokens(unitCode, unitLabel);
   const knownContainerTypeTokens = new Set(
@@ -698,31 +751,21 @@ function resolveFclJobContainerChargeNoOfUnit(
 
   if (!isContainerUnit) return "not-container";
 
-  const matchingContainer = containerDetails.find((container) => {
+  const matchingContainers = containerDetails.filter((container) => {
+    const type = String(
+      container.container_type ?? container.container_type_code ?? "",
+    ).trim();
+    if (!type) return false;
     const typeTokens = containerDetailTypeTokens(container);
     return typeTokens.some((token) => unitTokens.includes(token));
   });
 
-  if (!matchingContainer) return 1;
-
-  const containerNo = String(matchingContainer.container_no ?? "").trim();
-  if (!containerNo) return 1;
-
-  const matchingCargo = cargoDetails.find((cargo) => {
-    const cargoContainerNo = String(
-      cargo.container_number ?? cargo.container_no ?? "",
-    ).trim();
-    return cargoContainerNo && cargoContainerNo === containerNo;
-  });
-
-  if (!matchingCargo) return 1;
-
-  const packages = matchingCargo.no_of_packages;
-  if (packages === null || packages === undefined || packages === "") {
-    return 1;
+  if (matchingContainers.length > 0) {
+    return matchingContainers.length;
   }
 
-  return parseNoOfUnitForPayload(packages) ?? 1;
+  // Container-type unit selected but no matching rows in container_details
+  return 1;
 }
 
 /** Job unit dropdown: all ACTIVE rows — value = unit id, label = unit_name. */
@@ -808,7 +851,6 @@ function resolveJobChargeNoOfUnitNumber(
       unitCode,
       unitLabel,
       context.containerDetails,
-      context.jobCargoDetails ?? [],
     );
     if (fclResult !== "not-container") {
       return fclResult;
@@ -822,7 +864,7 @@ function resolveJobChargeNoOfUnitNumber(
     cargoDetails,
   );
   if (resolved !== null && resolved !== "") {
-    return parseNoOfUnitForPayload(resolved);
+    return formatJobChargeNoOfUnitFromCargo(resolved);
   }
 
   return 1;
@@ -944,6 +986,8 @@ export function syncJobChargesWithCargoNoOfUnits<
 ): T[] | null {
   let hasChanges = false;
   const updated = charges.map((charge) => {
+    // Preserve existing quantity on edit/load; only auto-fill when empty.
+    if (!isJobChargeNoOfUnitEmpty(charge.no_of_unit)) return charge;
     if (!charge.unit_id && !charge.unit_code) return charge;
     const unitOpt = charge.unit_id
       ? findJobUnitOption(unitOptions, String(charge.unit_id))
@@ -1100,11 +1144,15 @@ export function resolveOceanCbmsNoOfUnit(
         "ocean",
       ),
     );
-    return calculated !== null && calculated > 0 ? calculated : null;
+    return calculated !== null && calculated > 0
+      ? formatJobChargeNoOfUnitFromCargo(calculated)
+      : null;
   }
 
   const total = sumHouseOceanChargeableWeight(cargoList);
-  return total !== null && total > 0 ? total : null;
+  return total !== null && total > 0
+    ? formatJobChargeNoOfUnitFromCargo(total)
+    : null;
 }
 
 export function sumHouseOceanChargeableWeight(
@@ -1134,7 +1182,9 @@ export function sumHouseOceanChargeableWeight(
     }
   }
 
-  return hasValue ? total : null;
+  return hasValue
+    ? (roundToDecimals(total, HOUSE_CARGO_WEIGHT_DECIMALS) ?? null)
+    : null;
 }
 
 /**
@@ -1155,16 +1205,24 @@ export function calculateHouseChargeableWeight(
   if (unit === "ocean") {
     const grossCbm = grossNum > 0 ? grossNum / 1000 : 0;
     if (volNum > 0 && volNum >= grossCbm) {
-      return applyOceanChargeableWeightMinimum(volume ?? null);
+      return formatCalculatedHouseCargoWeight(
+        applyOceanChargeableWeightMinimum(volume ?? null),
+      );
     }
     if (grossCbm > 0 && grossCbm > volNum) {
-      return applyOceanChargeableWeightMinimum(oceanGrossKgToCbm(grossWeight));
+      return formatCalculatedHouseCargoWeight(
+        applyOceanChargeableWeightMinimum(oceanGrossKgToCbm(grossWeight)),
+      );
     }
     return null;
   }
 
-  if (volNum > 0 && volNum >= grossNum) return volume ?? null;
-  if (grossNum > 0 && grossNum > volNum) return grossWeight ?? null;
+  if (volNum > 0 && volNum >= grossNum) {
+    return formatCalculatedHouseCargoWeight(volume);
+  }
+  if (grossNum > 0 && grossNum > volNum) {
+    return formatCalculatedHouseCargoWeight(grossWeight);
+  }
   return null;
 }
 

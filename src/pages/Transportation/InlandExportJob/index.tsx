@@ -77,6 +77,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { withInlandExportJobServiceFields } from "./inlandExportJobService";
 
@@ -535,11 +536,11 @@ function InlandExportJobMaster() {
     const rows = exportJobData;
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active")
+      active: rows.filter((r) => (r.status ?? "").toUpperCase() === "ACTIVE")
         .length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed")
+      closed: rows.filter((r) => (r.status ?? "").toUpperCase() === "CLOSED")
         .length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel")
+      cancel: rows.filter((r) => (r.status ?? "").toUpperCase() === "CANCEL")
         .length,
     };
   }, [exportJobData, totalRecords, listSummary]);
@@ -1483,72 +1484,30 @@ function InlandExportJobMaster() {
                                 const statusUpper = (
                                   row.status ?? ""
                                 ).toUpperCase();
-                                const isCancel = statusUpper === "CANCEL";
                                 const canCancel =
-                                  statusUpper !== "GENERATED" && !isCancel;
+                                  statusUpper !== "GENERATED" && statusUpper !== "CANCEL";
                                 return (
-                                  <Menu
-                                    withinPortal
-                                    position="bottom-end"
-                                    shadow="md"
-                                    width={200}
-                                    styles={erpListGeistMenuDropdownStyles}
-                                    classNames={{
-                                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                  <ERPListJobActionMenu
+                                    status={row.status}
+                                    variant="job-page"
+                                    canCancel={canCancel}
+                                    onEdit={() => {
+                                      setStoreFilters(LIST_KEY, appliedFilters);
+                                      setStoreSearch(LIST_KEY, search);
+                                      setShouldRestore(LIST_KEY, true);
+                                      navigate(`/inland/export-job/edit`, {
+                                        state: {
+                                          job: withInlandExportJobServiceFields(
+                                            row as unknown as Record<
+                                              string,
+                                              unknown
+                                            >,
+                                          ),
+                                        },
+                                      });
                                     }}
-                                  >
-                                    <Menu.Target>
-                                      <ActionIcon
-                                        variant="subtle"
-                                        color="gray"
-                                        size="sm"
-                                      >
-                                        <IconDotsVertical size={16} />
-                                      </ActionIcon>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                      <Menu.Item
-                                        leftSection={<IconEdit size={14} />}
-                                        disabled={isCancel}
-                                        onClick={() => {
-                                          if (!isCancel) {
-                                            setStoreFilters(
-                                              LIST_KEY,
-                                              appliedFilters,
-                                            );
-                                            setStoreSearch(LIST_KEY, search);
-                                            setShouldRestore(LIST_KEY, true);
-                                            navigate(
-                                              `/inland/export-job/edit`,
-                                              {
-                                                state: {
-                                                  job: withInlandExportJobServiceFields(
-                                                    row as unknown as Record<
-                                                      string,
-                                                      unknown
-                                                    >,
-                                                  ),
-                                                },
-                                              },
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        Edit
-                                      </Menu.Item>
-                                      <Menu.Item
-                                        leftSection={<IconX size={14} />}
-                                        color="red"
-                                        disabled={!canCancel}
-                                        onClick={() => {
-                                          if (canCancel)
-                                            setCancelConfirmRow(row);
-                                        }}
-                                      >
-                                        Cancel
-                                      </Menu.Item>
-                                    </Menu.Dropdown>
-                                  </Menu>
+                                    onCancel={() => setCancelConfirmRow(row)}
+                                  />
                                 );
                               })()}
                             </td>

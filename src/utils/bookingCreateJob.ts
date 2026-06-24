@@ -85,6 +85,10 @@ function isLclBooking(booking: Record<string, unknown>): boolean {
   return String(booking.service ?? "").trim().toUpperCase() === "LCL";
 }
 
+function isFclBooking(booking: Record<string, unknown>): boolean {
+  return String(booking.service ?? "").trim().toUpperCase() === "FCL";
+}
+
 function resolveContainerTypeCode(cargo: Record<string, unknown>): string {
   return String(
     cargo.container_type_code ??
@@ -94,12 +98,45 @@ function resolveContainerTypeCode(cargo: Record<string, unknown>): string {
   ).trim();
 }
 
-function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
-  if (!isLclBooking(booking)) return [];
+function buildJobContainerDetailRow(
+  containerType: string,
+  containerNo?: string | null,
+): Record<string, unknown> {
+  const no = String(containerNo ?? "").trim();
+  return {
+    container_type_input: containerType || null,
+    container_no: no || null,
+    actual_seal_no: null,
+    customs_seal_no: null,
+    loading_date: null,
+    uploading_date: null,
+  };
+}
 
+/** FCL: one container_details row per booking cargo row (same line count), type copied from cargo. */
+function mapFclContainerDetailsFromBooking(
+  cargoList: unknown[],
+): Array<Record<string, unknown>> {
+  if (!cargoList.length) return [];
+
+  return cargoList.map((cargo) => {
+    const row = cargo as Record<string, unknown>;
+    const containerType = resolveContainerTypeCode(row);
+    return buildJobContainerDetailRow(containerType);
+  });
+}
+
+function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
   const cargoList = Array.isArray(booking.cargo_details)
     ? booking.cargo_details
     : [];
+
+  if (isFclBooking(booking)) {
+    return mapFclContainerDetailsFromBooking(cargoList);
+  }
+
+  if (!isLclBooking(booking)) return [];
+
   const containers: Array<Record<string, unknown>> = [];
 
   for (const cargo of cargoList) {
@@ -112,28 +149,14 @@ function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
         const container = nestedRow as Record<string, unknown>;
         const containerNo = String(container.container_no ?? "").trim();
         if (!containerNo && !containerType) continue;
-        containers.push({
-          container_type_input: containerType || null,
-          container_no: containerNo || null,
-          actual_seal_no: null,
-          customs_seal_no: null,
-          loading_date: null,
-          uploading_date: null,
-        });
+        containers.push(buildJobContainerDetailRow(containerType, containerNo));
       }
       continue;
     }
 
     const containerNo = String(row.container_no ?? "").trim();
     if (!containerNo && !containerType) continue;
-    containers.push({
-      container_type_input: containerType || null,
-      container_no: containerNo || null,
-      actual_seal_no: null,
-      customs_seal_no: null,
-      loading_date: null,
-      uploading_date: null,
-    });
+    containers.push(buildJobContainerDetailRow(containerType, containerNo));
   }
 
   return containers;
@@ -213,10 +236,21 @@ function mapCargoDetails(
   transport: "air" | "ocean" = "ocean",
 ) {
   const cargo = Array.isArray(booking.cargo_details) ? booking.cargo_details : [];
+  const isFclOcean =
+    transport === "ocean" &&
+    String(booking.service ?? "")
+      .trim()
+      .toUpperCase() === "FCL";
+
   return cargo.map((c) => {
     const row = c as Record<string, unknown>;
+    const noOfPackages = isFclOcean
+      ? toNumberOrNull(row.no_of_packages)
+      : toNumberOrNull(row.no_of_packages) ??
+        toNumberOrNull(row.no_of_containers);
+
     return {
-      no_of_packages: row.no_of_packages || row.no_of_containers || "",
+      no_of_packages: noOfPackages,
       gross_weight: row.gross_weight || "",
       volume:
         transport === "air"
@@ -242,17 +276,36 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+function resolveJobUnitFromBookingRow(row: Record<string, unknown>): {
+  unit_id: number | null;
+  unit_code: string;
+} {
+  const rawUnit = row.unit ?? row.unit_id;
+  const explicitCode = String(row.unit_code ?? "").trim();
+  if (rawUnit == null || rawUnit === "") {
+    return { unit_id: null, unit_code: explicitCode };
+  }
+  const rawStr = String(rawUnit).trim();
+  const asNum = Number(rawStr);
+  if (Number.isFinite(asNum) && !Number.isNaN(asNum) && rawStr === String(asNum)) {
+    return { unit_id: asNum, unit_code: explicitCode };
+  }
+  return { unit_id: null, unit_code: explicitCode || rawStr };
+}
+
 /** Map booking quotation/rate lines to job master-level estimates (FCL Export). */
 function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
   return rates.map((c) => {
     const row = c as Record<string, unknown>;
     const chargeId = row.charge_id != null ? Number(row.charge_id) : null;
+    const { unit_id, unit_code } = resolveJobUnitFromBookingRow(row);
     return {
       supplier_code: null,
       charge_id: chargeId != null && !Number.isNaN(chargeId) ? chargeId : null,
       pp_cc: normalizePpCc(row.pp_cc) || "Prepaid",
-      unit_id: row.unit != null ? Number(row.unit) : row.unit_id != null ? Number(row.unit_id) : null,
+      unit_id,
+      ...(unit_code ? { unit_code } : {}),
       no_of_unit:
         toNumberOrNull(row.no_of_units) ?? toNumberOrNull(row.no_of_unit),
       currency_id:

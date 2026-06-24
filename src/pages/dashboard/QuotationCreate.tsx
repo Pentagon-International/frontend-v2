@@ -5613,7 +5613,7 @@ function QuotationCreate({
                             }}
                           >
                             Total Sell
-                            {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                            {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
                           </Text>
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -5626,7 +5626,7 @@ function QuotationCreate({
                             }}
                           >
                             Total Cost
-                            {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                            {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
                           </Text>
                         </Grid.Col>
                       </Grid>
@@ -7007,7 +7007,7 @@ function QuotationCreate({
                           }}
                         >
                           Total Sell
-                          {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                          {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -7020,7 +7020,7 @@ function QuotationCreate({
                           }}
                         >
                           Total Cost
-                          {userCurrencyCode ? ` (${userCurrencyCode})` : ""}
+                          {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
                         </Text>
                       </Grid.Col>
                     </Grid>

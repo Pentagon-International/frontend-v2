@@ -77,6 +77,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 
 const LIST_KEY = "OCEAN_IMPORT_JOB_MASTER";
 
@@ -558,9 +559,9 @@ function ImportJobMaster() {
     }
     return {
       total: totalRecords,
-      active: rows.filter((r) => getStatusBadge(r.status).label === "Active").length,
-      closed: rows.filter((r) => getStatusBadge(r.status).label === "Closed").length,
-      cancel: rows.filter((r) => getStatusBadge(r.status).label === "Cancel").length,
+      active: rows.filter((r) => (r.status ?? "").toUpperCase() === "ACTIVE").length,
+      closed: rows.filter((r) => (r.status ?? "").toUpperCase() === "CLOSED").length,
+      cancel: rows.filter((r) => (r.status ?? "").toUpperCase() === "CANCEL").length,
     };
   }, [importJobData, importJobListResult?.summary, totalRecords]);
 
@@ -765,7 +766,7 @@ function ImportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       size="xs"
-                      label="Destination Agent"
+                      label="Origin Agent"
                       placeholder="Type agent name"
                       apiEndpoint={URL.agent}
                       searchFields={["customer_name", "customer_code"]}
@@ -1027,7 +1028,7 @@ function ImportJobMaster() {
                       {visibleColumns.agent && (
                         <th style={mergeTh(200, 200)}>
                           <ERPListColumnHeaderFilter
-                            label="Destination Agent"
+                            label="Origin Agent"
                             value={appliedFilters.origin_agent}
                             displayValue={appliedFilters.origin_agent_label || appliedFilters.origin_agent}
                             theme={theme}
@@ -1418,45 +1419,17 @@ function ImportJobMaster() {
                                 const isCancel = statusUpper === "CANCEL";
                                 const canCancel = statusUpper !== "GENERATED" && !isCancel;
                                 return (
-                                  <Menu
-                                    withinPortal
-                                    position="bottom-end"
-                                    shadow="md"
-                                    width={200}
-                                    styles={erpListGeistMenuDropdownStyles}
-                                    classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  >
-                                    <Menu.Target>
-                                      <ActionIcon variant="subtle" color="gray" size="sm">
-                                        <IconDotsVertical size={16} />
-                                      </ActionIcon>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                      <Menu.Item
-                                        leftSection={<IconEdit size={14} />}
-                                        disabled={isCancel}
-                                        onClick={() => {
-                                          if (!isCancel) {
-                                            persistListAndNavigate(`/SeaExport/import-job/edit`, {
-                                              job: row,
-                                            });
-                                          }
-                                        }}
-                                      >
-                                        Edit
-                                      </Menu.Item>
-                                      <Menu.Item
-                                        leftSection={<IconX size={14} />}
-                                        color="red"
-                                        disabled={!canCancel}
-                                        onClick={() => {
-                                          if (canCancel) setCancelConfirmRow(row);
-                                        }}
-                                      >
-                                        Cancel
-                                      </Menu.Item>
-                                    </Menu.Dropdown>
-                                  </Menu>
+                                  <ERPListJobActionMenu
+                                    status={row.status}
+                                    variant="job-page"
+                                    canCancel={canCancel}
+                                    onEdit={() => {
+                                      persistListAndNavigate(`/SeaExport/import-job/edit`, {
+                                        job: row,
+                                      });
+                                    }}
+                                    onCancel={() => setCancelConfirmRow(row)}
+                                  />
                                 );
                               })()}
                             </td>

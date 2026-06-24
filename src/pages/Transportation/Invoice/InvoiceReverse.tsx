@@ -36,6 +36,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
+import { fetchReverseInvoiceById } from "../../../utils/fetchReverseInvoiceById";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -1095,42 +1096,79 @@ function InvoiceReverse() {
 
   useEffect(() => {
     type NavState = {
+      reverse_invoice_id?: number;
       document_no?: string;
       financeReverseRecord?: ReversableDataResponse;
       reverse_document_no?: string;
       invoice_document_no?: string;
     } | null;
     const st = location.state as NavState;
-    const prebuilt = st?.financeReverseRecord;
+    const reverseInvoiceId =
+      st?.reverse_invoice_id != null && Number(st.reverse_invoice_id) > 0
+        ? Number(st.reverse_invoice_id)
+        : st?.financeReverseRecord?.id != null &&
+            Number(st.financeReverseRecord.id) > 0
+          ? Number(st.financeReverseRecord.id)
+          : null;
 
-    if (prebuilt && typeof prebuilt === "object") {
+    if (reverseInvoiceId) {
       let cancelled = false;
       setLoading(true);
       setLoadError(null);
-      applyReversableDataToReverseForm(prebuilt as ReversableDataResponse, form, {
-        setIsAgentInvoice,
-        setBillToDisplayName,
-        emptyDaybook: false,
-        preserveChargeIds: true,
-      });
-      setDocumentNo(String(prebuilt.document_no ?? st?.document_no ?? ""));
-      if (prebuilt.id != null && Number(prebuilt.id) > 0) {
-        setSaveResponse({
-          id: Number(prebuilt.id),
-          customer_id:
-            prebuilt.customer_id != null ? Number(prebuilt.customer_id) : undefined,
-          reverse_document_no:
-            pickReverseDocumentNo(st) || pickReverseDocumentNo(prebuilt),
-          status: String(prebuilt.status ?? "UNPOSTED"),
+      fetchReverseInvoiceById(reverseInvoiceId)
+        .then((data) => {
+          if (cancelled) return;
+          if (!data) {
+            setLoadError("No reverse invoice data returned.");
+            ToastNotification({
+              message: "No reverse invoice data returned.",
+              type: "error",
+            });
+            return;
+          }
+          applyReversableDataToReverseForm(
+            data as ReversableDataResponse,
+            form,
+            {
+              setIsAgentInvoice,
+              setBillToDisplayName,
+              emptyDaybook: false,
+              preserveChargeIds: true,
+            },
+          );
+          setDocumentNo(
+            String(
+              data.document_no ??
+                st?.invoice_document_no ??
+                st?.document_no ??
+                "",
+            ),
+          );
+          setSaveResponse({
+            id: Number(data.id ?? reverseInvoiceId),
+            customer_id:
+              data.customer_id != null
+                ? Number(data.customer_id)
+                : undefined,
+            reverse_document_no:
+              pickReverseDocumentNo(st) || pickReverseDocumentNo(data),
+            status: String(data.status ?? "UNPOSTED"),
+          });
+          setInvoiceIsPosted(
+            String(data.status ?? "").toUpperCase() === "POSTED",
+          );
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            const message =
+              err?.message || "Failed to load reverse invoice data.";
+            setLoadError(message);
+            ToastNotification({ message, type: "error" });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
         });
-        setInvoiceIsPosted(
-          String(prebuilt.status ?? "").toUpperCase() === "POSTED",
-        );
-      } else {
-        setSaveResponse(null);
-        setInvoiceIsPosted(false);
-      }
-      if (!cancelled) setLoading(false);
       return () => {
         cancelled = true;
       };
