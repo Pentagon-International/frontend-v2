@@ -158,6 +158,85 @@ const formatExchangeSellRate = (sellRate: string | number): number => {
   return Math.round(num * 100) / 100;
 };
 
+const ROE_CANNOT_BE_ONE_FIELD = "ROE can't be 1";
+const ROE_CANNOT_BE_ONE_TOAST =
+  "ROE cannot be 1 when currency differs from local currency";
+
+const validateRoeForCurrency = (
+  currencyCode: string | null | undefined,
+  roe: number | null | undefined,
+  branchCurrency: string | null | undefined,
+  forField = false,
+  options?: {
+    currencyId?: string | null;
+    branchCurrencyId?: string | null;
+  },
+): string | null => {
+  if (roe === null || roe === undefined) return "ROE is required";
+
+  const branchCurrencyId = options?.branchCurrencyId ?? "";
+  const base = branchCurrency?.trim().toUpperCase() ?? "";
+  const code = currencyCode?.trim().toUpperCase() ?? "";
+  const currencyId = options?.currencyId ?? "";
+  const hasBranchCurrency = Boolean(base || branchCurrencyId);
+  const hasChargeCurrency = Boolean(code || currencyId);
+  if (!hasBranchCurrency || !hasChargeCurrency) return null;
+
+  const isBase = isChargeBranchCurrency(
+    code,
+    currencyId,
+    branchCurrency ?? "",
+    branchCurrencyId,
+  );
+
+  if (isBase && roe !== 1) {
+    return "ROE must be 1 when currency matches branch currency";
+  }
+  if (!isBase && roe === 1) {
+    return forField ? ROE_CANNOT_BE_ONE_FIELD : ROE_CANNOT_BE_ONE_TOAST;
+  }
+  return null;
+};
+
+const isChargeBranchCurrency = (
+  currencyCode: string,
+  currencyId: string,
+  branchCurrency: string,
+  branchCurrencyId: string,
+): boolean => {
+  const base = branchCurrency?.trim().toUpperCase() ?? "";
+  const code = currencyCode?.trim().toUpperCase() ?? "";
+  if (base && code && code === base) return true;
+  if (
+    branchCurrencyId &&
+    currencyId &&
+    String(currencyId) === String(branchCurrencyId)
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const resolveChargeCurrencyCode = (
+  charge: { currency?: string; currency_id?: string },
+  currencyData: { id?: number; code?: string; currency_code?: string }[],
+): string => {
+  const currencyId = charge.currency_id
+    ? String(charge.currency_id).trim()
+    : "";
+  const fromField = charge.currency?.trim().toUpperCase() ?? "";
+  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
+    const row = currencyData.find((c) => String(c.id) === currencyId);
+    return (row?.code || row?.currency_code || "").toString().trim().toUpperCase();
+  }
+  if (fromField) return fromField;
+  if (currencyId) {
+    const row = currencyData.find((c) => String(c.id) === currencyId);
+    return (row?.code || row?.currency_code || "").toString().trim().toUpperCase();
+  }
+  return "";
+};
+
 const fetchExchangeRateMaster = async (
   countryCode: string,
   currencyCode: string,
@@ -988,7 +1067,14 @@ function InvoiceCreate({
       document_date: (value) => (!value ? "Document Date is required" : null),
       due_date: (value) => (!value ? "Due Date is required" : null),
       currency: (value) => (!value ? "Currency is required" : null),
-      roe: (value) => (value === null ? "ROE is required" : null),
+      roe: (value, values) =>
+        validateRoeForCurrency(
+          values.currency,
+          value,
+          defaultBranchCurrency,
+          true,
+          { branchCurrencyId: defaultBranchCurrencyId },
+        ),
     },
   });
 
@@ -1024,17 +1110,20 @@ function InvoiceCreate({
 
       const billingCurrencyUpper = billingCurrencyRef.current?.trim().toUpperCase();
       const headerRoe = billingRoeRef.current;
+      const isForeignToBranch =
+        branchCurrencyUpper !== "" && currencyUpper !== branchCurrencyUpper;
       if (
         billingCurrencyUpper &&
         currencyUpper === billingCurrencyUpper &&
         headerRoe != null &&
-        headerRoe > 0
+        headerRoe > 0 &&
+        !(isForeignToBranch && headerRoe === 1)
       ) {
         roeCacheRef.current.set(currencyUpper, headerRoe);
         return headerRoe;
       }
 
-      if (!activeBranchCountryCode) return 1;
+      if (!activeBranchCountryCode) return null;
 
       const pending = pendingRoeFetchesRef.current.get(currencyUpper);
       if (pending) return pending;
@@ -1045,12 +1134,13 @@ function InvoiceCreate({
             activeBranchCountryCode,
             currencyUpper,
           );
-          const resolved = rate ?? 1;
-          roeCacheRef.current.set(currencyUpper, resolved);
-          return resolved;
+          if (rate != null) {
+            roeCacheRef.current.set(currencyUpper, rate);
+          }
+          return rate;
         } catch (error) {
           console.error("Error fetching exchange rate:", error);
-          return 1;
+          return null;
         } finally {
           pendingRoeFetchesRef.current.delete(currencyUpper);
         }
@@ -1068,6 +1158,34 @@ function InvoiceCreate({
     queryFn: fetchCurrencyMaster,
     staleTime: Infinity,
   });
+
+  const isChargeBaseCurrency = useCallback(
+    (charge: { currency?: string; currency_id?: string }): boolean => {
+      const code = resolveChargeCurrencyCode(
+        charge,
+        (currencyData as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[]) ?? [],
+      );
+      return (
+        isBaseCurrency(code) ||
+        isChargeBranchCurrency(
+          code,
+          charge.currency_id ?? "",
+          defaultBranchCurrency,
+          defaultBranchCurrencyId,
+        )
+      );
+    },
+    [
+      currencyData,
+      isBaseCurrency,
+      defaultBranchCurrency,
+      defaultBranchCurrencyId,
+    ],
+  );
 
   // Fetch state data
   const { data: stateData = [], isLoading: isStateLoading } = useQuery({
@@ -1302,26 +1420,32 @@ function InvoiceCreate({
   }, [form.values.currency, form.values.roe, userLocalCurrency]);
 
   const chargeCurrenciesKey = form.values.charges
-    .map((c) => c.currency ?? "")
+    .map((c) => `${c.currency ?? ""}|${c.currency_id ?? ""}`)
     .join("|");
 
   // When a charge currency is the branch base currency, ROE must always be 1
   useEffect(() => {
     if (!defaultBranchCurrency) return;
-    const base = defaultBranchCurrency.trim().toUpperCase();
     let changed = false;
     const updated = form.values.charges.map((charge) => {
-      const code = charge.currency?.trim().toUpperCase() ?? "";
-      if (code === base && charge.roe !== 1) {
+      if (isChargeBaseCurrency(charge) && charge.roe !== 1) {
         changed = true;
-        roeCacheRef.current.set(code, 1);
+        const code = resolveChargeCurrencyCode(
+          charge,
+          (currencyData as {
+            id?: number;
+            code?: string;
+            currency_code?: string;
+          }[]) ?? [],
+        );
+        if (code) roeCacheRef.current.set(code, 1);
         return { ...charge, roe: 1 };
       }
       return charge;
     });
     if (changed) form.setFieldValue("charges", updated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrenciesKey, defaultBranchCurrency]);
+  }, [chargeCurrenciesKey, defaultBranchCurrency, defaultBranchCurrencyId, currencyData]);
 
   // When Bill To is cleared, clear address only. Do not clear state here: it runs before
   // house→invoice prefill and would wipe shipper/consignee state before bill_to is set.
@@ -1680,16 +1804,42 @@ function InvoiceCreate({
                   ? charge.amount_per_unit
                   : parseFloat(charge.amount_per_unit)
                 : null;
-            const roeVal =
-              charge.roe != null && String(charge.roe).trim() !== ""
-                ? typeof charge.roe === "number"
-                  ? charge.roe
-                  : parseFloat(String(charge.roe))
-                : currency
-                  ? currency === headerCode && headerRoe != null
-                    ? headerRoe
-                    : await ensureRoeForCurrency(currency)
+            const branchBase = defaultBranchCurrency?.trim().toUpperCase() ?? "";
+            const chargeIsBranchCurrency = isChargeBranchCurrency(
+              currency,
+              currency_id,
+              defaultBranchCurrency,
+              defaultBranchCurrencyId,
+            );
+            if (!currency && chargeIsBranchCurrency && branchBase) {
+              currency = branchBase;
+            }
+            const roeVal = await (async (): Promise<number | null> => {
+              if (chargeIsBranchCurrency) return 1;
+              if (!currency) return null;
+
+              const fromJob =
+                charge.roe != null && String(charge.roe).trim() !== ""
+                  ? typeof charge.roe === "number"
+                    ? charge.roe
+                    : parseFloat(String(charge.roe))
                   : null;
+              if (
+                fromJob != null &&
+                Number.isFinite(fromJob) &&
+                fromJob !== 1
+              ) {
+                return fromJob;
+              }
+              if (
+                currency === headerCode &&
+                headerRoe != null &&
+                headerRoe !== 1
+              ) {
+                return headerRoe;
+              }
+              return ensureRoeForCurrency(currency);
+            })();
 
             let amount: number | null =
               charge.amount != null
@@ -2652,6 +2802,82 @@ function InvoiceCreate({
 
     setIsSubmitting(true);
     try {
+      const headerRoeToastError = validateRoeForCurrency(
+        values.currency,
+        values.roe,
+        defaultBranchCurrency,
+        false,
+        { branchCurrencyId: defaultBranchCurrencyId },
+      );
+      if (headerRoeToastError) {
+        const headerRoeFieldError = validateRoeForCurrency(
+          values.currency,
+          values.roe,
+          defaultBranchCurrency,
+          true,
+          { branchCurrencyId: defaultBranchCurrencyId },
+        );
+        form.setFieldError("roe", headerRoeFieldError ?? headerRoeToastError);
+        ToastNotification({
+          message: headerRoeToastError,
+          type: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const currencyRows = (currencyData as {
+        id?: number;
+        code?: string;
+        currency_code?: string;
+      }[]) ?? [];
+      const nextChargeErrors: Record<number, Record<string, string>> = {};
+      let chargeRoeErrorMessage: string | null = null;
+
+      values.charges.forEach((charge, index) => {
+        const chargeCurrencyCode = resolveChargeCurrencyCode(
+          charge,
+          currencyRows,
+        );
+        const roeToastError = validateRoeForCurrency(
+          chargeCurrencyCode,
+          charge.roe,
+          defaultBranchCurrency,
+          false,
+          {
+            currencyId: charge.currency_id,
+            branchCurrencyId: defaultBranchCurrencyId,
+          },
+        );
+        if (roeToastError) {
+          const roeFieldError = validateRoeForCurrency(
+            chargeCurrencyCode,
+            charge.roe,
+            defaultBranchCurrency,
+            true,
+            {
+              currencyId: charge.currency_id,
+              branchCurrencyId: defaultBranchCurrencyId,
+            },
+          );
+          nextChargeErrors[index] = {
+            ...(nextChargeErrors[index] ?? {}),
+            roe: roeFieldError ?? roeToastError,
+          };
+          if (!chargeRoeErrorMessage) chargeRoeErrorMessage = roeToastError;
+        }
+      });
+
+      if (chargeRoeErrorMessage) {
+        setChargeErrors((prev) => ({ ...prev, ...nextChargeErrors }));
+        ToastNotification({
+          message: chargeRoeErrorMessage,
+          type: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validate charges
       // const invalidCharges = values.charges.some((charge) => {
       //   const hasMissingRequired =
@@ -4050,11 +4276,13 @@ function InvoiceCreate({
                     return;
                   }
                   void ensureRoeForCurrency(newCurrency).then((roe) => {
-                    if (roe == null) return;
                     form.setFieldValue("roe", roe);
+                    if (roe == null) return;
                     const billingUpper = newCurrency.trim().toUpperCase();
                     form.values.charges.forEach((charge, idx) => {
-                      if (charge.currency?.trim().toUpperCase() === billingUpper) {
+                      if (
+                        charge.currency?.trim().toUpperCase() === billingUpper
+                      ) {
                         form.setFieldValue(`charges.${idx}.roe`, roe);
                       }
                     });
@@ -4492,21 +4720,18 @@ function InvoiceCreate({
                           );
                           const code = opt ? (opt.label ?? opt.value) : v;
                           form.setFieldValue(`charges.${index}.currency`, code);
-                          void ensureRoeForCurrency(code).then((newRoe) => {
-                            if (newRoe !== null) {
-                              form.setFieldValue(`charges.${index}.roe`, newRoe);
-                            }
+                          if (isBaseCurrency(code)) {
+                            form.setFieldValue(`charges.${index}.roe`, 1);
+                            roeCacheRef.current.set(code.trim().toUpperCase(), 1);
                             const currentCharge = form.values.charges[index];
                             const amt = currentCharge.amount;
                             if (amt != null && amt > 0) {
-                              let local = currentCharge.amount_in_local;
-                              if (newRoe != null && newRoe > 0) {
-                                local = clampAmount(amt * newRoe);
-                                if (local != null)
-                                  form.setFieldValue(
-                                    `charges.${index}.amount_in_local`,
-                                    local,
-                                  );
+                              const local = clampAmount(amt * 1);
+                              if (local != null) {
+                                form.setFieldValue(
+                                  `charges.${index}.amount_in_local`,
+                                  local,
+                                );
                               }
                               const headerAmt = calcChargeHeaderAmount(
                                 {
@@ -4518,13 +4743,51 @@ function InvoiceCreate({
                                 form.values.currency,
                                 form.values.roe,
                               );
-                              if (headerAmt != null)
+                              if (headerAmt != null) {
                                 form.setFieldValue(
                                   `charges.${index}.header_amount`,
                                   headerAmt,
                                 );
+                              }
                             }
-                          });
+                          } else {
+                            void ensureRoeForCurrency(code).then((newRoe) => {
+                              form.setFieldValue(
+                                `charges.${index}.roe`,
+                                newRoe,
+                              );
+                              const currentCharge = form.values.charges[index];
+                              const amt = currentCharge.amount;
+                              if (amt != null && amt > 0) {
+                                let local = currentCharge.amount_in_local;
+                                if (newRoe != null && newRoe > 0) {
+                                  local = clampAmount(amt * newRoe);
+                                  if (local != null) {
+                                    form.setFieldValue(
+                                      `charges.${index}.amount_in_local`,
+                                      local,
+                                    );
+                                  }
+                                }
+                                const headerAmt = calcChargeHeaderAmount(
+                                  {
+                                    ...currentCharge,
+                                    amount: amt,
+                                    amount_in_local: local,
+                                    currency: code,
+                                  },
+                                  form.values.currency,
+                                  form.values.roe,
+                                );
+                                if (headerAmt != null) {
+                                  form.setFieldValue(
+                                    `charges.${index}.header_amount`,
+                                    headerAmt,
+                                  );
+                                }
+                              }
+                            });
+                          }
                           // Clear error when field is updated
                           if (chargeErrors[index]?.currency) {
                             const newErrors = { ...chargeErrors };
@@ -4637,11 +4900,11 @@ function InvoiceCreate({
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={
-                          isReadOnly || isBaseCurrency(charge.currency)
+                          isReadOnly || isChargeBaseCurrency(charge)
                         }
                         value={charge.roe || undefined}
                         onChange={(value) => {
-                          if (isBaseCurrency(charge.currency)) {
+                          if (isChargeBaseCurrency(charge)) {
                             form.setFieldValue(`charges.${index}.roe`, 1);
                             return;
                           }
@@ -5332,7 +5595,9 @@ function InvoiceCreate({
                                     currency: newChargeCurrency,
                                     currency_id: newChargeCurrencyId,
                                     billing_currency: null,
-                                    roe,
+                                    roe: isBaseCurrency(newChargeCurrency)
+                                      ? 1
+                                      : roe,
                                     amount_per_unit: null,
                                     amount: null,
                                     header_amount: null,

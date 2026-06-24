@@ -2,8 +2,12 @@ import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 
 const US_COMPANY_FALLBACK = "PENTAGON PRIME AMERICAS INC";
+const US_FORWARDING_AGENT_NAME = "PENTAGON PRIME AMERICAS INC";
+const US_FORWARDING_AGENT_ADDRESS =
+  "8400 NW 33rd STREET, SUITE 310, MIAMI FL 33178";
 const US_FMC_NO = "034982N";
-const TOP_ROW1_HEIGHT = 24;
+const TOP_ROW1_HEIGHT = 32;
+const ROW1_EXPORT_REF_HEIGHT = 10;
 const TOP_ROW2_HEIGHT = 18;
 const RIGHT_SUB_SECTION_HEIGHT = 12;
 const RIGHT_SUB_TITLE_OFFSET = 4;
@@ -11,6 +15,8 @@ const RIGHT_SUB_BODY_OFFSET = 9;
 const TOP_ROW3_HEIGHT = RIGHT_SUB_SECTION_HEIGHT * 3;
 const TABLE_SEPARATION_GAP = 4;
 const TOP_TO_MIDDLE_GAP = 3;
+const LOGO_HEIGHT = 14;
+const LOGO_TO_TABLE_GAP = 2;
 
 // Document font sizes (+2pt from original layout)
 const FONT_HEADER = 11;
@@ -122,12 +128,17 @@ const buildTextLines = (
 };
 
 const CARGO_BODY_LINE_HEIGHT = 3.8;
+const SECTION_TITLE_LINE_HEIGHT = 4;
+const SECTION_BODY_LINE_HEIGHT = 3.7;
+const SECTION_TITLE_TOP_INSET = 3;
+const EXPORT_REF_TITLE_TOP_GAP = 2;
+const FORWARDING_AGENT_TITLE_TOP_GAP = 2;
 const CARGO_HEADER_TOP_PAD = 3;
 const CARGO_HEADER_BOTTOM_PAD = 2;
 const CARGO_DATA_GAP = 4;
 const PAGE_MARGIN_LEFT = 10;
 const PAGE_MARGIN_RIGHT = 10;
-const PAGE_MARGIN_TOP = 10;
+const PAGE_MARGIN_TOP = 6;
 const CONTINUATION_TOP_Y = PAGE_MARGIN_TOP;
 const TERMS_TO_CARRIER_GAP = 5;
 const CARRIER_TO_SIGNED_GAP = 4;
@@ -292,23 +303,22 @@ const drawFixedLabeledSection = (
   title: string,
   contentLines: string[],
   padding = 3,
+  titleTopInset = padding + SECTION_TITLE_TOP_INSET,
 ) => {
   const contentWidth = width - 2 * padding;
-  const titleLineHeight = 4;
-  const bodyLineHeight = 3.7;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(FONT_SECTION_TITLE);
   const titleLines = doc.splitTextToSize(title, contentWidth);
-  doc.text(titleLines, x + padding, y + padding + 3);
+  doc.text(titleLines, x + padding, y + titleTopInset);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_SECTION_BODY);
-  const titleHeight = titleLines.length * titleLineHeight;
-  const bodyStartY = y + padding + 3 + titleHeight;
+  const titleHeight = titleLines.length * SECTION_TITLE_LINE_HEIGHT;
+  const bodyStartY = y + titleTopInset + titleHeight;
   const maxBodyLines = Math.max(
     1,
-    Math.floor((y + height - padding - bodyStartY) / bodyLineHeight),
+    Math.floor((y + height - padding - bodyStartY) / SECTION_BODY_LINE_HEIGHT),
   );
   const visibleLines = contentLines.slice(0, maxBodyLines);
   if (visibleLines.length > 0) {
@@ -534,7 +544,7 @@ export const generateUsBillOfLadingPDF = (
         innerMargin + boxPadding,
         logoY,
         38,
-        14,
+        LOGO_HEIGHT,
         undefined,
         "FAST",
       );
@@ -543,8 +553,8 @@ export const generateUsBillOfLadingPDF = (
     }
   }
 
-  const topTableStartY = logoY + 18;
-  const headerAboveTableY = topTableStartY - 3;
+  const topTableStartY = logoY + LOGO_HEIGHT + LOGO_TO_TABLE_GAP;
+  const headerAboveTableY = topTableStartY - 2;
 
   const headerCenterWidth = innerWidth * 0.36;
   const headerCenterX = innerMargin + (innerWidth - headerCenterWidth) / 2;
@@ -581,13 +591,24 @@ export const generateUsBillOfLadingPDF = (
   // ===== TABLE 1: TOP INFORMATION GRID =====
   const topTableHeight = TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT + TOP_ROW3_HEIGHT;
   const colWidth = innerWidth / 2;
+  const rightSubWidth = colWidth / 2;
+  const row1ExportRefHeight = ROW1_EXPORT_REF_HEIGHT;
+  const row1ForwardingAgentHeight = TOP_ROW1_HEIGHT - ROW1_EXPORT_REF_HEIGHT;
   const leftX = innerMargin;
   const rightX = innerMargin + colWidth;
   const sectionPad = boxPadding;
+  const exportRefTitleTopInset = sectionPad + EXPORT_REF_TITLE_TOP_GAP;
+  const forwardingAgentTitleTopInset =
+    sectionPad + FORWARDING_AGENT_TITLE_TOP_GAP;
   const textWidth = colWidth - 2 * sectionPad;
 
   const shipperLines = buildTextLines(doc, shipperParts, textWidth);
   const exportRefLines = buildTextLines(doc, [exportReference], textWidth);
+  const forwardingAgentLines = buildTextLines(
+    doc,
+    [US_FORWARDING_AGENT_NAME, US_FORWARDING_AGENT_ADDRESS],
+    textWidth,
+  );
   const consigneeLines = buildTextLines(doc, consigneeParts, textWidth);
   const deliveryAgentLines = buildTextLines(doc, deliveryAgentParts, textWidth);
   const notifyLines = buildTextLines(doc, notifyParts, textWidth);
@@ -611,10 +632,22 @@ export const generateUsBillOfLadingPDF = (
     rightX,
     row1Y,
     colWidth,
-    TOP_ROW1_HEIGHT,
+    row1ExportRefHeight,
     "Export Reference",
     exportRefLines,
     sectionPad,
+    exportRefTitleTopInset,
+  );
+  drawFixedLabeledSection(
+    doc,
+    rightX,
+    row1Y + row1ExportRefHeight,
+    colWidth,
+    row1ForwardingAgentHeight,
+    "Forwarding Agent (Name and address)",
+    forwardingAgentLines,
+    sectionPad,
+    forwardingAgentTitleTopInset,
   );
 
   drawFixedLabeledSection(
@@ -649,7 +682,6 @@ export const generateUsBillOfLadingPDF = (
     sectionPad,
   );
 
-  const rightSubWidth = colWidth / 2;
   const vesselTopY = row3Y;
   const portsRow1Y = row3Y + RIGHT_SUB_SECTION_HEIGHT;
   const portsRow2Y = row3Y + RIGHT_SUB_SECTION_HEIGHT * 2;
@@ -701,6 +733,12 @@ export const generateUsBillOfLadingPDF = (
 
   drawBox(doc, innerMargin, topTableStartY, innerWidth, topTableHeight);
   doc.line(rightX, topTableStartY, rightX, topTableStartY + topTableHeight);
+  doc.line(
+    rightX,
+    row1Y + row1ExportRefHeight,
+    rightX + colWidth,
+    row1Y + row1ExportRefHeight,
+  );
   doc.line(innerMargin, row2Y, innerMargin + innerWidth, row2Y);
   // Full-width line aligns Notify Party (left) with top of Vessel and Voyage (right)
   doc.line(innerMargin, row3Y, innerMargin + innerWidth, row3Y);
