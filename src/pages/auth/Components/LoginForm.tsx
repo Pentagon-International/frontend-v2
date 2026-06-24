@@ -22,6 +22,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import * as yup from "yup";
 import { login, LoginFormData } from "../../../service/auth.services";
 import useAuthStore from "../../../store/authStore";
+import { normalizeLoginBranches } from "../../../utils/branchOdexCredentials";
 import "./../authPage.css";
 
 type SigninFormValues = {
@@ -51,10 +52,18 @@ type LoginResponse = {
     country_name: string;
   };
   branches: Array<{
-    branch_id: number;
+    id?: number;
+    user_branch_id?: number;
+    branch_id?: number;
     branch_code: string;
     branch_name: string;
     is_default: boolean;
+    main_default?: boolean;
+    odex_username?: string | null;
+    odex_password?: string | null;
+    has_odex_credentials?: boolean;
+    logo_url?: string | null;
+    branch_title?: string | null;
   }>;
   screen_permissions?: {
     quotation_approval?: boolean;
@@ -129,7 +138,7 @@ function LoginForm() {
         is_manager: data.is_manager,
         company: data.company,
         country: data.country,
-        branches: data.branches,
+        branches: normalizeLoginBranches(data.branches),
         screen_permissions: data.screen_permissions,
       });
 

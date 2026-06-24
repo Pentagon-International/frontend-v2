@@ -10,14 +10,22 @@ import {
   Center,
   Paper,
   ThemeIcon,
+  Switch,
+  TextInput,
+  PasswordInput,
 } from "@mantine/core";
 import { IconMapPin, IconBuilding, IconFlag } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuthStore from "../store/authStore";
 import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 import { apiCallProtected } from "../api/axios";
+import {
+  extractOdexFieldsFromResponse,
+  getBranchByUserBranchId,
+  hasOdexCredentialsChanged,
+} from "../utils/branchOdexCredentials";
 import { ToastNotification } from "./index";
 
 interface ProfileDrawerProps {
@@ -45,6 +53,9 @@ interface BranchWithCountry {
   state?: unknown;
   logo_url?: string | null;
   branch_title?: string | null;
+  odex_username?: string | null;
+  odex_password?: string | null;
+  has_odex_credentials?: boolean;
 }
 
 function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
@@ -61,8 +72,28 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
   const [selectedBranch, setSelectedBranch] = useState(
     defaultBranch?.user_branch_id || 0,
   );
+  const [odexUsername, setOdexUsername] = useState("");
+  const [odexPassword, setOdexPassword] = useState("");
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    if (!opened || !defaultBranch) return;
+    setSelectedBranch(defaultBranch.user_branch_id);
+    setOdexUsername(defaultBranch.odex_username ?? "");
+    setOdexPassword(defaultBranch.odex_password ?? "");
+  }, [
+    opened,
+    defaultBranch?.user_branch_id,
+    defaultBranch?.odex_username,
+    defaultBranch?.odex_password,
+  ]);
+
+  const loadOdexFieldsForBranch = (userBranchId: number) => {
+    const branch = getBranchByUserBranchId(user?.branches, userBranchId);
+    setOdexUsername(branch?.odex_username ?? "");
+    setOdexPassword(branch?.odex_password ?? "");
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -97,18 +128,34 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
 
   const handleBranchChange = (value: string | null) => {
     if (value) {
-      setSelectedBranch(parseInt(value));
+      const branchId = parseInt(value, 10);
+      setSelectedBranch(branchId);
+      if (branchId === defaultBranch?.user_branch_id) {
+        loadOdexFieldsForBranch(branchId);
+      }
     }
   };
 
   const [isUpdatingBranch, setIsUpdatingBranch] = useState(false);
 
   const handleUpdateProfile = async () => {
-    if (!user || !selectedBranch) return;
+    if (!user || !selectedBranch || !defaultBranch) return;
 
-    const isNonActiveBranch = selectedBranch !== defaultBranch?.user_branch_id;
+    const branchChanged =
+      selectedBranch !== defaultBranch.user_branch_id;
+    const storedActiveBranch = getBranchByUserBranchId(
+      user.branches,
+      defaultBranch.user_branch_id,
+    );
+    const odexChanged =
+      !branchChanged &&
+      hasOdexCredentialsChanged(
+        storedActiveBranch,
+        odexUsername,
+        odexPassword,
+      );
 
-    if (!isNonActiveBranch) {
+    if (!branchChanged && !odexChanged) {
       onClose();
       return;
     }
@@ -116,63 +163,99 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
     setIsUpdatingBranch(true);
 
     try {
-      const payload = { is_default: true };
+      if (branchChanged) {
+        const response = await apiCallProtected.patch(
+          `${URL.userBranchMapping}${selectedBranch}/`,
+          { is_default: true },
+          API_HEADER,
+        );
+
+        if (response.data) {
+          const responseData = response.data as Record<string, unknown>;
+          const odexFromResponse = extractOdexFieldsFromResponse(responseData);
+
+          updateUserProfile({
+            branchId: selectedBranch,
+            switchDefault: true,
+            company: responseData.company_id
+              ? {
+                  company_id: Number(responseData.company_id),
+                  company: String(responseData.company_name ?? ""),
+                  company_code: String(responseData.company_code ?? ""),
+                }
+              : undefined,
+            country: responseData.country_id
+              ? {
+                  country_id: Number(responseData.country_id),
+                  country_name: String(responseData.country_name ?? ""),
+                  country_code: String(responseData.country_code ?? ""),
+                }
+              : undefined,
+            ...(odexFromResponse.has_odex_credentials
+              ? { odexCredentials: odexFromResponse }
+              : {}),
+          });
+        }
+
+        ToastNotification({
+          type: "success",
+          message: "Profile is updated",
+        });
+
+        onClose();
+
+        const isOnDashboard = location.pathname === "/";
+
+        if (isOnDashboard) {
+          navigate("/", {
+            replace: true,
+            state: {
+              refreshData: true,
+              timestamp: Date.now(),
+            },
+          });
+        } else {
+          navigate("/", { replace: true });
+        }
+        return;
+      }
 
       const response = await apiCallProtected.patch(
-        `${URL.userBranchMapping}${selectedBranch}/`,
-        payload,
+        `${URL.userBranchMapping}${defaultBranch.user_branch_id}/`,
+        {
+          odex_username: odexUsername,
+          odex_password: odexPassword,
+        },
         API_HEADER,
       );
 
-      if (response.data) {
-        console.log("Branch updated successfully:", response);
+      const responseData = (response.data ?? {}) as Record<string, unknown>;
+      const odexFromResponse = extractOdexFieldsFromResponse({
+        ...responseData,
+        odex_username: responseData.odex_username ?? odexUsername,
+        odex_password: responseData.odex_password ?? odexPassword,
+      });
 
-        // ✅ SINGLE STORE UPDATE (IMPORTANT FIX)
-        updateUserProfile({
-          branchId: selectedBranch,
-          company: response?.data?.company_id
-            ? {
-                company_id: response.data.company_id,
-                company: response.data.company_name,
-                company_code: response.data.company_code,
-              }
-            : undefined,
-          country: response?.data?.country_id
-            ? {
-                country_id: response.data.country_id,
-                country_name: response.data.country_name,
-                country_code: response.data.country_code,
-              }
-            : undefined,
-        });
-      }
+      updateUserProfile({
+        branchId: defaultBranch.user_branch_id,
+        switchDefault: false,
+        odexCredentials: odexFromResponse,
+      });
 
       ToastNotification({
         type: "success",
-        message: "Profile is updated",
+        message: "ODEX credentials updated",
       });
 
       onClose();
-
-      const isOnDashboard = location.pathname === "/";
-
-      if (isOnDashboard) {
-        navigate("/", {
-          replace: true,
-          state: {
-            refreshData: true,
-            timestamp: Date.now(),
-          },
-        });
-      } else {
-        navigate("/", { replace: true });
-      }
     } catch (error) {
-      console.error("Error updating branch:", error);
+      console.error("Error updating profile:", error);
 
       ToastNotification({
         type: "error",
-        message: "Failed to update profile",
+        message: branchChanged
+          ? "Failed to update profile"
+          : "Failed to update ODEX credentials",
       });
     } finally {
       setIsUpdatingBranch(false);
@@ -183,6 +266,15 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
 
   // Check if selected branch is different from default (active) branch
   const isNonActiveBranch = selectedBranch !== defaultBranch?.user_branch_id;
+  const storedActiveBranch = getBranchByUserBranchId(
+    user.branches,
+    defaultBranch?.user_branch_id,
+  );
+  const odexChanged =
+    !isNonActiveBranch &&
+    hasOdexCredentialsChanged(storedActiveBranch, odexUsername, odexPassword);
+  const hasPendingChanges = isNonActiveBranch || odexChanged;
+  const hasOdexConfigured = storedActiveBranch?.has_odex_credentials === true;
 
   // Prepare branch data for Select component
   const getBranchData = () => {
@@ -390,6 +482,63 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
           </Box>
         )}
 
+        {!isNonActiveBranch && (
+          <Box>
+            <Group justify="space-between" align="center" mb="sm">
+              <Text fw={600} fz="md" c="#2c3e50">
+                ODEX Configuration
+              </Text>
+              <Switch
+                checked={hasOdexConfigured}
+                disabled
+              />
+              </Group>
+            <Stack
+              gap="sm"
+              component="form"
+              autoComplete="off"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <TextInput
+                name="odex-portal-username"
+                placeholder="Odex Username"
+                value={odexUsername}
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore
+                onChange={(event) =>
+                  setOdexUsername(event.currentTarget.value)
+                }
+                styles={{
+                  input: {
+                    border: "1px solid #e9ecef",
+                    borderRadius: "8px",
+                    backgroundColor: "#f8f9fa",
+                  },
+                }}
+              />
+              <PasswordInput
+                name="odex-portal-password"
+                placeholder="Odex Password"
+                value={odexPassword}
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore
+                onChange={(event) =>
+                  setOdexPassword(event.currentTarget.value)
+                }
+                styles={{
+                  input: {
+                    border: "1px solid #e9ecef",
+                    borderRadius: "8px",
+                    backgroundColor: "#f8f9fa",
+                  },
+                }}
+              />
+            </Stack>
+          </Box>
+        )}
+
         {/* Actions */}
         <Stack gap="sm" mt="lg" align="center">
           <Button
@@ -403,7 +552,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
               width: "200px",
             }}
             onClick={handleUpdateProfile}
-            disabled={isUpdatingBranch}
+            disabled={isUpdatingBranch || !hasPendingChanges}
             loading={isUpdatingBranch}
           >
             {isUpdatingBranch ? "Updating..." : "Update Profile"}

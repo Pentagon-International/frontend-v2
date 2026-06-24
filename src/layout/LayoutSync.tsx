@@ -215,6 +215,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/automation/vendor-invoice") || path.startsWith("/automation/invoice-manager")) {
       setActiveNav("Automation");
       setActiveSubNav("Vendor Invoice");
+    } else if (path.startsWith("/automation/odex-jobs") || path.startsWith("/odex-jobs")) {
+      setActiveNav("Automation");
+      setActiveSubNav("ODEX Jobs");
     } else if (path.startsWith("/workflow/hbl-document-manager")) {
       setActiveNav("Automation");
       setActiveSubNav("Import Job");

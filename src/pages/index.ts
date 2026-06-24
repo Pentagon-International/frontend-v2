@@ -188,6 +188,8 @@ import FreightCreate from "./call-entry/tariff/FreightCreate";
 import DestinationCreate from "./call-entry/tariff/DestinationCreate";
 import HBLDocumentManager from "./Workflow/jobcreation/AutoJobCreation"
 import Invoice from "./Workflow/jobcreation/InvoiceCreation";
+import OdexJobsMaster from "./Odex/OdexJobsMaster";
+import OdexJobDetail from "./Odex/OdexJobDetail";
 import Chatbot from "./Workflow/Chatbot";
 import ChatbotGoogleApi from "./Workflow/Chatbot_google_api";
 import ChatbotBrowser from "./Workflow/Chatbot_browser";
@@ -354,6 +356,8 @@ export {
   OceanImportToExportBooking,
   HBLDocumentManager,
   Invoice,
+  OdexJobsMaster,
+  OdexJobDetail,
   Chatbot,
   ChatbotGoogleApi,
   ChatbotBrowser,

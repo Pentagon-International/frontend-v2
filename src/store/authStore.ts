@@ -50,6 +50,12 @@ interface Branch {
   branch_code: string;
   branch_name: string;
   is_default: boolean;
+  main_default?: boolean;
+  odex_username?: string | null;
+  odex_password?: string | null;
+  has_odex_credentials?: boolean;
+  logo_url?: string | null;
+  branch_title?: string | null;
 }
 
 interface ScreenPermissions {
@@ -110,6 +116,25 @@ interface AuthStore {
     country_name: string;
   }) => void;
   invalidateQueries: () => void;
+  updateUserProfile: (data: {
+    branchId: number;
+    switchDefault?: boolean;
+    company?: {
+      company_id: number;
+      company: string;
+      company_code: string;
+    };
+    country?: {
+      country_id: number;
+      country_name: string;
+      country_code: string;
+    };
+    odexCredentials?: {
+      odex_username?: string | null;
+      odex_password?: string | null;
+      has_odex_credentials?: boolean;
+    };
+  }) => void;
 }
 
 const useAuthStore = create<AuthStore>((set) => ({
@@ -323,45 +348,61 @@ const useAuthStore = create<AuthStore>((set) => ({
     });
   },
   updateUserProfile: (data) => {
-  set((state) => {
-    if (!state.user) return state;
+    set((state) => {
+      if (!state.user) return state;
 
-    const updatedBranches = state.user.branches.map((branch) => ({
-      ...branch,
-      is_default: branch.user_branch_id === data.branchId,
-    }));
+      const shouldSwitchDefault = data.switchDefault !== false;
 
-    const updatedUser = {
-      ...state.user,
-      branches: updatedBranches,
-      company: data.company
-        ? {
-            ...state.user.company,
-            company_name: data.company.company,
-            company_id: data.company.company_id,
-            company_code: data.company.company_code,
-          }
-        : state.user.company,
-      country: data.country
-        ? {
-            ...state.user.country,
-            country_name: data.country.country_name,
-            country_code: data.country.country_code,
-            country_id: data.country.country_id,
-          }
-        : state.user.country,
-    };
+      const updatedBranches = state.user.branches.map((branch) => {
+        if (branch.user_branch_id !== data.branchId) {
+          if (!shouldSwitchDefault) return branch;
+          return { ...branch, is_default: false };
+        }
 
-    localStorage.setItem("user", JSON.stringify(updatedUser));
+        return {
+          ...branch,
+          ...(shouldSwitchDefault ? { is_default: true } : {}),
+          ...(data.odexCredentials
+            ? {
+                odex_username: data.odexCredentials.odex_username,
+                odex_password: data.odexCredentials.odex_password,
+                has_odex_credentials: data.odexCredentials.has_odex_credentials,
+              }
+            : {}),
+        };
+      });
 
-    invalidateBranchRelatedQueries();
+      const updatedUser = {
+        ...state.user,
+        branches: updatedBranches,
+        company: data.company
+          ? {
+              ...state.user.company,
+              company_name: data.company.company,
+              company_id: data.company.company_id,
+              company_code: data.company.company_code,
+            }
+          : state.user.company,
+        country: data.country
+          ? {
+              ...state.user.country,
+              country_name: data.country.country_name,
+              country_code: data.country.country_code,
+              country_id: data.country.country_id,
+            }
+          : state.user.country,
+      };
 
-    return {
-      ...state,
-      user: updatedUser, // ✅ ALWAYS new reference
-    };
-  });
-},
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+
+      invalidateBranchRelatedQueries();
+
+      return {
+        ...state,
+        user: updatedUser,
+      };
+    });
+  },
   invalidateQueries: () => {
     invalidateBranchRelatedQueries();
   },
