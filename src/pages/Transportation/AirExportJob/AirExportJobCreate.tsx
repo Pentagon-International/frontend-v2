@@ -761,6 +761,7 @@ function AirExportJobCreate() {
       ? { estimates: location.state.estimates }
       : undefined,
   );
+  const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   const cargoDetailsForm = useForm<CargoDetailsForm>({
     initialValues: {
@@ -2423,6 +2424,11 @@ function AirExportJobCreate() {
     }
 
     if (!validateEstimates()) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimatesRoeValidateRef.current?.() === false) {
       setIsSubmitting(false);
       return;
     }
@@ -4350,6 +4356,7 @@ function AirExportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              roeSubmitValidateRef={estimatesRoeValidateRef}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, type MutableRefObject } from "react";
 import { ActionIcon, Box, Grid, Group, Text } from "@mantine/core";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import Dropdown from "./Dropdown";
 import SearchableSelect from "./SearchableSelect";
 import FormNumberInput from "./FormNumberInput";
 import RequiredLabel from "./RequiredLabel";
+import ToastNotification from "./ToastNotification";
 import {
   applyJobChargeUnitChange,
   buildJobUnitOptions,
@@ -25,6 +26,14 @@ import {
   parseSummaryAmount,
 } from "../utils/jobSummaryTotals";
 import type { BranchCurrencyContext } from "../utils/userNumberFormat";
+import { useExchangeRateRoe } from "../hooks/useExchangeRateRoe";
+import {
+  getBranchCurrencyDefaults,
+  getDefaultBranchCurrencyFromUser,
+  ROE_CANNOT_BE_ONE_TOAST,
+  validateEstimatesRoeRows,
+  type BranchCurrencyLike,
+} from "../utils/exchangeRateRoe";
 
 export type EstimateRow = {
   id?: number | string;
@@ -47,7 +56,14 @@ export type EstimatesFormValues = {
   estimates: EstimateRow[];
 };
 
-export function createEmptyEstimateRow(): EstimateRow {
+export function createEmptyEstimateRow(options?: {
+  currencyId?: string;
+  currencyCode?: string;
+}): EstimateRow {
+  const branchDefaults = getBranchCurrencyDefaults(
+    options?.currencyId ?? "",
+    options?.currencyCode ?? "",
+  );
   return {
     supplier_code: "",
     supplier_name: "",
@@ -57,9 +73,9 @@ export function createEmptyEstimateRow(): EstimateRow {
     unit_id: "",
     unit_code: "",
     no_of_unit: null,
-    currency_id: "",
-    currency_code: "",
-    roe: null,
+    currency_id: branchDefaults.currency_id,
+    currency_code: branchDefaults.currency_code,
+    roe: branchDefaults.roe,
     cost_per_unit: null,
     total_cost: null,
   };
@@ -115,9 +131,9 @@ function calcTotalCost(
   cost_per_unit: unknown,
 ): number | null {
   const qty = toNumberOrNull(no_of_unit);
-  const rate = toNumberOrNull(roe) ?? 1; // Default ROE to 1 if not set
+  const rate = toNumberOrNull(roe);
   const cpu = toNumberOrNull(cost_per_unit);
-  if (qty == null || cpu == null) return null;
+  if (qty == null || cpu == null || rate == null) return null;
   if (!Number.isFinite(qty) || !Number.isFinite(cpu) || !Number.isFinite(rate)) {
     return null;
   }
@@ -151,6 +167,8 @@ export type EstimatesSectionProps = {
   jobUnitDefaults?: {
     service: string;
   } & JobChargeNoOfUnitContext;
+  /** Parent calls this before submit to block API when ROE rules fail. */
+  roeSubmitValidateRef?: MutableRefObject<(() => boolean) | null>;
 };
 
 export function EstimatesSection({
@@ -163,9 +181,27 @@ export function EstimatesSection({
   summaryEstimatesTotalCost,
   userBranches,
   jobUnitDefaults,
+  roeSubmitValidateRef,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
   const branches = userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
+  const {
+    isBaseCurrency,
+    isChargeBaseCurrencyFor,
+    ensureRoeForCurrency,
+    validateRoeField,
+    defaultBranchCurrency,
+    defaultBranchCurrencyId,
+  } = useExchangeRateRoe();
+
+  const createDefaultEstimateRow = () =>
+    createEmptyEstimateRow({
+      currencyId: defaultBranchCurrencyId,
+      currencyCode: defaultBranchCurrency,
+    });
+  const [estimateErrors, setEstimateErrors] = useState<
+    Record<number, Record<string, string>>
+  >({});
   const serviceTypeValue = Array.isArray(serviceType)
     ? (serviceType[0] ?? "")
     : (serviceType ?? "");
@@ -187,14 +223,106 @@ export function EstimatesSection({
     refetchOnWindowFocus: false,
   });
 
-  const currencyOptions = (currencyDataRaw ?? [])
+  const currencyData = (currencyDataRaw ?? []) as CurrencyMasterItem[];
+
+  const estimateCurrenciesKey = form.values.estimates
+    .map((r) => `${r.currency_id ?? ""}|${r.currency_code ?? ""}`)
+    .join("|");
+
+  useEffect(() => {
+    let changed = false;
+    const updated = form.values.estimates.map((row) => {
+      if (
+        isChargeBaseCurrencyFor(
+          {
+            currency_code: row.currency_code,
+            currency_id: row.currency_id,
+          },
+          currencyData,
+        ) &&
+        row.roe !== 1
+      ) {
+        changed = true;
+        return { ...row, roe: 1 };
+      }
+      return row;
+    });
+    if (changed) form.setFieldValue("estimates", updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateCurrenciesKey, currencyDataRaw]);
+
+  useEffect(() => {
+    form.values.estimates.forEach((row, index) => {
+      if (!row.currency_id || row.roe != null) return;
+      const code = String(row.currency_code ?? "").trim().toUpperCase();
+      if (!code) return;
+      if (
+        isChargeBaseCurrencyFor(
+          { currency_code: row.currency_code, currency_id: row.currency_id },
+          currencyData,
+        )
+      ) {
+        return;
+      }
+      void ensureRoeForCurrency(code).then((roe) => {
+        if (form.values.estimates[index]?.roe == null) {
+          form.setFieldValue(`estimates.${index}.roe`, roe);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateCurrenciesKey, currencyDataRaw]);
+
+  useEffect(() => {
+    if (!roeSubmitValidateRef) return;
+    roeSubmitValidateRef.current = () => {
+      const result = validateEstimatesRoeRows(
+        form.values.estimates,
+        defaultBranchCurrency,
+        defaultBranchCurrencyId,
+        currencyData,
+      );
+      if (!result.ok) {
+        setEstimateErrors((prev) => ({ ...prev, ...result.fieldErrors }));
+        ToastNotification({
+          type: "error",
+          message: result.toastMessage ?? ROE_CANNOT_BE_ONE_TOAST,
+        });
+        return false;
+      }
+      return true;
+    };
+    return () => {
+      roeSubmitValidateRef.current = null;
+    };
+  }, [
+    roeSubmitValidateRef,
+    form.values.estimates,
+    defaultBranchCurrency,
+    defaultBranchCurrencyId,
+    currencyData,
+  ]);
+
+  const currencyOptions = currencyData
     .map((c) => {
       const id = c?.id != null ? String(c.id) : "";
-      const name = String(c?.code ?? "").trim();
+      const name = String(c?.currency_code ?? c?.code ?? "").trim();
       if (!id || !name) return null;
       return { value: id, label: name };
     })
     .filter(Boolean) as Array<{ value: string; label: string }>;
+
+  const clearEstimateError = (index: number, field: string) => {
+    setEstimateErrors((prev) => {
+      if (!prev[index]?.[field]) return prev;
+      const next = { ...prev };
+      const row = { ...next[index] };
+      delete row[field];
+      if (Object.keys(row).length === 0) delete next[index];
+      else next[index] = row;
+      return next;
+    });
+  };
 
   const unitOptions = (unitDataRaw ?? [])
     .map((u) => {
@@ -272,20 +400,6 @@ export function EstimatesSection({
     currencyOptions.length,
   ]);
 
-  const getRoeValue = (currencyCode: string): number => {
-    const userCountryCode = user?.country?.country_code;
-    const currencyUpper = String(currencyCode ?? "").toUpperCase();
-
-    if (userCountryCode === "IN") {
-      if (currencyUpper === "INR") return 1;
-      if (currencyUpper === "USD") return 88.75;
-    } else if (userCountryCode === "AE") {
-      if (currencyUpper === "AED") return 1;
-      if (currencyUpper === "USD") return 3.67;
-    }
-    return 1;
-  };
-
   return (
     <Box>
       <Grid
@@ -326,7 +440,7 @@ export function EstimatesSection({
       </Grid>
 
       {form.values.estimates.map((row, index) => (
-        <Grid key={index} gutter="sm" mb="xs" align="flex-end">
+        <Grid key={index} gutter="sm" mb="xs" align="flex-start">
           <Grid.Col span={1.75}>
             <SearchableSelect
               placeholder="Type charge"
@@ -472,8 +586,21 @@ export function EstimatesSection({
                 ).trim();
                 form.setFieldValue(`estimates.${index}.currency_id`, currencyId);
                 form.setFieldValue(`estimates.${index}.currency_code`, code);
-                if (code) {
-                  form.setFieldValue(`estimates.${index}.roe`, getRoeValue(code));
+                clearEstimateError(index, "roe");
+                if (isBaseCurrency(code)) {
+                  form.setFieldValue(`estimates.${index}.roe`, 1);
+                  const total = calcTotalCost(row.no_of_unit, 1, row.cost_per_unit);
+                  form.setFieldValue(`estimates.${index}.total_cost`, total);
+                } else {
+                  void ensureRoeForCurrency(code).then((roe) => {
+                    form.setFieldValue(`estimates.${index}.roe`, roe);
+                    const total = calcTotalCost(
+                      row.no_of_unit,
+                      roe,
+                      row.cost_per_unit,
+                    );
+                    form.setFieldValue(`estimates.${index}.total_cost`, total);
+                  });
                 }
               }}
               disabled={readOnly}
@@ -486,12 +613,48 @@ export function EstimatesSection({
               min={0}
               hideControls
               value={row.roe ?? undefined}
+              readOnly={
+                readOnly ||
+                isChargeBaseCurrencyFor(
+                  {
+                    currency_code: row.currency_code,
+                    currency_id: row.currency_id,
+                  },
+                  currencyData,
+                )
+              }
               onChange={(value) => {
+                if (
+                  isChargeBaseCurrencyFor(
+                    {
+                      currency_code: row.currency_code,
+                      currency_id: row.currency_id,
+                    },
+                    currencyData,
+                  )
+                ) {
+                  form.setFieldValue(`estimates.${index}.roe`, 1);
+                  return;
+                }
                 const v = typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(`estimates.${index}.roe`, v);
+                const roeError = validateRoeField(
+                  row.currency_code,
+                  v,
+                  row.currency_id,
+                );
+                if (roeError) {
+                  setEstimateErrors((prev) => ({
+                    ...prev,
+                    [index]: { ...(prev[index] ?? {}), roe: roeError },
+                  }));
+                } else {
+                  clearEstimateError(index, "roe");
+                }
                 const total = calcTotalCost(row.no_of_unit, v, row.cost_per_unit);
                 form.setFieldValue(`estimates.${index}.total_cost`, total);
               }}
+              error={estimateErrors[index]?.roe}
               disabled={readOnly}
             />
           </Grid.Col>
@@ -567,7 +730,7 @@ export function EstimatesSection({
                     variant="light"
                     color="#105476"
                     onClick={() =>
-                      form.insertListItem("estimates", createEmptyEstimateRow())
+                      form.insertListItem("estimates", createDefaultEstimateRow())
                     }
                   >
                     <IconPlus size={16} />
@@ -579,7 +742,7 @@ export function EstimatesSection({
                     color="red"
                     onClick={() => {
                       if (form.values.estimates.length <= 1) {
-                        form.setValues({ estimates: [createEmptyEstimateRow()] });
+                        form.setValues({ estimates: [createDefaultEstimateRow()] });
                         return;
                       }
                       form.removeListItem("estimates", index);
@@ -627,12 +790,22 @@ export function EstimatesSection({
 export function useEstimatesForm(
   initial?: Partial<EstimatesFormValues>,
 ): UseFormReturnType<EstimatesFormValues> {
+  const user = useAuthStore((state) => state.user);
+  const { branchCurrencyId, branchCurrencyCode } = getDefaultBranchCurrencyFromUser(
+    user?.branches as BranchCurrencyLike[] | undefined,
+  );
+
   return useForm<EstimatesFormValues>({
     initialValues: {
       estimates:
         initial?.estimates && initial.estimates.length > 0
           ? initial.estimates
-          : [createEmptyEstimateRow()],
+          : [
+              createEmptyEstimateRow({
+                currencyId: branchCurrencyId,
+                currencyCode: branchCurrencyCode,
+              }),
+            ],
     },
   });
 }

@@ -45,6 +45,7 @@ import {
 import { useDebouncedCallback } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
 import { URL } from "../../../api/serverUrls";
 import {
   SearchableSelect,
@@ -160,6 +161,7 @@ type ChargeDetail = {
   unit_id: string;
   no_of_unit: number | null;
   currency_id: string;
+  currency: string;
   roe: number | null;
   amount_per_unit: number | null;
   amount: number | null;
@@ -295,24 +297,17 @@ function HouseCreate() {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
 
-  // Helper function to calculate ROE based on currency and user's country
-  const getRoeValue = useCallback(
-    (currency: string): number => {
-      const userCountryCode = user?.country?.country_code;
-      const currencyUpper = currency?.toUpperCase();
-
-      if (userCountryCode === "IN") {
-        if (currencyUpper === "INR") return 1;
-        if (currencyUpper === "USD") return 88.75;
-      } else if (userCountryCode === "AE") {
-        if (currencyUpper === "AED") return 1;
-        if (currencyUpper === "USD") return 3.67;
-      }
-
-      return 1;
-    },
-    [user?.country?.country_code],
-  );
+  const {
+    isBaseCurrency,
+    isChargeBaseCurrencyFor,
+    ensureRoeForCurrency,
+    validateRoeField,
+    resolveCurrencyCode,
+    ROE_CANNOT_BE_ONE_FIELD,
+    ROE_CANNOT_BE_ONE_TOAST,
+    getBranchCurrencyDefaults,
+  } = useExchangeRateRoe();
+  const branchCurrencyDefaults = getBranchCurrencyDefaults();
 
   const calculateChargeableWeight = useCallback(
     (
@@ -412,8 +407,7 @@ function HouseCreate() {
           pp_cc: "",
           unit_id: "",
           no_of_unit: null,
-          currency_id: "",
-          roe: null,
+          ...branchCurrencyDefaults,
           amount_per_unit: null,
           amount: null,
           local_amount: null,
@@ -1428,36 +1422,47 @@ function HouseCreate() {
     }));
   };
 
-  // Auto-set ROE when currency_id changes (resolve code from currencyData, then getRoeValue)
-  const chargeCurrencyIds = chargesForm.values.charges
-    .map((c) => c.currency_id)
-    .join(",");
+  // When charge currency matches branch currency, ROE must always be 1
+  const chargeCurrenciesKey = chargesForm.values.charges
+    .map((c) => `${c.currency ?? ""}|${c.currency_id ?? ""}`)
+    .join("|");
   useEffect(() => {
     const currencyArr = (currencyData ?? []) as {
       id?: number;
       code?: string;
       currency_code?: string;
     }[];
+    let changed = false;
     const updatedCharges = chargesForm.values.charges.map((charge) => {
-      let roe = charge.roe;
-      if (charge.currency_id && !roe) {
-        const curr = currencyArr.find(
-          (c) => String(c.id) === charge.currency_id,
-        );
-        const code = curr?.currency_code ?? curr?.code ?? "";
-        if (code) roe = getRoeValue(code);
-      }
-      if (roe !== charge.roe) {
-        return { ...charge, roe: roe || null };
+      if (isChargeBaseCurrencyFor(charge, currencyArr) && charge.roe !== 1) {
+        changed = true;
+        return { ...charge, roe: 1 };
       }
       return charge;
     });
-    const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== chargesForm.values.charges[index]?.roe,
-    );
-    if (hasChanges) chargesForm.setValues({ charges: updatedCharges });
+    if (changed) chargesForm.setValues({ charges: updatedCharges });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencyIds, getRoeValue, currencyData]);
+  }, [chargeCurrenciesKey, currencyData]);
+
+  useEffect(() => {
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    chargesForm.values.charges.forEach((charge, index) => {
+      if (!charge.currency_id || charge.roe != null) return;
+      if (isChargeBaseCurrencyFor(charge, currencyArr)) return;
+      const code = resolveCurrencyCode(charge, currencyArr);
+      if (!code) return;
+      void ensureRoeForCurrency(code).then((roe) => {
+        if (chargesForm.values.charges[index]?.roe == null) {
+          chargesForm.setFieldValue(`charges.${index}.roe`, roe);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrenciesKey, currencyData]);
 
   // When in edit mode and unit/currency masters load, resolve charge unit_id/currency_id from unit_code/currency
   const chargesIdsResolvedRef = useRef(false);
@@ -1956,6 +1961,7 @@ function HouseCreate() {
   const validateStep4 = () => {
     const newErrors: Record<number, Record<string, string>> = {};
     let hasErrors = false;
+    let roeToastMessage: string | null = null;
 
     chargesForm.values.charges.forEach((charge, index) => {
       const chargeError: Record<string, string> = {};
@@ -1979,6 +1985,27 @@ function HouseCreate() {
       if (charge.roe === null || charge.roe === undefined) {
         chargeError.roe = "ROE is required";
         hasErrors = true;
+      } else {
+        const currencyArr = (currencyData ?? []) as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[];
+        const roeRuleError = validateRoeField(
+          resolveCurrencyCode(charge, currencyArr),
+          charge.roe,
+          charge.currency_id,
+        );
+        if (roeRuleError) {
+          chargeError.roe = roeRuleError;
+          hasErrors = true;
+          if (
+            roeRuleError === ROE_CANNOT_BE_ONE_FIELD &&
+            !roeToastMessage
+          ) {
+            roeToastMessage = ROE_CANNOT_BE_ONE_TOAST;
+          }
+        }
       }
       if (charge.amount === null || charge.amount === undefined) {
         chargeError.amount = "Amount is required";
@@ -1993,6 +2020,12 @@ function HouseCreate() {
     setChargeErrors(newErrors);
 
     if (hasErrors) {
+      if (roeToastMessage) {
+        ToastNotification({
+          type: "error",
+          message: roeToastMessage,
+        });
+      }
       return false;
     }
     return true;
@@ -2629,7 +2662,7 @@ function HouseCreate() {
           )}
 
           {form.values.event_modal_rows.map((row, index) => (
-            <Grid key={index} align="flex-end" gutter="sm">
+            <Grid key={index} align="flex-start" gutter="sm">
               <Grid.Col span={5}>
                 <Select
                   placeholder="Select event type"
@@ -4445,16 +4478,23 @@ function HouseCreate() {
                         const code =
                           currencyOptions.find((o) => o.value === currencyId)
                             ?.label ?? "";
-                        const roe = code ? getRoeValue(code) : null;
                         chargesForm.setFieldValue(
                           `charges.${index}.currency_id`,
                           currencyId,
                         );
-                        if (roe !== null) {
-                          chargesForm.setFieldValue(
-                            `charges.${index}.roe`,
-                            roe,
-                          );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.currency`,
+                          code,
+                        );
+                        if (isBaseCurrency(code)) {
+                          chargesForm.setFieldValue(`charges.${index}.roe`, 1);
+                        } else {
+                          void ensureRoeForCurrency(code).then((roe) => {
+                            chargesForm.setFieldValue(
+                              `charges.${index}.roe`,
+                              roe,
+                            );
+                          });
                         }
                         if (chargeErrors[index]?.currency_id) {
                           const newErrors = { ...chargeErrors };
@@ -4475,19 +4515,58 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={2}
+                      readOnly={isChargeBaseCurrencyFor(
+                        charge,
+                        (currencyData ?? []) as {
+                          id?: number;
+                          code?: string;
+                          currency_code?: string;
+                        }[],
+                      )}
                       value={charge.roe || undefined}
                       onChange={(value) => {
+                        if (
+                          isChargeBaseCurrencyFor(
+                            charge,
+                            (currencyData ?? []) as {
+                              id?: number;
+                              code?: string;
+                              currency_code?: string;
+                            }[],
+                          )
+                        ) {
+                          chargesForm.setFieldValue(`charges.${index}.roe`, 1);
+                          return;
+                        }
                         const roe = value as number | null;
                         chargesForm.setFieldValue(`charges.${index}.roe`, roe);
-                        if (chargeErrors[index]?.roe) {
-                          const newErrors = { ...chargeErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].roe;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
+                        const currencyArr = (currencyData ?? []) as {
+                          id?: number;
+                          code?: string;
+                          currency_code?: string;
+                        }[];
+                        const roeError = validateRoeField(
+                          resolveCurrencyCode(charge, currencyArr),
+                          roe,
+                          charge.currency_id,
+                        );
+                        if (roeError) {
+                          setChargeErrors((prev) => ({
+                            ...prev,
+                            [index]: { ...(prev[index] ?? {}), roe: roeError },
+                          }));
+                        } else {
+                          setChargeErrors((prev) => {
+                            if (!prev[index]?.roe) return prev;
+                            const newErrors = { ...prev };
+                            if (newErrors[index]) {
+                              delete newErrors[index].roe;
+                              if (Object.keys(newErrors[index]).length === 0) {
+                                delete newErrors[index];
+                              }
                             }
-                          }
-                          setChargeErrors(newErrors);
+                            return newErrors;
+                          });
                         }
                       }}
                       error={chargeErrors[index]?.roe}
@@ -4717,8 +4796,7 @@ function HouseCreate() {
                             pp_cc: "Collect",
                             unit_id: "",
                             no_of_unit: null,
-                            currency_id: "",
-                            roe: null,
+                            ...branchCurrencyDefaults,
                             amount_per_unit: null,
                             amount: null,
                             local_amount: null,

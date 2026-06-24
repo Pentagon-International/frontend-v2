@@ -4323,6 +4323,18 @@ function InvoiceCreate({
                   if (billingCode && numValue != null && Number.isFinite(numValue)) {
                     roeCacheRef.current.set(billingCode, numValue);
                   }
+                  const headerRoeError = validateRoeForCurrency(
+                    form.values.currency,
+                    numValue,
+                    defaultBranchCurrency,
+                    true,
+                    { branchCurrencyId: defaultBranchCurrencyId },
+                  );
+                  if (headerRoeError) {
+                    form.setFieldError("roe", headerRoeError);
+                  } else {
+                    form.clearFieldError("roe");
+                  }
                   // Recalculate header_amount for all charges when header ROE changes
                   const updatedCharges = form.values.charges.map((charge) => {
                     const newHeader = calcChargeHeaderAmount(
@@ -4959,14 +4971,43 @@ function InvoiceCreate({
                           );
                           form.setFieldValue("charges", updatedCharges);
 
-                          if (chargeErrors[index]?.roe) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].roe;
-                              if (Object.keys(newErrors[index]).length === 0)
-                                delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
+                          const currencyRows = (currencyData as {
+                            id?: number;
+                            code?: string;
+                            currency_code?: string;
+                          }[]) ?? [];
+                          const roeError = validateRoeForCurrency(
+                            resolveChargeCurrencyCode(
+                              {
+                                currency: currentCharge.currency,
+                                currency_id: currentCharge.currency_id,
+                              },
+                              currencyRows,
+                            ),
+                            roe,
+                            defaultBranchCurrency,
+                            true,
+                            {
+                              currencyId: currentCharge.currency_id,
+                              branchCurrencyId: defaultBranchCurrencyId,
+                            },
+                          );
+                          if (roeError) {
+                            setChargeErrors((prev) => ({
+                              ...prev,
+                              [index]: { ...(prev[index] ?? {}), roe: roeError },
+                            }));
+                          } else {
+                            setChargeErrors((prev) => {
+                              if (!prev[index]?.roe) return prev;
+                              const newErrors = { ...prev };
+                              if (newErrors[index]) {
+                                delete newErrors[index].roe;
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
+                              }
+                              return newErrors;
+                            });
                           }
                         }}
                         error={chargeErrors[index]?.roe}

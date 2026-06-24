@@ -849,6 +849,7 @@ function InlandExportJobCreate() {
       ? { estimates: location.state.estimates }
       : undefined,
   );
+  const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   // Note: Container Details are not used for Inland Export Jobs
 
@@ -2389,6 +2390,11 @@ function InlandExportJobCreate() {
     }
 
     if (!validateEstimates()) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimatesRoeValidateRef.current?.() === false) {
       setIsSubmitting(false);
       return;
     }
@@ -4163,6 +4169,7 @@ function InlandExportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              roeSubmitValidateRef={estimatesRoeValidateRef}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"
               summaryEstimatesTotalCost={

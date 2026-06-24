@@ -703,6 +703,7 @@ function AirImportJobCreate() {
       ? { estimates: location.state.estimates }
       : undefined,
   );
+  const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
   console.log("🧾 [AIR_IMPORT_JOB] estimatesForm initialized", {
     fromLocationState: Array.isArray(location.state?.estimates),
     estimatesCount: estimatesForm.values.estimates?.length ?? 0,
@@ -2660,6 +2661,11 @@ function AirImportJobCreate() {
 
     // Validate routings if any field has value
     if (!validateStep2()) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimatesRoeValidateRef.current?.() === false) {
       setIsSubmitting(false);
       return;
     }
@@ -4961,6 +4967,7 @@ function AirImportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              roeSubmitValidateRef={estimatesRoeValidateRef}
               debugTag="AIR_IMPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
               summaryEstimatesTotalCost={

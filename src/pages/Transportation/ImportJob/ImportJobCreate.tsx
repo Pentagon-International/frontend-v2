@@ -709,6 +709,7 @@ function ImportJobCreate() {
   });
 
   const estimatesForm = useEstimatesForm();
+  const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -2927,6 +2928,11 @@ function ImportJobCreate() {
     if (!validateStep3()) {
       // Navigate to step 3 to show validation errors
       setActive(3);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimatesRoeValidateRef.current?.() === false) {
       setIsSubmitting(false);
       return;
     }
@@ -5599,6 +5605,7 @@ function ImportJobCreate() {
               serviceType="SEA"
               form={estimatesForm}
               readOnly={isReadOnly}
+              roeSubmitValidateRef={estimatesRoeValidateRef}
               jobUnitDefaults={estimatesJobUnitDefaults}
               summaryEstimatesTotalCost={
                 (jobData as { summary?: { estimates_total_cost?: unknown } })

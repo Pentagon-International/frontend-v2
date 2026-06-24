@@ -35,7 +35,7 @@ import {
   IconFileInvoice,
   IconRefresh,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
+import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -811,6 +811,7 @@ function ExportJobCreate() {
   });
 
   const estimatesForm = useEstimatesForm();
+  const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -2585,6 +2586,11 @@ function ExportJobCreate() {
     if (!validateStep3()) {
       // Navigate to step 3 to show validation errors
       setActive(3);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimatesRoeValidateRef.current?.() === false) {
       setIsSubmitting(false);
       return;
     }
@@ -4803,6 +4809,7 @@ function ExportJobCreate() {
               serviceType={["FCL", "LCL"]}
               form={estimatesForm}
               readOnly={isReadOnly}
+              roeSubmitValidateRef={estimatesRoeValidateRef}
               jobUnitDefaults={estimatesJobUnitDefaults}
               summaryEstimatesTotalCost={
                 (jobData as { summary?: { estimates_total_cost?: unknown } })
