@@ -43,6 +43,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -472,13 +473,16 @@ export default function OverseasPaymentCreate({
     status?: string;
   } | null>(null);
 
+  const {
+    localCurrency,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+  } = useAccountsDocumentCurrencyRoe();
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
-  //   const localCurrency =
-  //     (defaultBranch as { currency?: { currency_code?: string } } | undefined)
-  //       ?.currency?.currency_code ?? "";
-
-  const localCurrency = "USD";
   const [dropdownZIndex] = useState(300);
   const [
     documentsModalOpened,
@@ -861,10 +865,11 @@ export default function OverseasPaymentCreate({
     isReversalCreate,
   ]);
 
-  const userCountryCode = user?.country?.country_code;
-
-  // Overseas Payment: no amount/ROE auto-sync. Keep effect for dependency symmetry.
-  useEffect(() => {}, [form.values.currency, localCurrency, userCountryCode]);
+  useEffect(() => {
+    const curr = form.values.currency?.trim();
+    if (!curr || !localCurrency) return;
+    syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
+  }, [form.values.currency, localCurrency, syncRoeForCurrencyChange]);
 
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
@@ -1254,6 +1259,28 @@ export default function OverseasPaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    const headerRoeToastError = validateRoeToast(values.currency, values.roe);
+    if (headerRoeToastError) {
+      form.setFieldError(
+        "roe",
+        validateRoeField(values.currency, values.roe) ?? headerRoeToastError,
+      );
+      ToastNotification({ type: "error", message: headerRoeToastError });
+      return;
+    }
+    for (let i = 0; i < (values.details ?? []).length; i++) {
+      const detail = values.details[i];
+      const detailRoeToastError = validateRoeToast(detail.currency, detail.roe);
+      if (detailRoeToastError) {
+        form.setFieldError(
+          `details.${i}.roe`,
+          validateRoeField(detail.currency, detail.roe) ?? detailRoeToastError,
+        );
+        ToastNotification({ type: "error", message: detailRoeToastError });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       if (_isReversal) {
@@ -1917,8 +1944,11 @@ export default function OverseasPaymentCreate({
                 value={form.values.currency}
                 onChange={(v) => {
                   form.setFieldValue("currency", v ?? "");
-                  if (v?.toUpperCase() === localCurrency.toUpperCase()) {
-                    form.setFieldValue("roe", 1);
+                  form.clearFieldError("roe");
+                  if (v) {
+                    syncRoeForCurrencyChange(v, (roe) =>
+                      form.setFieldValue("roe", roe),
+                    );
                   }
                 }}
                 searchable
@@ -1934,17 +1964,26 @@ export default function OverseasPaymentCreate({
                 placeholder="Rate of exchange"
                 value={form.values.roe ?? undefined}
                 onChange={(v) =>
-                  form.setFieldValue(
-                    "roe",
+                  onRoeValueChange(
+                    form.values.currency,
                     clampROE(typeof v === "string" ? parseFloat(v) : v) ?? null,
+                    (roe) => form.setFieldValue("roe", roe),
+                    form.setFieldError,
+                    form.clearFieldError,
+                    "roe",
                   )
                 }
                 min={0}
                 decimalScale={4}
                 max={ROE_MAX}
                 hideControls
+                error={form.errors.roe}
                 styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                disabled={
+                  useNonEditableStyleOnly
+                    ? false
+                    : headerOtherDisabled || isLocalCurrency(form.values.currency)
+                }
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -2220,8 +2259,11 @@ export default function OverseasPaymentCreate({
                 value={form.values.details[idx].currency}
                 onChange={(v) => {
                   form.setFieldValue(`details.${idx}.currency`, v ?? "");
-                  if (v?.toUpperCase() === localCurrency.toUpperCase()) {
-                    form.setFieldValue(`details.${idx}.roe`, 1);
+                  form.clearFieldError(`details.${idx}.roe`);
+                  if (v) {
+                    syncRoeForCurrencyChange(v, (roe) =>
+                      form.setFieldValue(`details.${idx}.roe`, roe),
+                    );
                   }
                 }}
                 searchable
@@ -2238,11 +2280,21 @@ export default function OverseasPaymentCreate({
                             hideControls
                             value={form.values.details[idx].roe ?? undefined}
                             onChange={(v) => {
+                              const detailCurrency =
+                                form.values.details[idx]?.currency ?? "";
                               const newRoe =
                                 clampROE(
                                   typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? 1;
-                              form.setFieldValue(`details.${idx}.roe`, newRoe);
+                                ) ?? null;
+                              onRoeValueChange(
+                                detailCurrency,
+                                newRoe,
+                                (roe) =>
+                                  form.setFieldValue(`details.${idx}.roe`, roe),
+                                form.setFieldError,
+                                form.clearFieldError,
+                                `details.${idx}.roe`,
+                              );
                               const amt = form.values.details[idx]?.amount;
                               if (
                                 amt != null &&
@@ -2258,9 +2310,15 @@ export default function OverseasPaymentCreate({
                             }}
                             decimalScale={4}
                             max={ROE_MAX}
+                            error={form.errors[`details.${idx}.roe`]}
                             styles={partyFieldStyles}
                             disabled={
-                              useNonEditableStyleOnly ? false : isReadOnly
+                              useNonEditableStyleOnly
+                                ? false
+                                : isReadOnly ||
+                                  isLocalCurrency(
+                                    form.values.details[idx]?.currency,
+                                  )
                             }
                           />
                         </Grid.Col>

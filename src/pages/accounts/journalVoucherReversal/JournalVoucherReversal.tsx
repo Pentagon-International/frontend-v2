@@ -45,6 +45,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
@@ -193,16 +194,15 @@ function JournalVoucherReversal() {
     navigateFinanceReturn(navigate, location.state);
   };
 
-  const defaultBranch = user?.branches?.find(
-    (b: { is_default?: boolean }) => b.is_default === true,
-  ) as
-    | { currency?: { currency_id?: number; currency_code?: string } }
-    | undefined;
-  const defaultCurrencyCode = defaultBranch?.currency?.currency_code ?? "";
-  const defaultCurrencyId =
-    defaultBranch?.currency?.currency_id != null
-      ? String(defaultBranch.currency.currency_id)
-      : "";
+  const {
+    localCurrency: defaultCurrencyCode,
+    defaultBranchCurrencyId: defaultCurrencyId,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+  } = useAccountsDocumentCurrencyRoe();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
@@ -300,22 +300,6 @@ function JournalVoucherReversal() {
       label: (item.currency_code ?? item.code ?? "").toString().trim(),
     }));
   }, [currencyData]);
-
-  const getRoe = useCallback(
-    (currencyCode: string): number => {
-      const cc = user?.country?.country_code;
-      const cu = currencyCode?.toUpperCase();
-      if (cc === "IN") {
-        if (cu === "INR") return 1;
-        if (cu === "USD") return 88.75;
-      } else if (cc === "AE") {
-        if (cu === "AED") return 1;
-        if (cu === "USD") return 3.67;
-      }
-      return 1;
-    },
-    [user?.country?.country_code],
-  );
 
   // ─── Form ─────────────────────────────────────────────────────────────────
 
@@ -535,6 +519,27 @@ function JournalVoucherReversal() {
   };
 
   const handleSubmit = async (values: JVFormValues) => {
+    for (let i = 0; i < (values.charges ?? []).length; i++) {
+      const charge = values.charges[i];
+      const chargeRoeToastError = validateRoeToast(
+        charge.currency_code,
+        charge.roe,
+        charge.currency_id,
+      );
+      if (chargeRoeToastError) {
+        form.setFieldError(
+          `charges.${i}.roe`,
+          validateRoeField(
+            charge.currency_code,
+            charge.roe,
+            charge.currency_id,
+          ) ?? chargeRoeToastError,
+        );
+        ToastNotification({ type: "error", message: chargeRoeToastError });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const payload = buildPayload(values);
@@ -1180,7 +1185,7 @@ function JournalVoucherReversal() {
                         ...emptyRow(),
                         currency_id: defaultCurrencyId,
                         currency_code: defaultCurrencyCode,
-                        roe: defaultCurrencyCode ? getRoe(defaultCurrencyCode) : null,
+                        roe: defaultCurrencyCode ? 1 : null,
                       })
                     }
                     title="Add row"
@@ -1570,17 +1575,22 @@ function JournalVoucherReversal() {
                                 `charges.${index}.currency_code`,
                                 code,
                               );
-                              const roe = code ? getRoe(code) : null;
-                              if (roe != null) {
-                                form.setFieldValue(`charges.${index}.roe`, roe);
-                                const amt = form.values.charges[index].amount;
-                                if (amt != null && amt > 0) {
-                                  form.setFieldValue(
-                                    `charges.${index}.local_amount`,
-                                    clampAmt(amt * roe),
-                                  );
-                                }
-                              }
+                              form.clearFieldError(`charges.${index}.roe`);
+                              syncRoeForCurrencyChange(
+                                code,
+                                (roe) => {
+                                  if (roe == null) return;
+                                  form.setFieldValue(`charges.${index}.roe`, roe);
+                                  const amt = form.values.charges[index].amount;
+                                  if (amt != null && amt > 0) {
+                                    form.setFieldValue(
+                                      `charges.${index}.local_amount`,
+                                      clampAmt(amt * roe),
+                                    );
+                                  }
+                                },
+                                val ?? "",
+                              );
                             }}
                             styles={inputCell}
                           />
@@ -1592,11 +1602,26 @@ function JournalVoucherReversal() {
                             placeholder="ROE"
                             min={0}
                             hideControls
-                            readOnly={isReadOnly}
+                            readOnly={
+                              isReadOnly ||
+                              isLocalCurrency(
+                                row.currency_code,
+                                row.currency_id,
+                              )
+                            }
                             value={row.roe ?? undefined}
                             onChange={(v) => {
                               const roe = v as number | null;
-                              form.setFieldValue(`charges.${index}.roe`, roe);
+                              onRoeValueChange(
+                                row.currency_code,
+                                roe,
+                                (nextRoe) =>
+                                  form.setFieldValue(`charges.${index}.roe`, nextRoe),
+                                form.setFieldError,
+                                form.clearFieldError,
+                                `charges.${index}.roe`,
+                                row.currency_id,
+                              );
                               const amt = form.values.charges[index].amount;
                               if (
                                 amt != null &&
@@ -1610,6 +1635,7 @@ function JournalVoucherReversal() {
                                 );
                               }
                             }}
+                            error={form.errors[`charges.${index}.roe`]}
                             styles={inputCell}
                           />
                         </td>
@@ -1728,9 +1754,7 @@ function JournalVoucherReversal() {
                                       ...emptyRow(),
                                       currency_id: defaultCurrencyId,
                                       currency_code: defaultCurrencyCode,
-                                      roe: defaultCurrencyCode
-                                        ? getRoe(defaultCurrencyCode)
-                                        : null,
+                                      roe: defaultCurrencyCode ? 1 : null,
                                     });
                                   }}
                                 >

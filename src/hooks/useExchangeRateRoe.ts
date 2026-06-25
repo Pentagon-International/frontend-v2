@@ -40,10 +40,13 @@ export function useExchangeRateRoe() {
   );
 
   const isBaseCurrency = useCallback(
-    (currency: string | null | undefined): boolean => {
+    (
+      currencyCode: string | null | undefined,
+      currencyId?: string | null,
+    ): boolean => {
       return isChargeBranchCurrency(
-        currency ?? "",
-        "",
+        currencyCode ?? "",
+        currencyId ?? "",
         defaultBranchCurrency,
         defaultBranchCurrencyId,
       );

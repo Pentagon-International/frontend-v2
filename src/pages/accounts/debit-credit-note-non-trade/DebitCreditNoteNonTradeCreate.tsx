@@ -36,6 +36,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -128,7 +129,7 @@ function formatChartOfAccountsLabel(
   return [c, b, a].filter(Boolean).join(" - ");
 }
 
-const newLineItem = (n: number): LineItem => ({
+const newLineItem = (n: number, currency = ""): LineItem => ({
   id: `line-${Date.now()}-${n}`,
   shipment_no: "",
   service_id: null,
@@ -141,7 +142,7 @@ const newLineItem = (n: number): LineItem => ({
   subledger: "",
   cost_center_code: "",
   cost_center_key: "",
-  currency: "INR",
+  currency,
   roe: "",
   amount: "",
   amount_in_inr: "",
@@ -190,6 +191,17 @@ export function DebitCreditNoteCreateBase({
     address?: string;
   };
 
+  const {
+    localCurrency,
+    getBranchCurrencyDefaults,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+  } = useAccountsDocumentCurrencyRoe();
+  const branchCurrencyDefaults = getBranchCurrencyDefaults();
+
   const form = useForm({
     initialValues: {
       daybookId: null as string | null,
@@ -198,16 +210,16 @@ export function DebitCreditNoteCreateBase({
       partyName: "",
       address: "",
       stateId: null as string | null,
-      currencyId: null as string | null,
-      currencyCode: "INR",
-      roe: 1 as number | "",
+      currencyId: branchCurrencyDefaults.currency_id || null,
+      currencyCode: branchCurrencyDefaults.currency_code || "",
+      roe: (branchCurrencyDefaults.roe ?? "") as number | "",
       costCenter: "",
       documentDate: dayjs().toDate() as Date | null,
       documentNo: "",
       gstId: "",
       narration: "",
       note: "",
-      lines: [newLineItem(0)] as LineItem[],
+      lines: [newLineItem(0, branchCurrencyDefaults.currency_code || "")] as LineItem[],
       supporting_documents: [] as SupportingDocument[],
     },
   });
@@ -291,7 +303,10 @@ export function DebitCreditNoteCreateBase({
   };
 
   const addLine = () =>
-    form.insertListItem("lines", newLineItem(form.values.lines.length));
+    form.insertListItem(
+      "lines",
+      newLineItem(form.values.lines.length, localCurrency),
+    );
   const removeLine = (id: string) => {
     if (form.values.lines.length <= 1) return;
     const idx = form.values.lines.findIndex((l) => l.id === id);
@@ -392,7 +407,7 @@ export function DebitCreditNoteCreateBase({
           account_name: String(t.account_name ?? ""),
           subledger: String(t.subledger_code ?? ""),
           currency: String(
-            t.currency_code ?? form.values.currencyCode ?? "INR",
+            t.currency_code ?? form.values.currencyCode ?? localCurrency,
           ),
           roe: lineRoe,
           amount,
@@ -768,7 +783,7 @@ export function DebitCreditNoteCreateBase({
     // debit_credit_note_tem -> lines
     if (Array.isArray(details) && details.length) {
       const fallbackCurrencyCode =
-        headerCurrencyCode || String(form.values.currencyCode ?? "INR");
+        headerCurrencyCode || String(form.values.currencyCode ?? localCurrency);
       const mapped: LineItem[] = details.map((d, i) => ({
         id: `line-${Date.now()}-${i}`,
         shipment_no: String(d.shipment_no ?? ""),
@@ -797,7 +812,7 @@ export function DebitCreditNoteCreateBase({
         subledger: String(d.subledger ?? ""),
         cost_center_code: String(d.code ?? ""),
         cost_center_key: String(d.key ?? ""),
-        currency: String(d.currency_code ?? fallbackCurrencyCode ?? "INR"),
+        currency: String(d.currency_code ?? fallbackCurrencyCode ?? localCurrency),
         roe: d.roe != null ? Number(d.roe) : "",
         amount: d.amount != null ? Number(d.amount) : "",
         amount_in_inr: d.amount_in_inr != null ? Number(d.amount_in_inr) : "",
@@ -820,7 +835,49 @@ export function DebitCreditNoteCreateBase({
     }
   };
 
+  const isHeaderLocalCurrency = isLocalCurrency(
+    form.values.currencyCode,
+    form.values.currencyId,
+  );
+
+  const validateRoeBeforeSave = (): boolean => {
+    const headerRoe =
+      form.values.roe === "" ? null : Number(form.values.roe);
+    const headerError = validateRoeToast(
+      form.values.currencyCode,
+      headerRoe,
+      form.values.currencyId,
+    );
+    if (headerError) {
+      form.setFieldError(
+        "roe",
+        validateRoeField(
+          form.values.currencyCode,
+          headerRoe,
+          form.values.currencyId,
+        ) ?? headerError,
+      );
+      ToastNotification({ type: "error", message: headerError });
+      return false;
+    }
+    for (let i = 0; i < form.values.lines.length; i++) {
+      const lineRoe =
+        form.values.lines[i].roe === "" ? null : Number(form.values.lines[i].roe);
+      const lineError = validateRoeToast(
+        form.values.currencyCode,
+        lineRoe,
+        form.values.currencyId,
+      );
+      if (lineError) {
+        ToastNotification({ type: "error", message: lineError });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const onCreate = async () => {
+    if (!validateRoeBeforeSave()) return;
     const fd = buildDebitCreditNoteFormData();
     setIsSubmitting(true);
     setLoadingText("Creating credit/debit note...");
@@ -843,6 +900,7 @@ export function DebitCreditNoteCreateBase({
 
   const onUpdate = async () => {
     if (saveResponse?.id == null) return;
+    if (!validateRoeBeforeSave()) return;
     const fd = buildDebitCreditNoteFormData();
     // putAPICall expects `formValue.id` to build `${url}${id}/`.
     (fd as unknown as { id: unknown }).id = saveResponse.id;
@@ -879,28 +937,34 @@ export function DebitCreditNoteCreateBase({
     });
   }, [form.values.lines]);
 
-  // If currency is INR, default header/line ROE to 1 (do not override user-entered values).
+  // Branch currency: ROE = 1; foreign currency: fetch from exchange rate master.
   useEffect(() => {
     if (isReadOnly) return;
     if (isPrefillingRef.current) return;
-    const code = String(form.values.currencyCode ?? "")
-      .trim()
-      .toUpperCase();
-    if (code !== "INR") return;
+    const code = String(form.values.currencyCode ?? "").trim();
+    if (!code) return;
 
-    if (form.values.roe === "") {
-      form.setFieldValue("roe", 1);
+    if (isLocalCurrency(code)) {
+      if (form.values.roe === "") {
+        form.setFieldValue("roe", 1);
+      }
+      const nextLines = form.values.lines.map((l) =>
+        l.roe === "" ? { ...l, roe: 1 } : l,
+      );
+      const changed = nextLines.some(
+        (l, i) => l.roe !== form.values.lines[i]?.roe,
+      );
+      if (changed) form.setFieldValue("lines", nextLines);
+      return;
     }
 
-    const nextLines = form.values.lines.map((l) =>
-      l.roe === "" ? { ...l, roe: 1 } : l,
-    );
-    const changed = nextLines.some(
-      (l, i) => l.roe !== form.values.lines[i]?.roe,
-    );
-    if (changed) form.setFieldValue("lines", nextLines);
+    syncRoeForCurrencyChange(code, (roe) => {
+      if (roe != null && form.values.roe === "") {
+        form.setFieldValue("roe", roe);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.currencyCode, isReadOnly]);
+  }, [form.values.currencyCode, isReadOnly, isLocalCurrency, syncRoeForCurrencyChange]);
 
   // Trade only: auto-fetch SAC once shipment_no + charge_id are selected.
   const tradeSacKey = showTradeFields
@@ -944,6 +1008,7 @@ export function DebitCreditNoteCreateBase({
 
   const handlePost = async () => {
     if (saveResponse?.id == null) return;
+    if (!validateRoeBeforeSave()) return;
     setIsSubmitting(true);
     setLoadingText("Posting credit/debit note...");
     try {
@@ -1237,6 +1302,16 @@ export function DebitCreditNoteCreateBase({
                 const found = currencyOptions.find((o) => o.label === label);
                 form.setFieldValue("currencyId", found?.value ?? null);
                 form.setFieldValue("currencyCode", label ?? "");
+                form.clearFieldError("roe");
+                if (label) {
+                  syncRoeForCurrencyChange(
+                    label,
+                    (roe) => {
+                      if (roe != null) form.setFieldValue("roe", roe);
+                    },
+                    found?.value ?? null,
+                  );
+                }
               }}
               disabled={isReadOnly}
             />
@@ -1249,9 +1324,20 @@ export function DebitCreditNoteCreateBase({
               value={form.values.roe === "" ? "" : String(form.values.roe)}
               onChange={(e) => {
                 const v = e.currentTarget.value;
-                form.setFieldValue("roe", v === "" ? "" : Number(v));
+                const nextRoe = v === "" ? null : Number(v);
+                onRoeValueChange(
+                  form.values.currencyCode,
+                  nextRoe,
+                  (roe) =>
+                    form.setFieldValue("roe", roe === null ? "" : roe),
+                  form.setFieldError,
+                  form.clearFieldError,
+                  "roe",
+                  form.values.currencyId,
+                );
               }}
-              disabled={isReadOnly}
+              error={form.errors.roe}
+              disabled={isReadOnly || isHeaderLocalCurrency}
             />
           </Grid.Col>
           <Grid.Col span={1}>
@@ -1402,7 +1488,7 @@ export function DebitCreditNoteCreateBase({
           </Grid.Col>
           <Grid.Col span={1}>
             <Text size="xs" fw={600} c="#105476">
-              Amount in {form.values.currencyCode || "INR"}
+              Amount in {form.values.currencyCode || localCurrency}
             </Text>
           </Grid.Col>
           <Grid.Col span={0.7}>
@@ -1670,6 +1756,19 @@ export function DebitCreditNoteCreateBase({
                     onChange={(e) => {
                       const v = e.currentTarget.value;
                       const nextRoe = v === "" ? "" : Number(v);
+                      if (isHeaderLocalCurrency) {
+                        setLineById(l.id, { roe: 1, local_amount: computeLocalAmount(l.amount, 1) });
+                        return;
+                      }
+                      const roeNum = nextRoe === "" ? null : Number(nextRoe);
+                      const roeError = validateRoeField(
+                        form.values.currencyCode,
+                        roeNum,
+                        form.values.currencyId,
+                      );
+                      if (roeError) {
+                        ToastNotification({ type: "error", message: roeError });
+                      }
                       const localAmount = computeLocalAmount(l.amount, nextRoe);
                       setLineById(l.id, {
                         roe: nextRoe,
@@ -1677,7 +1776,7 @@ export function DebitCreditNoteCreateBase({
                       });
                     }}
                     size="xs"
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isHeaderLocalCurrency}
                   />
                 </Grid.Col>
                 <Grid.Col span={showTradeFields ? 0.9 : 1}>

@@ -88,8 +88,8 @@ type VisibleColumnsState = {
   job_id: boolean;
   mbl: boolean;
   service: boolean;
-  volume: boolean;
   agent: boolean;
+  volume: boolean;
   route: boolean;
   etd: boolean;
   eta: boolean;
@@ -102,8 +102,8 @@ const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   job_id: "Job ID",
   mbl: "MBL No",
   service: "Service",
-  volume: "Volume",
   agent: "Agent",
+  volume: "Volume",
   route: "Route",
   etd: "ETD",
   eta: "ETA",
@@ -264,8 +264,8 @@ function ImportJobMaster() {
     job_id: true,
     mbl: true,
     service: true,
-    volume: true,
     agent: true,
+    volume: true,
     route: true,
     etd: true,
     eta: true,
@@ -1034,9 +1034,6 @@ function ImportJobMaster() {
                           />
                         </th>
                       )}
-                      {visibleColumns.volume && (
-                        <th style={mergeTh(160, 160)}>Volume</th>
-                      )}
                       {visibleColumns.agent && (
                         <th style={mergeTh(200, 200)}>
                           <ERPListColumnHeaderFilter
@@ -1076,6 +1073,9 @@ function ImportJobMaster() {
                             )}
                           />
                         </th>
+                      )}
+                      {visibleColumns.volume && (
+                        <th style={mergeTh(160, 160)}>Volume</th>
                       )}
                       {visibleColumns.route && (
                         <th style={mergeTh(220, 220)}>
@@ -1379,6 +1379,29 @@ function ImportJobMaster() {
                                 </Text>
                               </td>
                             )}
+                            {visibleColumns.agent && (
+                              <td style={{ ...tdPad, maxWidth: 200 }}>
+                                <Tooltip
+                                  label={row.agent_name ?? ""}
+                                  withArrow
+                                  styles={{
+                                    tooltip: {
+                                      fontFamily: theme.fontSans,
+                                      fontSize: 12,
+                                    },
+                                  }}
+                                >
+                                  <Text
+                                    size="sm"
+                                    c={fg}
+                                    lineClamp={1}
+                                    style={{ cursor: "default" }}
+                                  >
+                                    {row.agent_name || "—"}
+                                  </Text>
+                                </Tooltip>
+                              </td>
+                            )}
                             {visibleColumns.volume && (
                               <td style={{ ...tdPad, maxWidth: 220 }}>
                                 <Tooltip
@@ -1399,29 +1422,6 @@ function ImportJobMaster() {
                                     style={{ cursor: "default" }}
                                   >
                                     {volumeDisplay}
-                                  </Text>
-                                </Tooltip>
-                              </td>
-                            )}
-                            {visibleColumns.agent && (
-                              <td style={{ ...tdPad, maxWidth: 200 }}>
-                                <Tooltip
-                                  label={row.agent_name ?? ""}
-                                  withArrow
-                                  styles={{
-                                    tooltip: {
-                                      fontFamily: theme.fontSans,
-                                      fontSize: 12,
-                                    },
-                                  }}
-                                >
-                                  <Text
-                                    size="sm"
-                                    c={fg}
-                                    lineClamp={1}
-                                    style={{ cursor: "default" }}
-                                  >
-                                    {row.agent_name || "—"}
                                   </Text>
                                 </Tooltip>
                               </td>

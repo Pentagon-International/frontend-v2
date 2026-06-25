@@ -47,6 +47,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const RECEIPT_TYPE_OPTIONS = [
@@ -70,22 +71,6 @@ const fetchCurrencyMaster = async () => {
     return [];
   }
 };
-
-// Default ROE by currency (same as InvoiceCreate): IN -> INR=1, USD=88.75; AE -> AED=1, USD=3.67
-function getRoeValue(
-  currency: string,
-  countryCode: string | undefined,
-): number {
-  const currencyUpper = currency?.toUpperCase();
-  if (countryCode === "IN") {
-    if (currencyUpper === "INR") return 1;
-    if (currencyUpper === "USD") return 88.75;
-  } else if (countryCode === "AE") {
-    if (currencyUpper === "AED") return 1;
-    if (currencyUpper === "USD") return 3.67;
-  }
-  return 1;
-}
 
 // Header daybook: create receipt flow only
 const fetchDaybookRPT = async () => {
@@ -526,11 +511,16 @@ export default function ReceiptCreate({
   const sourceReceiptIdForReversalRef = useRef<number | null>(null);
   const sourceReceiptNoForReversalRef = useRef<string>("");
 
+  const {
+    localCurrency,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+  } = useAccountsDocumentCurrencyRoe();
   const defaultBranch =
     user?.branches?.find((b) => b.is_default) || user?.branches?.[0];
-  const localCurrency =
-    (defaultBranch as { currency?: { currency_code?: string } } | undefined)
-      ?.currency?.currency_code ?? "";
 
   const [dropdownZIndex] = useState(300);
   const [
@@ -895,17 +885,11 @@ export default function ReceiptCreate({
     isReversalCreate,
   ]);
 
-  const userCountryCode = user?.country?.country_code;
-
   useEffect(() => {
-    const curr = form.values.currency?.trim().toUpperCase();
+    const curr = form.values.currency?.trim();
     if (!curr || !localCurrency) return;
-    if (curr === localCurrency.toUpperCase()) {
-      form.setFieldValue("roe", 1);
-    } else {
-      form.setFieldValue("roe", getRoeValue(curr, userCountryCode));
-    }
-  }, [form.values.currency, localCurrency, userCountryCode]);
+    syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
+  }, [form.values.currency, localCurrency, syncRoeForCurrencyChange]);
 
   // When party details change: header amount = Σ(Cr) − Σ(Dr)
   // This is important because backend may append extra party rows (ex: TDS) on save.
@@ -1522,6 +1506,28 @@ export default function ReceiptCreate({
   };
 
   const handleSubmit = async (values: ReceiptFormValues) => {
+    const headerRoeToastError = validateRoeToast(values.currency, values.roe);
+    if (headerRoeToastError) {
+      form.setFieldError(
+        "roe",
+        validateRoeField(values.currency, values.roe) ?? headerRoeToastError,
+      );
+      ToastNotification({ type: "error", message: headerRoeToastError });
+      return;
+    }
+    for (let i = 0; i < (values.details ?? []).length; i++) {
+      const detail = values.details[i];
+      const detailRoeToastError = validateRoeToast(detail.currency, detail.roe);
+      if (detailRoeToastError) {
+        form.setFieldError(
+          `details.${i}.roe`,
+          validateRoeField(detail.currency, detail.roe) ?? detailRoeToastError,
+        );
+        ToastNotification({ type: "error", message: detailRoeToastError });
+        return;
+      }
+    }
+
     const hasAdjustments = (values.adjustments ?? []).some((a) => {
       const hasAmounts =
         (a.adj_local_amount != null &&
@@ -2256,8 +2262,11 @@ export default function ReceiptCreate({
                 value={form.values.currency}
                 onChange={(v) => {
                   form.setFieldValue("currency", v ?? "");
-                  if (v?.toUpperCase() === localCurrency.toUpperCase()) {
-                    form.setFieldValue("roe", 1);
+                  form.clearFieldError("roe");
+                  if (v) {
+                    syncRoeForCurrencyChange(v, (roe) =>
+                      form.setFieldValue("roe", roe),
+                    );
                   }
                 }}
                 searchable
@@ -2273,17 +2282,26 @@ export default function ReceiptCreate({
                 placeholder="Rate of exchange"
                 value={form.values.roe ?? undefined}
                 onChange={(v) =>
-                  form.setFieldValue(
-                    "roe",
+                  onRoeValueChange(
+                    form.values.currency,
                     clampROE(typeof v === "string" ? parseFloat(v) : v) ?? null,
+                    (roe) => form.setFieldValue("roe", roe),
+                    form.setFieldError,
+                    form.clearFieldError,
+                    "roe",
                   )
                 }
                 min={0}
                 decimalScale={4}
                 max={ROE_MAX}
                 hideControls
+                error={form.errors.roe}
                 styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                disabled={
+                  useNonEditableStyleOnly
+                    ? false
+                    : headerOtherDisabled || isLocalCurrency(form.values.currency)
+                }
               />
             </Grid.Col>
             <Grid.Col span={1.5}>
@@ -2601,8 +2619,11 @@ export default function ReceiptCreate({
                 value={form.values.details[idx].currency}
                 onChange={(v) => {
                   form.setFieldValue(`details.${idx}.currency`, v ?? "");
-                  if (v?.toUpperCase() === localCurrency.toUpperCase()) {
-                    form.setFieldValue(`details.${idx}.roe`, 1);
+                  form.clearFieldError(`details.${idx}.roe`);
+                  if (v) {
+                    syncRoeForCurrencyChange(v, (roe) =>
+                      form.setFieldValue(`details.${idx}.roe`, roe),
+                    );
                   }
                 }}
                 searchable
@@ -2619,11 +2640,21 @@ export default function ReceiptCreate({
                             hideControls
                             value={form.values.details[idx].roe ?? undefined}
                             onChange={(v) => {
+                              const detailCurrency =
+                                form.values.details[idx]?.currency ?? "";
                               const newRoe =
                                 clampROE(
                                   typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? 1;
-                              form.setFieldValue(`details.${idx}.roe`, newRoe);
+                                ) ?? null;
+                              onRoeValueChange(
+                                detailCurrency,
+                                newRoe,
+                                (roe) =>
+                                  form.setFieldValue(`details.${idx}.roe`, roe),
+                                form.setFieldError,
+                                form.clearFieldError,
+                                `details.${idx}.roe`,
+                              );
                               const amt = form.values.details[idx]?.amount;
                               if (
                                 amt != null &&
@@ -2639,11 +2670,16 @@ export default function ReceiptCreate({
                             }}
                             decimalScale={4}
                             max={ROE_MAX}
+                            error={form.errors[`details.${idx}.roe`]}
                             styles={partyFieldStyles}
                             disabled={
                               useNonEditableStyleOnly
                                 ? false
-                                : isReadOnly || reversalFormDisabled
+                                : isReadOnly ||
+                                  reversalFormDisabled ||
+                                  isLocalCurrency(
+                                    form.values.details[idx]?.currency,
+                                  )
                             }
                           />
                         </Grid.Col>

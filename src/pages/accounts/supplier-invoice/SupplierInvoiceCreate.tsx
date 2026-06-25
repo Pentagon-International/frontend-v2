@@ -40,6 +40,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
@@ -560,31 +561,14 @@ export default function SupplierInvoiceCreate({
     document.body.removeChild(link);
   };
 
-  const defaultBranch = user?.branches?.find(
-    (b: { is_default?: boolean }) => b.is_default === true,
-  ) as
-    | { currency?: { currency_id?: number; currency_code?: string } }
-    | undefined;
-  const defaultBranchCurrencyId =
-    defaultBranch?.currency?.currency_id != null
-      ? String(defaultBranch.currency.currency_id)
-      : "";
-
-  const getRoeValue = useCallback(
-    (currencyCode: string): number => {
-      const code = (user?.country?.country_code ?? "").toUpperCase();
-      const curr = (currencyCode ?? "").toUpperCase();
-      if (code === "IN") {
-        if (curr === "INR") return 1;
-        if (curr === "USD") return 88.75;
-      } else if (code === "AE") {
-        if (curr === "AED") return 1;
-        if (curr === "USD") return 3.67;
-      }
-      return 1;
-    },
-    [user?.country?.country_code],
-  );
+  const {
+    defaultBranchCurrencyId,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+  } = useAccountsDocumentCurrencyRoe();
 
   const isIndiaUser =
     isIndianUserCountry(user?.country?.country_code) ||
@@ -712,6 +696,17 @@ export default function SupplierInvoiceCreate({
       }))
       .filter((o) => o.value);
   }, [currencyData]);
+
+  const headerCurrencyCode = useMemo(
+    () =>
+      currencyOptions.find((o) => o.value === form.values.currency_id)?.label ??
+      "",
+    [currencyOptions, form.values.currency_id],
+  );
+  const isHeaderLocalCurrency = isLocalCurrency(
+    headerCurrencyCode,
+    form.values.currency_id,
+  );
 
   const stateOptions = useMemo(() => {
     const data = stateData as {
@@ -952,7 +947,9 @@ export default function SupplierInvoiceCreate({
       const currCode =
         currencyOptions.find((o) => o.value === effectiveCurrency)?.label ?? "";
       if (currCode && form.values.roe == null) {
-        form.setFieldValue("roe", getRoeValue(currCode));
+        syncRoeForCurrencyChange(currCode, (roe) =>
+          form.setFieldValue("roe", roe),
+        );
       }
     }
   }, [
@@ -962,7 +959,7 @@ export default function SupplierInvoiceCreate({
     isEditMode,
     isReversal,
     currencyOptions,
-    getRoeValue,
+    syncRoeForCurrencyChange,
   ]);
 
   // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes (not for supplier reversal — preserve API figures)
@@ -1570,6 +1567,37 @@ export default function SupplierInvoiceCreate({
         return null;
       }
 
+      const headerRoeToastError = validateRoeToast(
+        headerCurrencyCode,
+        values.roe,
+        values.currency_id,
+      );
+      if (headerRoeToastError) {
+        form.setFieldError("roe", validateRoeField(headerCurrencyCode, values.roe, values.currency_id) ?? headerRoeToastError);
+        ToastNotification({ type: "error", message: headerRoeToastError });
+        return null;
+      }
+
+      for (let i = 0; i < (values.charges_data ?? []).length; i++) {
+        const charge = values.charges_data[i];
+        const chargeCode =
+          currencyOptions.find((o) => o.value === String(charge.currency_id ?? ""))
+            ?.label ?? "";
+        const chargeRoeToastError = validateRoeToast(
+          chargeCode,
+          charge.roe,
+          charge.currency_id != null ? String(charge.currency_id) : null,
+        );
+        if (chargeRoeToastError) {
+          form.setFieldError(
+            `charges_data.${i}.roe`,
+            validateRoeField(chargeCode, charge.roe, charge.currency_id != null ? String(charge.currency_id) : null) ?? chargeRoeToastError,
+          );
+          ToastNotification({ type: "error", message: chargeRoeToastError });
+          return null;
+        }
+      }
+
       const payload = buildPayload(values);
       (payload as Record<string, unknown>).is_agent = isOverseasCrjDaybook ? true : false;
       const isEdit = saveResponse?.id != null;
@@ -1806,7 +1834,7 @@ export default function SupplierInvoiceCreate({
       form.values.currency_id || defaultBranchCurrencyId || "";
     const currCode =
       currencyOptions.find((o) => o.value === currencyIdStr)?.label ?? "";
-    const roe = currCode ? getRoeValue(currCode) : 1;
+    const newIndex = form.values.charges_data.length;
     form.insertListItem("charges_data", {
       account_code: "",
       account_name: "",
@@ -1822,12 +1850,17 @@ export default function SupplierInvoiceCreate({
           : currencyIdStr
             ? Number(currencyIdStr)
             : null,
-      roe,
+      roe: currCode && isLocalCurrency(currCode) ? 1 : null,
       amount: null,
       amount_in_local: null,
       tax_code: "",
       Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
     });
+    if (currCode) {
+      syncRoeForCurrencyChange(currCode, (roe) => {
+        if (roe != null) form.setFieldValue(`charges_data.${newIndex}.roe`, roe);
+      });
+    }
   };
 
   return (
@@ -2210,8 +2243,13 @@ export default function SupplierInvoiceCreate({
                   form.setFieldValue("currency_id", v ?? "");
                   const code =
                     currencyOptions.find((o) => o.value === v)?.label ?? "";
+                  form.clearFieldError("roe");
                   if (code) {
-                    form.setFieldValue("roe", getRoeValue(code));
+                    syncRoeForCurrencyChange(
+                      code,
+                      (roe) => form.setFieldValue("roe", roe),
+                      v ?? "",
+                    );
                   }
                 }}
                 searchable
@@ -2232,12 +2270,26 @@ export default function SupplierInvoiceCreate({
                 placeholder="0"
                 value={form.values.roe ?? undefined}
                 onChange={(v) =>
-                  form.setFieldValue("roe", typeof v === "number" ? v : null)
+                  onRoeValueChange(
+                    headerCurrencyCode,
+                    typeof v === "number" ? v : null,
+                    (roe) => form.setFieldValue("roe", roe),
+                    form.setFieldError,
+                    form.clearFieldError,
+                    "roe",
+                    form.values.currency_id,
+                  )
                 }
                 min={0}
                 decimalScale={4}
                 hideControls
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                error={form.errors.roe}
+                disabled={
+                  isReadOnly ||
+                  reversalFormDisabled ||
+                  !isVendorSelected ||
+                  isHeaderLocalCurrency
+                }
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
@@ -3031,11 +3083,21 @@ export default function SupplierInvoiceCreate({
                           const code =
                             currencyOptions.find((o) => o.value === v)?.label ??
                             "";
-                          if (code)
-                            form.setFieldValue(
-                              `charges_data.${index}.roe`,
-                              getRoeValue(code),
+                          if (code) {
+                            form.clearFieldError(`charges_data.${index}.roe`);
+                            syncRoeForCurrencyChange(
+                              code,
+                              (roe) => {
+                                if (roe != null) {
+                                  form.setFieldValue(
+                                    `charges_data.${index}.roe`,
+                                    roe,
+                                  );
+                                }
+                              },
+                              v ?? "",
                             );
+                          }
                         }}
                         searchable
                         clearable
@@ -3053,16 +3115,43 @@ export default function SupplierInvoiceCreate({
                       <NumberInput
                         placeholder="ROE"
                         value={row.roe ?? undefined}
-                        onChange={(v) =>
-                          form.setFieldValue(
-                            `charges_data.${index}.roe`,
+                        onChange={(v) => {
+                          const chargeCode =
+                            currencyOptions.find(
+                              (o) => o.value === String(row.currency_id ?? ""),
+                            )?.label ?? "";
+                          onRoeValueChange(
+                            chargeCode,
                             typeof v === "number" ? v : null,
-                          )
-                        }
+                            (roe) =>
+                              form.setFieldValue(
+                                `charges_data.${index}.roe`,
+                                roe,
+                              ),
+                            form.setFieldError,
+                            form.clearFieldError,
+                            `charges_data.${index}.roe`,
+                            row.currency_id != null
+                              ? String(row.currency_id)
+                              : null,
+                          );
+                        }}
                         min={0}
                         decimalScale={4}
                         hideControls
-                        disabled={isReadOnly || reversalFormDisabled}
+                        error={form.errors[`charges_data.${index}.roe`]}
+                        disabled={
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          isLocalCurrency(
+                            currencyOptions.find(
+                              (o) => o.value === String(row.currency_id ?? ""),
+                            )?.label ?? "",
+                            row.currency_id != null
+                              ? String(row.currency_id)
+                              : null,
+                          )
+                        }
                         styles={{
                           input: {
                             fontSize: "13px",
