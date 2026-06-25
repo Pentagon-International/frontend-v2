@@ -404,6 +404,48 @@ function JournalVoucher() {
     },
   });
 
+  const chargeCurrencyKey = form.values.charges
+    .map((c) => `${c.currency_id}|${c.currency_code}|${c.roe}`)
+    .join(";");
+
+  // Default branch currency on new rows; backfill currency code and local ROE
+  useEffect(() => {
+    if (isReadOnly || !defaultCurrencyId || currencyOptions.length === 0) return;
+
+    const charges = form.values.charges;
+    let changed = false;
+    const next = charges.map((c) => {
+      const currencyId = String(c.currency_id ?? "").trim();
+      if (!currencyId) {
+        changed = true;
+        return {
+          ...c,
+          currency_id: defaultCurrencyId,
+          currency_code: defaultCurrencyCode,
+          roe: 1,
+        };
+      }
+      const opt = currencyOptions.find((o) => o.value === currencyId);
+      const code = (c.currency_code || opt?.label || "").trim();
+      const patch: Partial<JVChargeRow> = {};
+      if (!c.currency_code && code) patch.currency_code = code;
+      if (isLocalCurrency(code, currencyId) && c.roe !== 1) patch.roe = 1;
+      if (Object.keys(patch).length === 0) return c;
+      changed = true;
+      return { ...c, ...patch };
+    });
+
+    if (changed) form.setFieldValue("charges", next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    chargeCurrencyKey,
+    defaultCurrencyId,
+    defaultCurrencyCode,
+    currencyOptions,
+    isReadOnly,
+    isLocalCurrency,
+  ]);
+
   // ─── Populate form from API response (Edit / View / JV Reversal) ─────────
 
   useEffect(() => {

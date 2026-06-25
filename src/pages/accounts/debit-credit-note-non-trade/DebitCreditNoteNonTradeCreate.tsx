@@ -41,7 +41,17 @@ import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocume
 const fetchCurrencyMaster = async () => {
   try {
     const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
-    return (response as { data?: unknown[] })?.data ?? response ?? [];
+    const maybeWrapped = response as { data?: unknown };
+    const payload = maybeWrapped?.data ?? response;
+    if (Array.isArray(payload)) return payload;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      Array.isArray((payload as { data?: unknown }).data)
+    ) {
+      return (payload as { data: unknown[] }).data;
+    }
+    return [];
   } catch (error) {
     console.error("Error fetching currency master:", error);
     return [];
@@ -153,6 +163,87 @@ const newLineItem = (n: number, currency = ""): LineItem => ({
   note: "",
 });
 
+type CurrencyOption = { value: string; label: string };
+
+type CurrencyMasterRow = {
+  id?: number;
+  currency_id?: number;
+  currency_code?: string;
+  code?: string;
+};
+
+function buildCurrencyOptions(data: unknown): CurrencyOption[] {
+  if (!Array.isArray(data)) return [];
+  return (data as CurrencyMasterRow[])
+    .map((c) => {
+      const rawId = c.id ?? c.currency_id;
+      const code = String(c.currency_code ?? c.code ?? "")
+        .trim()
+        .toUpperCase();
+      return {
+        value: String(rawId ?? ""),
+        label: code || String(rawId ?? ""),
+      };
+    })
+    .filter((o) => o.value && o.label);
+}
+
+function buildCurrencyIdByCode(options: CurrencyOption[]): Map<string, string> {
+  const map = new Map<string, string>();
+  options.forEach((o) => map.set(o.label, o.value));
+  return map;
+}
+
+function resolveCurrencyCodeFromId(
+  currencyId: string | null | undefined,
+  options: CurrencyOption[],
+  fallbackCode = "",
+): string {
+  const fromId = options.find(
+    (o) => o.value === String(currencyId ?? ""),
+  )?.label;
+  if (fromId) return fromId;
+  return String(fallbackCode ?? "").trim().toUpperCase();
+}
+
+function resolveHeaderCurrencySelection(
+  rawId: string | null,
+  item: { value?: string; label?: string } | null | undefined,
+  options: CurrencyOption[],
+): { currencyId: string | null; code: string } {
+  const selectedKey = rawId != null ? String(rawId).trim() : "";
+  const itemLabel = item?.label?.trim().toUpperCase() ?? "";
+
+  const byValue = options.find((o) => o.value === selectedKey);
+  if (byValue) {
+    return { currencyId: byValue.value, code: byValue.label };
+  }
+
+  const byLabel = options.find((o) => o.label === selectedKey.toUpperCase());
+  if (byLabel) {
+    return { currencyId: byLabel.value, code: byLabel.label };
+  }
+
+  if (itemLabel) {
+    const fromItem = options.find((o) => o.label === itemLabel);
+    return {
+      currencyId: fromItem?.value ?? (selectedKey || null),
+      code: itemLabel,
+    };
+  }
+
+  return { currencyId: selectedKey || null, code: "" };
+}
+
+function resolveLineCurrencyContext(
+  lineCurrency: string,
+  idByCode: Map<string, string>,
+): { code: string; currencyId: string | null } {
+  const code = String(lineCurrency ?? "").trim().toUpperCase();
+  const currencyId = code ? (idByCode.get(code) ?? null) : null;
+  return { code, currencyId };
+}
+
 export function DebitCreditNoteCreateBase({
   payloadType,
   showTradeFields,
@@ -163,11 +254,6 @@ export function DebitCreditNoteCreateBase({
   const navigate = useNavigate();
   const location = useLocation();
   useParams(); // keep route `:id` segment for identification
-  console.log("[DCN] render", {
-    payloadType,
-    showTradeFields,
-    locationState: location.state,
-  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
   const [loadingText, setLoadingText] = useState<string>("");
@@ -211,7 +297,7 @@ export function DebitCreditNoteCreateBase({
       address: "",
       stateId: null as string | null,
       currencyId: branchCurrencyDefaults.currency_id || null,
-      currencyCode: branchCurrencyDefaults.currency_code || "",
+      currencyCode: (branchCurrencyDefaults.currency_code || "").toUpperCase(),
       roe: (branchCurrencyDefaults.roe ?? "") as number | "",
       costCenter: "",
       documentDate: dayjs().toDate() as Date | null,
@@ -516,20 +602,25 @@ export function DebitCreditNoteCreateBase({
 
   // daybook master list not needed (Daybook is SearchableSelect)
 
-  const currencyOptions = useMemo(() => {
-    const data = currencyData as {
-      id?: number;
-      currency_code?: string;
-      code?: string;
-    }[];
-    if (!Array.isArray(data)) return [];
-    return data
-      .map((c) => ({
-        value: String(c.id ?? ""),
-        label: String(c.currency_code ?? c.code ?? c.id ?? "").trim(),
-      }))
-      .filter((o) => o.value && o.label);
-  }, [currencyData]);
+  const currencyOptions = useMemo(
+    () => buildCurrencyOptions(currencyData),
+    [currencyData],
+  );
+
+  const currencyIdByCode = useMemo(
+    () => buildCurrencyIdByCode(currencyOptions),
+    [currencyOptions],
+  );
+
+  const headerCurrencyCode = useMemo(
+    () =>
+      resolveCurrencyCodeFromId(
+        form.values.currencyId,
+        currencyOptions,
+        form.values.currencyCode,
+      ),
+    [currencyOptions, form.values.currencyId, form.values.currencyCode],
+  );
 
   const stateOptions = useMemo(() => {
     const data = stateData as {
@@ -689,7 +780,6 @@ export function DebitCreditNoteCreateBase({
   };
 
   const applyCreateResponseToForm = (raw: unknown) => {
-    console.log("[DCN] applyCreateResponseToForm: raw =", raw);
     // Supports axios responses that wrap the note under `data`.
     const unwrap = (x: unknown): unknown => {
       if (!x || typeof x !== "object") return x;
@@ -711,23 +801,6 @@ export function DebitCreditNoteCreateBase({
     const details = (Array.isArray(linesFromTem) ? linesFromTem : []) as Array<
       Record<string, unknown>
     >;
-
-    console.log(
-      "[DCN] applyCreateResponseToForm: header keys =",
-      Object.keys(header ?? {}),
-    );
-    console.log("[DCN] applyCreateResponseToForm: lines source counts =", {
-      debit_credit_note_tem: Array.isArray(linesFromTem)
-        ? linesFromTem.length
-        : null,
-      chosen: details.length,
-    });
-    if (details.length) {
-      console.log(
-        "[DCN] applyCreateResponseToForm: first line =",
-        details[0],
-      );
-    }
 
     if (header?.id != null) setSaveResponse(header);
 
@@ -762,7 +835,7 @@ export function DebitCreditNoteCreateBase({
     const headerCurrencyCode =
       headerCurrencyCodeRaw != null ? String(headerCurrencyCodeRaw).trim() : "";
     if (headerCurrencyCode) {
-      form.setFieldValue("currencyCode", headerCurrencyCode);
+      form.setFieldValue("currencyCode", headerCurrencyCode.toUpperCase());
     }
     if (header?.roe != null) form.setFieldValue("roe", Number(header.roe));
     if (header?.document_date != null)
@@ -822,29 +895,29 @@ export function DebitCreditNoteCreateBase({
         narration: String(d.narration ?? ""),
         note: String(d.note ?? ""),
       }));
-      console.log("[DCN] applyCreateResponseToForm: mapped lines =", mapped);
-      console.log(
-        "[DCN] applyCreateResponseToForm: setting lines length =",
-        mapped.length,
-      );
       form.setFieldValue("lines", mapped);
-    } else {
-      console.log(
-        "[DCN] applyCreateResponseToForm: no line items found in payload (debit_credit_note_tem empty)",
-      );
     }
   };
 
   const isHeaderLocalCurrency = isLocalCurrency(
-    form.values.currencyCode,
+    headerCurrencyCode,
     form.values.currencyId,
   );
+
+  const isLineLocalCurrency = (lineCurrency: string) => {
+    const { code, currencyId } = resolveLineCurrencyContext(
+      lineCurrency,
+      currencyIdByCode,
+    );
+    if (!code) return isHeaderLocalCurrency;
+    return isLocalCurrency(code, currencyId);
+  };
 
   const validateRoeBeforeSave = (): boolean => {
     const headerRoe =
       form.values.roe === "" ? null : Number(form.values.roe);
     const headerError = validateRoeToast(
-      form.values.currencyCode,
+      headerCurrencyCode,
       headerRoe,
       form.values.currencyId,
     );
@@ -852,7 +925,7 @@ export function DebitCreditNoteCreateBase({
       form.setFieldError(
         "roe",
         validateRoeField(
-          form.values.currencyCode,
+          headerCurrencyCode,
           headerRoe,
           form.values.currencyId,
         ) ?? headerError,
@@ -861,12 +934,14 @@ export function DebitCreditNoteCreateBase({
       return false;
     }
     for (let i = 0; i < form.values.lines.length; i++) {
-      const lineRoe =
-        form.values.lines[i].roe === "" ? null : Number(form.values.lines[i].roe);
+      const line = form.values.lines[i];
+      const lineRoe = line.roe === "" ? null : Number(line.roe);
+      const { code: lineCode, currencyId: lineCurrencyId } =
+        resolveLineCurrencyContext(line.currency, currencyIdByCode);
       const lineError = validateRoeToast(
-        form.values.currencyCode,
+        lineCode || headerCurrencyCode,
         lineRoe,
-        form.values.currencyId,
+        lineCurrencyId ?? form.values.currencyId,
       );
       if (lineError) {
         ToastNotification({ type: "error", message: lineError });
@@ -930,41 +1005,110 @@ export function DebitCreditNoteCreateBase({
   const isReadOnly = isViewMode || isPosted;
   const pageLabel = showTradeFields ? "Trade" : "Non Trade";
 
-  useEffect(() => {
-    console.log("[DCN] lines changed:", {
-      length: form.values.lines.length,
-      first: form.values.lines[0],
-    });
-  }, [form.values.lines]);
+  const applyHeaderRoeToLines = (roe: number, currencyCode?: string) => {
+    const code = currencyCode?.trim().toUpperCase();
+    form.setFieldValue(
+      "lines",
+      form.values.lines.map((l) => ({
+        ...l,
+        ...(code ? { currency: code } : {}),
+        roe,
+        local_amount: computeLocalAmount(l.amount, roe),
+      })),
+    );
+  };
 
-  // Branch currency: ROE = 1; foreign currency: fetch from exchange rate master.
-  useEffect(() => {
-    if (isReadOnly) return;
-    if (isPrefillingRef.current) return;
-    const code = String(form.values.currencyCode ?? "").trim();
+  const syncRoeAndApply = (
+    code: string,
+    currencyId: string | null,
+    onRoe: (roe: number) => void,
+  ) => {
     if (!code) return;
+    syncRoeForCurrencyChange(
+      code,
+      (roe) => {
+        if (roe != null) onRoe(roe);
+      },
+      currencyId,
+    );
+  };
 
-    if (isLocalCurrency(code)) {
-      if (form.values.roe === "") {
-        form.setFieldValue("roe", 1);
-      }
-      const nextLines = form.values.lines.map((l) =>
-        l.roe === "" ? { ...l, roe: 1 } : l,
-      );
-      const changed = nextLines.some(
-        (l, i) => l.roe !== form.values.lines[i]?.roe,
-      );
-      if (changed) form.setFieldValue("lines", nextLines);
+  const handleLineCurrencyChange = (
+    lineId: string,
+    rawCode: string | null,
+  ) => {
+    const code = rawCode?.trim().toUpperCase() ?? "";
+    const line = form.values.lines.find((l) => l.id === lineId);
+    if (!line) return;
+
+    if (!code) {
+      setLineById(lineId, { currency: "", roe: "", local_amount: "" });
       return;
     }
 
-    syncRoeForCurrencyChange(code, (roe) => {
-      if (roe != null && form.values.roe === "") {
-        form.setFieldValue("roe", roe);
-      }
+    const { currencyId } = resolveLineCurrencyContext(code, currencyIdByCode);
+    syncRoeAndApply(code, currencyId, (roe) => {
+      setLineById(lineId, {
+        currency: code,
+        roe,
+        local_amount: computeLocalAmount(line.amount, roe),
+      });
     });
+  };
+
+  const handleHeaderCurrencyChange = (
+    rawId: string | null,
+    item?: { value?: string; label?: string } | null,
+  ) => {
+    const { currencyId, code } = resolveHeaderCurrencySelection(
+      rawId,
+      item,
+      currencyOptions,
+    );
+    form.setFieldValue("currencyId", currencyId);
+    form.setFieldValue("currencyCode", code);
+    form.clearFieldError("roe");
+    if (!code) return;
+
+    syncRoeAndApply(code, currencyId, (roe) => {
+      form.setFieldValue("roe", roe);
+      applyHeaderRoeToLines(roe, code);
+    });
+  };
+
+  // Branch currency: ROE = 1; foreign currency: fetch from exchange rate master.
+  useEffect(() => {
+    if (isReadOnly || isPrefillingRef.current || !headerCurrencyCode) return;
+
+    const isLocal = isLocalCurrency(
+      headerCurrencyCode,
+      form.values.currencyId,
+    );
+
+    if (isLocal) {
+      if (form.values.roe !== 1) form.setFieldValue("roe", 1);
+      if (form.values.lines.some((l) => l.roe !== 1)) {
+        applyHeaderRoeToLines(1, headerCurrencyCode);
+      }
+      return;
+    }
+
+    syncRoeAndApply(
+      headerCurrencyCode,
+      form.values.currencyId,
+      (roe) => {
+        form.setFieldValue("roe", roe);
+        applyHeaderRoeToLines(roe, headerCurrencyCode);
+      },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.currencyCode, isReadOnly, isLocalCurrency, syncRoeForCurrencyChange]);
+  }, [
+    headerCurrencyCode,
+    form.values.currencyId,
+    isReadOnly,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+  ]);
 
   // Trade only: auto-fetch SAC once shipment_no + charge_id are selected.
   const tradeSacKey = showTradeFields
@@ -988,12 +1132,26 @@ export function DebitCreditNoteCreateBase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeSacKey, showTradeFields, isReadOnly]);
 
+  // Keep currency code in sync when master loads after form init (e.g. branch id preset).
+  useEffect(() => {
+    if (isReadOnly) return;
+    if (!form.values.currencyId) return;
+    const match = currencyOptions.find(
+      (o) => o.value === String(form.values.currencyId),
+    );
+    if (!match?.label) return;
+    if (form.values.currencyCode !== match.label) {
+      form.setFieldValue("currencyCode", match.label);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currencyOptions, form.values.currencyId, isReadOnly]);
+
   // If header currency code defaults (e.g. INR) but id isn't selected,
   // auto-select the matching currency id so payload doesn't send null.
   useEffect(() => {
     if (isReadOnly) return;
     if (form.values.currencyId) return;
-    const code = String(form.values.currencyCode ?? "").trim();
+    const code = String(form.values.currencyCode ?? "").trim().toUpperCase();
     if (!code) return;
     const match = currencyOptions.find((o) => o.label === code);
     if (!match) return;
@@ -1290,29 +1448,13 @@ export function DebitCreditNoteCreateBase({
               label="Currency"
               placeholder="Select currency"
               searchable
-              data={currencyOptions.map((o) => o.label)}
+              data={currencyOptions}
               value={
-                currencyOptions.find(
-                  (o) => o.value === String(form.values.currencyId ?? ""),
-                )?.label ??
-                form.values.currencyCode ??
-                null
+                form.values.currencyId != null
+                  ? String(form.values.currencyId)
+                  : null
               }
-              onChange={(label) => {
-                const found = currencyOptions.find((o) => o.label === label);
-                form.setFieldValue("currencyId", found?.value ?? null);
-                form.setFieldValue("currencyCode", label ?? "");
-                form.clearFieldError("roe");
-                if (label) {
-                  syncRoeForCurrencyChange(
-                    label,
-                    (roe) => {
-                      if (roe != null) form.setFieldValue("roe", roe);
-                    },
-                    found?.value ?? null,
-                  );
-                }
-              }}
+              onChange={(id, item) => handleHeaderCurrencyChange(id, item)}
               disabled={isReadOnly}
             />
           </Grid.Col>
@@ -1326,7 +1468,7 @@ export function DebitCreditNoteCreateBase({
                 const v = e.currentTarget.value;
                 const nextRoe = v === "" ? null : Number(v);
                 onRoeValueChange(
-                  form.values.currencyCode,
+                  headerCurrencyCode,
                   nextRoe,
                   (roe) =>
                     form.setFieldValue("roe", roe === null ? "" : roe),
@@ -1488,7 +1630,7 @@ export function DebitCreditNoteCreateBase({
           </Grid.Col>
           <Grid.Col span={1}>
             <Text size="xs" fw={600} c="#105476">
-              Amount in {form.values.currencyCode || localCurrency}
+              Amount in {headerCurrencyCode || localCurrency}
             </Text>
           </Grid.Col>
           <Grid.Col span={0.7}>
@@ -1739,10 +1881,12 @@ export function DebitCreditNoteCreateBase({
                   <Dropdown
                     searchable
                     data={currencyOptions.map((o) => o.label)}
-                    value={l.currency || null}
-                    onChange={(label) =>
-                      setLineById(l.id, { currency: label ?? "" })
+                    value={
+                      l.currency
+                        ? String(l.currency).trim().toUpperCase()
+                        : null
                     }
+                    onChange={(code) => handleLineCurrencyChange(l.id, code)}
                     size="xs"
                     clearable
                     placeholder="Currency"
@@ -1756,15 +1900,23 @@ export function DebitCreditNoteCreateBase({
                     onChange={(e) => {
                       const v = e.currentTarget.value;
                       const nextRoe = v === "" ? "" : Number(v);
-                      if (isHeaderLocalCurrency) {
-                        setLineById(l.id, { roe: 1, local_amount: computeLocalAmount(l.amount, 1) });
+                      const { code: lineCode, currencyId: lineCurrencyId } =
+                        resolveLineCurrencyContext(
+                          l.currency,
+                          currencyIdByCode,
+                        );
+                      if (isLineLocalCurrency(l.currency)) {
+                        setLineById(l.id, {
+                          roe: 1,
+                          local_amount: computeLocalAmount(l.amount, 1),
+                        });
                         return;
                       }
                       const roeNum = nextRoe === "" ? null : Number(nextRoe);
                       const roeError = validateRoeField(
-                        form.values.currencyCode,
+                        lineCode || headerCurrencyCode,
                         roeNum,
-                        form.values.currencyId,
+                        lineCurrencyId ?? form.values.currencyId,
                       );
                       if (roeError) {
                         ToastNotification({ type: "error", message: roeError });
@@ -1776,7 +1928,7 @@ export function DebitCreditNoteCreateBase({
                       });
                     }}
                     size="xs"
-                    disabled={isReadOnly || isHeaderLocalCurrency}
+                    disabled={isReadOnly || isLineLocalCurrency(l.currency)}
                   />
                 </Grid.Col>
                 <Grid.Col span={showTradeFields ? 0.9 : 1}>

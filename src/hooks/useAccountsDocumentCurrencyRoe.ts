@@ -9,6 +9,7 @@ export function useAccountsDocumentCurrencyRoe() {
   const {
     defaultBranchCurrency,
     defaultBranchCurrencyId,
+    activeBranchCountryCode,
     isBaseCurrency,
     ensureRoeForCurrency,
     getBranchCurrencyDefaults,
@@ -79,6 +80,7 @@ export function useAccountsDocumentCurrencyRoe() {
     localCurrency,
     defaultBranchCurrency,
     defaultBranchCurrencyId,
+    activeBranchCountryCode,
     isLocalCurrency: isBaseCurrency,
     isBaseCurrency,
     resolveRoeForCurrency,

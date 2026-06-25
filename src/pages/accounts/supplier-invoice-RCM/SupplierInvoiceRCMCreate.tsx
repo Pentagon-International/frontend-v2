@@ -39,6 +39,7 @@ import {
   import { API_HEADER } from "../../../store/storeKeys";
   import { postAPICall } from "../../../service/postApiCall";
   import useAuthStore from "../../../store/authStore";
+  import { isIndianUserCountry } from "../../../utils/userNumberFormat";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   
   const fetchCurrencyMaster = async () => {
@@ -189,7 +190,7 @@ import {
     customer_gst_no: string;
     location_gst_no: string;
     type: "INV" | "CRN";
-    Inv_Crn_note: string;
+    Inv_Crn_note: Date | null;
     Inv_Crn_no: string;
     roe: number | null;
     currency_id: string;
@@ -341,6 +342,27 @@ import {
     },
     label: inputStyles.label,
   };
+
+  /** ROE validation text below the input without affecting flex-end row alignment */
+  function FieldErrorBelow({ error }: { error?: string | null }) {
+    if (!error) return null;
+    return (
+      <Text
+        size="xs"
+        c="red"
+        style={{
+          position: "absolute",
+          top: "100%",
+          left: 0,
+          right: 0,
+          marginTop: 4,
+          lineHeight: 1.2,
+        }}
+      >
+        {error}
+      </Text>
+    );
+  }
   
   // Reversal: non-editable via styling (only daybook and date editable) — same idea as ReceiptCreate
   const reversalNonEditableStyles = {
@@ -437,7 +459,21 @@ import {
       validateRoeField,
       validateRoeToast,
     } = useAccountsDocumentCurrencyRoe();
-  
+
+    const isIndiaUser =
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india");
+
+    const getDrCrDefaultsByType = useCallback(
+      (type: "INV" | "CRN") =>
+        type === "CRN"
+          ? ({ header: "Dr", charge: "Cr" } as const)
+          : ({ header: "Cr", charge: "Dr" } as const),
+      [],
+    );
+
     const form = useForm<SupplierInvoiceFormValues>({
       initialValues: {
         cbp_number: "",
@@ -454,7 +490,7 @@ import {
         customer_gst_no: "",
         location_gst_no: "",
         type: "INV",
-        Inv_Crn_note: "",
+        Inv_Crn_note: null,
         Inv_Crn_no: "",
         roe: null,
         currency_id: defaultBranchCurrencyId || "",
@@ -481,7 +517,7 @@ import {
               defaultBranchCurrencyId
                 ? Number(defaultBranchCurrencyId)
                 : null,
-            roe: null,
+            roe: defaultBranchCurrencyId ? 1 : null,
             amount: null,
             amount_in_local: null,
             tax_code: "",
@@ -495,7 +531,8 @@ import {
         date: (v) => (!v ? "Date is required" : null),
         due_date: (v) => (!v ? "Due date is required" : null),
         currency_id: (v) => (!v ? "Currency is required" : null),
-        state_id: (v) => (!v ? "State is required" : null),
+        state_id: (v) =>
+          isIndiaUser && !v ? "State is required" : null,
         Inv_Crn_no: (v) =>
           !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
       },
@@ -681,14 +718,32 @@ import {
       }
       // Don't overwrite charges_data in view/edit — they were loaded from list state
       if (isViewMode || isEditMode) return;
-      // Set local currency on charge rows that don't have currency_id (including first row)
+      // Set local currency + ROE on charge rows
       const charges = form.values.charges_data;
-      const next = charges.map((c) =>
-        c.currency_id == null
-          ? { ...c, currency_id: Number(effectiveCurrency) }
-          : c,
-      );
-      if (next.some((c, i) => c.currency_id !== charges[i]?.currency_id)) {
+      const next = charges.map((c) => {
+        const resolvedId =
+          c.currency_id ??
+          (effectiveCurrency ? Number(effectiveCurrency) : null);
+        const currencyIdStr =
+          resolvedId != null ? String(resolvedId) : effectiveCurrency;
+        const code =
+          currencyOptions.find((o) => o.value === currencyIdStr)?.label ?? "";
+        const patch: Partial<ChargeRow> = {};
+        if (c.currency_id == null && resolvedId != null) {
+          patch.currency_id = resolvedId;
+        }
+        if (isLocalCurrency(code, currencyIdStr) && c.roe !== 1) {
+          patch.roe = 1;
+        }
+        return Object.keys(patch).length > 0 ? { ...c, ...patch } : c;
+      });
+      if (
+        next.some(
+          (c, i) =>
+            c.currency_id !== charges[i]?.currency_id ||
+            c.roe !== charges[i]?.roe,
+        )
+      ) {
         form.setFieldValue("charges_data", next);
       }
       if (!isViewMode && !isEditMode) {
@@ -696,8 +751,10 @@ import {
           currencyOptions.find((o) => o.value === effectiveCurrency)?.label ??
           "";
         if (currCode && form.values.roe == null) {
-          syncRoeForCurrencyChange(currCode, (roe) =>
-            form.setFieldValue("roe", roe),
+          syncRoeForCurrencyChange(
+            currCode,
+            (roe) => form.setFieldValue("roe", roe),
+            effectiveCurrency,
           );
         }
       }
@@ -708,6 +765,7 @@ import {
       isEditMode,
       currencyOptions,
       syncRoeForCurrencyChange,
+      isLocalCurrency,
     ]);
   
     // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes
@@ -849,7 +907,9 @@ import {
         customer_gst_no: (data.customer_gst_no ?? "") as string,
         location_gst_no: (data.location_gst_no ?? "") as string,
         type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
-        Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+        Inv_Crn_note:
+          parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+          normalizeDate((data.Inv_Crn_note as string) ?? null),
         Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
         roe:
           data.roe != null && data.roe !== ""
@@ -1035,7 +1095,9 @@ import {
         customer_gst_no: values.customer_gst_no || "",
         location_gst_no: values.location_gst_no || "",
         type: values.type ?? "INV",
-        Inv_Crn_note: values.Inv_Crn_note || "",
+        Inv_Crn_note: values.Inv_Crn_note
+          ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
+          : "",
         Inv_Crn_no: values.Inv_Crn_no || "",
         roe: values.roe ?? null,
         currency_id: values.currency_id ? Number(values.currency_id) : null,
@@ -1140,7 +1202,9 @@ import {
         narration: (data.narration ?? "") as string,
         customer_gst_no: (data.customer_gst_no ?? "") as string,
         location_gst_no: (data.location_gst_no ?? "") as string,
-        Inv_Crn_note: (data.Inv_Crn_note ?? "") as string,
+        Inv_Crn_note:
+          parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
+          normalizeDate((data.Inv_Crn_note as string) ?? null),
         Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
         currency_id: data.currency_id != null ? String(data.currency_id) : "",
         taxable_amount:
@@ -1502,18 +1566,22 @@ import {
             : currencyIdStr
               ? Number(currencyIdStr)
               : null,
-        roe: currCode && isLocalCurrency(currCode) ? 1 : null,
+        roe: currCode && isLocalCurrency(currCode, currencyIdStr) ? 1 : null,
         amount: null,
         amount_in_local: null,
         tax_code: "",
         Dr_Cr: isReversal ? "Cr" : "Dr",
       });
       if (currCode) {
-        syncRoeForCurrencyChange(currCode, (roe) => {
-          if (roe != null) {
-            form.setFieldValue(`charges_data.${newIndex}.roe`, roe);
-          }
-        });
+        syncRoeForCurrencyChange(
+          currCode,
+          (roe) => {
+            if (roe != null) {
+              form.setFieldValue(`charges_data.${newIndex}.roe`, roe);
+            }
+          },
+          currencyIdStr,
+        );
       }
     };
   
@@ -1756,7 +1824,7 @@ import {
                   value={form.values.state_id || null}
                   onChange={(v) => form.setFieldValue("state_id", v ?? "")}
                   searchable
-                  withAsterisk
+                  withAsterisk={isIndiaUser}
                   error={form.errors.state_id}
                   disabled={
                     isStateLoading ||
@@ -1831,8 +1899,12 @@ import {
             <Text size="sm" fw={600} c="#105476" mb="xs">
               Agent INV/CRN Detail
             </Text>
-            <Grid mb="md" columns={12}>
-  
+            <Grid
+              mb="md"
+              columns={12}
+              align="flex-end"
+              pb={form.errors.roe ? 20 : 0}
+            >
               <Grid.Col span={0.7}>
                 <Dropdown
                   label="Type"
@@ -1842,23 +1914,20 @@ import {
                     { value: "CRN", label: "CRN" },
                   ]}
                   value={form.values.type}
-                  onChange={(v) =>
-                    form.setFieldValue("type", v === "CRN" ? "CRN" : "INV")
-                  }
+                  onChange={(v) => {
+                    const nextType = v === "CRN" ? "CRN" : "INV";
+                    const defaults = getDrCrDefaultsByType(nextType);
+                    form.setFieldValue("type", nextType);
+                    form.setFieldValue("Dr_Cr", defaults.header);
+                    form.values.charges_data.forEach((_, idx) => {
+                      form.setFieldValue(
+                        `charges_data.${idx}.Dr_Cr`,
+                        defaults.charge,
+                      );
+                    });
+                  }}
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                   styles={effectiveInputStyles}
-                />
-              </Grid.Col>
-              <Grid.Col span={0.9}>
-                <TextInput
-                  label="Inv/Crn Note"
-                  placeholder="Inv/Crn Note"
-                  value={form.values.Inv_Crn_note}
-                  onChange={(e) =>
-                    form.setFieldValue("Inv_Crn_note", e.target.value)
-                  }
-                  styles={effectiveInputStyles}
-                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
               <Grid.Col span={0.9}>
@@ -1875,7 +1944,16 @@ import {
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={0.8}>
+              <Grid.Col span={1.15}>
+                <SingleDateInput
+                  label="Inv/Crn Date"
+                  placeholder="Select Inv/Crn Date"
+                  value={normalizeDate(form.values.Inv_Crn_note)}
+                  onChange={(d) => form.setFieldValue("Inv_Crn_note", d)}
+                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                />
+              </Grid.Col>
+              <Grid.Col span={0.85}>
                 <Dropdown
                   label="Currency"
                   placeholder={
@@ -1909,33 +1987,35 @@ import {
                 />
               </Grid.Col>
               <Grid.Col span={0.75}>
-                <NumberInput
-                  label="ROE"
-                  placeholder="0"
-                  value={form.values.roe ?? undefined}
-                  onChange={(v) =>
-                    onRoeValueChange(
-                      headerCurrencyCode,
-                      typeof v === "number" ? v : null,
-                      (roe) => form.setFieldValue("roe", roe),
-                      form.setFieldError,
-                      form.clearFieldError,
-                      "roe",
-                      form.values.currency_id,
-                    )
-                  }
-                  min={0}
-                  decimalScale={4}
-                  hideControls
-                  error={form.errors.roe}
-                  disabled={
-                    isReadOnly ||
-                    reversalFormDisabled ||
-                    !isVendorSelected ||
-                    isHeaderLocalCurrency
-                  }
-                  styles={effectiveInputStyles}
-                />
+                <Box style={{ position: "relative" }}>
+                  <NumberInput
+                    label="ROE"
+                    placeholder="0"
+                    value={form.values.roe ?? undefined}
+                    onChange={(v) =>
+                      onRoeValueChange(
+                        headerCurrencyCode,
+                        typeof v === "number" ? v : null,
+                        (roe) => form.setFieldValue("roe", roe),
+                        form.setFieldError,
+                        form.clearFieldError,
+                        "roe",
+                        form.values.currency_id,
+                      )
+                    }
+                    min={0}
+                    decimalScale={4}
+                    hideControls
+                    disabled={
+                      isReadOnly ||
+                      reversalFormDisabled ||
+                      !isVendorSelected ||
+                      isHeaderLocalCurrency
+                    }
+                    styles={effectiveInputStyles}
+                  />
+                  <FieldErrorBelow error={form.errors.roe} />
+                </Box>
               </Grid.Col>
               <Grid.Col span={0.9}>
                 <NumberInput
@@ -2728,54 +2808,64 @@ import {
                         />
                       </Grid.Col>
                       <Grid.Col span={0.65}>
-                        <NumberInput
-                          placeholder="ROE"
-                          value={row.roe ?? undefined}
-                          onChange={(v) => {
-                            const chargeCode =
-                              currencyOptions.find(
-                                (o) => o.value === String(row.currency_id ?? ""),
-                              )?.label ?? "";
-                            onRoeValueChange(
-                              chargeCode,
-                              typeof v === "number" ? v : null,
-                              (roe) =>
-                                form.setFieldValue(
-                                  `charges_data.${index}.roe`,
-                                  roe,
-                                ),
-                              form.setFieldError,
-                              form.clearFieldError,
-                              `charges_data.${index}.roe`,
-                              row.currency_id != null
-                                ? String(row.currency_id)
-                                : null,
-                            );
-                          }}
-                          min={0}
-                          decimalScale={4}
-                          hideControls
-                          error={form.errors[`charges_data.${index}.roe`]}
-                          disabled={
-                            isReadOnly ||
-                            reversalFormDisabled ||
-                            isLocalCurrency(
-                              currencyOptions.find(
-                                (o) => o.value === String(row.currency_id ?? ""),
-                              )?.label ?? "",
-                              row.currency_id != null
-                                ? String(row.currency_id)
-                                : null,
-                            )
-                          }
-                          styles={{
-                            input: {
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              height: "36px",
-                            },
-                          }}
-                        />
+                        <Box style={{ position: "relative" }}>
+                          <NumberInput
+                            placeholder="ROE"
+                            value={row.roe ?? undefined}
+                            onChange={(v) => {
+                              const chargeCode =
+                                currencyOptions.find(
+                                  (o) =>
+                                    o.value === String(row.currency_id ?? ""),
+                                )?.label ?? "";
+                              onRoeValueChange(
+                                chargeCode,
+                                typeof v === "number" ? v : null,
+                                (roe) =>
+                                  form.setFieldValue(
+                                    `charges_data.${index}.roe`,
+                                    roe,
+                                  ),
+                                form.setFieldError,
+                                form.clearFieldError,
+                                `charges_data.${index}.roe`,
+                                row.currency_id != null
+                                  ? String(row.currency_id)
+                                  : null,
+                              );
+                            }}
+                            min={0}
+                            decimalScale={4}
+                            hideControls
+                            disabled={
+                              isReadOnly ||
+                              reversalFormDisabled ||
+                              isLocalCurrency(
+                                currencyOptions.find(
+                                  (o) =>
+                                    o.value === String(row.currency_id ?? ""),
+                                )?.label ?? "",
+                                row.currency_id != null
+                                  ? String(row.currency_id)
+                                  : null,
+                              )
+                            }
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                          />
+                          <FieldErrorBelow
+                            error={
+                              form.errors[`charges_data.${index}.roe`] as
+                                | string
+                                | undefined
+                            }
+                          />
+                        </Box>
                       </Grid.Col>
                       <Grid.Col span={0.8}>
                         <NumberInput
@@ -2919,7 +3009,15 @@ import {
               >
                 <Stack gap="xs">
                   {form.values.supporting_documents.map((doc, index) => (
-                    <Grid key={index} columns={12} gutter="sm" align="flex-end">
+                    <Grid
+                      key={index}
+                      columns={12}
+                      gutter="sm"
+                      align="flex-end"
+                      pb={
+                        form.errors[`charges_data.${index}.roe`] ? 18 : 0
+                      }
+                    >
                       <Grid.Col span={5.5}>
                         <TextInput
                           label="Document Name"
