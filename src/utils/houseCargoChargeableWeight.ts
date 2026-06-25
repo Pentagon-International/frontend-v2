@@ -465,6 +465,33 @@ export function resolveBookingChargeNoOfUnits(
   return null;
 }
 
+/** Units that auto-fill no_of_units from cargo (KG, W/M, CBM, containers, etc.). */
+function isBookingChargeCargoConfiguredUnit(
+  unitCode: string,
+  unitLabel: string | undefined,
+  service: string,
+): boolean {
+  if (isShipmentOrDocChargeUnit(unitCode, unitLabel)) return true;
+
+  if (service === "AIR") {
+    return isKgChargeUnit(unitCode, unitLabel);
+  }
+
+  if (service === "LCL") {
+    return (
+      isWmChargeUnit(unitCode, unitLabel) ||
+      isCbmsChargeUnit(unitCode, unitLabel) ||
+      isPlainCbmChargeUnit(unitCode, unitLabel)
+    );
+  }
+
+  if (service === "FCL") {
+    return isProbableFclContainerChargeUnit(unitCode, unitLabel);
+  }
+
+  return false;
+}
+
 export type BookingUnitOption = { value: string; label: string };
 
 type UnitMasterRow = {
@@ -560,7 +587,10 @@ export function applyBookingChargeUnitSelection(
   if (resolved !== null && resolved !== "") {
     return resolved;
   }
-  return currentNoOfUnits;
+  if (isBookingChargeCargoConfiguredUnit(unitCode, unitLabel, service)) {
+    return currentNoOfUnits;
+  }
+  return 1;
 }
 
 /** Apply unit selection on a charge row: resolve unit_code and set default no_of_units. */
@@ -651,6 +681,19 @@ export function mapBookingChargesWithUnits<
           ...next,
           unit: unitCode || next.unit,
           no_of_units: formatBookingChargeNoOfUnitsField(resolved),
+        });
+      } else if (
+        !isBookingChargeCargoConfiguredUnit(
+          unitCode,
+          unitOpt?.label,
+          service,
+        )
+      ) {
+        hasChanges = true;
+        next = recalcBookingChargeLineTotals({
+          ...next,
+          unit: unitCode || next.unit,
+          no_of_units: 1,
         });
       }
     }

@@ -51,6 +51,17 @@ export function getBranchCurrencyDefaults(
   };
 }
 
+/** Default currency + ROE for new booking charge rows (active branch currency). */
+export function getDefaultBookingChargeCurrencyFields(
+  branches?: BranchCurrencyLike[],
+): { currency_country_code: string; roe: string } {
+  const { branchCurrencyCode } = getDefaultBranchCurrencyFromUser(branches);
+  return {
+    currency_country_code: branchCurrencyCode,
+    roe: branchCurrencyCode ? "1" : "",
+  };
+}
+
 export const formatExchangeSellRate = (sellRate: string | number): number => {
   const num = typeof sellRate === "string" ? parseFloat(sellRate) : sellRate;
   if (!Number.isFinite(num)) return 1;

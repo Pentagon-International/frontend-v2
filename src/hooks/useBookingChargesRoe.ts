@@ -48,6 +48,7 @@ export function useBookingChargesRoe<T extends BookingChargeRoeRow>(
   setCharges: Dispatch<SetStateAction<T[]>>,
 ) {
   const {
+    defaultBranchCurrency,
     isBaseCurrency,
     ensureRoeForCurrency,
     validateRoeField,
@@ -62,6 +63,23 @@ export function useBookingChargesRoe<T extends BookingChargeRoeRow>(
   const chargeCurrenciesKey = charges
     .map((c) => String(c.currency_country_code ?? "").trim())
     .join("|");
+
+  useEffect(() => {
+    const branchCurrency = defaultBranchCurrency.trim();
+    if (!branchCurrency) return;
+
+    let changed = false;
+    const updated = charges.map((charge) => {
+      if (String(charge.currency_country_code ?? "").trim()) return charge;
+      changed = true;
+      return recalcBookingChargeTotals({
+        ...charge,
+        currency_country_code: branchCurrency,
+        roe: "1",
+      });
+    });
+    if (changed) setCharges(updated);
+  }, [charges, defaultBranchCurrency, setCharges]);
 
   const clearChargeRoeError = useCallback((index: number) => {
     setChargeRoeErrors((prev) => {
@@ -192,6 +210,7 @@ export function useBookingChargesRoe<T extends BookingChargeRoeRow>(
   ]);
 
   return {
+    defaultBranchCurrency,
     isChargeBaseCurrency: isBaseCurrency,
     chargeRoeErrors,
     handleCurrencyChange,

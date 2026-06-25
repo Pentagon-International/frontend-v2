@@ -47,6 +47,7 @@ import { SearchableSelect } from "../../../components";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
+import { getDefaultBookingChargeCurrencyFields } from "../../../utils/exchangeRateRoe";
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
@@ -637,8 +638,7 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       charge_id: "",
       charge_name: "",
       pp_cc: "Prepaid",
-      currency_country_code: "",
-      roe: "",
+      ...getDefaultBookingChargeCurrencyFields(useAuthStore.getState().user?.branches),
       unit: "",
       no_of_units: "",
       sell_per_unit: "",
@@ -1028,8 +1028,7 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       charge_id: "",
       charge_name: "",
       pp_cc: "Prepaid",
-      currency_country_code: "",
-      roe: "",
+      ...getDefaultBookingChargeCurrencyFields(useAuthStore.getState().user?.branches),
       unit: "",
       no_of_units: "",
       sell_per_unit: "",
