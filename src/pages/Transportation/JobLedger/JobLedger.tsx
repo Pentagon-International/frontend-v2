@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import {
   Paper,
   Box,
@@ -23,11 +29,7 @@ import {
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
-import { 
-  IconFilter, 
-  IconChevronLeft,
-  IconX,
-} from "@tabler/icons-react";
+import { IconFilter, IconChevronLeft, IconX } from "@tabler/icons-react";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -86,6 +88,7 @@ type JobLedgerSummary = {
 type JobLedgerApiRow = {
   sno?: number;
   service?: string;
+  service_code?: string;
   job_id?: string;
   location?: string;
   branch_name?: string;
@@ -107,9 +110,21 @@ type JobLedgerApiRow = {
 
 type JobLedgerApiResponse = {
   job_id?: string;
+  service_code?: string;
   total?: number;
   summary?: JobLedgerSummary;
   data?: JobLedgerApiRow[];
+};
+
+const formatJobLedgerJobLabel = (response: JobLedgerApiResponse): string => {
+  const jobId = (response?.job_id ?? "").toString().trim();
+  const serviceCode = (response?.service_code ?? "").toString().trim();
+
+  if (!jobId && !serviceCode) return "";
+  if (!jobId) return serviceCode;
+  if (!serviceCode) return jobId;
+  if (jobId.startsWith(`${serviceCode}-`)) return jobId;
+  return `${serviceCode}-${jobId}`;
 };
 
 type JobLedgerRequestFilters = {
@@ -162,10 +177,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
   // Real data (loaded from API)
   const [tableData, setTableData] = useState<JobLedgerData[]>([]);
-  const [jobLedgerSummary, setJobLedgerSummary] = useState<JobLedgerSummary | null>(null);
+  const [jobLedgerSummary, setJobLedgerSummary] =
+    useState<JobLedgerSummary | null>(null);
+  const [jobLedgerJobLabel, setJobLedgerJobLabel] = useState<string | null>(
+    null,
+  );
   const [jobLedgerLoading, setJobLedgerLoading] = useState<boolean>(false);
   const [jobLedgerError, setJobLedgerError] = useState<string | null>(null);
-  const [apiFilters, setApiFilters] = useState<JobLedgerRequestFilters | null>(null);
+  const [apiFilters, setApiFilters] = useState<JobLedgerRequestFilters | null>(
+    null,
+  );
   const [segmentOptions, setSegmentOptions] = useState<
     { value: string; label: string }[]
   >([]);
@@ -308,6 +329,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     setApiFilters(null);
     setTableData([]);
     setJobLedgerSummary(null);
+    setJobLedgerJobLabel(null);
     setJobLedgerError(null);
     setShowFilters(false);
   };
@@ -333,6 +355,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     setJobLedgerError(null);
     setTableData([]);
     setJobLedgerSummary(null);
+    setJobLedgerJobLabel(null);
     try {
       const response = await apiCallProtected.post(
         `${URL.jobLedger}`,
@@ -342,6 +365,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       const result = response as JobLedgerApiResponse;
       const apiRows = Array.isArray(result?.data) ? result.data : [];
       setJobLedgerSummary(result?.summary ?? null);
+      setJobLedgerJobLabel(formatJobLedgerJobLabel(result));
       setTableData(
         apiRows.map((d, idx) => {
           const id = Number(d?.sno ?? idx + 1);
@@ -349,7 +373,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             id: Number.isFinite(id) ? id : idx + 1,
             segment: (d?.service ?? "").toString(),
             job: (d?.job_id ?? "").toString(),
-            sno:d?.sno ?? 0,
+            sno: d?.sno ?? 0,
             // Response doesn't have "subjob" like the UI. Using HBL/AWB as a closest match.
             subjob: (d?.hbl_hawb_no ?? "").toString(),
             documentType: (d?.document_type ?? "").toString(),
@@ -371,6 +395,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       setJobLedgerError("Failed to load Job Ledger. Please try again.");
       setTableData([]);
       setJobLedgerSummary(null);
+      setJobLedgerJobLabel(null);
       // eslint-disable-next-line no-console
       console.error("JobLedger fetch error:", err);
     } finally {
@@ -391,7 +416,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     async function fetchServiceMaster() {
       setSegmentOptionsLoading(true);
       try {
-        const res = await apiCallProtected.get(`${URL.serviceMaster}`, API_HEADER);
+        const res = await apiCallProtected.get(
+          `${URL.serviceMaster}`,
+          API_HEADER,
+        );
         const rows = (res?.data ?? res) as ServiceMasterRow[];
         const list = Array.isArray(rows) ? rows : [];
 
@@ -427,8 +455,12 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
     const requestFilters: JobLedgerRequestFilters = {
       job_id: (filters.jobNo ?? inferredJobIdFinal ?? "").toString().trim(),
-      location: (filters.location ?? inferredLocationFinal ?? "").toString().trim(),
-      segment_code: (filters.segmentCode ?? inferredSegmentCodeFinal ?? "").toString().trim(),
+      location: (filters.location ?? inferredLocationFinal ?? "")
+        .toString()
+        .trim(),
+      segment_code: (filters.segmentCode ?? inferredSegmentCodeFinal ?? "")
+        .toString()
+        .trim(),
       hbl_hawb_no: (filters.hbl_hawb_no ?? "").toString().trim(),
     };
 
@@ -456,15 +488,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         totalNeutral: toNumber(jobLedgerSummary.total_neutral),
       };
     }
-    
+
     // Fallback to calculating from table data
     const totalDebit = tableData.reduce((sum, row) => sum + row.debit, 0);
     const totalCredit = tableData.reduce((sum, row) => sum + row.credit, 0);
     const totalRevenue = tableData.reduce((sum, row) => sum + row.revenue, 0);
-    const totalActualCost = tableData.reduce((sum, row) => sum + row.actualCost, 0);
+    const totalActualCost = tableData.reduce(
+      (sum, row) => sum + row.actualCost,
+      0,
+    );
     const totalNeutral = tableData.reduce((sum, row) => sum + row.neutral, 0);
     const grossProfit = totalRevenue - totalActualCost;
-    
+
     return {
       totalDebit,
       totalCredit,
@@ -504,7 +539,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "subjob",
         header: "HBL/HAWB No.",
-        size: 135,
+        size: 120,
+        minSize: 120,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
@@ -512,12 +549,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "documentType",
-        header: "Daybook Type",
-        size: 115,
+        header: "Daybook",
+        size: 58,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
-        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
-        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
+        mantineTableBodyCellProps: { style: { padding: "4px 4px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 4px" } },
       },
       // {
       //   accessorKey: "daybookName",
@@ -529,7 +567,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "documentNo",
         header: "Document number",
-        size: 150,
+        size: 140,
+        minSize: 140,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row, cell }) => {
@@ -576,7 +616,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "partyName",
         header: "Party Name",
-        size: 220,
+        size: 180,
+        minSize: 180,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -584,7 +626,11 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           if (!value) return "-";
           return (
             <Tooltip label={value} withArrow multiline maw={320}>
-              <Text size="sm" truncate style={{ fontFamily: "Inter", maxWidth: 220 }}>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: "Inter", maxWidth: "100%" }}
+              >
                 {value}
               </Text>
             </Tooltip>
@@ -595,21 +641,23 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "currencyCode",
-        header: "Currency",
-        size: 90,
+        header: "Curr",
+        size: 48,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<string>();
           return value || "-";
         },
-        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
-        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
+        mantineTableBodyCellProps: { style: { padding: "4px 4px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 4px" } },
       },
       {
         accessorKey: "debit",
         header: "Debit",
-        size: 140,
+        size: 70,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -617,16 +665,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "4px 6px",
+            textAlign: "center",
+          },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "6px 6px",
+            textAlign: "center",
+          },
         },
       },
       {
         accessorKey: "credit",
         header: "Credit",
-        size: 140,
+        size: 88,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -634,16 +691,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return value > 0 ? `${value.toFixed(2)}` : "-";
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "4px 6px",
+            textAlign: "center",
+          },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "6px 6px",
+            textAlign: "center",
+          },
         },
       },
       {
         accessorKey: "revenue",
         header: "Revenue",
-        size: 140,
+        size: 88,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -651,16 +717,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "4px 6px",
+            textAlign: "center",
+          },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "6px 6px",
+            textAlign: "center",
+          },
         },
       },
       {
         accessorKey: "actualCost",
         header: "Actual cost",
-        size: 150,
+        size: 92,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -668,16 +743,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "4px 6px",
+            textAlign: "center",
+          },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "6px 6px",
+            textAlign: "center",
+          },
         },
       },
       {
         accessorKey: "neutral",
         header: "Neutral",
-        size: 140,
+        size: 88,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ cell }) => {
@@ -685,14 +769,27 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           return `${value.toFixed(2)}`;
         },
         mantineTableBodyCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "4px 14px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "4px 6px",
+            textAlign: "center",
+          },
         },
         mantineTableHeadCellProps: {
-          style: { backgroundColor: "#F8FAFC", padding: "6px 16px" },
+          style: {
+            backgroundColor: "#F8FAFC",
+            padding: "6px 6px",
+            textAlign: "center",
+          },
         },
       },
     ],
     [handleDocumentNumberClick],
+  );
+
+  const tableMinWidth = useMemo(
+    () => columns.reduce((total, col) => total + (col.size ?? 0), 0),
+    [columns],
   );
 
   // Create table instance
@@ -713,7 +810,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       highlightOnHover: true,
       withTableBorder: false,
       withColumnBorders: false,
-      style: { width: "100%" },
+      style: { width: "100%", minWidth: tableMinWidth },
     },
     mantinePaperProps: {
       shadow: "sm",
@@ -763,6 +860,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         minHeight: 0,
         position: "relative",
         overflow: "auto",
+        maxWidth: "100%",
       },
     },
     renderEmptyRowsFallback: () => (
@@ -844,7 +942,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       </Modal>
       {/* Header */}
       {/* <Paper shadow="xs" p="lg" mb="md" withBorder> */}
-        {/* <Group justify="space-between" mb="md">
+      {/* <Group justify="space-between" mb="md">
           <Text size="lg" fw={600} c="#105476">
             Job Ledger
           </Text>
@@ -870,19 +968,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               }}
             >
               {/* Filters */}
-            {/* </Button> */}
-            {/* <Button
+      {/* </Button> */}
+      {/* <Button
               variant="outline"
               size="sm"
               leftSection={<IconDownload size={16} />}
             >
               Export
             </Button> */}
-          {/* </Group>
+      {/* </Group>
         </Group> */}
 
-        {/* Filter Section */}
-        {/* {showFilters && (
+      {/* Filter Section */}
+      {/* {showFilters && (
           <Box
             tt="capitalize"
             mb="sm"
@@ -1041,9 +1139,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           </Box>
         )} */}
 
-        {/* Filter Section */}
-        {/* <Grid> */}
-          {/* <Grid.Col span={3}>
+      {/* Filter Section */}
+      {/* <Grid> */}
+      {/* <Grid.Col span={3}>
             <TextInput
               placeholder="Search..."
               leftSection={<IconSearch size={16} />}
@@ -1051,7 +1149,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               onChange={(event) => setSearchValue(event.currentTarget.value)}
             />
           </Grid.Col> */}
-          {/* <Grid.Col span={2}>
+      {/* <Grid.Col span={2}>
             <Select
               placeholder="Filter Type"
               data={[
@@ -1086,12 +1184,12 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               Apply Filters
             </Button>
           </Grid.Col> */}
-        {/* </Grid> */}
+      {/* </Grid> */}
       {/* </Paper> */}
 
       {/* Tabs Section */}
       <Paper shadow="xs" p="lg" mb="md" withBorder>
-                <Group justify="space-between" mb="md">
+        <Group justify="space-between" mb="md">
           <Text size="lg" fw={600} c="#105476">
             Job Ledger
           </Text>
@@ -1106,7 +1204,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                 Segment:
               </Text>
               <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
-                  {navState?.service_name}
+                {navState?.service_name}
               </Text>
             </Group>
             <Group gap={6} wrap="nowrap">
@@ -1118,8 +1216,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               >
                 Job:
               </Text>
-              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" , }}>
-                {filters.jobNo || "-"}
+              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
+                {jobLedgerJobLabel || filters.jobNo || "-"}
               </Text>
             </Group>
             <Button
@@ -1217,7 +1315,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   clearable
                   data={segmentOptions}
                   value={filters.segmentCode || ""}
-                  onChange={(value) => updateFilter("segmentCode", value || null)}
+                  onChange={(value) =>
+                    updateFilter("segmentCode", value || null)
+                  }
                   disabled={segmentOptionsLoading}
                   rightSection={
                     segmentOptionsLoading ? <Loader size={14} /> : undefined
@@ -1348,9 +1448,23 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
           <Tabs.Panel value="document" pt="md">
             {/* Document Wise Content */}
-            <Box style={{ height: "600px", display: "flex", flexDirection: "column" }}>
+            <Box
+              style={{
+                height: "600px",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               {/* Table */}
-              <Box style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <Box
+                style={{
+                  position: "relative",
+                  flex: 1,
+                  minHeight: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
                 {jobLedgerLoading && (
                   <Box
                     style={{
