@@ -56,6 +56,7 @@ import { SearchableSelect } from "../../../components";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
+import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
@@ -1090,6 +1091,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       prev.length > 1 ? prev.filter((_, i) => i !== index) : prev,
     );
   };
+
+  const bookingRoe = useBookingChargesRoe(charges, setCharges);
+  const { validateChargesRoe } = bookingRoe;
 
   // Function to map initial data to form values
   const mapInitialDataToFormValues = (
@@ -3022,6 +3026,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           type: "error",
           message: "Please fill in all required fields before submitting.",
         });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!validateChargesRoe()) {
         setIsSubmitting(false);
         return;
       }
@@ -6569,7 +6578,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <RequiredLabel label="Charge Name" required={false} />
                     </Grid.Col>
                     <Grid.Col span={0.95}>
-                      <RequiredLabel label="Prepaid/Collect" required={false} />
+                      <RequiredLabel label="PP/CC" required={false} />
                     </Grid.Col>
                     <Grid.Col span={0.8}>
                       <RequiredLabel label="Currency" required={false} />
@@ -6661,10 +6670,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           searchable
                           value={charge.currency_country_code}
                           onChange={(value) =>
-                            updateCharge(
+                            bookingRoe.handleCurrencyChange(
                               index,
-                              "currency_country_code",
                               value || "",
+                              updateCharge,
                             )
                           }
                           data={currencyOptions}
@@ -6675,9 +6684,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="ROE"
                           value={charge.roe}
+                          readOnly={bookingRoe.isChargeBaseCurrency(
+                            charge.currency_country_code,
+                          )}
                           onChange={(val) =>
-                            updateCharge(index, "roe", val ?? "")
+                            bookingRoe.handleRoeChange(
+                              index,
+                              val ?? "",
+                              updateCharge,
+                            )
                           }
+                          error={bookingRoe.chargeRoeErrors[index]}
                           size="xs"
                           decimalScale={2}
                         />
