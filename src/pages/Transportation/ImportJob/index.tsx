@@ -77,6 +77,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { getOceanJobListVolumeDisplay } from "../../../utils/oceanJobListVolume";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 
 const LIST_KEY = "OCEAN_IMPORT_JOB_MASTER";
@@ -87,6 +88,7 @@ type VisibleColumnsState = {
   job_id: boolean;
   mbl: boolean;
   service: boolean;
+  volume: boolean;
   agent: boolean;
   route: boolean;
   etd: boolean;
@@ -100,6 +102,7 @@ const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   job_id: "Job ID",
   mbl: "MBL No",
   service: "Service",
+  volume: "Volume",
   agent: "Agent",
   route: "Route",
   etd: "ETD",
@@ -137,6 +140,11 @@ type ImportJobData = {
   status: string;
   job_id?: string;
   service_code?: string;
+  summary?: {
+    estimates_total_cost?: string | number | null;
+    container_type?: string[] | null;
+    volume_total?: string | number | null;
+  };
   housing_details?: Array<{
     hbl_number: string;
   }>;
@@ -256,6 +264,7 @@ function ImportJobMaster() {
     job_id: true,
     mbl: true,
     service: true,
+    volume: true,
     agent: true,
     route: true,
     etd: true,
@@ -1025,6 +1034,9 @@ function ImportJobMaster() {
                           />
                         </th>
                       )}
+                      {visibleColumns.volume && (
+                        <th style={mergeTh(160, 160)}>Volume</th>
+                      )}
                       {visibleColumns.agent && (
                         <th style={mergeTh(200, 200)}>
                           <ERPListColumnHeaderFilter
@@ -1307,6 +1319,10 @@ function ImportJobMaster() {
                             return v;
                           }
                         };
+                        const volumeDisplay = getOceanJobListVolumeDisplay(
+                          row.service,
+                          row.summary,
+                        );
                         return (
                           <tr
                             key={row.id}
@@ -1361,6 +1377,30 @@ function ImportJobMaster() {
                                 <Text size="sm" fw={600} c={fg}>
                                   {row.service || "—"}
                                 </Text>
+                              </td>
+                            )}
+                            {visibleColumns.volume && (
+                              <td style={{ ...tdPad, maxWidth: 220 }}>
+                                <Tooltip
+                                  label={volumeDisplay}
+                                  withArrow
+                                  disabled={volumeDisplay === "—"}
+                                  styles={{
+                                    tooltip: {
+                                      fontFamily: theme.fontSans,
+                                      fontSize: 12,
+                                    },
+                                  }}
+                                >
+                                  <Text
+                                    size="sm"
+                                    c={fg}
+                                    lineClamp={2}
+                                    style={{ cursor: "default" }}
+                                  >
+                                    {volumeDisplay}
+                                  </Text>
+                                </Tooltip>
                               </td>
                             )}
                             {visibleColumns.agent && (
