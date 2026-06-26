@@ -148,6 +148,13 @@ type ExportJobData = {
   housing_details?: Array<{
     hbl_number: string;
   }>;
+  document_ids?: number[];
+  documents?: Array<{
+    id: number;
+    document_name?: string;
+    user_file_name?: string;
+    document_url?: string;
+  }>;
 };
 
 /** `summary` on `filterJobCreate` list (filter-scoped). */

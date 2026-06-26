@@ -33,6 +33,7 @@ import {
   IconDotsVertical,
   IconFileInvoice,
   IconRefresh,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -76,6 +77,8 @@ import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import JobDocumentsModal from "../../../components/JobDocumentsModal";
+import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -363,6 +366,7 @@ function AirImportJobCreate() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
+  const jobDocuments = useJobDocuments();
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
     location.state?.hawbDetails && Array.isArray(location.state.hawbDetails)
       ? location.state.hawbDetails
@@ -1383,6 +1387,10 @@ function AirImportJobCreate() {
             sanitizedEstimates,
           });
         }
+
+        if (!location.state?.fromHouseCreate) {
+          jobDocuments.initFromJobData(jobData as Record<string, unknown>);
+        }
         // Force re-render of select/search components after all values are set
         // Use a small delay to ensure setValues has completed
         setTimeout(() => {
@@ -2070,6 +2078,18 @@ function AirImportJobCreate() {
     mode, // Add mode to dependencies
   ]);
 
+  useEffect(() => {
+    if (location.state?.fromHouseCreate === true) {
+      jobDocuments.restoreFromNavigationState(location.state);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    location.state?.fromHouseCreate,
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
+  ]);
+
   // Note: Container details restoration removed for Air Import Jobs
 
   // Remove housing detail
@@ -2197,6 +2217,7 @@ function AirImportJobCreate() {
           routings: routingsForm.values.routings,
           // Preserve current Estimates so they can be restored after saving house
           estimates: estimatesForm.values.estimates,
+          ...jobDocuments.getNavigationState(),
         },
       });
 
@@ -2214,6 +2235,7 @@ function AirImportJobCreate() {
       jobWithMergedHousingDetails,
       location.state,
       navigate,
+      jobDocuments,
     ],
   );
 
@@ -3007,6 +3029,7 @@ function AirImportJobCreate() {
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
+        document_ids: jobDocuments.document_ids,
       };
       console.log("Payload value---", payload);
 
@@ -5549,6 +5572,18 @@ function AirImportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <JobDocumentsModal
+        opened={jobDocuments.documentsModalOpen}
+        onClose={() => jobDocuments.setDocumentsModalOpen(false)}
+        rows={jobDocuments.document_modal_rows}
+        readOnly={isReadOnly}
+        uploading={jobDocuments.documentUploading}
+        onAddRow={jobDocuments.addDocumentRow}
+        onUpdateRow={jobDocuments.updateDocumentRow}
+        onRemoveRow={jobDocuments.removeDocumentRow}
+        onSubmit={jobDocuments.handleSubmitDocumentsModal}
+      />
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -5572,6 +5607,14 @@ function AirImportJobCreate() {
         </Group>
 
         <Group>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconPaperclip size={16} />}
+            onClick={jobDocuments.openDocumentsModal}
+          >
+            {isReadOnly ? "View Documents" : "Attach Documents"}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"

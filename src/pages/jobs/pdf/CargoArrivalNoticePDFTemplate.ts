@@ -396,10 +396,44 @@ const isKenyaCountry = (country?: any): boolean => {
   return countryName.includes("KENYA") || countryCode === "KE";
 };
 
+const USA_CAN_BRANCH_INFO = {
+  name: "PENTAGON PRIME AMERICAS INC",
+  address:
+    "8400 NW 33rd STREET, SUITE 310, MIAMI FL 33178",
+  tel: "",
+  email: "",
+  pan: "",
+  gstn: "",
+  isKenya: true,
+} as const;
+
+const isUSACountry = (country?: any): boolean => {
+  let countryName = "";
+  let countryCode = "";
+
+  if (country) {
+    countryName = (country.country_name || "").toUpperCase();
+    countryCode = (country.country_code || "").toUpperCase();
+  } else {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      countryName = (user?.country?.country_name || "").toUpperCase();
+      countryCode = (user?.country?.country_code || "").toUpperCase();
+    }
+  }
+
+  return countryName.includes("UNITED STATES ") || countryCode === "US";
+};
+
 // Helper function to get branch info
 const getBranchInfo = (branchName: string, country?: any) => {
   if (isCctCompany()) {
     return { ...CCT_BRANCH_INFO };
+  }
+
+  if (isUSACountry(country)) {
+    return { ...USA_CAN_BRANCH_INFO };
   }
 
   if (isKenyaCountry(country)) {

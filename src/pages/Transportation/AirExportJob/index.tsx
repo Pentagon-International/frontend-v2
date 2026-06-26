@@ -137,6 +137,13 @@ type AirExportJobData = {
   mawb_date: string | null;
   ocean_routings?: Array<Record<string, unknown>>;
   housing_details?: Array<Record<string, unknown>>;
+  document_ids?: number[];
+  documents?: Array<{
+    id: number;
+    document_name?: string;
+    user_file_name?: string;
+    document_url?: string;
+  }>;
   created_by?: string;
   branch_code?: string;
   company_code?: string;

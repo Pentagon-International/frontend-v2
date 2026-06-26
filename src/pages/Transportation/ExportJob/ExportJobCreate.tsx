@@ -34,6 +34,7 @@ import {
   IconX,
   IconFileInvoice,
   IconRefresh,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -88,6 +89,8 @@ import {
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import JobDocumentsModal from "../../../components/JobDocumentsModal";
+import { useJobDocuments } from "../../../hooks/useJobDocuments";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -575,6 +578,7 @@ function ExportJobCreate() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
+  const jobDocuments = useJobDocuments();
   const [housingDetails, setHousingDetails] = useState<HousingDetail[]>(
     location.state?.housingDetails &&
       Array.isArray(location.state.housingDetails)
@@ -1520,6 +1524,10 @@ function ExportJobCreate() {
             );
           }
         }
+
+        if (!location.state?.fromHouseCreate) {
+          jobDocuments.initFromJobData(jobData as Record<string, unknown>);
+        }
       } catch (error) {
         console.error("Error loading job data:", error);
         ToastNotification({
@@ -1710,6 +1718,18 @@ function ExportJobCreate() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.fromHouseCreate, location.state?.estimates]);
+
+  useEffect(() => {
+    if (location.state?.fromHouseCreate === true) {
+      jobDocuments.restoreFromNavigationState(location.state);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    location.state?.fromHouseCreate,
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
+  ]);
 
   // Add new routing - Using insertListItem like charges form
   const addRouting = () => {
@@ -2480,6 +2500,7 @@ function ExportJobCreate() {
           containerDetails: containerDetailsForm.values.containers,
           // NEW: preserve master-level estimates when going to HouseCreate
           estimates: estimatesForm.values.estimates,
+          ...jobDocuments.getNavigationState(),
         },
       });
     },
@@ -2491,6 +2512,7 @@ function ExportJobCreate() {
       estimatesForm.values.estimates,
       housingDetails,
       jobWithMergedHousingDetails,
+      jobDocuments,
     ],
   );
 
@@ -2917,6 +2939,7 @@ function ExportJobCreate() {
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
+        document_ids: jobDocuments.document_ids,
       };
 
       // API call to create or update export job
@@ -5393,6 +5416,18 @@ function ExportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <JobDocumentsModal
+        opened={jobDocuments.documentsModalOpen}
+        onClose={() => jobDocuments.setDocumentsModalOpen(false)}
+        rows={jobDocuments.document_modal_rows}
+        readOnly={isReadOnly}
+        uploading={jobDocuments.documentUploading}
+        onAddRow={jobDocuments.addDocumentRow}
+        onUpdateRow={jobDocuments.updateDocumentRow}
+        onRemoveRow={jobDocuments.removeDocumentRow}
+        onSubmit={jobDocuments.handleSubmitDocumentsModal}
+      />
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -5421,6 +5456,14 @@ function ExportJobCreate() {
         </Group>
 
         <Group>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconPaperclip size={16} />}
+            onClick={jobDocuments.openDocumentsModal}
+          >
+            {isReadOnly ? "View Documents" : "Attach Documents"}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"
