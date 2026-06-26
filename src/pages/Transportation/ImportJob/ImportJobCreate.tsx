@@ -33,7 +33,6 @@ import {
   IconX,
   IconFileInvoice,
   IconRefresh,
-  IconPaperclip,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -6102,14 +6101,14 @@ function ImportJobCreate() {
         </Group>
 
         <Group>
-          <Button
+          {/* <Button
             variant="outline"
             color="#105476"
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
             {isReadOnly ? "View Documents" : "Attach Documents"}
-          </Button>
+          </Button> */}
           {!isReadOnly && (
             <Button
               variant="outline"
