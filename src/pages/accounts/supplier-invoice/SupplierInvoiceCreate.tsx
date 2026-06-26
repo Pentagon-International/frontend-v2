@@ -194,6 +194,7 @@ type SupplierInvoiceFormValues = {
   tds_section_code: string;
   note: string;
   narration: string;
+  fapiao_no: string;
   customer_gst_no: string;
   location_gst_no: string;
   type: "INV" | "CRN";
@@ -253,6 +254,34 @@ function clampAmount(value: number | null | undefined): number | null {
   if (Math.abs(rounded) > AMOUNT_MAX)
     return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
+}
+
+type AmountCalcBaselineInput = {
+  taxable_amount: number | null;
+  non_taxable_amount: number | null;
+  cgst_amount: number | null;
+  sgst_amount: number | null;
+  igst_amount: number | null;
+  roe: number | null;
+  charges_data: ChargeRow[];
+};
+
+function buildAmountCalcBaseline(values: AmountCalcBaselineInput): string {
+  const agentPart = [
+    values.taxable_amount,
+    values.non_taxable_amount,
+    values.cgst_amount,
+    values.sgst_amount,
+    values.igst_amount,
+    values.roe,
+  ].join("|");
+  const chargesPart = (values.charges_data ?? [])
+    .map(
+      (c) =>
+        `${c.amount ?? ""}-${c.roe ?? ""}-${c.Dr_Cr ?? ""}`,
+    )
+    .join(";");
+  return `${agentPart}::${chargesPart}`;
 }
 
 function formatAmountToTwoDecimals(value: number | null | undefined): string {
@@ -564,6 +593,7 @@ export default function SupplierInvoiceCreate({
 
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcLoadingText, setCalcLoadingText] = useState<string>("");
+  const editAmountCalcBaselineRef = useRef<string | null>(null);
 
   const parseNum = (v: unknown): number | null => {
     if (v == null || v === "") return null;
@@ -614,30 +644,70 @@ export default function SupplierInvoiceCreate({
     user?.country?.country_name,
   ]);
 
-  const cjvColSpans = useMemo(
-    () =>
-      isIndiaUser
-        ? {
-            dayBook: 1.25,
-            date: 1.25,
-            dueDate: 1.25,
-            vendor: 2.25,
-            state: 1.25,
-            tds: 1.25,
-            customerGst: 1,
-            note: 1.25,
-            narration: 1.25,
-          }
-        : {
-            dayBook: 1.5,
-            date: 1.5,
-            dueDate: 1.5,
-            vendor: 2.5,
-            note: 2.5,
-            narration: 2.5,
-          },
-    [isIndiaUser],
-  );
+  const isChinaUser = useMemo(() => {
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    if (branchCountryCode) {
+      const bc = branchCountryCode.toUpperCase();
+      if (bc === "CN" || bc.includes("CHINA")) return true;
+    }
+    const defaultBranch =
+      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
+    const branchCode = String(defaultBranch?.branch_code ?? "").toUpperCase();
+    const branchName = String(defaultBranch?.branch_name ?? "").toUpperCase();
+    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "CN" || countryName === "CHINA";
+  }, [user?.branches, user?.country?.country_code, user?.country?.country_name]);
+
+  const cjvColSpans = useMemo(() => {
+    if (isIndiaUser) {
+      if (isChinaUser) {
+        return {
+          dayBook: 1.25,
+          date: 1.25,
+          dueDate: 1.25,
+          vendor: 2,
+          state: 1.25,
+          tds: 1.25,
+          customerGst: 0.75,
+          note: 1,
+          narration: 1,
+          fapiao: 1.25,
+        };
+      }
+      return {
+        dayBook: 1.25,
+        date: 1.25,
+        dueDate: 1.25,
+        vendor: 2.25,
+        state: 1.25,
+        tds: 1.25,
+        customerGst: 1,
+        note: 1.25,
+        narration: 1.25,
+      };
+    }
+    if (isChinaUser) {
+      return {
+        dayBook: 1.5,
+        date: 1.5,
+        dueDate: 1.5,
+        vendor: 2,
+        note: 1.5,
+        narration: 1.5,
+        fapiao: 1.5,
+      };
+    }
+    return {
+      dayBook: 1.5,
+      date: 1.5,
+      dueDate: 1.5,
+      vendor: 2.5,
+      note: 2.5,
+      narration: 2.5,
+    };
+  }, [isIndiaUser, isChinaUser]);
 
   const agentColSpans = useMemo(
     () =>
@@ -721,6 +791,7 @@ export default function SupplierInvoiceCreate({
       tds_section_code: "",
       note: "",
       narration: "",
+      fapiao_no: "",
       customer_gst_no: "",
       location_gst_no: "",
       type: "INV",
@@ -1135,6 +1206,43 @@ export default function SupplierInvoiceCreate({
     if (changed) form.setFieldValue("charges_data", next);
   }, [chargesAmountRoeKey, isReversal]);
 
+  useEffect(() => {
+    if (!isEditMode) {
+      editAmountCalcBaselineRef.current = null;
+      return;
+    }
+    editAmountCalcBaselineRef.current = null;
+  }, [invoiceFromState?.id, supplierInvoiceIdFromRoute, isEditMode]);
+
+  const shouldSkipAmountAutoCalc = useCallback(() => {
+    if (isReversal || isViewMode) return true;
+    if (!isEditMode) return false;
+    const baseline = editAmountCalcBaselineRef.current;
+    if (!baseline) return true;
+    return (
+      buildAmountCalcBaseline({
+        taxable_amount: form.values.taxable_amount,
+        non_taxable_amount: form.values.non_taxable_amount,
+        cgst_amount: form.values.cgst_amount,
+        sgst_amount: form.values.sgst_amount,
+        igst_amount: form.values.igst_amount,
+        roe: form.values.roe,
+        charges_data: form.values.charges_data,
+      }) === baseline
+    );
+  }, [
+    form.values.taxable_amount,
+    form.values.non_taxable_amount,
+    form.values.cgst_amount,
+    form.values.sgst_amount,
+    form.values.igst_amount,
+    form.values.roe,
+    form.values.charges_data,
+    isEditMode,
+    isReversal,
+    isViewMode,
+  ]);
+
   // Auto-calc Inv/Crn Amount = sum of breakup amounts × Agent INV/CRN ROE
   const invCrnCalcKey = [
     form.values.taxable_amount,
@@ -1145,7 +1253,7 @@ export default function SupplierInvoiceCreate({
     form.values.roe,
   ].join("|");
   useEffect(() => {
-    if (isReversal || isViewMode || isEditMode) return;
+    if (shouldSkipAmountAutoCalc()) return;
     const baseSum =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
@@ -1160,14 +1268,14 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invCrnCalcKey, isReversal, isViewMode, isEditMode, isIndiaUser]);
+  }, [invCrnCalcKey, isIndiaUser, shouldSkipAmountAutoCalc]);
 
   // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved (skipped for reversal)
   const chargesNetKey = form.values.charges_data
     .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
     .join(",");
   useEffect(() => {
-    if (isReversal || isViewMode || isEditMode) return;
+    if (shouldSkipAmountAutoCalc()) return;
     const charges = form.values.charges_data ?? [];
     const netLocal = round2(
       charges.reduce((acc, row) => {
@@ -1187,7 +1295,7 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount, isReversal, isViewMode, isEditMode]);
+  }, [chargesNetKey, form.values.Inv_crn_amount, shouldSkipAmountAutoCalc]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
@@ -1260,6 +1368,7 @@ export default function SupplierInvoiceCreate({
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
       narration: (data.narration ?? "") as string,
+      fapiao_no: (data.fapiao_no ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
@@ -1306,6 +1415,35 @@ export default function SupplierInvoiceCreate({
     });
     // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
     form.setFieldValue("charges_data", mappedCharges);
+    if (isEditMode) {
+      editAmountCalcBaselineRef.current = buildAmountCalcBaseline({
+        taxable_amount:
+          data.taxable_amount != null
+            ? parseFloat(String(data.taxable_amount))
+            : null,
+        non_taxable_amount:
+          data.non_taxable_amount != null
+            ? parseFloat(String(data.non_taxable_amount))
+            : null,
+        cgst_amount:
+          data.cgst_amount != null
+            ? parseFloat(String(data.cgst_amount))
+            : null,
+        sgst_amount:
+          data.sgst_amount != null
+            ? parseFloat(String(data.sgst_amount))
+            : null,
+        igst_amount:
+          data.igst_amount != null
+            ? parseFloat(String(data.igst_amount))
+            : null,
+        roe:
+          data.roe != null && data.roe !== ""
+            ? parseFloat(String(data.roe))
+            : null,
+        charges_data: mappedCharges,
+      });
+    }
     // Support documents for edit/view flows
     const rawDocs =
       (invoiceFromState as any)?.documents ??
@@ -1541,6 +1679,7 @@ export default function SupplierInvoiceCreate({
       tds_section_code: values.tds_section_code || "",
       note: values.note || "",
       narration: values.narration || "",
+      fapiao_no: values.fapiao_no || null,
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
       type: values.type ?? "INV",
@@ -1649,6 +1788,7 @@ export default function SupplierInvoiceCreate({
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
       narration: (data.narration ?? "") as string,
+      fapiao_no: (data.fapiao_no ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
       Inv_Crn_note:
@@ -1815,6 +1955,9 @@ export default function SupplierInvoiceCreate({
               mapApiChargesToRows(data.charges),
             );
           }
+          if (data.fapiao_no != null) {
+            form.setFieldValue("fapiao_no", String(data.fapiao_no));
+          }
 
           // Refresh supporting docs so downloads work in edit/view
           form.setFieldValue(
@@ -1866,6 +2009,9 @@ export default function SupplierInvoiceCreate({
               "charges_data",
               mapApiChargesToRows(data.charges),
             );
+          }
+          if (data.fapiao_no != null) {
+            form.setFieldValue("fapiao_no", String(data.fapiao_no));
           }
 
           form.setFieldValue(
@@ -1954,6 +2100,12 @@ export default function SupplierInvoiceCreate({
           "supporting_documents",
           mapApiDocumentsToSupportingDocuments((data as any).documents),
         );
+        if ((data as { fapiao_no?: string | null }).fapiao_no != null) {
+          form.setFieldValue(
+            "fapiao_no",
+            String((data as { fapiao_no?: string | null }).fapiao_no),
+          );
+        }
         ToastNotification({
           message: "Supplier invoice posted successfully",
           type: "success",
@@ -2346,6 +2498,20 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
+            {isChinaUser && (
+              <Grid.Col span={"fapiao" in cjvColSpans ? cjvColSpans.fapiao : 1.5}>
+                <TextInput
+                  label="Fapiao No"
+                  placeholder="Fapiao No"
+                  value={form.values.fapiao_no}
+                  onChange={(e) =>
+                    form.setFieldValue("fapiao_no", e.target.value)
+                  }
+                  styles={effectiveInputStyles}
+                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                />
+              </Grid.Col>
+            )}
           </Grid>
 
           {/* Segment: Agent INV/CRN Detail — Due Date, Currency, Inv/Crn Note through Difference Amount */}

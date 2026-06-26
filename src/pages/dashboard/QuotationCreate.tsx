@@ -75,6 +75,8 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
+import { useExchangeRateRoe } from "../../hooks/useExchangeRateRoe";
+import { parseBookingRoe } from "../../hooks/useBookingChargesRoe";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 import {
   getBookingCreatePath,
@@ -497,28 +499,18 @@ function QuotationCreate({
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
   const queryClient = useQueryClient();
   const [chargesData, setCharges] = useState<ChargesDataItem[]>([]);
-
-  // Helper function to calculate ROE based on user's country and currency
-  const getRoeValue = useCallback(
-    (currency: string): number => {
-      const userCountryCode = user?.country?.country_code;
-      const currencyUpper = currency?.toUpperCase();
-
-      if (userCountryCode === "IN") {
-        // India user
-        if (currencyUpper === "INR") return 1;
-        if (currencyUpper === "USD") return 88.75;
-      } else if (userCountryCode === "AE") {
-        // Dubai/UAE user
-        if (currencyUpper === "AED") return 1;
-        if (currencyUpper === "USD") return 3.67;
-      }
-
-      // Default fallback
-      return 1;
-    },
-    [user?.country?.country_code],
-  );
+  const {
+    defaultBranchCurrency,
+    isBaseCurrency,
+    ensureRoeForCurrency,
+    validateRoeField,
+    ROE_CANNOT_BE_ONE_FIELD,
+    ROE_CANNOT_BE_ONE_TOAST,
+  } = useExchangeRateRoe();
+  const branchCurrencyCode = defaultBranchCurrency;
+  const [chargeRoeErrors, setChargeRoeErrors] = useState<
+    Record<number, string>
+  >({});
   const [carrierComparisonData, setCarrierComparisonData] =
     useState<CarrierComparisonData | null>(null);
   const [isLoadingCarriers, setIsLoadingCarriers] = useState(false);
@@ -915,8 +907,13 @@ function QuotationCreate({
         {
           charge_name: "",
           charge_id: null,
-          currency_country_code: "",
-          roe: 1,
+          currency_country_code: defaultBranchCurrency || "",
+          roe:
+            defaultBranchCurrency && isBaseCurrency(defaultBranchCurrency)
+              ? "1"
+              : defaultBranchCurrency
+                ? ""
+                : "1",
           unit: "",
           no_of_units: "",
           sell_per_unit: "",
@@ -953,11 +950,152 @@ function QuotationCreate({
     [dynamicForm],
   );
 
+  const clearChargeRoeError = useCallback((index: number) => {
+    setChargeRoeErrors((prev) => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  }, []);
+
+  const handleChargeCurrencyChange = useCallback(
+    (index: number, currencyCode: string) => {
+      const code = currencyCode.trim();
+      dynamicForm.setFieldValue(
+        `charges.${index}.currency_country_code`,
+        code,
+      );
+      if (!code) {
+        syncChargeTotalsAtIndex(index, { currency_country_code: "" });
+        clearChargeRoeError(index);
+        return;
+      }
+      if (isBaseCurrency(code)) {
+        dynamicForm.setFieldValue(`charges.${index}.roe`, "1");
+        syncChargeTotalsAtIndex(index, {
+          currency_country_code: code,
+          roe: "1",
+        });
+      } else {
+        dynamicForm.setFieldValue(`charges.${index}.roe`, "");
+        syncChargeTotalsAtIndex(index, {
+          currency_country_code: code,
+          roe: "",
+        });
+        void ensureRoeForCurrency(code.toUpperCase()).then((roe) => {
+          if (roe == null) return;
+          const current = dynamicForm.values.charges[index];
+          if (
+            String(current?.currency_country_code ?? "").trim().toUpperCase() !==
+            code.toUpperCase()
+          ) {
+            return;
+          }
+          dynamicForm.setFieldValue(`charges.${index}.roe`, String(roe));
+          syncChargeTotalsAtIndex(index, { roe: String(roe) });
+        });
+      }
+      clearChargeRoeError(index);
+    },
+    [
+      clearChargeRoeError,
+      dynamicForm,
+      ensureRoeForCurrency,
+      isBaseCurrency,
+      syncChargeTotalsAtIndex,
+    ],
+  );
+
+  const handleChargeRoeChange = useCallback(
+    (index: number, rawValue: string) => {
+      const charge = dynamicForm.values.charges[index];
+      const code = String(charge?.currency_country_code ?? "").trim();
+      if (code && isBaseCurrency(code)) {
+        dynamicForm.setFieldValue(`charges.${index}.roe`, "1");
+        syncChargeTotalsAtIndex(index, { roe: "1" });
+        clearChargeRoeError(index);
+        return;
+      }
+      dynamicForm.setFieldValue(`charges.${index}.roe`, rawValue);
+      syncChargeTotalsAtIndex(index, { roe: rawValue });
+      const roeError = validateRoeField(code, parseBookingRoe(rawValue));
+      setChargeRoeErrors((prev) => {
+        if (roeError) return { ...prev, [index]: roeError };
+        if (!prev[index]) return prev;
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    },
+    [
+      clearChargeRoeError,
+      dynamicForm,
+      isBaseCurrency,
+      syncChargeTotalsAtIndex,
+      validateRoeField,
+    ],
+  );
+
+  const validateChargesRoe = useCallback((): boolean => {
+    const chargeList = dynamicForm.values.charges || [];
+    let toastMessage: string | null = null;
+    const errors: Record<number, string> = {};
+
+    chargeList.forEach((charge, index) => {
+      const code = String(charge.currency_country_code ?? "").trim();
+      if (!code) return;
+      const roeError = validateRoeField(code, parseBookingRoe(charge.roe));
+      if (!roeError) return;
+      errors[index] = roeError;
+      if (!toastMessage) {
+        toastMessage =
+          roeError === ROE_CANNOT_BE_ONE_FIELD
+            ? ROE_CANNOT_BE_ONE_TOAST
+            : roeError;
+      }
+    });
+
+    if (Object.keys(errors).length === 0) return true;
+
+    setChargeRoeErrors(errors);
+    ToastNotification({
+      type: "error",
+      message: toastMessage ?? ROE_CANNOT_BE_ONE_TOAST,
+    });
+    return false;
+  }, [
+    dynamicForm.values.charges,
+    validateRoeField,
+    ROE_CANNOT_BE_ONE_FIELD,
+    ROE_CANNOT_BE_ONE_TOAST,
+  ]);
+
+  const getDefaultNewChargeFields = useCallback(() => {
+    const currencyCode = defaultBranchCurrency || "INR";
+    return {
+      currency_country_code: currencyCode,
+      roe: isBaseCurrency(currencyCode) ? "1" : "",
+    };
+  }, [defaultBranchCurrency, isBaseCurrency]);
+
   const bindChargeAmountInput = useCallback(
     (
       index: number,
       field: "sell_per_unit" | "cost_per_unit" | "no_of_units" | "roe",
     ) => {
+      if (field === "roe") {
+        const formError = (dynamicForm.errors as any)?.charges?.[index]
+          ?.roe as string | undefined;
+        return {
+          value: dynamicForm.values.charges[index]?.roe ?? "",
+          error: formError || chargeRoeErrors[index],
+          onChange: (event: ChangeEvent<HTMLInputElement>) => {
+            handleChargeRoeChange(index, event.currentTarget.value);
+          },
+        };
+      }
+
       const inputProps = dynamicForm.getInputProps(`charges.${index}.${field}`);
       return {
         ...inputProps,
@@ -976,7 +1114,12 @@ function QuotationCreate({
         },
       };
     },
-    [dynamicForm, syncChargeTotalsAtIndex],
+    [
+      chargeRoeErrors,
+      dynamicForm,
+      handleChargeRoeChange,
+      syncChargeTotalsAtIndex,
+    ],
   );
 
   const tariffOption = useForm({
@@ -1051,7 +1194,6 @@ function QuotationCreate({
 
   // Helper function to reset forms to defaults
   const resetFormsToDefaults = useCallback(() => {
-    // Leave currency empty - useEffect will set it based on user's country when quoteCurrency is available
     quotationForm.setValues({
       quote_currency_country_code: "",
       valid_upto: "",
@@ -1066,8 +1208,7 @@ function QuotationCreate({
         {
           charge_name: "",
           charge_id: null,
-          currency_country_code: "",
-          roe: 1,
+          ...getDefaultNewChargeFields(),
           unit: "",
           no_of_units: "",
           sell_per_unit: "",
@@ -1078,7 +1219,7 @@ function QuotationCreate({
         },
       ],
     });
-  }, [quotationForm, dynamicForm]);
+  }, [quotationForm, dynamicForm, getDefaultNewChargeFields]);
 
   const snapshotServiceQuotationData = useCallback(() => {
     const currentService = services[selectedServiceIndex];
@@ -1286,8 +1427,7 @@ function QuotationCreate({
             {
               charge_name: "",
               charge_id: null,
-              currency_country_code: "",
-              roe: 1,
+              ...getDefaultNewChargeFields(),
               unit: "",
               no_of_units: "",
               sell_per_unit: "",
@@ -1529,8 +1669,8 @@ function QuotationCreate({
         const quantity = charge.quantity ?? 1;
         console.log("quantity value---", quantity);
 
-        // Use helper function to calculate ROE based on currency and user's country
-        const roe = getRoeValue(charge.currency ?? "");
+        const currencyCode = charge.currency ?? "";
+        const roe = isBaseCurrency(currencyCode) ? 1 : "";
 
         const unit = charge.unit ?? "";
         // Calculate no_of_units based on service and unit (not from API response)
@@ -1572,8 +1712,7 @@ function QuotationCreate({
               {
                 charge_name: "",
                 charge_id: null,
-                currency_country_code: "",
-                roe: 0,
+                ...getDefaultNewChargeFields(),
                 unit: "",
                 no_of_units: "",
                 sell_per_unit: "",
@@ -1854,6 +1993,63 @@ function QuotationCreate({
 
   const charges = dynamicForm.values.charges || [];
   console.log("charges value----", charges);
+
+  const chargeCurrenciesKey = charges
+    .map((c) => String(c.currency_country_code ?? "").trim())
+    .join("|");
+
+  useEffect(() => {
+    if (!defaultBranchCurrency) return;
+    let changed = false;
+    const updated = charges.map((charge) => {
+      const code = String(charge.currency_country_code ?? "").trim();
+      if (code && isBaseCurrency(code) && parseBookingRoe(charge.roe) !== 1) {
+        changed = true;
+        return {
+          ...charge,
+          roe: "1",
+          ...computeChargeLineTotals({ ...charge, roe: "1" }),
+        };
+      }
+      return charge;
+    });
+    if (changed) dynamicForm.setValues({ charges: updated });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrenciesKey, defaultBranchCurrency]);
+
+  useEffect(() => {
+    charges.forEach((charge, index) => {
+      const code = String(charge.currency_country_code ?? "")
+        .trim()
+        .toUpperCase();
+      if (!code) return;
+      const roeEmpty =
+        charge.roe === "" ||
+        charge.roe === null ||
+        charge.roe === undefined;
+      if (!roeEmpty) return;
+      if (isBaseCurrency(code)) return;
+      void ensureRoeForCurrency(code).then((roe) => {
+        if (roe == null) return;
+        const current = dynamicForm.values.charges[index];
+        if (!current) return;
+        const stillEmpty =
+          current.roe === "" ||
+          current.roe === null ||
+          current.roe === undefined;
+        if (
+          String(current.currency_country_code ?? "").trim().toUpperCase() !==
+          code
+        ) {
+          return;
+        }
+        if (!stillEmpty) return;
+        dynamicForm.setFieldValue(`charges.${index}.roe`, String(roe));
+        syncChargeTotalsAtIndex(index, { roe: String(roe) });
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrenciesKey]);
 
   const netCost = charges.reduce((sum: number, item: any) => {
     const cost = parseFloat(item.total_cost || "0");
@@ -2400,6 +2596,10 @@ function QuotationCreate({
     console.log("dynamicResult----", dynamicResult);
 
     if (!quotationResult.hasErrors && !dynamicResult.hasErrors) {
+      if (!validateChargesRoe()) {
+        setIsSubmittingQuotation(false);
+        return;
+      }
       // Check for unfilled services before submitting
       const unfilledServicesList = checkForUnfilledServices();
 
@@ -2429,6 +2629,7 @@ function QuotationCreate({
 
   const handleSubmitWithIncompleteData = async () => {
     setUnfilledServicesModalOpened(false);
+    if (!validateChargesRoe()) return;
     setIsSubmittingQuotation(true);
     await submitQuotation();
   };
@@ -2931,24 +3132,12 @@ function QuotationCreate({
     );
   }, [carrierRes]);
 
-  // Get user's currency code by matching user country_code with currency country_code
-  const userCurrencyCode = useMemo(() => {
-    if (!user?.country?.country_code || !Array.isArray(currencyData)) {
-      return null;
-    }
-    const match = currencyData.find(
-      (item: any) =>
-        item.country_code &&
-        item.country_code.toUpperCase() ===
-          user.country.country_code.toUpperCase(),
-    );
-    return match ? match.code : null;
-  }, [user?.country?.country_code, currencyData]);
-
   const quoteCurrencyCode =
     quotationForm.values.quote_currency_country_code || "";
   const normalizedQuoteCurrency = quoteCurrencyCode.trim().toUpperCase();
-  const normalizedLocalCurrency = (userCurrencyCode ?? "").trim().toUpperCase();
+  const normalizedLocalCurrency = (branchCurrencyCode ?? "")
+    .trim()
+    .toUpperCase();
   const showQuoteCurrencyProfit = Boolean(
     normalizedQuoteCurrency &&
       normalizedLocalCurrency &&
@@ -2999,13 +3188,8 @@ function QuotationCreate({
     currentServiceId,
   ]);
 
-  // Default charge currency for newly added charge rows:
-  // use the currently selected quote currency (branch currency proxy),
-  // otherwise fall back to user's currency, else INR.
-  const defaultChargeCurrencyCode =
-    quotationForm.values.quote_currency_country_code ||
-    userCurrencyCode ||
-    "INR";
+  // Default charge currency for newly added / blank charge rows: active branch currency.
+  const defaultChargeCurrencyCode = defaultBranchCurrency || "INR";
 
   // Keep charges currency in sync for *new/blank* rows only.
   useEffect(() => {
@@ -3020,7 +3204,7 @@ function QuotationCreate({
       return {
         ...c,
         currency_country_code: nextCurrency,
-        roe: getRoeValue(nextCurrency),
+        roe: isBaseCurrency(nextCurrency) ? "1" : "",
       };
     });
 
@@ -3031,7 +3215,7 @@ function QuotationCreate({
     );
     if (changed) dynamicForm.setValues({ charges: updated });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultChargeCurrencyCode]);
+  }, [defaultChargeCurrencyCode, isBaseCurrency]);
 
   // Service selection handler - defined after data is available
   const handleServiceSelect = useCallback(
@@ -3284,8 +3468,12 @@ function QuotationCreate({
                   {
                     charge_name: "",
                     charge_id: null,
-                    currency_country_code: "",
-                    roe: 1,
+                    currency_country_code: defaultBranchCurrency || "INR",
+                    roe:
+                      defaultBranchCurrency &&
+                      isBaseCurrency(defaultBranchCurrency)
+                        ? "1"
+                        : "",
                     unit: "",
                     no_of_units: "",
                     sell_per_unit: "",
@@ -4192,9 +4380,8 @@ function QuotationCreate({
         ) {
           // Map the response to form charges format
           const mappedCharges = response.data.map((charge: any) => {
-            const currencyCode = charge.currency || "INR";
-            // Calculate ROE based on currency
-            const calculatedRoe = getRoeValue(currencyCode);
+            const currencyCode = charge.currency || defaultBranchCurrency || "INR";
+            const calculatedRoe = isBaseCurrency(currencyCode) ? 1 : "";
             const unit = charge.unit || "";
 
             // Calculate no_of_units based on service and unit (not from API response)
@@ -4230,8 +4417,7 @@ function QuotationCreate({
           const emptyChargeRow = {
             charge_name: "",
             charge_id: null,
-            currency_country_code: "",
-            roe: 1,
+            ...getDefaultNewChargeFields(),
             unit: "",
             no_of_units: "",
             sell_per_unit: "",
@@ -4287,7 +4473,8 @@ function QuotationCreate({
   }, [
     actualEnquiryData?.id,
     dynamicForm,
-    getRoeValue,
+    defaultBranchCurrency,
+    isBaseCurrency,
     isDirectQuoteFromList,
     isEditMode,
     selectedService?.id,
@@ -5613,7 +5800,7 @@ function QuotationCreate({
                             }}
                           >
                             Total Sell
-                            {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
+                            {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}
                           </Text>
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -5626,7 +5813,7 @@ function QuotationCreate({
                             }}
                           >
                             Total Cost
-                            {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
+                            {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}
                           </Text>
                         </Grid.Col>
                       </Grid>
@@ -5794,25 +5981,10 @@ function QuotationCreate({
                               )}
                               onChange={(value) => {
                                 if (!isViewMode) {
-                                  dynamicForm.setFieldValue(
-                                    `charges.${index}.currency_country_code`,
+                                  handleChargeCurrencyChange(
+                                    index,
                                     value || "",
                                   );
-                                  if (value) {
-                                    const calculatedRoe = getRoeValue(value);
-                                    dynamicForm.setFieldValue(
-                                      `charges.${index}.roe`,
-                                      calculatedRoe,
-                                    );
-                                    syncChargeTotalsAtIndex(index, {
-                                      currency_country_code: value,
-                                      roe: calculatedRoe,
-                                    });
-                                  } else {
-                                    syncChargeTotalsAtIndex(index, {
-                                      currency_country_code: "",
-                                    });
-                                  }
                                 }
                               }}
                               readOnly={isViewMode}
@@ -5835,8 +6007,20 @@ function QuotationCreate({
                                 },
                               }}
                               {...bindChargeAmountInput(index, "roe")}
-                              readOnly={isViewMode}
-                              disabled={isViewMode}
+                              readOnly={
+                                isViewMode ||
+                                isBaseCurrency(
+                                  dynamicForm.values.charges[index]
+                                    ?.currency_country_code,
+                                )
+                              }
+                              disabled={
+                                isViewMode ||
+                                isBaseCurrency(
+                                  dynamicForm.values.charges[index]
+                                    ?.currency_country_code,
+                                )
+                              }
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
@@ -6080,22 +6264,15 @@ function QuotationCreate({
                                   onClick={() =>
                                     dynamicForm.insertListItem("charges", {
                                       charge_name: "",
-                                      currency_country_code:
-                                        quotationForm.values
-                                          .quote_currency_country_code ||
-                                        userCurrencyCode ||
-                                        "INR",
-                                      roe: getRoeValue(
-                                        quotationForm.values
-                                          .quote_currency_country_code ||
-                                          userCurrencyCode ||
-                                          "INR",
-                                      ),
+                                      charge_id: null,
+                                      ...getDefaultNewChargeFields(),
                                       unit: "",
                                       no_of_units: "",
                                       sell_per_unit: "",
                                       min_sell: "",
                                       cost_per_unit: "",
+                                      total_cost: "",
+                                      total_sell: "",
                                       // min_cost: "",
                                     })
                                   }
@@ -6154,7 +6331,7 @@ function QuotationCreate({
 
                       <Grid.Col span={1} ml={10}>
                         Profit
-                        {userCurrencyCode ? ` (${userCurrencyCode})` : ""}=
+                        {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}=
                       </Grid.Col>
                       <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
                     </Grid>
@@ -7007,7 +7184,7 @@ function QuotationCreate({
                           }}
                         >
                           Total Sell
-                          {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
+                          {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}
                         </Text>
                       </Grid.Col>
                       <Grid.Col span={1}>
@@ -7020,7 +7197,7 @@ function QuotationCreate({
                           }}
                         >
                           Total Cost
-                          {quoteCurrencyCode ? ` (${quoteCurrencyCode})` : ""}
+                          {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}
                         </Text>
                       </Grid.Col>
                     </Grid>
@@ -7175,25 +7352,7 @@ function QuotationCreate({
                               `charges.${index}.currency_country_code`,
                             )}
                             onChange={(value) => {
-                              dynamicForm.setFieldValue(
-                                `charges.${index}.currency_country_code`,
-                                value || "",
-                              );
-                              if (value) {
-                                const calculatedRoe = getRoeValue(value);
-                                dynamicForm.setFieldValue(
-                                  `charges.${index}.roe`,
-                                  calculatedRoe,
-                                );
-                                syncChargeTotalsAtIndex(index, {
-                                  currency_country_code: value,
-                                  roe: calculatedRoe,
-                                });
-                              } else {
-                                syncChargeTotalsAtIndex(index, {
-                                  currency_country_code: "",
-                                });
-                              }
+                              handleChargeCurrencyChange(index, value || "");
                             }}
                           />
                         </Grid.Col>
@@ -7209,6 +7368,20 @@ function QuotationCreate({
                               },
                             }}
                             {...bindChargeAmountInput(index, "roe")}
+                            readOnly={
+                              isViewMode ||
+                              isBaseCurrency(
+                                dynamicForm.values.charges[index]
+                                  ?.currency_country_code,
+                              )
+                            }
+                            disabled={
+                              isViewMode ||
+                              isBaseCurrency(
+                                dynamicForm.values.charges[index]
+                                  ?.currency_country_code,
+                              )
+                            }
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -7357,22 +7530,15 @@ function QuotationCreate({
                               onClick={() =>
                                 dynamicForm.insertListItem("charges", {
                                   charge_name: "",
-                                  currency_country_code:
-                                    quotationForm.values
-                                      .quote_currency_country_code ||
-                                    userCurrencyCode ||
-                                    "INR",
-                                  roe: getRoeValue(
-                                    quotationForm.values
-                                      .quote_currency_country_code ||
-                                      userCurrencyCode ||
-                                      "INR",
-                                  ),
+                                  charge_id: null,
+                                  ...getDefaultNewChargeFields(),
                                   unit: "",
                                   no_of_units: "",
                                   sell_per_unit: "",
                                   min_sell: "",
                                   cost_per_unit: "",
+                                  total_cost: "",
+                                  total_sell: "",
                                 })
                               }
                             >
@@ -7423,7 +7589,7 @@ function QuotationCreate({
                     <Grid.Col span={7.5} />
                     <Grid.Col span={1} ml={10}>
                       Profit
-                      {userCurrencyCode ? ` (${userCurrencyCode})` : ""}=
+                      {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}=
                     </Grid.Col>
                     <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
                   </Grid>

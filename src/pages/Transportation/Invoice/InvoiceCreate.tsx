@@ -56,6 +56,14 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  parseInvoiceMutationResponse,
+  readIrnNoFromInvoiceData,
+} from "../../../utils/parseInvoiceMutationResponse";
+import {
+  isIndianOutstandingBranch,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 
 // Fetch functions
 
@@ -906,6 +914,8 @@ function InvoiceCreate({
     (b: { is_default?: boolean }) => b.is_default === true,
   ) as
     | {
+        branch_code?: string;
+        branch_name?: string;
         currency?: { currency_id?: number; currency_code?: string };
         country?: { country_code?: string };
       }
@@ -1081,16 +1091,46 @@ function InvoiceCreate({
   const userLocalCurrency = defaultBranchCurrency;
 
   const isChinaUser = useMemo(() => {
+    const branchCountry = (activeBranchCountryCode ?? "").toUpperCase();
+    if (branchCountry === "CN") return true;
+    const branchCode = (defaultBranch?.branch_code ?? "").toUpperCase();
+    const branchName = (defaultBranch?.branch_name ?? "").toUpperCase();
+    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
     const countryName = (user?.country?.country_name ?? "").toUpperCase();
     return countryCode === "CN" || countryName === "CHINA";
-  }, [user?.country?.country_code, user?.country?.country_name]);
+  }, [
+    activeBranchCountryCode,
+    defaultBranch?.branch_code,
+    defaultBranch?.branch_name,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
   const isKenyaUser = useMemo(() => {
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
     const countryName = (user?.country?.country_name ?? "").toUpperCase();
     return countryCode === "KE" || countryName.includes("KENYA");
   }, [user?.country?.country_code, user?.country?.country_name]);
+
+  const isIndiaUser = useMemo(() => {
+    const branchCountryCode = (activeBranchCountryCode ?? "").toUpperCase();
+    const branchCurrencyCode = (defaultBranchCurrency ?? "").toUpperCase();
+    if (branchCountryCode || branchCurrencyCode) {
+      return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
+    }
+    return (
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india")
+    );
+  }, [
+    activeBranchCountryCode,
+    defaultBranchCurrency,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
   // China & Kenya: VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
   const isVatInvoiceUser = useMemo(() => {
@@ -1125,17 +1165,25 @@ function InvoiceCreate({
 
   const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
 
+  const isInvoicePosted =
+    invoiceIsPosted ||
+    String(saveResponse?.status ?? "").toUpperCase() === "POSTED";
+
   // China: fapiao_no remains editable after POSTED; Update saves without unposting
   const canEditChinaFapiaoAfterPost = useMemo(
     () =>
       isChinaUser &&
-      invoiceIsPosted &&
+      isInvoicePosted &&
       !isViewMode &&
       saveResponse?.id != null &&
       saveResponse.id > 0,
-    [isChinaUser, invoiceIsPosted, isViewMode, saveResponse?.id],
+    [isChinaUser, isInvoicePosted, isViewMode, saveResponse?.id],
   );
-  const fapiaoReadOnly = isReadOnly && !canEditChinaFapiaoAfterPost;
+  const fapiaoFieldEditable =
+    isChinaUser &&
+    !isViewMode &&
+    (!isInvoicePosted || canEditChinaFapiaoAfterPost);
+  const fapiaoReadOnly = !fapiaoFieldEditable;
   const canSubmitInvoiceForm = !isReadOnly;
   const isFormVisuallyLocked = isReadOnly && !canEditChinaFapiaoAfterPost;
 
@@ -2268,7 +2316,7 @@ function InvoiceCreate({
             : invoiceData.roe
           : null,
       narration: invoiceData.narration ?? "",
-      irn_no: invoiceData.irn_no ?? "",
+      irn_no: readIrnNoFromInvoiceData(invoiceData) ?? "",
       fapiao_no: invoiceData.fapiao_no ?? "",
       charges:
         invoiceData.charges && invoiceData.charges.length > 0
@@ -2874,19 +2922,32 @@ function InvoiceCreate({
     }
     setIsSubmitting(true);
     try {
-      const response = (await putAPICall(
+      const rawResponse = await putAPICall(
         URL.invoice,
         {
           id: saveResponse.id,
           fapiao_no: form.values.fapiao_no?.trim() || null,
+          status: "POSTED",
         },
         API_HEADER,
-      )) as { fapiao_no?: string | null } | undefined;
-      if (response?.fapiao_no != null) {
-        form.setFieldValue("fapiao_no", response.fapiao_no ?? "");
+      );
+      const parsed = parseInvoiceMutationResponse(
+        rawResponse,
+        "Failed to update fapiao number",
+        "Fapiao number updated successfully",
+      );
+      if (!parsed.success) {
+        ToastNotification({
+          message: parsed.message,
+          type: "error",
+        });
+        return;
+      }
+      if (parsed.data.fapiao_no != null) {
+        form.setFieldValue("fapiao_no", String(parsed.data.fapiao_no));
       }
       ToastNotification({
-        message: "Fapiao number updated successfully",
+        message: parsed.message,
         type: "success",
       });
     } catch (error: unknown) {
@@ -3238,7 +3299,7 @@ function InvoiceCreate({
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: isKenyaUser ? null : values.irn_no || null,
+        irn_no: isIndiaUser ? values.irn_no || null : null,
         fapiao_no: values.fapiao_no || null,
         ...(isUpdate ? { status: "UNPOSTED" } : {}),
         total,
@@ -3251,82 +3312,102 @@ function InvoiceCreate({
       console.log("payload---", payload);
 
       if (isUpdate) {
-        const response = (await putAPICall(
+        const rawResponse = await putAPICall(
           URL.invoice,
           payload,
           API_HEADER,
-        )) as
-          | {
-              id?: number;
-              customer_id?: number;
-              document_no?: string;
-              status?: string;
-            }
-          | undefined;
-        if (response) {
-          setSaveResponse((prev) => ({
-            ...prev,
-            id: response.id ?? prev?.id,
-            customer_id: response.customer_id ?? prev?.customer_id,
-            document_no: response.document_no ?? prev?.document_no ?? "",
-            status: response.status ?? prev?.status ?? "UNPOSTED",
-          }));
-          // Merge returned charge ids into form (e.g. new charges created by this PUT)
-          const res = response as { charges?: Array<{ id?: number }> };
-          if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => {
-              const chargeRes = res.charges?.[i];
-              const id = chargeRes?.id;
-              return {
-                ...c,
-                id: id != null ? Number(id) : c.id,
-              };
-            });
-            form.setFieldValue("charges", updatedCharges);
-          }
+        );
+        const parsed = parseInvoiceMutationResponse(
+          rawResponse,
+          "Failed to update invoice",
+          "Invoice updated successfully",
+        );
+        if (!parsed.success) {
           ToastNotification({
-            message: "Invoice updated successfully",
-            type: "success",
+            message: parsed.message,
+            type: "error",
           });
+          return;
         }
+        const response = parsed.data;
+        setSaveResponse((prev) => ({
+          ...prev,
+          id: response.id ?? prev?.id,
+          customer_id: response.customer_id ?? prev?.customer_id,
+          document_no: response.document_no ?? prev?.document_no ?? "",
+          status: response.status ?? prev?.status ?? "UNPOSTED",
+        }));
+        // Merge returned charge ids into form (e.g. new charges created by this PUT)
+        if (response.charges && Array.isArray(response.charges)) {
+          const updatedCharges = form.values.charges.map((c, i) => {
+            const chargeRes = response.charges?.[i];
+            const id = chargeRes?.id;
+            return {
+              ...c,
+              id: id != null ? Number(id) : c.id,
+            };
+          });
+          form.setFieldValue("charges", updatedCharges);
+        }
+        if (response.fapiao_no != null) {
+          form.setFieldValue("fapiao_no", String(response.fapiao_no));
+        }
+        const irnNo = readIrnNoFromInvoiceData(response);
+        if (irnNo != null) {
+          form.setFieldValue("irn_no", irnNo);
+        }
+        ToastNotification({
+          message: parsed.message,
+          type: "success",
+        });
       } else {
-        const response = (await postAPICall(
+        const rawResponse = await postAPICall(
           URL.invoice,
           payload,
           API_HEADER,
-        )) as
-          | {
-              id?: number;
-              customer_id?: number;
-              document_no?: string;
-              status?: string;
-            }
-          | undefined;
-        if (response) {
-          setSaveResponse({
-            id: response.id,
-            customer_id: response.customer_id,
-            document_no: response.document_no ?? "",
-            status: response.status ?? "UNPOSTED",
-          });
-          // Merge returned charge ids into form so Update (PUT) sends id for existing charges
-          const res = response as { charges?: Array<{ id?: number }> };
-          if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => {
-              const chargeRes = res.charges?.[i];
-              const id = chargeRes?.id;
-              return {
-                ...c,
-                id: id != null ? Number(id) : c.id,
-              };
-            });
-            form.setFieldValue("charges", updatedCharges);
-          }
+        );
+        const parsed = parseInvoiceMutationResponse(
+          rawResponse,
+          "Failed to create invoice",
+          `${documentLabel} created successfully`,
+        );
+        if (!parsed.success) {
           ToastNotification({
-            message: `${documentLabel} created successfully`,
-            type: "success",
+            message: parsed.message,
+            type: "error",
           });
+          return;
         }
+        const response = parsed.data;
+        setSaveResponse({
+          id: response.id,
+          customer_id: response.customer_id,
+          document_no: response.document_no ?? "",
+          status: response.status ?? "UNPOSTED",
+        });
+        // Merge returned charge ids into form so Update (PUT) sends id for existing charges
+        if (response.charges && Array.isArray(response.charges)) {
+          const updatedCharges = form.values.charges.map((c, i) => {
+            const chargeRes = response.charges?.[i];
+            const id = chargeRes?.id;
+            return {
+              ...c,
+              id: id != null ? Number(id) : c.id,
+            };
+          });
+          form.setFieldValue("charges", updatedCharges);
+        }
+        const createdIrnNo = readIrnNoFromInvoiceData(response);
+        if (createdIrnNo != null) {
+          form.setFieldValue("irn_no", createdIrnNo);
+        }
+        if (response.fapiao_no != null) {
+          form.setFieldValue("fapiao_no", String(response.fapiao_no));
+        }
+        ToastNotification({
+          message: parsed.message,
+          type: "success",
+        });
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
@@ -3673,7 +3754,7 @@ function InvoiceCreate({
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: isKenyaUser ? null : values.irn_no || null,
+        irn_no: isIndiaUser ? values.irn_no || null : null,
         fapiao_no: values.fapiao_no || null,
         status: "POSTED",
         total,
@@ -3684,43 +3765,38 @@ function InvoiceCreate({
         charges: allChargesPayload,
         taxes: [],
       };
-      const response = (await putAPICall(URL.invoice, payload, API_HEADER)) as
-        | {
-            id?: number;
-            customer_id?: number;
-            document_no?: string;
-            status?: string;
-            charges?: Array<{
-              id?: number;
-              charge_id?: number;
-              charge_name?: string;
-              unit_code?: string | null;
-              unit_id?: number | null;
-              no_of_unit?: string | number;
-              currency_code?: string;
-              currency_id?: number;
-              roe?: string | number;
-              amount_per_unit?: string | number;
-              amount?: string | number;
-              amount_in_local?: string | number;
-              amount_in_header?: string | number;
-              tax_code?: string | null;
-              tax_id?: number | null;
-            }>;
-          }
-        | undefined;
-      if (response) {
-        setSaveResponse({
-          id: response.id,
-          customer_id: response.customer_id,
-          document_no: response.document_no ?? "",
-          status: response.status ?? "POSTED",
+      const rawResponse = await putAPICall(URL.invoice, payload, API_HEADER);
+      const parsed = parseInvoiceMutationResponse(
+        rawResponse,
+        "Failed to post invoice",
+        "Invoice posted successfully",
+      );
+      if (!parsed.success) {
+        ToastNotification({
+          message: parsed.message,
+          type: "error",
         });
-        setInvoiceIsPosted(true);
-        // After POST, display charges exactly as returned by API.
-        if (response.charges && Array.isArray(response.charges)) {
-          const mappedCharges: ChargeItem[] = response.charges.map((c) => {
-            const noOfUnit = parseNoOfUnitForPayload(c.no_of_unit);
+        return;
+      }
+      const response = parsed.data;
+      setSaveResponse({
+        id: response.id,
+        customer_id: response.customer_id,
+        document_no: response.document_no ?? "",
+        status: response.status ?? "POSTED",
+      });
+      setInvoiceIsPosted(true);
+      const postedIrnNo = readIrnNoFromInvoiceData(response);
+      if (postedIrnNo != null) {
+        form.setFieldValue("irn_no", postedIrnNo);
+      }
+      if (response.fapiao_no != null) {
+        form.setFieldValue("fapiao_no", String(response.fapiao_no));
+      }
+      // After POST, display charges exactly as returned by API.
+      if (response.charges && Array.isArray(response.charges)) {
+        const mappedCharges: ChargeItem[] = response.charges.map((c) => {
+          const noOfUnit = parseNoOfUnitForPayload(c.no_of_unit);
             const roe =
               c.roe != null
                 ? typeof c.roe === "string"
@@ -3898,11 +3974,10 @@ function InvoiceCreate({
             return next;
           });
         }
-        ToastNotification({
-          message: "Invoice posted successfully",
-          type: "success",
-        });
-      }
+      ToastNotification({
+        message: parsed.message,
+        type: "success",
+      });
     } catch (error: unknown) {
       console.error("Error posting invoice:", error);
       ToastNotification({
@@ -4441,11 +4516,12 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {!isKenyaUser && (
+            {isIndiaUser && (
               <Grid.Col span={2}>
                 <FormTextInput
                   label="IRN No"
                   placeholder="Enter IRN number"
+                  format="normal"
                   value={form.values.irn_no}
                   onChange={(e) =>
                     form.setFieldValue("irn_no", e.target.value)
@@ -4461,6 +4537,7 @@ function InvoiceCreate({
                 <FormTextInput
                   label="Fapiao No"
                   placeholder="Enter fapiao number"
+                  format="normal"
                   value={form.values.fapiao_no}
                   onChange={(e) =>
                     form.setFieldValue("fapiao_no", e.target.value)

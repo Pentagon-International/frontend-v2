@@ -38,6 +38,10 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 import { fetchReverseInvoiceById } from "../../../utils/fetchReverseInvoiceById";
+import {
+  parseInvoiceMutationResponse,
+  readIrnNoFromInvoiceData,
+} from "../../../utils/parseInvoiceMutationResponse";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -1577,116 +1581,108 @@ function InvoiceReverse() {
         charges: allChargesPayload,
         taxes: isVatPost ? [] : taxes,
       };
-      const response = (await putAPICall(
+      const rawResponse = await putAPICall(
         URL.reverseInvoice,
         payload,
         API_HEADER,
-      )) as
-        | {
-            id?: number;
-            customer_id?: number;
-            document_no?: string;
-            status?: string;
-            charges?: Array<{
-              charge_id?: number;
-              charge_name?: string;
-              unit_code?: string;
-              currency_code?: string;
-              no_of_unit?: string | number;
-              roe?: string | number;
-              amount_per_unit?: string | number;
-              amount?: string | number;
-              amount_in_local?: string | number;
-              amount_in_header?: string | number;
-              tax_code?: string;
-              Dr_Cr?: string;
-            }>;
-          }
-        | undefined;
-      if (response) {
-        const resWithAgent = response as { is_agent?: boolean };
-        if (resWithAgent.is_agent === true) setIsAgentInvoice(true);
-        setSaveResponse((prev) => ({
-          ...prev,
-          id: response.id,
-          customer_id: response.customer_id ?? prev?.customer_id,
-          reverse_document_no:
-            pickReverseDocumentNo(response) || prev?.reverse_document_no || "",
-          status: response.status ?? "POSTED",
-        }));
-        setInvoiceIsPosted(true);
-        if (response.charges && Array.isArray(response.charges)) {
-          const mappedCharges: ChargeItem[] = response.charges.map((c) => {
-            const noOfUnit =
-              c.no_of_unit != null
-                ? typeof c.no_of_unit === "string"
-                  ? parseFloat(c.no_of_unit)
-                  : c.no_of_unit
-                : null;
-            const roe =
-              c.roe != null
-                ? typeof c.roe === "string"
-                  ? parseFloat(c.roe)
-                  : c.roe
-                : null;
-            const amountPerUnit =
-              c.amount_per_unit != null
-                ? typeof c.amount_per_unit === "string"
-                  ? parseFloat(c.amount_per_unit)
-                  : c.amount_per_unit
-                : null;
-            const amount =
-              c.amount != null
-                ? typeof c.amount === "string"
-                  ? parseFloat(c.amount)
-                  : c.amount
-                : null;
-            const amountInLocal =
-              c.amount_in_local != null
-                ? typeof c.amount_in_local === "string"
-                  ? parseFloat(c.amount_in_local)
-                  : c.amount_in_local
-                : null;
-            const headerAmount =
-              c.amount_in_header != null
-                ? typeof c.amount_in_header === "string"
-                  ? parseFloat(c.amount_in_header)
-                  : c.amount_in_header
-                : null;
-            return {
-              charge_id: c.charge_id ?? null,
-              charge_name: c.charge_name ?? "",
-              shipment_id:
-                (c as { shipment_id?: string; shipment_no?: string })
-                  .shipment_id ??
-                (c as { shipment_id?: string; shipment_no?: string })
-                  .shipment_no ??
-                "",
-              unit_code: c.unit_code ?? "",
-              no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
-              currency: c.currency_code ?? "",
-              roe: Number.isFinite(roe) ? roe : null,
-              amount_per_unit: Number.isFinite(amountPerUnit)
-                ? amountPerUnit
-                : null,
-              amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount)
-                ? headerAmount
-                : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
-              tax_code: c.tax_code ?? "",
-              dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
-            };
-          });
-          form.setFieldValue("charges", mappedCharges);
-        }
+      );
+      const parsed = parseInvoiceMutationResponse(
+        rawResponse,
+        "Failed to post reverse invoice",
+        "Reverse invoice posted successfully",
+      );
+      if (!parsed.success) {
         ToastNotification({
-          message: "Reverse invoice posted successfully",
-          type: "success",
+          message: parsed.message,
+          type: "error",
         });
+        return;
       }
+      const response = parsed.data;
+      if (response.is_agent === true) setIsAgentInvoice(true);
+      setSaveResponse((prev) => ({
+        ...prev,
+        id: response.id,
+        customer_id: response.customer_id ?? prev?.customer_id,
+        reverse_document_no:
+          pickReverseDocumentNo(response) || prev?.reverse_document_no || "",
+        status: response.status ?? "POSTED",
+      }));
+      setInvoiceIsPosted(true);
+      const postedIrnNo = readIrnNoFromInvoiceData(response);
+      if (postedIrnNo != null) {
+        form.setFieldValue("irn_no", postedIrnNo);
+      }
+      if (response.fapiao_no != null) {
+        form.setFieldValue("fapiao_no", String(response.fapiao_no));
+      }
+      if (response.charges && Array.isArray(response.charges)) {
+        const mappedCharges: ChargeItem[] = response.charges.map((c) => {
+          const noOfUnit =
+            c.no_of_unit != null
+              ? typeof c.no_of_unit === "string"
+                ? parseFloat(c.no_of_unit)
+                : c.no_of_unit
+              : null;
+          const roe =
+            c.roe != null
+              ? typeof c.roe === "string"
+                ? parseFloat(c.roe)
+                : c.roe
+              : null;
+          const amountPerUnit =
+            c.amount_per_unit != null
+              ? typeof c.amount_per_unit === "string"
+                ? parseFloat(c.amount_per_unit)
+                : c.amount_per_unit
+              : null;
+          const amount =
+            c.amount != null
+              ? typeof c.amount === "string"
+                ? parseFloat(c.amount)
+                : c.amount
+              : null;
+          const amountInLocal =
+            c.amount_in_local != null
+              ? typeof c.amount_in_local === "string"
+                ? parseFloat(c.amount_in_local)
+                : c.amount_in_local
+              : null;
+          const headerAmount =
+            c.amount_in_header != null
+              ? typeof c.amount_in_header === "string"
+                ? parseFloat(c.amount_in_header)
+                : c.amount_in_header
+              : null;
+          return {
+            charge_id: c.charge_id ?? null,
+            charge_name: c.charge_name ?? "",
+            shipment_id:
+              c.shipment_id ?? c.shipment_no ?? "",
+            unit_code: c.unit_code ?? "",
+            no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
+            currency: c.currency_code ?? "",
+            roe: Number.isFinite(roe) ? roe : null,
+            amount_per_unit: Number.isFinite(amountPerUnit)
+              ? amountPerUnit
+              : null,
+            amount: Number.isFinite(amount) ? amount : null,
+            header_amount: Number.isFinite(headerAmount)
+              ? headerAmount
+              : null,
+            amount_in_local: Number.isFinite(amountInLocal)
+              ? amountInLocal
+              : null,
+            tax_code: c.tax_code ?? "",
+            dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+          };
+        });
+        form.setFieldValue("charges", mappedCharges);
+      }
+      ToastNotification({
+        message: parsed.message,
+        type: "success",
+      });
     } catch (error: unknown) {
       console.error("Error posting reverse invoice:", error);
       ToastNotification({
@@ -2020,83 +2016,97 @@ function InvoiceReverse() {
         charges: chargesPayload,
       };
       if (isUpdate) {
-        const response = (await putAPICall(
+        const rawResponse = await putAPICall(
           URL.reverseInvoice,
           payload,
           API_HEADER,
-        )) as
-          | { id?: number; document_no?: string; status?: string }
-          | undefined;
-        if (response) {
-          const res = response as {
-            id?: number;
-            customer_id?: number;
-            document_no?: string;
-            status?: string;
-            is_agent?: boolean;
-            charges?: Array<{ id?: number }>;
-          };
-          if (res.is_agent === true) setIsAgentInvoice(true);
-          setSaveResponse((prev) => ({
-            ...prev,
-            id: res.id ?? prev?.id,
-            customer_id: res.customer_id ?? prev?.customer_id,
-            reverse_document_no:
-              pickReverseDocumentNo(res) || prev?.reverse_document_no || "",
-            status: res.status ?? prev?.status ?? "UNPOSTED",
+        );
+        const parsed = parseInvoiceMutationResponse(
+          rawResponse,
+          "Failed to update reverse invoice",
+          "Reverse invoice updated successfully",
+        );
+        if (!parsed.success) {
+          ToastNotification({
+            message: parsed.message,
+            type: "error",
+          });
+          return;
+        }
+        const res = parsed.data;
+        if (res.is_agent === true) setIsAgentInvoice(true);
+        setSaveResponse((prev) => ({
+          ...prev,
+          id: res.id ?? prev?.id,
+          customer_id: res.customer_id ?? prev?.customer_id,
+          reverse_document_no:
+            pickReverseDocumentNo(res) || prev?.reverse_document_no || "",
+          status: res.status ?? prev?.status ?? "UNPOSTED",
+        }));
+        if (res.charges && Array.isArray(res.charges)) {
+          const updatedCharges = form.values.charges.map((c, i) => ({
+            ...c,
+            id: res.charges?.[i]?.id ?? null,
           }));
-          // Merge returned charge ids into form (e.g. new charges created by this PUT)
-          if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => ({
-              ...c,
-              id: res.charges?.[i]?.id ?? null,
-            }));
-            form.setFieldValue("charges", updatedCharges);
-          }
-          ToastNotification({
-            message: "Reverse invoice updated successfully",
-            type: "success",
-          });
+          form.setFieldValue("charges", updatedCharges);
         }
+        const updatedIrnNo = readIrnNoFromInvoiceData(res);
+        if (updatedIrnNo != null) {
+          form.setFieldValue("irn_no", updatedIrnNo);
+        }
+        if (res.fapiao_no != null) {
+          form.setFieldValue("fapiao_no", String(res.fapiao_no));
+        }
+        ToastNotification({
+          message: parsed.message,
+          type: "success",
+        });
       } else {
-        const response = (await postAPICall(
+        const rawResponse = await postAPICall(
           URL.reverseInvoice,
           payload,
           API_HEADER,
-        )) as
-          | { id?: number; document_no?: string; status?: string }
-          | undefined;
-        if (response) {
-          const res = response as {
-            id?: number;
-            customer_id?: number;
-            document_no?: string;
-            status?: string;
-            is_agent?: boolean;
-            charges?: Array<{ id?: number }>;
-          };
-          if (res.is_agent === true) setIsAgentInvoice(true);
-          setSaveResponse({
-            id: res.id,
-            customer_id: res.customer_id,
-            reverse_document_no: pickReverseDocumentNo(res),
-            status: res.status ?? "UNPOSTED",
-          });
-          // Merge returned charge ids into form so Update (PUT) sends id for existing charges
-          if (res.charges && Array.isArray(res.charges)) {
-            const updatedCharges = form.values.charges.map((c, i) => ({
-              ...c,
-              id: res.charges?.[i]?.id ?? null,
-            }));
-            form.setFieldValue("charges", updatedCharges);
-          }
-          const statusUpper = (res.status ?? "").toUpperCase();
-          setInvoiceIsPosted(statusUpper === "POSTED");
+        );
+        const parsed = parseInvoiceMutationResponse(
+          rawResponse,
+          "Failed to save reverse invoice",
+          "Reverse invoice saved successfully",
+        );
+        if (!parsed.success) {
           ToastNotification({
-            message: "Reverse invoice saved successfully",
-            type: "success",
+            message: parsed.message,
+            type: "error",
           });
+          return;
         }
+        const res = parsed.data;
+        if (res.is_agent === true) setIsAgentInvoice(true);
+        setSaveResponse({
+          id: res.id,
+          customer_id: res.customer_id,
+          reverse_document_no: pickReverseDocumentNo(res),
+          status: res.status ?? "UNPOSTED",
+        });
+        if (res.charges && Array.isArray(res.charges)) {
+          const updatedCharges = form.values.charges.map((c, i) => ({
+            ...c,
+            id: res.charges?.[i]?.id ?? null,
+          }));
+          form.setFieldValue("charges", updatedCharges);
+        }
+        const createdIrnNo = readIrnNoFromInvoiceData(res);
+        if (createdIrnNo != null) {
+          form.setFieldValue("irn_no", createdIrnNo);
+        }
+        if (res.fapiao_no != null) {
+          form.setFieldValue("fapiao_no", String(res.fapiao_no));
+        }
+        const statusUpper = (res.status ?? "").toUpperCase();
+        setInvoiceIsPosted(statusUpper === "POSTED");
+        ToastNotification({
+          message: parsed.message,
+          type: "success",
+        });
       }
     } catch (error: unknown) {
       console.error("Error saving reverse invoice:", error);

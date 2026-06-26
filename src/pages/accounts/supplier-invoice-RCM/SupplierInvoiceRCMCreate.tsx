@@ -466,6 +466,99 @@ import {
         .toLowerCase()
         .includes("india");
 
+    const cjvColSpans = useMemo(
+      () =>
+        isIndiaUser
+          ? {
+              dayBook: 1.25,
+              date: 1.25,
+              dueDate: 1.25,
+              vendor: 1.5,
+              state: 1.25,
+              tds: 1.25,
+              customerGst: 1,
+              note: 1.25,
+              narration: 1.25,
+            }
+          : {
+              dayBook: 1.5,
+              date: 1.5,
+              dueDate: 1.5,
+              vendor: 2,
+              note: 2.25,
+              narration: 2.25,
+            },
+      [isIndiaUser],
+    );
+
+    const agentColSpans = useMemo(
+      () =>
+        isIndiaUser
+          ? {
+              type: 0.8,
+              invCrnNo: 0.95,
+              invCrnDate: 0.95,
+              currency: 0.9,
+              roe: 0.8,
+              taxable: 0.95,
+              nonTaxable: 0.95,
+              cgst: 0.95,
+              sgst: 0.95,
+              igst: 0.95,
+              invCrnAmount: 0.95,
+              approved: 0.95,
+              difference: 0.95,
+            }
+          : {
+              type: 0.85,
+              invCrnNo: 1.1,
+              invCrnDate: 1.25,
+              currency: 1,
+              roe: 0.9,
+              taxable: 1.1,
+              nonTaxable: 1.25,
+              invCrnAmount: 1.15,
+              approved: 1.15,
+              difference: 1.15,
+            },
+      [isIndiaUser],
+    );
+
+    const chargeColSpans = useMemo(
+      () =>
+        isIndiaUser
+          ? {
+              shipment: 1.25,
+              charge: 1.25,
+              crn: 0.8,
+              account: 1,
+              subledger: 1,
+              narration: 1.6,
+              currency: 0.75,
+              roe: 0.65,
+              amount: 0.8,
+              localAmount: 0.8,
+              sac: 0.75,
+              drCr: 0.75,
+              actions: 0.5,
+            }
+          : {
+              shipment: 1.35,
+              charge: 1.35,
+              crn: 0.85,
+              account: 1.05,
+              subledger: 1.05,
+              narration: 1.75,
+              currency: 0.8,
+              roe: 0.7,
+              amount: 0.85,
+              localAmount: 0.85,
+              drCr: 0.8,
+              actions: 0.5,
+            },
+      [isIndiaUser],
+    );
+
     const getDrCrDefaultsByType = useCallback(
       (type: "INV" | "CRN") =>
         type === "CRN"
@@ -548,6 +641,7 @@ import {
       queryKey: ["stateMaster"],
       queryFn: fetchStateMaster,
       staleTime: Infinity,
+      enabled: isIndiaUser,
     });
   
     const { data: tdsSectionData = [], isLoading: isTdsSectionLoading } =
@@ -555,6 +649,7 @@ import {
         queryKey: ["tdsSectionMaster"],
         queryFn: fetchTdsSectionMaster,
         staleTime: Infinity,
+        enabled: isIndiaUser,
       });
   
     const daybookDocumentType = isReversal ? "CRJREV" : "CRJ";
@@ -689,7 +784,7 @@ import {
   
     const fetchSacForChargeRow = useCallback(
       (index: number, chargeId: number | null, shipmentNo: string) => {
-        if (chargeId == null || !shipmentNo) return;
+        if (!isIndiaUser || chargeId == null || !shipmentNo) return;
         const serviceId = getServiceIdByShipmentId(shipmentNo);
         if (serviceId == null) return;
         fetchGetEffectiveSac([
@@ -701,7 +796,7 @@ import {
           }
         });
       },
-      [getServiceIdByShipmentId],
+      [getServiceIdByShipmentId, isIndiaUser],
     );
   
     const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
@@ -797,15 +892,17 @@ import {
       const inv =
         (parseNum(form.values.taxable_amount) ?? 0) +
         (parseNum(form.values.non_taxable_amount) ?? 0) +
-        (parseNum(form.values.cgst_amount) ?? 0) +
-        (parseNum(form.values.sgst_amount) ?? 0) +
-        (parseNum(form.values.igst_amount) ?? 0);
+        (isIndiaUser
+          ? (parseNum(form.values.cgst_amount) ?? 0) +
+            (parseNum(form.values.sgst_amount) ?? 0) +
+            (parseNum(form.values.igst_amount) ?? 0)
+          : 0);
       const nextInv = clampAmount(inv);
       if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
         form.setFieldValue("Inv_crn_amount", nextInv);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [invCrnCalcKey]);
+    }, [invCrnCalcKey, isIndiaUser]);
   
     // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved
     const chargesNetKey = form.values.charges_data
@@ -1718,7 +1815,7 @@ import {
                   disabled={isReadOnly || reversalFormDisabled}
                 />
               </Grid.Col> */}
-              <Grid.Col span={1.25}>
+              <Grid.Col span={cjvColSpans.dayBook}>
                 <Dropdown
                   label="Day Book"
                   placeholder={
@@ -1733,7 +1830,9 @@ import {
                     if (!isReversalCreate) {
                       form.setFieldValue("agent_code", "");
                       setAgentDisplayName(null);
-                      form.setFieldValue("state_id", "");
+                      if (isIndiaUser) {
+                        form.setFieldValue("state_id", "");
+                      }
                     }
                   }}
                   searchable
@@ -1743,7 +1842,7 @@ import {
                   styles={daybookAndDateStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+              <Grid.Col span={cjvColSpans.date}>
                 <SingleDateInput
                   label="Date"
                   placeholder="Select date"
@@ -1757,7 +1856,7 @@ import {
                   disabled={daybookDateDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+              <Grid.Col span={cjvColSpans.dueDate}>
                 <SingleDateInput
                   label="Due Date"
                   placeholder="Select due date"
@@ -1772,7 +1871,7 @@ import {
                   disabled={isReadOnly || reversalFormDisabled}
                 />
               </Grid.Col>
-              <Grid.Col span={1.5}>
+              <Grid.Col span={cjvColSpans.vendor}>
                 <SearchableSelect
                   label="Vendor/Supplier"
                   disabled={isReadOnly || reversalFormDisabled || !isDaybookSelected}
@@ -1797,26 +1896,29 @@ import {
                             gst_id?: string | null;
                           }>
                         | undefined) ?? [];
-  
+
                     const primary =
                       addresses.find(
                         (a) =>
                           String(a.address_type ?? "").toUpperCase() === "PRIMARY",
                       ) ?? addresses[0];
-  
-                    if (primary?.state_id != null) {
-                      form.setFieldValue("state_id", String(primary.state_id));
+
+                    if (isIndiaUser) {
+                      if (primary?.state_id != null) {
+                        form.setFieldValue("state_id", String(primary.state_id));
+                      }
+                      form.setFieldValue(
+                        "customer_gst_no",
+                        primary?.gst_id != null ? String(primary.gst_id) : "",
+                      );
                     }
-                    form.setFieldValue(
-                      "customer_gst_no",
-                      primary?.gst_id != null ? String(primary.gst_id) : "",
-                    );
                   }}
                   dropdownZIndex={1000}
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.state}>
                 <Dropdown
                   label="State"
                   placeholder={isStateLoading ? "Loading..." : "Select state"}
@@ -1824,7 +1926,7 @@ import {
                   value={form.values.state_id || null}
                   onChange={(v) => form.setFieldValue("state_id", v ?? "")}
                   searchable
-                  withAsterisk={isIndiaUser}
+                  withAsterisk
                   error={form.errors.state_id}
                   disabled={
                     isStateLoading ||
@@ -1835,7 +1937,9 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.tds}>
                 <Dropdown
                   label="TDS Section Code"
                   placeholder={
@@ -1857,7 +1961,9 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={1}>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.customerGst}>
                 <TextInput
                   label="Customer GST No"
                   placeholder="Customer GST No"
@@ -1869,7 +1975,8 @@ import {
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+            )}
+              <Grid.Col span={cjvColSpans.note}>
                 <Textarea
                   label="Note"
                   placeholder="Note"
@@ -1880,7 +1987,7 @@ import {
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={1.25}>
+              <Grid.Col span={cjvColSpans.narration}>
                 <Textarea
                   label="Narration"
                   placeholder="Narration"
@@ -1905,7 +2012,7 @@ import {
               align="flex-end"
               pb={form.errors.roe ? 20 : 0}
             >
-              <Grid.Col span={0.7}>
+              <Grid.Col span={agentColSpans.type}>
                 <Dropdown
                   label="Type"
                   placeholder="Type"
@@ -1930,7 +2037,7 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+              <Grid.Col span={agentColSpans.invCrnNo}>
                 <TextInput
                   label="Inv/Crn No"
                   placeholder="Inv/Crn No"
@@ -1944,7 +2051,7 @@ import {
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={1.15}>
+              <Grid.Col span={agentColSpans.invCrnDate}>
                 <SingleDateInput
                   label="Inv/Crn Date"
                   placeholder="Select Inv/Crn Date"
@@ -1953,7 +2060,7 @@ import {
                   disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
                 />
               </Grid.Col>
-              <Grid.Col span={0.85}>
+              <Grid.Col span={agentColSpans.currency}>
                 <Dropdown
                   label="Currency"
                   placeholder={
@@ -1986,7 +2093,7 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.75}>
+              <Grid.Col span={agentColSpans.roe}>
                 <Box style={{ position: "relative" }}>
                   <NumberInput
                     label="ROE"
@@ -2017,7 +2124,7 @@ import {
                   <FieldErrorBelow error={form.errors.roe} />
                 </Box>
               </Grid.Col>
-              <Grid.Col span={0.9}>
+              <Grid.Col span={agentColSpans.taxable}>
                 <NumberInput
                   label="Taxable Amount"
                   disabled={isReadOnly || reversalFormDisabled}
@@ -2035,7 +2142,7 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={1.15}>
+              <Grid.Col span={agentColSpans.nonTaxable}>
                 <NumberInput
                   label="Non Taxable Amount"
                   disabled={isReadOnly || reversalFormDisabled}
@@ -2053,7 +2160,8 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.cgst}>
                 <NumberInput
                   label="CGST Amount"
                   disabled={isReadOnly || reversalFormDisabled}
@@ -2071,7 +2179,9 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.sgst}>
                 <NumberInput
                   label="SGST Amount"
                   disabled={isReadOnly || reversalFormDisabled}
@@ -2089,7 +2199,9 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.igst}>
                 <NumberInput
                   label="IGST Amount"
                   placeholder="0"
@@ -2107,8 +2219,9 @@ import {
                   disabled={isReadOnly || reversalFormDisabled}
                 />
               </Grid.Col>
-  
-              <Grid.Col span={0.9}>
+            )}
+
+              <Grid.Col span={agentColSpans.invCrnAmount}>
                 <NumberInput
                   label="Inv/Crn Amount"
                   disabled
@@ -2121,7 +2234,7 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+              <Grid.Col span={agentColSpans.approved}>
                 <NumberInput
                   label="Approved Amount"
                   disabled
@@ -2134,7 +2247,7 @@ import {
                   styles={effectiveInputStyles}
                 />
               </Grid.Col>
-              <Grid.Col span={0.9}>
+              <Grid.Col span={agentColSpans.difference}>
                 <NumberInput
                   label="Difference Amount"
                   disabled
@@ -2155,8 +2268,8 @@ import {
                   <Text size="sm" fw={600} c="#105476">
                     Charges
                   </Text>
-                  {!isReversal && form.values.tds_section_code?.trim() && (
-                    <Group gap="xs">
+                  <Group gap="xs">
+                    {isIndiaUser && (
                       <Button
                         type="button"
                         size="sm"
@@ -2317,6 +2430,10 @@ import {
                       >
                         Calculate GST
                       </Button>
+                    )}
+                    {isIndiaUser &&
+                      String(form.values.tds_section_code ?? "").trim() !== "" &&
+                      !isReversal && (
                        <Button
                         type="button"
                         size="sm"
@@ -2437,8 +2554,8 @@ import {
                       >
                         Calculate TDS
                       </Button>
-                    </Group>
-                  )}
+                    )}
+                  </Group>
                 </Group>
   
                 <Box mb="sm" mt="sm">
@@ -2455,43 +2572,45 @@ import {
                       color: "#105476",
                     }}
                   >
-                    <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.shipment} style={{ fontSize: "13px" }}>
                       Shipment No
                     </Grid.Col>
-                    <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.charge} style={{ fontSize: "13px" }}>
                       Charge
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.crn} style={{ fontSize: "13px" }}>
                       CRN
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.account} style={{ fontSize: "13px" }}>
                       Account
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.subledger} style={{ fontSize: "13px" }}>
                       Subledger
                     </Grid.Col>
-                    <Grid.Col span={1.6} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.narration} style={{ fontSize: "13px" }}>
                       Narration
                     </Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.currency} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.roe} style={{ fontSize: "13px" }}>
                       ROE
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.amount} style={{ fontSize: "13px" }}>
                       Amount
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.localAmount} style={{ fontSize: "13px" }}>
                       Local Amount
                     </Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
-                      SAC Code
-                    </Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                    {isIndiaUser && (
+                      <Grid.Col span={chargeColSpans.sac} style={{ fontSize: "13px" }}>
+                        SAC Code
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={chargeColSpans.drCr} style={{ fontSize: "13px" }}>
                       Dr/Cr
                     </Grid.Col>
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={chargeColSpans.actions} style={{ fontSize: "13px" }}>
                       Actions
                     </Grid.Col>
                   </Grid>
@@ -2503,7 +2622,7 @@ import {
                       gutter="sm"
                       mt={index !== 0 ? "sm" : 0}
                     >
-                      <Grid.Col span={1.25}>
+                      <Grid.Col span={chargeColSpans.shipment}>
                         <Dropdown
                           placeholder="Shipment No"
                           data={shipmentOptions}
@@ -2532,7 +2651,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.25}>
+                      <Grid.Col span={chargeColSpans.charge}>
                         <SearchableSelect
                           placeholder="Charge"
                           apiEndpoint={URL.chargeMaster}
@@ -2597,7 +2716,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={chargeColSpans.crn}>
                         <Dropdown
                           placeholder=""
                           data={CRN_OPTIONS}
@@ -2618,7 +2737,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={chargeColSpans.account}>
                         <SearchableSelect
                           placeholder="Search by account name"
                           apiEndpoint={URL.chartOfAccounts}
@@ -2721,7 +2840,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={chargeColSpans.subledger}>
                         <TextInput
                           placeholder="Subledger"
                           value={row.subledger_code}
@@ -2741,7 +2860,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.6}>
+                      <Grid.Col span={chargeColSpans.narration}>
                         <TextInput
                           placeholder="Narration"
                           value={row.narration}
@@ -2761,7 +2880,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={chargeColSpans.currency}>
                         <Dropdown
                           placeholder="Currency"
                           data={currencyOptions}
@@ -2807,7 +2926,7 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.65}>
+                      <Grid.Col span={chargeColSpans.roe}>
                         <Box style={{ position: "relative" }}>
                           <NumberInput
                             placeholder="ROE"
@@ -2913,7 +3032,8 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                    {isIndiaUser && (
+                      <Grid.Col span={chargeColSpans.sac}>
                         <TextInput
                           placeholder="SAC Code"
                           value={row.tax_code}
@@ -2933,7 +3053,8 @@ import {
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                    )}
+                    <Grid.Col span={chargeColSpans.drCr}>
                         <Dropdown
                           data={[
                             { value: "Dr", label: "Dr" },
