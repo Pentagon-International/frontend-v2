@@ -41,7 +41,12 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
-import { isIndianUserCountry } from "../../../utils/userNumberFormat";
+import {
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  isIndianOutstandingBranch,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const fetchCurrencyMaster = async () => {
@@ -591,11 +596,117 @@ export default function SupplierInvoiceCreate({
     validateRoeToast,
   } = useAccountsDocumentCurrencyRoe();
 
-  const isIndiaUser =
-    isIndianUserCountry(user?.country?.country_code) ||
-    String(user?.country?.country_name ?? "")
-      .toLowerCase()
-      .includes("india");
+  const isIndiaUser = useMemo(() => {
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+    if (branchCountryCode || branchCurrencyCode) {
+      return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
+    }
+    return (
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india")
+    );
+  }, [
+    user?.branches,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
+
+  const cjvColSpans = useMemo(
+    () =>
+      isIndiaUser
+        ? {
+            dayBook: 1.25,
+            date: 1.25,
+            dueDate: 1.25,
+            vendor: 2.25,
+            state: 1.25,
+            tds: 1.25,
+            customerGst: 1,
+            note: 1.25,
+            narration: 1.25,
+          }
+        : {
+            dayBook: 1.5,
+            date: 1.5,
+            dueDate: 1.5,
+            vendor: 2.5,
+            note: 2.5,
+            narration: 2.5,
+          },
+    [isIndiaUser],
+  );
+
+  const agentColSpans = useMemo(
+    () =>
+      isIndiaUser
+        ? {
+            type: 0.8,
+            invCrnNo: 0.95,
+            invCrnDate: 0.95,
+            currency: 0.9,
+            roe: 0.8,
+            taxable: 0.95,
+            nonTaxable: 0.95,
+            cgst: 0.95,
+            sgst: 0.95,
+            igst: 0.95,
+            invCrnAmount: 0.95,
+            approved: 0.95,
+            difference: 0.95,
+          }
+        : {
+            type: 1.05,
+            invCrnNo: 1.1,
+            invCrnDate: 1.1,
+            currency: 1.1,
+            roe: 1.05,
+            taxable: 1.1,
+            nonTaxable: 1.1,
+            vat: 1.1,
+            invCrnAmount: 1.1,
+            approved: 1.1,
+            difference: 1.1,
+          },
+    [isIndiaUser],
+  );
+
+  const chargeColSpans = useMemo(
+    () =>
+      isIndiaUser
+        ? {
+            shipment: 1.25,
+            charge: 1.25,
+            crn: 0.8,
+            account: 1,
+            subledger: 1,
+            narration: 1.45,
+            currency: 0.75,
+            roe: 0.65,
+            amount: 0.8,
+            localAmount: 0.8,
+            sac: 0.75,
+            drCr: 0.75,
+            actions: 0.5,
+          }
+        : {
+            shipment: 1.35,
+            charge: 1.35,
+            crn: 0.85,
+            account: 1.05,
+            subledger: 1.05,
+            narration: 1.65,
+            currency: 0.8,
+            roe: 0.7,
+            amount: 0.85,
+            localAmount: 0.85,
+            drCr: 0.8,
+            actions: 0.5,
+          },
+    [isIndiaUser],
+  );
 
   const form = useForm<SupplierInvoiceFormValues>({
     initialValues: {
@@ -679,6 +790,7 @@ export default function SupplierInvoiceCreate({
     queryKey: ["stateMaster"],
     queryFn: fetchStateMaster,
     staleTime: Infinity,
+    enabled: isIndiaUser,
   });
 
   const { data: tdsSectionData = [], isLoading: isTdsSectionLoading } =
@@ -686,6 +798,7 @@ export default function SupplierInvoiceCreate({
       queryKey: ["tdsSectionMaster"],
       queryFn: fetchTdsSectionMaster,
       staleTime: Infinity,
+      enabled: isIndiaUser,
     });
 
   const daybookDocumentType = isReversal ? "CRJREV" : "CRJ";
@@ -871,7 +984,7 @@ export default function SupplierInvoiceCreate({
 
   const fetchSacForChargeRow = useCallback(
     (index: number, chargeId: number | null, shipmentNo: string) => {
-      if (chargeId == null || !shipmentNo) return;
+      if (!isIndiaUser || chargeId == null || !shipmentNo) return;
       (async () => {
         const serviceId = await getServiceIdByShipmentIdAsync(shipmentNo);
         if (serviceId == null) return;
@@ -886,7 +999,7 @@ export default function SupplierInvoiceCreate({
         }
       })();
     },
-    [getServiceIdByShipmentIdAsync, form],
+    [getServiceIdByShipmentIdAsync, form, isIndiaUser],
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
@@ -928,6 +1041,7 @@ export default function SupplierInvoiceCreate({
     .map((c) => `${c.shipment_no}|${c.charge_id}|${c.tax_code}`)
     .join(",");
   useEffect(() => {
+    if (!isIndiaUser) return;
     if (!prefillFromJob) return;
     if (prefillFromJob.source !== "air-import-job") return;
     if (!String(form.values.agent_code ?? "").trim()) return; // only after manual vendor select
@@ -941,7 +1055,7 @@ export default function SupplierInvoiceCreate({
       fetchSacForChargeRow(idx, chargeId, shipmentNo);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillSacKey, prefillFromJob, form.values.agent_code]);
+  }, [prefillSacKey, prefillFromJob, form.values.agent_code, isIndiaUser]);
 
   useEffect(() => {
     const effectiveCurrency =
@@ -1035,16 +1149,18 @@ export default function SupplierInvoiceCreate({
     const baseSum =
       (parseNum(form.values.taxable_amount) ?? 0) +
       (parseNum(form.values.non_taxable_amount) ?? 0) +
-      (parseNum(form.values.cgst_amount) ?? 0) +
-      (parseNum(form.values.sgst_amount) ?? 0) +
-      (parseNum(form.values.igst_amount) ?? 0);
+      (isIndiaUser
+        ? (parseNum(form.values.cgst_amount) ?? 0) +
+          (parseNum(form.values.sgst_amount) ?? 0) +
+          (parseNum(form.values.igst_amount) ?? 0)
+        : parseNum(form.values.igst_amount) ?? 0);
     const roe = parseNum(form.values.roe) ?? 1;
     const nextInv = clampAmount(baseSum * roe);
     if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invCrnCalcKey, isReversal, isViewMode, isEditMode]);
+  }, [invCrnCalcKey, isReversal, isViewMode, isEditMode, isIndiaUser]);
 
   // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved (skipped for reversal)
   const chargesNetKey = form.values.charges_data
@@ -2041,7 +2157,7 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col> */}
-            <Grid.Col span={1.25}>
+            <Grid.Col span={cjvColSpans.dayBook}>
               <Dropdown
                 label="Day Book"
                 placeholder={
@@ -2056,7 +2172,9 @@ export default function SupplierInvoiceCreate({
                   if (!isReversalCreate) {
                     form.setFieldValue("agent_code", "");
                     setAgentDisplayName(null);
-                    form.setFieldValue("state_id", "");
+                    if (isIndiaUser) {
+                      form.setFieldValue("state_id", "");
+                    }
                   }
                 }}
                 searchable
@@ -2066,7 +2184,7 @@ export default function SupplierInvoiceCreate({
                 styles={daybookAndDateStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
+            <Grid.Col span={cjvColSpans.date}>
               <SingleDateInput
                 label="Date"
                 placeholder="Select date"
@@ -2080,7 +2198,7 @@ export default function SupplierInvoiceCreate({
                 disabled={daybookDateDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
+            <Grid.Col span={cjvColSpans.dueDate}>
               <SingleDateInput
                 label="Due Date"
                 placeholder="Select due date"
@@ -2095,7 +2213,7 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled}
               />
             </Grid.Col>
-            <Grid.Col span={1.5}>
+            <Grid.Col span={cjvColSpans.vendor}>
               <SearchableSelect
                 label="Vendor/Supplier"
                 disabled={isReadOnly || reversalFormDisabled || !isDaybookSelected}
@@ -2127,13 +2245,15 @@ export default function SupplierInvoiceCreate({
                         String(a.address_type ?? "").toUpperCase() === "PRIMARY",
                     ) ?? addresses[0];
 
-                  if (primary?.state_id != null) {
-                    form.setFieldValue("state_id", String(primary.state_id));
+                  if (isIndiaUser) {
+                    if (primary?.state_id != null) {
+                      form.setFieldValue("state_id", String(primary.state_id));
+                    }
+                    form.setFieldValue(
+                      "customer_gst_no",
+                      primary?.gst_id != null ? String(primary.gst_id) : "",
+                    );
                   }
-                  form.setFieldValue(
-                    "customer_gst_no",
-                    primary?.gst_id != null ? String(primary.gst_id) : "",
-                  );
 
                   // If navigated from Air Import Job → Create Supplier Invoice:
                   // Populate charges only after vendor selection, filtered by matching supplier_code.
@@ -2143,60 +2263,66 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading..." : "Select state"}
-                data={effectiveStateOptions}
-                value={form.values.state_id || null}
-                onChange={(v) => form.setFieldValue("state_id", v ?? "")}
-                searchable
-                withAsterisk={isIndiaUser}
-                error={form.errors.state_id}
-                disabled={
-                  isStateLoading ||
-                  isReadOnly ||
-                  reversalFormDisabled ||
-                  !isVendorSelected
-                }
-                styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={1.25}>
-              <Dropdown
-                label="TDS Section Code"
-                placeholder={
-                  isTdsSectionLoading ? "Loading..." : "Select TDS section"
-                }
-                data={tdsSectionOptions}
-                value={form.values.tds_section_code || null}
-                onChange={(v) =>
-                  form.setFieldValue("tds_section_code", v ?? "")
-                }
-                searchable
-                clearable
-                disabled={
-                  isTdsSectionLoading ||
-                  isReadOnly ||
-                  reversalFormDisabled ||
-                  !isVendorSelected
-                }
-                styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={1}>
-              <TextInput
-                label="Customer GST No"
-                placeholder="Customer GST No"
-                value={form.values.customer_gst_no}
-                onChange={(e) =>
-                  form.setFieldValue("customer_gst_no", e.target.value)
-                }
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
-              />
-            </Grid.Col>
-            <Grid.Col span={1.25}>
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.state}>
+                <Dropdown
+                  label="State"
+                  placeholder={isStateLoading ? "Loading..." : "Select state"}
+                  data={effectiveStateOptions}
+                  value={form.values.state_id || null}
+                  onChange={(v) => form.setFieldValue("state_id", v ?? "")}
+                  searchable
+                  withAsterisk
+                  error={form.errors.state_id}
+                  disabled={
+                    isStateLoading ||
+                    isReadOnly ||
+                    reversalFormDisabled ||
+                    !isVendorSelected
+                  }
+                  styles={effectiveInputStyles}
+                />
+              </Grid.Col>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.tds}>
+                <Dropdown
+                  label="TDS Section Code"
+                  placeholder={
+                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
+                  }
+                  data={tdsSectionOptions}
+                  value={form.values.tds_section_code || null}
+                  onChange={(v) =>
+                    form.setFieldValue("tds_section_code", v ?? "")
+                  }
+                  searchable
+                  clearable
+                  disabled={
+                    isTdsSectionLoading ||
+                    isReadOnly ||
+                    reversalFormDisabled ||
+                    !isVendorSelected
+                  }
+                  styles={effectiveInputStyles}
+                />
+              </Grid.Col>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={cjvColSpans.customerGst}>
+                <TextInput
+                  label="Customer GST No"
+                  placeholder="Customer GST No"
+                  value={form.values.customer_gst_no}
+                  onChange={(e) =>
+                    form.setFieldValue("customer_gst_no", e.target.value)
+                  }
+                  styles={effectiveInputStyles}
+                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                />
+              </Grid.Col>
+            )}
+            <Grid.Col span={cjvColSpans.note}>
               <Textarea
                 label="Note"
                 placeholder="Note"
@@ -2207,7 +2333,7 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={1.25}>
+            <Grid.Col span={cjvColSpans.narration}>
               <Textarea
                 label="Narration"
                 placeholder="Narration"
@@ -2232,7 +2358,7 @@ export default function SupplierInvoiceCreate({
             align="flex-end"
             pb={form.errors.roe ? 20 : 0}
           >
-            <Grid.Col span={0.7}>
+            <Grid.Col span={agentColSpans.type}>
               <Dropdown
                 label="Type"
                 placeholder="Type"
@@ -2257,7 +2383,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.9}>
+            <Grid.Col span={agentColSpans.invCrnNo}>
               <TextInput
                 label="Inv/Crn No"
                 placeholder="Inv/Crn No"
@@ -2271,7 +2397,7 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={1.15}>
+            <Grid.Col span={agentColSpans.invCrnDate}>
               <SingleDateInput
                 label="Inv/Crn Date"
                 placeholder="Select Inv/Crn Date"
@@ -2280,7 +2406,7 @@ export default function SupplierInvoiceCreate({
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>
-            <Grid.Col span={0.85}>
+            <Grid.Col span={agentColSpans.currency}>
               <Dropdown
                 label="Currency"
                 placeholder={
@@ -2313,7 +2439,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.75}>
+            <Grid.Col span={agentColSpans.roe}>
               <Box style={{ position: "relative" }}>
                 <NumberInput
                   label="ROE"
@@ -2344,7 +2470,7 @@ export default function SupplierInvoiceCreate({
                 <FieldErrorBelow error={form.errors.roe} />
               </Box>
             </Grid.Col>
-            <Grid.Col span={0.9}>
+            <Grid.Col span={agentColSpans.taxable}>
               <NumberInput
                 label="Taxable Amount"
                 disabled={isReadOnly || reversalFormDisabled}
@@ -2362,7 +2488,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={1.15}>
+            <Grid.Col span={agentColSpans.nonTaxable}>
               <NumberInput
                 label="Non Taxable Amount"
                 disabled={isReadOnly || reversalFormDisabled}
@@ -2380,62 +2506,88 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.9}>
-              <NumberInput
-                label="CGST Amount"
-                disabled={isReadOnly || reversalFormDisabled}
-                placeholder="0"
-                value={form.values.cgst_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "cgst_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
-                }
-                min={0}
-                decimalScale={2}
-                hideControls
-                styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={0.9}>
-              <NumberInput
-                label="SGST Amount"
-                disabled={isReadOnly || reversalFormDisabled}
-                placeholder="0"
-                value={form.values.sgst_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "sgst_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
-                }
-                min={0}
-                decimalScale={2}
-                hideControls
-                styles={effectiveInputStyles}
-              />
-            </Grid.Col>
-            <Grid.Col span={0.9}>
-              <NumberInput
-                label="IGST Amount"
-                placeholder="0"
-                value={form.values.igst_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "igst_amount",
-                    typeof v === "number" ? clampAmount(v) : null,
-                  )
-                }
-                min={0}
-                decimalScale={2}
-                hideControls
-                styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled}
-              />
-            </Grid.Col>
+            {!isIndiaUser && (
+              <Grid.Col span={agentColSpans.vat}>
+                <NumberInput
+                  label="VAT Amount"
+                  placeholder="0"
+                  value={form.values.igst_amount ?? undefined}
+                  onChange={(v) =>
+                    form.setFieldValue(
+                      "igst_amount",
+                      typeof v === "number" ? clampAmount(v) : null,
+                    )
+                  }
+                  min={0}
+                  decimalScale={2}
+                  hideControls
+                  styles={effectiveInputStyles}
+                  disabled={isReadOnly || reversalFormDisabled}
+                />
+              </Grid.Col>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.cgst}>
+                <NumberInput
+                  label="CGST Amount"
+                  disabled={isReadOnly || reversalFormDisabled}
+                  placeholder="0"
+                  value={form.values.cgst_amount ?? undefined}
+                  onChange={(v) =>
+                    form.setFieldValue(
+                      "cgst_amount",
+                      typeof v === "number" ? clampAmount(v) : null,
+                    )
+                  }
+                  min={0}
+                  decimalScale={2}
+                  hideControls
+                  styles={effectiveInputStyles}
+                />
+              </Grid.Col>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.sgst}>
+                <NumberInput
+                  label="SGST Amount"
+                  disabled={isReadOnly || reversalFormDisabled}
+                  placeholder="0"
+                  value={form.values.sgst_amount ?? undefined}
+                  onChange={(v) =>
+                    form.setFieldValue(
+                      "sgst_amount",
+                      typeof v === "number" ? clampAmount(v) : null,
+                    )
+                  }
+                  min={0}
+                  decimalScale={2}
+                  hideControls
+                  styles={effectiveInputStyles}
+                />
+              </Grid.Col>
+            )}
+            {isIndiaUser && (
+              <Grid.Col span={agentColSpans.igst}>
+                <NumberInput
+                  label="IGST Amount"
+                  placeholder="0"
+                  value={form.values.igst_amount ?? undefined}
+                  onChange={(v) =>
+                    form.setFieldValue(
+                      "igst_amount",
+                      typeof v === "number" ? clampAmount(v) : null,
+                    )
+                  }
+                  min={0}
+                  decimalScale={2}
+                  hideControls
+                  styles={effectiveInputStyles}
+                  disabled={isReadOnly || reversalFormDisabled}
+                />
+              </Grid.Col>
+            )}
 
-            <Grid.Col span={0.9}>
+            <Grid.Col span={agentColSpans.invCrnAmount}>
               <NumberInput
                 label="Inv/Crn Amount"
                 disabled
@@ -2448,7 +2600,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.9}>
+            <Grid.Col span={agentColSpans.approved}>
               <NumberInput
                 label="Approved Amount"
                 disabled
@@ -2461,7 +2613,7 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={0.9}>
+            <Grid.Col span={agentColSpans.difference}>
               <NumberInput
                 label="Difference Amount"
                 disabled
@@ -2483,6 +2635,7 @@ export default function SupplierInvoiceCreate({
                   Charges
                 </Text>
                 <Group gap="xs">
+                    {isIndiaUser && (
                     <Button
                       type="button"
                       size="sm"
@@ -2643,7 +2796,9 @@ export default function SupplierInvoiceCreate({
                     >
                       Calculate GST
                     </Button>
-                    {String(form.values.tds_section_code ?? "").trim() !== "" &&
+                    )}
+                    {isIndiaUser &&
+                      String(form.values.tds_section_code ?? "").trim() !== "" &&
                       !isReversal && (
                       <Button
                         type="button"
@@ -2783,43 +2938,45 @@ export default function SupplierInvoiceCreate({
                     color: "#105476",
                   }}
                 >
-                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.shipment} style={{ fontSize: "13px" }}>
                     Shipment No
                   </Grid.Col>
-                  <Grid.Col span={1.25} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.charge} style={{ fontSize: "13px" }}>
                     Charge
                   </Grid.Col>
-                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.crn} style={{ fontSize: "13px" }}>
                     CRN
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.account} style={{ fontSize: "13px" }}>
                     Account
                   </Grid.Col>
-                  <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.subledger} style={{ fontSize: "13px" }}>
                     Subledger
                   </Grid.Col>
-                  <Grid.Col span={1.6} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.narration} style={{ fontSize: "13px" }}>
                     Narration
                   </Grid.Col>
-                  <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.currency} style={{ fontSize: "13px" }}>
                     Currency
                   </Grid.Col>
-                  <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.roe} style={{ fontSize: "13px" }}>
                     ROE
                   </Grid.Col>
-                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.amount} style={{ fontSize: "13px" }}>
                     Amount
                   </Grid.Col>
-                  <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.localAmount} style={{ fontSize: "13px" }}>
                     Local Amount
                   </Grid.Col>
-                  <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
-                    SAC Code
-                  </Grid.Col>
-                  <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                  {isIndiaUser && (
+                    <Grid.Col span={chargeColSpans.sac} style={{ fontSize: "13px" }}>
+                      SAC Code
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={chargeColSpans.drCr} style={{ fontSize: "13px" }}>
                     Dr/Cr
                   </Grid.Col>
-                  <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                  <Grid.Col span={chargeColSpans.actions} style={{ fontSize: "13px" }}>
                     Actions
                   </Grid.Col>
                 </Grid>
@@ -2831,7 +2988,7 @@ export default function SupplierInvoiceCreate({
                     gutter="sm"
                     mt={index !== 0 ? "sm" : 0}
                   >
-                    <Grid.Col span={1.25}>
+                    <Grid.Col span={chargeColSpans.shipment}>
                       {isAirImportJobPrefillFlow ? (
                         <Dropdown
                           placeholder="Select shipment no"
@@ -2887,7 +3044,7 @@ export default function SupplierInvoiceCreate({
                         />
                       )}
                     </Grid.Col>
-                    <Grid.Col span={1.25}>
+                    <Grid.Col span={chargeColSpans.charge}>
                       <SearchableSelect
                         placeholder="Charge"
                         apiEndpoint={URL.chargeMaster}
@@ -2952,7 +3109,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeColSpans.crn}>
                       <Dropdown
                         placeholder=""
                         data={CRN_OPTIONS}
@@ -2973,7 +3130,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeColSpans.account}>
                       <SearchableSelect
                         placeholder="Search by account name"
                         apiEndpoint={URL.chartOfAccounts}
@@ -3076,7 +3233,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={chargeColSpans.subledger}>
                       <TextInput
                         placeholder="Subledger"
                         value={row.subledger_code}
@@ -3096,7 +3253,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1.6}>
+                    <Grid.Col span={chargeColSpans.narration}>
                       <TextInput
                         placeholder="Narration"
                         value={row.narration}
@@ -3116,7 +3273,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.75}>
+                    <Grid.Col span={chargeColSpans.currency}>
                       <Dropdown
                         placeholder="Currency"
                         data={currencyOptions}
@@ -3162,7 +3319,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.65}>
+                    <Grid.Col span={chargeColSpans.roe}>
                       <Box style={{ position: "relative" }}>
                         <NumberInput
                           placeholder="ROE"
@@ -3220,7 +3377,7 @@ export default function SupplierInvoiceCreate({
                         />
                       </Box>
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeColSpans.amount}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount ?? undefined}
@@ -3243,7 +3400,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeColSpans.localAmount}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount_in_local ?? undefined}
@@ -3266,27 +3423,29 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.75}>
-                      <TextInput
-                        placeholder="SAC Code"
-                        value={row.tax_code}
-                        onChange={(e) =>
-                          form.setFieldValue(
-                            `charges_data.${index}.tax_code`,
-                            e.currentTarget.value,
-                          )
-                        }
-                        disabled={isReadOnly || reversalFormDisabled}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={0.75}>
+                    {isIndiaUser && (
+                      <Grid.Col span={chargeColSpans.sac}>
+                        <TextInput
+                          placeholder="SAC Code"
+                          value={row.tax_code}
+                          onChange={(e) =>
+                            form.setFieldValue(
+                              `charges_data.${index}.tax_code`,
+                              e.currentTarget.value,
+                            )
+                          }
+                          disabled={isReadOnly || reversalFormDisabled}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
+                    <Grid.Col span={chargeColSpans.drCr}>
                       <Dropdown
                         data={[
                           { value: "Dr", label: "Dr" },
@@ -3309,7 +3468,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.5}>
+                    <Grid.Col span={chargeColSpans.actions}>
                       <Group gap="xs">
                         {!isReadOnly &&
                           !reversalFormDisabled &&

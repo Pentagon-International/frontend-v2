@@ -42,6 +42,8 @@ import {
   openGlobalSearchItem,
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
+import useAuthStore from "../../../store/authStore";
+import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
 
 interface JobLedgerData {
   id: number;
@@ -54,7 +56,8 @@ interface JobLedgerData {
   documentNo: string;
   date: string;
   partyName: string;
-  currencyCode: string;
+  billingCurrencyCode: string;
+  billingAmount: number;
   debit: number;
   credit: number;
   revenue: number;
@@ -100,6 +103,8 @@ type JobLedgerApiRow = {
   date?: string;
   party_name?: string;
   currency_code?: string;
+  billing_currency_code?: string;
+  billing_amount?: number | null;
   debit_local_amount?: number | null;
   credit_local_amount?: number | null;
   revence?: number | null;
@@ -146,6 +151,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const navState = (routerLocation.state ?? {}) as any;
+  const user = useAuthStore((state) => state.user);
+  const activeCurrencyCode = useMemo(
+    () => getDefaultBranchCurrencyCode(user?.branches),
+    [user?.branches],
+  );
+  const amountColumnLabel = useCallback(
+    (label: string) =>
+      activeCurrencyCode ? `${label} (${activeCurrencyCode})` : label,
+    [activeCurrencyCode],
+  );
 
   const inferredJobIdFinal: string | null =
     (navState?.jobId as string | number | null)?.toString?.() ??
@@ -381,7 +396,12 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             documentNo: (d?.document_no ?? "").toString(),
             date: (d?.date ?? "").toString(),
             partyName: (d?.party_name ?? "").toString(),
-            currencyCode: (d?.currency_code ?? "").toString(),
+            billingCurrencyCode: (
+              d?.billing_currency_code ??
+              d?.currency_code ??
+              ""
+            ).toString(),
+            billingAmount: toNumber(d?.billing_amount),
             debit: toNumber(d?.debit_local_amount),
             credit: toNumber(d?.credit_local_amount),
             revenue: toNumber(d?.revence),
@@ -616,8 +636,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "partyName",
         header: "Party Name",
-        size: 180,
-        minSize: 180,
+        size: 120,
+        minSize: 100,
+        maxSize: 140,
         grow: false,
         enableColumnFilter: false,
         enableSorting: false,
@@ -628,21 +649,49 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             <Tooltip label={value} withArrow multiline maw={320}>
               <Text
                 size="sm"
-                truncate
-                style={{ fontFamily: "Inter", maxWidth: "100%" }}
+                truncate="end"
+                style={{
+                  fontFamily: "Inter",
+                  display: "block",
+                  maxWidth: "100%",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
               >
                 {value}
               </Text>
             </Tooltip>
           );
         },
-        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableBodyCellProps: {
+          style: {
+            padding: "4px 8px",
+            maxWidth: 140,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          },
+        },
         mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
       },
       {
-        accessorKey: "currencyCode",
+        accessorKey: "billingCurrencyCode",
         header: "Curr",
-        size: 48,
+        size: 72,
+        grow: false,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          return value || "-";
+        },
+        mantineTableBodyCellProps: { style: { padding: "4px 4px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 4px" } },
+      },
+      {
+        accessorKey: "billingAmount",
+        header: "Billing Amt",
+        size: 72,
         grow: false,
         enableColumnFilter: false,
         enableSorting: false,
@@ -655,7 +704,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "debit",
-        header: "Debit",
+        header: amountColumnLabel("Debit"),
         size: 70,
         grow: false,
         enableColumnFilter: false,
@@ -681,7 +730,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "credit",
-        header: "Credit",
+        header: amountColumnLabel("Credit"),
         size: 88,
         grow: false,
         enableColumnFilter: false,
@@ -707,7 +756,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "revenue",
-        header: "Revenue",
+        header: amountColumnLabel("Revenue"),
         size: 88,
         grow: false,
         enableColumnFilter: false,
@@ -733,7 +782,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "actualCost",
-        header: "Actual cost",
+        header: amountColumnLabel("Actual Cost"),
         size: 92,
         grow: false,
         enableColumnFilter: false,
@@ -759,7 +808,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       },
       {
         accessorKey: "neutral",
-        header: "Neutral",
+        header: amountColumnLabel("Neutral"),
         size: 88,
         grow: false,
         enableColumnFilter: false,
@@ -784,7 +833,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         },
       },
     ],
-    [handleDocumentNumberClick],
+    [amountColumnLabel, handleDocumentNumberClick],
   );
 
   const tableMinWidth = useMemo(
@@ -1500,7 +1549,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
-                        Total Debit
+                        {amountColumnLabel("Total Debit")}
                       </Text>
                       <Text size="lg" fw={600}>
                         {totals.totalDebit.toFixed(2)}
@@ -1510,7 +1559,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
-                        Total Credit
+                        {amountColumnLabel("Total Credit")}
                       </Text>
                       <Text size="lg" fw={600}>
                         {totals.totalCredit.toFixed(2)}
@@ -1520,7 +1569,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
-                        Total Revenue
+                        {amountColumnLabel("Total Revenue")}
                       </Text>
                       <Text size="lg" fw={600}>
                         {totals.totalRevenue.toFixed(2)}
@@ -1530,7 +1579,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
-                        Total Actual Cost
+                        {amountColumnLabel("Total Actual Cost")}
                       </Text>
                       <Text size="lg" fw={600}>
                         {totals.totalActualCost.toFixed(2)}
@@ -1550,7 +1599,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
-                        Total Neutral
+                        {amountColumnLabel("Total Neutral")}
                       </Text>
                       <Text size="lg" fw={600} c="#105476">
                         {totals.totalNeutral.toFixed(2)}
