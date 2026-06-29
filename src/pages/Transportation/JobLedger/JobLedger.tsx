@@ -137,6 +137,70 @@ type JobLedgerRequestFilters = {
   location: string;
   segment_code: string;
   hbl_hawb_no: string;
+  charges?: boolean;
+};
+
+type ChargeWiseSummary = {
+  total_debit?: string | number | null;
+  total_credit?: string | number | null;
+  provisional?: {
+    total_revenue?: string | number | null;
+    total_cost?: string | number | null;
+    total_neutral?: string | number | null;
+  };
+  actual?: {
+    total_revenue?: string | number | null;
+    total_cost?: string | number | null;
+    total_neutral?: string | number | null;
+  };
+  net_profit_credit_debit?: string | number | null;
+  net_profit_revenue_cost?: string | number | null;
+};
+
+type ChargeWiseApiRow = {
+  sno?: number;
+  charge_code?: string;
+  charge_name?: string;
+  debit_local_amount?: string | number | null;
+  credit_local_amount?: string | number | null;
+  provisional_revenue?: string | number | null;
+  provisional_cost?: string | number | null;
+  provisional_neutral?: string | number | null;
+  actual_revenue?: string | number | null;
+  actual_cost?: string | number | null;
+  actual_neutral?: string | number | null;
+};
+
+type ChargeWiseApiResponse = {
+  total?: number;
+  summary?: ChargeWiseSummary;
+  data?: ChargeWiseApiRow[];
+};
+
+type ChargeWiseData = {
+  id: number;
+  sno: number;
+  chargeCode: string;
+  chargeName: string;
+  debit: number | null;
+  credit: number | null;
+  provisionalRevenue: number | null;
+  provisionalCost: number | null;
+  provisionalNeutral: number | null;
+  actualRevenue: number | null;
+  actualCost: number | null;
+  actualNeutral: number | null;
+};
+
+const toNullableNumber = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const formatChargeAmount = (v: number | null): string => {
+  if (v === null) return "";
+  return v.toFixed(3);
 };
 
 type ServiceMasterRow = {
@@ -211,6 +275,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const [documentSearchResults, setDocumentSearchResults] = useState<
     GlobalSearchItem[]
   >([]);
+  const [chargeTableData, setChargeTableData] = useState<ChargeWiseData[]>([]);
+  const [chargeSummary, setChargeSummary] = useState<ChargeWiseSummary | null>(
+    null,
+  );
+  const [chargeLoading, setChargeLoading] = useState<boolean>(false);
+  const [chargeError, setChargeError] = useState<string | null>(null);
+  const chargeFiltersRef = useRef<string | null>(null);
 
   const getJobLedgerReturnState = useCallback(
     () => ({
@@ -345,6 +416,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     setTableData([]);
     setJobLedgerSummary(null);
     setJobLedgerJobLabel(null);
+    setChargeTableData([]);
+    setChargeSummary(null);
+    setChargeError(null);
+    chargeFiltersRef.current = null;
     setJobLedgerError(null);
     setShowFilters(false);
   };
@@ -364,6 +439,81 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       hbl_hawb_no: (uiFilters.hbl_hawb_no ?? "").toString().trim(),
     };
   };
+
+  const fetchChargeWiseJobLedger = async (
+    requestFilters: JobLedgerRequestFilters,
+  ) => {
+    const filtersKey = JSON.stringify({
+      ...requestFilters,
+      charges: true,
+    });
+    setChargeLoading(true);
+    setChargeError(null);
+    setChargeTableData([]);
+    setChargeSummary(null);
+    try {
+      const response = await apiCallProtected.post(
+        `${URL.jobLedger}`,
+        { filters: { ...requestFilters, charges: true } },
+        API_HEADER,
+      );
+      const result = response as ChargeWiseApiResponse;
+      const apiRows = Array.isArray(result?.data) ? result.data : [];
+      setChargeSummary(result?.summary ?? null);
+      setChargeTableData(
+        apiRows.map((d, idx) => {
+          const id = Number(d?.sno ?? idx + 1);
+          return {
+            id: Number.isFinite(id) ? id : idx + 1,
+            sno: d?.sno ?? idx + 1,
+            chargeCode: (d?.charge_code ?? "").toString(),
+            chargeName: (d?.charge_name ?? "").toString(),
+            debit: toNullableNumber(d?.debit_local_amount),
+            credit: toNullableNumber(d?.credit_local_amount),
+            provisionalRevenue: toNullableNumber(d?.provisional_revenue),
+            provisionalCost: toNullableNumber(d?.provisional_cost),
+            provisionalNeutral: toNullableNumber(d?.provisional_neutral),
+            actualRevenue: toNullableNumber(d?.actual_revenue),
+            actualCost: toNullableNumber(d?.actual_cost),
+            actualNeutral: toNullableNumber(d?.actual_neutral),
+          };
+        }),
+      );
+      chargeFiltersRef.current = filtersKey;
+    } catch (err) {
+      setChargeError("Failed to load Charge Wise ledger. Please try again.");
+      setChargeTableData([]);
+      setChargeSummary(null);
+      chargeFiltersRef.current = null;
+      // eslint-disable-next-line no-console
+      console.error("ChargeWise JobLedger fetch error:", err);
+    } finally {
+      setChargeLoading(false);
+    }
+  };
+
+  const getCurrentRequestFilters = useCallback((): JobLedgerRequestFilters => {
+    if (apiFilters) return apiFilters;
+    return {
+      job_id: (filters.jobNo ?? inferredJobIdFinal ?? "").toString().trim(),
+      location: (filters.location ?? inferredLocationFinal ?? "")
+        .toString()
+        .trim(),
+      segment_code: (filters.segmentCode ?? inferredSegmentCodeFinal ?? "")
+        .toString()
+        .trim(),
+      hbl_hawb_no: (filters.hbl_hawb_no ?? "").toString().trim(),
+    };
+  }, [
+    apiFilters,
+    filters.jobNo,
+    filters.location,
+    filters.segmentCode,
+    filters.hbl_hawb_no,
+    inferredJobIdFinal,
+    inferredLocationFinal,
+    inferredSegmentCodeFinal,
+  ]);
 
   const fetchJobLedger = async (requestFilters: JobLedgerRequestFilters) => {
     setJobLedgerLoading(true);
@@ -426,8 +576,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const handleApplyFilters = () => {
     const built = buildJobLedgerFiltersFromUI(filters);
     setJobLedgerError(null);
+    setChargeError(null);
+    chargeFiltersRef.current = null;
     setApiFilters(built);
     fetchJobLedger(built);
+    if (activeTab === "charge") {
+      fetchChargeWiseJobLedger(built);
+    }
   };
 
   useEffect(() => {
@@ -492,8 +647,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   useEffect(() => {
     if (!apiFilters) return;
     fetchJobLedger(apiFilters);
+    if (activeTab === "charge") {
+      fetchChargeWiseJobLedger(apiFilters);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiFilters]);
+
+  useEffect(() => {
+    if (activeTab !== "charge") return;
+
+    const requestFilters = getCurrentRequestFilters();
+    const filtersKey = JSON.stringify({
+      ...requestFilters,
+      charges: true,
+    });
+    if (chargeFiltersRef.current === filtersKey) return;
+
+    fetchChargeWiseJobLedger(requestFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, getCurrentRequestFilters]);
 
   // Calculate totals from API summary (fallback to calculated totals)
   const totals = useMemo(() => {
@@ -529,6 +701,150 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       totalNeutral,
     };
   }, [jobLedgerSummary, tableData]);
+
+  const chargeTotals = useMemo(() => {
+    if (chargeSummary) {
+      return {
+        totalDebit: toNumber(chargeSummary.total_debit),
+        totalCredit: toNumber(chargeSummary.total_credit),
+        provisionalRevenue: toNumber(chargeSummary.provisional?.total_revenue),
+        provisionalCost: toNumber(chargeSummary.provisional?.total_cost),
+        provisionalNeutral: toNumber(chargeSummary.provisional?.total_neutral),
+        actualRevenue: toNumber(chargeSummary.actual?.total_revenue),
+        actualCost: toNumber(chargeSummary.actual?.total_cost),
+        actualNeutral: toNumber(chargeSummary.actual?.total_neutral),
+        netProfitCreditDebit: toNumber(chargeSummary.net_profit_credit_debit),
+      };
+    }
+
+    const totalDebit = chargeTableData.reduce(
+      (sum, row) => sum + (row.debit ?? 0),
+      0,
+    );
+    const totalCredit = chargeTableData.reduce(
+      (sum, row) => sum + (row.credit ?? 0),
+      0,
+    );
+    const provisionalRevenue = chargeTableData.reduce(
+      (sum, row) => sum + (row.provisionalRevenue ?? 0),
+      0,
+    );
+    const provisionalCost = chargeTableData.reduce(
+      (sum, row) => sum + (row.provisionalCost ?? 0),
+      0,
+    );
+    const provisionalNeutral = chargeTableData.reduce(
+      (sum, row) => sum + (row.provisionalNeutral ?? 0),
+      0,
+    );
+    const actualRevenue = chargeTableData.reduce(
+      (sum, row) => sum + (row.actualRevenue ?? 0),
+      0,
+    );
+    const actualCost = chargeTableData.reduce(
+      (sum, row) => sum + (row.actualCost ?? 0),
+      0,
+    );
+    const actualNeutral = chargeTableData.reduce(
+      (sum, row) => sum + (row.actualNeutral ?? 0),
+      0,
+    );
+
+    return {
+      totalDebit,
+      totalCredit,
+      provisionalRevenue,
+      provisionalCost,
+      provisionalNeutral,
+      actualRevenue,
+      actualCost,
+      actualNeutral,
+      netProfitCreditDebit: totalCredit - totalDebit,
+    };
+  }, [chargeSummary, chargeTableData]);
+
+  const chargeTableBorder = "1px solid #CBD5E1";
+  const chargeTableSectionBorder = "1px solid #94A3B8";
+
+  const chargeTableHeaderStyle: React.CSSProperties = {
+    padding: "6px 8px",
+    fontSize: "14px",
+    fontFamily: "Inter",
+    color: "#1E293B",
+    backgroundColor: "#F8FAFC",
+    border: chargeTableBorder,
+    textAlign: "center",
+    fontWeight: 600,
+    overflow: "hidden",
+    wordBreak: "break-word",
+  };
+
+  const chargeTableGroupHeaderStyle: React.CSSProperties = {
+    ...chargeTableHeaderStyle,
+    borderBottom: chargeTableSectionBorder,
+  };
+
+  const chargeTableSectionStartStyle: React.CSSProperties = {
+    borderLeft: chargeTableSectionBorder,
+  };
+
+  const chargeTableCellStyle: React.CSSProperties = {
+    padding: "4px 8px",
+    fontSize: "14px",
+    fontFamily: "Inter",
+    color: "#334155",
+    backgroundColor: "#ffffff",
+    border: chargeTableBorder,
+  };
+
+  const chargeTableAmountCellStyle: React.CSSProperties = {
+    ...chargeTableCellStyle,
+    backgroundColor: "#F8FAFC",
+    textAlign: "right",
+  };
+
+  const chargeTableFooterLabelStyle: React.CSSProperties = {
+    ...chargeTableCellStyle,
+    fontWeight: 600,
+    backgroundColor: "#F8FAFC",
+  };
+
+  const chargeTableFooterAmountStyle: React.CSSProperties = {
+    ...chargeTableAmountCellStyle,
+    fontWeight: 600,
+  };
+
+  const chargeTableColWidths = {
+    sno: 48,
+    chargeName: 280,
+    amount: 88,
+  } as const;
+
+  const chargeTableMinWidth =
+    chargeTableColWidths.sno +
+    chargeTableColWidths.chargeName +
+    chargeTableColWidths.amount * 8;
+
+  const chargeTableColumnCount = 10;
+
+  const withChargeSectionStart = (
+    style: React.CSSProperties,
+  ): React.CSSProperties => ({
+    ...style,
+    ...chargeTableSectionStartStyle,
+  });
+
+  const renderChargeTableColGroup = () => (
+    <colgroup>
+      <col style={{ width: chargeTableColWidths.sno }} />
+      <col style={{ width: chargeTableColWidths.chargeName }} />
+      {Array.from({ length: 8 }).map((_, i) => (
+        <col key={i} style={{ width: chargeTableColWidths.amount }} />
+      ))}
+    </colgroup>
+  );
+
+  const ledgerContentHeight = "min(520px, calc(100vh - 260px))";
 
   // Columns definition for MantineReactTable
   const columns = useMemo<MRT_ColumnDef<JobLedgerData>[]>(
@@ -863,15 +1179,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     },
     mantinePaperProps: {
       shadow: "sm",
-      p: "md",
+      p: "xs",
       radius: "md",
       style: {
         flex: 1,
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        maxHeight: "1536px",
-        overflow: "auto",
+        maxHeight: "100%",
+        overflow: "hidden",
       },
     },
     mantineTableBodyCellProps: {
@@ -1499,9 +1815,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             {/* Document Wise Content */}
             <Box
               style={{
-                height: "600px",
+                height: ledgerContentHeight,
                 display: "flex",
                 flexDirection: "column",
+                overflow: "hidden",
               }}
             >
               {/* Table */}
@@ -1512,6 +1829,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                   minHeight: 0,
                   display: "flex",
                   flexDirection: "column",
+                  overflow: "hidden",
                 }}
               >
                 {jobLedgerLoading && (
@@ -1533,19 +1851,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               </Box>
 
               {/* Totals Section */}
-              <Divider my="md" />
+              <Divider my="xs" />
               {jobLedgerLoading && (
-                <Text size="sm" c="dimmed" mb="sm">
+                <Text size="sm" c="dimmed" mb="xs">
                   Loading job ledger...
                 </Text>
               )}
               {jobLedgerError && (
-                <Text size="sm" c="red" mb="sm">
+                <Text size="sm" c="red" mb="xs">
                   {jobLedgerError}
                 </Text>
               )}
-              <Box>
-                <Grid gutter="md">
+              <Box style={{ flexShrink: 0, paddingTop: 4, paddingBottom: 2 }}>
+                <Grid gutter="xs">
                   <Grid.Col span={{ base: 12, sm: 6, md: 2 }}>
                     <Stack gap={0}>
                       <Text size="sm" c="dimmed">
@@ -1612,7 +1930,404 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           </Tabs.Panel>
 
           <Tabs.Panel value="charge" pt="md">
-            <Text c="dimmed">Charge Wise View - To be implemented</Text>
+            <Box
+              style={{
+                height: ledgerContentHeight,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+            >
+              <Box
+                style={{
+                  position: "relative",
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "auto",
+                }}
+              >
+                {chargeLoading && (
+                  <Box
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      zIndex: 5,
+                      background: "rgba(255,255,255,0.6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Loader size="md" color="#105476" />
+                  </Box>
+                )}
+
+                {chargeError && (
+                  <Text size="sm" c="red" mb="sm" px="xs">
+                    {chargeError}
+                  </Text>
+                )}
+
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: chargeTableMinWidth,
+                    borderCollapse: "collapse",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  {renderChargeTableColGroup()}
+                  <thead>
+                    <tr>
+                      <th
+                        rowSpan={2}
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 3,
+                        }}
+                      >
+                        S.No
+                      </th>
+                      <th
+                        rowSpan={2}
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          textAlign: "left",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 3,
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                          fontSize: "13px",
+                          overflow: "hidden",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        Charge Name
+                      </th>
+                      <th
+                        colSpan={2}
+                        style={{
+                          ...chargeTableGroupHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 3,
+                        }}
+                      >
+                        Amount
+                      </th>
+                      <th
+                        colSpan={3}
+                        style={{
+                          ...chargeTableGroupHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 3,
+                        }}
+                      >
+                        Provisional
+                      </th>
+                      <th
+                        colSpan={3}
+                        style={{
+                          ...chargeTableGroupHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 3,
+                        }}
+                      >
+                        Actual
+                      </th>
+                    </tr>
+                    <tr>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Debit")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Credit")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Revenue")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Cost")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Neutral")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          ...chargeTableSectionStartStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Revenue")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Cost")}
+                      </th>
+                      <th
+                        style={{
+                          ...chargeTableHeaderStyle,
+                          position: "sticky",
+                          top: 34,
+                          zIndex: 3,
+                          fontSize: "12px",
+                          whiteSpace: "normal",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {amountColumnLabel("Neutral")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chargeTableData.length === 0 && !chargeLoading ? (
+                      <tr>
+                        <td
+                          colSpan={chargeTableColumnCount}
+                          style={{
+                            ...chargeTableCellStyle,
+                            textAlign: "center",
+                            padding: "32px 8px",
+                          }}
+                        >
+                          <Text c="dimmed" style={{ fontFamily: "Inter" }}>
+                            No data to display
+                          </Text>
+                        </td>
+                      </tr>
+                    ) : (
+                      chargeTableData.map((row) => (
+                        <tr key={row.id}>
+                          <td
+                            style={{
+                              ...chargeTableCellStyle,
+                              textAlign: "center",
+                            }}
+                          >
+                            {row.sno}
+                          </td>
+                          <td
+                            style={{
+                              ...chargeTableCellStyle,
+                              textAlign: "left",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <Tooltip
+                              label={row.chargeName}
+                              withArrow
+                              multiline
+                              maw={320}
+                              disabled={!row.chargeName}
+                            >
+                              <Text
+                                size="sm"
+                                truncate="end"
+                                style={{
+                                  fontFamily: "Inter",
+                                  display: "block",
+                                  maxWidth: "100%",
+                                }}
+                              >
+                                {row.chargeName || "-"}
+                              </Text>
+                            </Tooltip>
+                          </td>
+                          <td
+                            style={withChargeSectionStart(
+                              chargeTableAmountCellStyle,
+                            )}
+                          >
+                            {formatChargeAmount(row.debit)}
+                          </td>
+                          <td style={chargeTableAmountCellStyle}>
+                            {formatChargeAmount(row.credit)}
+                          </td>
+                          <td
+                            style={withChargeSectionStart(
+                              chargeTableAmountCellStyle,
+                            )}
+                          >
+                            {formatChargeAmount(row.provisionalRevenue)}
+                          </td>
+                          <td style={chargeTableAmountCellStyle}>
+                            {formatChargeAmount(row.provisionalCost)}
+                          </td>
+                          <td style={chargeTableAmountCellStyle}>
+                            {formatChargeAmount(row.provisionalNeutral)}
+                          </td>
+                          <td
+                            style={withChargeSectionStart(
+                              chargeTableAmountCellStyle,
+                            )}
+                          >
+                            {formatChargeAmount(row.actualRevenue)}
+                          </td>
+                          <td style={chargeTableAmountCellStyle}>
+                            {formatChargeAmount(row.actualCost)}
+                          </td>
+                          <td style={chargeTableAmountCellStyle}>
+                            {formatChargeAmount(row.actualNeutral)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </Box>
+
+              {chargeTableData.length > 0 && (
+                <Box
+                  style={{
+                    flexShrink: 0,
+                    borderTop: "1px solid #CBD5E1",
+                    backgroundColor: "#F8FAFC",
+                    overflowX: "auto",
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      minWidth: chargeTableMinWidth,
+                      borderCollapse: "collapse",
+                      tableLayout: "fixed",
+                    }}
+                  >
+                    {renderChargeTableColGroup()}
+                    <tbody>
+                      <tr>
+                        <td
+                          colSpan={2}
+                          style={{
+                            ...chargeTableFooterLabelStyle,
+                            textAlign: "left",
+                          }}
+                        >
+                          Total
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.totalDebit)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.totalCredit)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.provisionalRevenue)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.provisionalCost)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.provisionalNeutral)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.actualRevenue)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.actualCost)}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(chargeTotals.actualNeutral)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td
+                          colSpan={2}
+                          style={{
+                            ...chargeTableFooterLabelStyle,
+                            textAlign: "left",
+                          }}
+                        >
+                          Profit (Credit-Debit)
+                        </td>
+                        <td style={chargeTableFooterAmountStyle}>
+                          {formatChargeAmount(
+                            chargeTotals.netProfitCreditDebit,
+                          )}
+                        </td>
+                        <td style={chargeTableFooterAmountStyle} />
+                        <td colSpan={6} style={chargeTableFooterAmountStyle} />
+                      </tr>
+                    </tbody>
+                  </table>
+                </Box>
+              )}
+            </Box>
           </Tabs.Panel>
 
           <Tabs.Panel value="links" pt="md">
