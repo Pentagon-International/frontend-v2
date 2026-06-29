@@ -1,8 +1,11 @@
 import { URL } from "../api/serverUrls";
+import { postAPICall } from "../service/postApiCall";
+import { API_HEADER } from "../store/storeKeys";
 
 export type JobDocumentDisplayItem = {
   id: number;
   documentName: string;
+  doc_code?: string;
   userFileName?: string;
   document_url?: string;
 };
@@ -10,6 +13,7 @@ export type JobDocumentDisplayItem = {
 export type JobDocumentModalRow = {
   id?: number;
   documentName: string;
+  doc_code?: string;
   file: File | null;
   userFileName?: string;
   document_url?: string;
@@ -24,13 +28,134 @@ export type JobDocumentsNavigationState = {
 export const EMPTY_JOB_DOCUMENT_MODAL_ROW: JobDocumentModalRow = {
   id: undefined,
   documentName: "",
+  doc_code: "",
   file: null,
   userFileName: "",
 };
 
+export type DocumentTypeMasterOption = {
+  value: string;
+  label: string;
+};
+
+export async function fetchDocumentTypeMasterOptions(): Promise<
+  DocumentTypeMasterOption[]
+> {
+  try {
+    const response = await postAPICall(
+      URL.documentTypeMasterFilter,
+      { filters: {} },
+      API_HEADER,
+    );
+    const data = (response as { data?: Array<{ code?: string }> })?.data ?? [];
+    return data
+      .filter((item) => item.code)
+      .map((item) => ({
+        value: String(item.code),
+        label: String(item.code),
+      }));
+  } catch (err) {
+    console.error("Error fetching document type master:", err);
+    return [];
+  }
+}
+
+function rowHasDocumentContent(row: JobDocumentModalRow): boolean {
+  return Boolean(
+    row.documentName.trim() ||
+      row.file ||
+      row.id != null ||
+      String(row.doc_code ?? "").trim(),
+  );
+}
+
+function rowIsCompleteUpload(row: JobDocumentModalRow): boolean {
+  return Boolean(
+    row.documentName.trim() &&
+      String(row.doc_code ?? "").trim() &&
+      (row.id != null || row.file != null),
+  );
+}
+
+export type DocumentModalValidationResult = {
+  valid: boolean;
+  docCodeErrors?: Record<number, string>;
+  message?: string;
+  items: Array<{ row: JobDocumentModalRow; index: number }>;
+  allowEmptyClose?: boolean;
+};
+
+function rowNeedsDocCode(row: JobDocumentModalRow): boolean {
+  return Boolean(
+    row.documentName.trim() && (row.id != null || row.file != null),
+  );
+}
+
+export function validateDocumentModalRows(
+  rows: JobDocumentModalRow[],
+): DocumentModalValidationResult {
+  const docCodeErrors: Record<number, string> = {};
+  rows.forEach((row, index) => {
+    if (rowNeedsDocCode(row) && !String(row.doc_code ?? "").trim()) {
+      docCodeErrors[index] = "Doc type is required";
+    }
+  });
+  if (Object.keys(docCodeErrors).length > 0) {
+    return { valid: false, docCodeErrors, items: [] };
+  }
+
+  const hasPartialRow = rows.some(
+    (row) => rowHasDocumentContent(row) && !rowIsCompleteUpload(row),
+  );
+  if (hasPartialRow) {
+    return {
+      valid: false,
+      message:
+        "Each row must have document name and either an existing document or a new file",
+      items: [],
+    };
+  }
+
+  const items = rows
+    .map((row, index) => ({ row, index }))
+    .filter((item) => rowIsCompleteUpload(item.row));
+
+  if (items.length === 0) {
+    const hasAnyContent = rows.some((row) => rowHasDocumentContent(row));
+    if (hasAnyContent) {
+      return {
+        valid: false,
+        message:
+          "Each row must have document name and either an existing document or a new file",
+        items: [],
+      };
+    }
+    return { valid: true, items: [], allowEmptyClose: true };
+  }
+
+  return { valid: true, items };
+}
+
+export function appendDocumentsToFormData(
+  formData: FormData,
+  items: Array<{ row: JobDocumentModalRow }>,
+): void {
+  items.forEach(({ row }, i) => {
+    formData.append(`document_names[${i}]`, row.documentName.trim());
+    formData.append(`doc_code[${i}]`, String(row.doc_code ?? "").trim());
+    if (row.file != null) {
+      formData.append(`documents[${i}]`, row.file);
+    }
+    if (row.id != null) {
+      formData.append(`document_id[${i}]`, String(row.id));
+    }
+  });
+}
+
 type UploadDocumentApiItem = {
   id?: number;
   document_name?: string;
+  doc_code?: string;
   document_url?: string;
   user_file_name?: string;
 };
@@ -116,6 +241,7 @@ export function mapUploadDocumentsToDisplayList(
     .map((d) => ({
       id: Number(d.id),
       documentName: String(d.document_name ?? ""),
+      doc_code: d.doc_code != null ? String(d.doc_code) : undefined,
       userFileName: String(d.user_file_name ?? ""),
       document_url: resolveJobDocumentUrl(
         d.document_url != null ? String(d.document_url) : undefined,
@@ -171,6 +297,7 @@ export function parseJobDocumentsFromApi(
     (doc) => ({
       id: Number(doc.id),
       documentName: String(doc.document_name ?? ""),
+      doc_code: doc.doc_code != null ? String(doc.doc_code) : undefined,
       userFileName: String(doc.user_file_name ?? ""),
       document_url: resolveJobDocumentUrl(
         doc.document_url != null ? String(doc.document_url) : undefined,
@@ -183,6 +310,7 @@ export function parseJobDocumentsFromApi(
       ? documents.map((doc) => ({
           id: doc.id != null ? Number(doc.id) : undefined,
           documentName: String(doc.document_name ?? ""),
+          doc_code: doc.doc_code != null ? String(doc.doc_code) : "",
           file: null,
           userFileName: String(doc.user_file_name ?? ""),
           document_url: resolveJobDocumentUrl(
@@ -240,6 +368,7 @@ export function buildDocumentModalRowsFromDisplayList(
   const modalRows = displayList.map((d) => ({
     id: d.id,
     documentName: d.documentName,
+    doc_code: d.doc_code ?? "",
     file: null as File | null,
     userFileName: d.userFileName ?? "",
     document_url: d.document_url,
@@ -250,6 +379,7 @@ export function buildDocumentModalRowsFromDisplayList(
     {
       id: undefined,
       documentName: "",
+      doc_code: "",
       file: null,
       userFileName: "",
     },

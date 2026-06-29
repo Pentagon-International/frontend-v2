@@ -4,13 +4,17 @@ import { ToastNotification } from "../components";
 import { postAPICall } from "../service/postApiCall";
 import { API_HEADER } from "../store/storeKeys";
 import {
+  appendDocumentsToFormData,
   buildDocumentModalRowsFromDisplayList,
   EMPTY_JOB_DOCUMENT_MODAL_ROW,
   extractUploadDocumentsFromApiBody,
+  fetchDocumentTypeMasterOptions,
   isDocumentUploadSuccessful,
   mapUploadDocumentsToDisplayList,
   parseJobDocumentsFromApi,
   unwrapPostApiResponseBody,
+  validateDocumentModalRows,
+  type DocumentTypeMasterOption,
   type JobDocumentDisplayItem,
   type JobDocumentModalRow,
   type JobDocumentsNavigationState,
@@ -33,6 +37,12 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
   >([{ ...EMPTY_JOB_DOCUMENT_MODAL_ROW }]);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
+  const [docTypeOptions, setDocTypeOptions] = useState<
+    DocumentTypeMasterOption[]
+  >([]);
+  const [docCodeErrors, setDocCodeErrors] = useState<Record<number, string>>(
+    {},
+  );
 
   const initFromJobData = useCallback(
     (data: Record<string, unknown> | null | undefined) => {
@@ -72,12 +82,20 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
     [document_ids, document_display_list, document_modal_rows],
   );
 
+  const loadDocTypeOptions = useCallback(async () => {
+    if (docTypeOptions.length > 0) return;
+    const options = await fetchDocumentTypeMasterOptions();
+    setDocTypeOptions(options);
+  }, [docTypeOptions.length]);
+
   const openDocumentsModal = useCallback(() => {
+    setDocCodeErrors({});
     setDocumentModalRows(
       buildDocumentModalRowsFromDisplayList(document_display_list),
     );
+    void loadDocTypeOptions();
     setDocumentsModalOpen(true);
-  }, [document_display_list]);
+  }, [document_display_list, loadDocTypeOptions]);
 
   const addDocumentRow = useCallback(() => {
     setDocumentModalRows((rows) => [
@@ -89,9 +107,17 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
   const updateDocumentRow = useCallback(
     (
       index: number,
-      field: "documentName" | "file" | "document_url",
+      field: "documentName" | "doc_code" | "file" | "document_url",
       value: string | File | null | undefined,
     ) => {
+      if (field === "doc_code" && String(value ?? "").trim()) {
+        setDocCodeErrors((prev) => {
+          if (!prev[index]) return prev;
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+      }
       setDocumentModalRows((rows) =>
         rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
       );
@@ -100,6 +126,7 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
   );
 
   const removeDocumentRow = useCallback((index: number) => {
+    setDocCodeErrors({});
     setDocumentModalRows((rows) =>
       rows.length > 1 ? rows.filter((_, i) => i !== index) : rows,
     );
@@ -107,47 +134,30 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
 
   const handleSubmitDocumentsModal = useCallback(async () => {
     const rows = document_modal_rows;
-    const items = rows
-      .map((row, index) => ({ row, index }))
-      .filter(
-        (item) =>
-          item.row.documentName.trim() &&
-          (item.row.id != null || item.row.file != null),
-      );
-    const invalid = rows.some(
-      (r) =>
-        (r.documentName.trim() && !r.file && r.id == null) ||
-        (!r.documentName.trim() && (r.file || r.id != null)),
-    );
-    if (invalid) {
+    const validation = validateDocumentModalRows(rows);
+    if (!validation.valid) {
+      if (validation.docCodeErrors) {
+        setDocCodeErrors(validation.docCodeErrors);
+        return;
+      }
       ToastNotification({
         type: "warning",
-        message:
-          "Each row must have document name and either an existing document or a new file",
+        message: validation.message ?? "Please complete all document fields",
       });
       return;
     }
-    if (items.length === 0) {
-      ToastNotification({
-        type: "warning",
-        message:
-          "Please add at least one document (name + file) or leave all rows empty",
-      });
+    setDocCodeErrors({});
+    if (validation.allowEmptyClose) {
+      setDocumentsModalOpen(false);
       return;
     }
+
+    const items = validation.items;
 
     setDocumentUploading(true);
     try {
       const formData = new FormData();
-      items.forEach(({ row }, i) => {
-        formData.append(`document_names[${i}]`, row.documentName.trim());
-        if (row.file != null) {
-          formData.append(`documents[${i}]`, row.file);
-        }
-        if (row.id != null) {
-          formData.append(`document_id[${i}]`, String(row.id));
-        }
-      });
+      appendDocumentsToFormData(formData, items);
 
       const headers = {
         "Content-Type": "multipart/form-data",
@@ -170,7 +180,12 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
               row?.userFileName ||
               row?.file?.name ||
               "";
-            return userFileName ? { ...doc, userFileName } : doc;
+            const doc_code =
+              doc.doc_code || row?.doc_code || undefined;
+            return {
+              ...(userFileName ? { ...doc, userFileName } : doc),
+              ...(doc_code ? { doc_code } : {}),
+            };
           });
         }
         let updatedDisplayList: JobDocumentDisplayItem[];
@@ -185,6 +200,7 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
             .map((item) => ({
               id: Number(item.row.id),
               documentName: item.row.documentName.trim(),
+              doc_code: item.row.doc_code?.trim() || undefined,
               userFileName: item.row.userFileName ?? "",
               document_url: item.row.document_url,
             }));
@@ -239,6 +255,8 @@ export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
     documentsModalOpen,
     setDocumentsModalOpen,
     documentUploading,
+    docTypeOptions,
+    docCodeErrors,
     initFromJobData,
     restoreFromNavigationState,
     getNavigationState,

@@ -4803,6 +4803,8 @@ function InlandExportJobCreate() {
         rows={jobDocuments.document_modal_rows}
         readOnly={isReadOnly}
         uploading={jobDocuments.documentUploading}
+        docTypeOptions={jobDocuments.docTypeOptions}
+        docCodeErrors={jobDocuments.docCodeErrors}
         onAddRow={jobDocuments.addDocumentRow}
         onUpdateRow={jobDocuments.updateDocumentRow}
         onRemoveRow={jobDocuments.removeDocumentRow}

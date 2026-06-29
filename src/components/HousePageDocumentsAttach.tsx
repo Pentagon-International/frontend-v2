@@ -21,6 +21,8 @@ export function HousePageDocumentsModal({
       rows={documents.document_modal_rows}
       readOnly={readOnly}
       uploading={documents.documentUploading}
+      docTypeOptions={documents.docTypeOptions}
+      docCodeErrors={documents.docCodeErrors}
       onAddRow={documents.addDocumentRow}
       onUpdateRow={documents.updateDocumentRow}
       onRemoveRow={documents.removeDocumentRow}

@@ -26,6 +26,7 @@ export default function Dropdown({
   styles,
   onSearchChange: onSearchChangeProp,
   searchValue: searchValueProp,
+  comboboxProps: comboboxPropsProp,
   ...props
 }: DropdownProps) {
   const [activeIndex, setActiveIndex] = useState<number>(-1);
@@ -216,7 +217,11 @@ export default function Dropdown({
   return (
     <Select
       {...props}
-      comboboxProps={{ zIndex: dropdownZIndex }}
+      comboboxProps={{
+        withinPortal: true,
+        zIndex: dropdownZIndex,
+        ...comboboxPropsProp,
+      }}
       styles={{
         input: {
           fontSize: "13px",

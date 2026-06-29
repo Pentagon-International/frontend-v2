@@ -10,10 +10,14 @@ import {
 } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { IconDownload, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
+import Dropdown from "./Dropdown";
 import FormTextInput from "./FormTextInput";
 import RequiredLabel from "./RequiredLabel";
 import { ToastNotification } from "./index";
-import type { JobDocumentModalRow } from "../utils/jobDocuments";
+import type {
+  DocumentTypeMasterOption,
+  JobDocumentModalRow,
+} from "../utils/jobDocuments";
 import { openCustomerDocumentInNewTab } from "../utils/customerDocuments";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -24,10 +28,12 @@ type JobDocumentsModalProps = {
   rows: JobDocumentModalRow[];
   readOnly?: boolean;
   uploading?: boolean;
+  docTypeOptions?: DocumentTypeMasterOption[];
+  docCodeErrors?: Record<number, string>;
   onAddRow: () => void;
   onUpdateRow: (
     index: number,
-    field: "documentName" | "file" | "document_url",
+    field: "documentName" | "doc_code" | "file" | "document_url",
     value: string | File | null | undefined,
   ) => void;
   onRemoveRow: (index: number) => void;
@@ -40,6 +46,8 @@ export default function JobDocumentsModal({
   rows,
   readOnly = false,
   uploading = false,
+  docTypeOptions = [],
+  docCodeErrors = {},
   onAddRow,
   onUpdateRow,
   onRemoveRow,
@@ -52,7 +60,7 @@ export default function JobDocumentsModal({
       title={readOnly ? "Documents" : "Attach Documents"}
       centered
       size="xl"
-      styles={{ content: { maxWidth: 640 } }}
+      styles={{ content: { maxWidth: 720 } }}
     >
       <Stack gap="md">
         {rows.length > 0 && (
@@ -61,11 +69,14 @@ export default function JobDocumentsModal({
             gutter="sm"
             style={{ fontWeight: 600, color: "#105476" }}
           >
-            <Grid.Col span={5}>
+            <Grid.Col span={4}>
               <RequiredLabel label="Document Name" required={false} />
             </Grid.Col>
-            <Grid.Col span={5}>
+            <Grid.Col span={3}>
               <RequiredLabel label="File" required={false} />
+            </Grid.Col>
+            <Grid.Col span={3}>
+              <RequiredLabel label="Doc Type" required={false} />
             </Grid.Col>
             <Grid.Col span={2}>
               <RequiredLabel label="Actions" required={false} />
@@ -74,7 +85,7 @@ export default function JobDocumentsModal({
         )}
         {rows.map((row, index) => (
           <Grid key={index} columns={12} gutter="sm" align="flex-end">
-            <Grid.Col span={5}>
+            <Grid.Col span={4}>
               <FormTextInput
                 placeholder="Enter document name"
                 value={row.documentName}
@@ -84,7 +95,7 @@ export default function JobDocumentsModal({
                 }
               />
             </Grid.Col>
-            <Grid.Col span={5}>
+            <Grid.Col span={3}>
               <Box>
                 {readOnly ? (
                   <Group
@@ -246,6 +257,28 @@ export default function JobDocumentsModal({
                   </Dropzone>
                 )}
               </Box>
+            </Grid.Col>
+            <Grid.Col span={3}>
+              {readOnly ? (
+                <FormTextInput
+                  value={row.doc_code ?? ""}
+                  readOnly
+                  placeholder="—"
+                />
+              ) : (
+                <Dropdown
+                  placeholder="Select doc type"
+                  data={docTypeOptions}
+                  value={row.doc_code || null}
+                  onChange={(value) =>
+                    onUpdateRow(index, "doc_code", value ?? "")
+                  }
+                  searchable
+                  clearable
+                  dropdownZIndex={3000}
+                  error={docCodeErrors[index]}
+                />
+              )}
             </Grid.Col>
             {!readOnly && (
               <Grid.Col
