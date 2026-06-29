@@ -33,6 +33,7 @@ import {
   IconX,
   IconFileInvoice,
   IconRefresh,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -89,6 +90,11 @@ import {
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import {
+  buildDocumentIdsPayloadField,
+  extractHouseDocumentFields,
+  type HouseDocumentFields,
+} from "../../../utils/jobDocuments";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -334,7 +340,7 @@ const containerDetailsFormSchema = yup.object({
 //     .required("Flight/Voyage Number is required"),
 // });
 
-type HousingDetail = {
+type HousingDetail = HouseDocumentFields & {
   id?: number | string;
   shipment_id: string;
   hbl_number: string;
@@ -1373,6 +1379,7 @@ function ImportJobCreate() {
                     | undefined,
                 };
               })(),
+              ...extractHouseDocumentFields(house),
             }),
           );
           setHousingDetails(mappedHousingDetails);
@@ -1836,6 +1843,10 @@ function ImportJobCreate() {
     location.state?.containerDetails,
     location.state?.estimates,
     location.state?.housingDetails,
+    location.state?.fromHouseCreate,
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
     mode,
     jobData,
   ]);
@@ -2978,6 +2989,7 @@ function ImportJobCreate() {
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
             }),
+          ...buildDocumentIdsPayloadField(house.document_ids),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
                 (house as {
@@ -6101,14 +6113,14 @@ function ImportJobCreate() {
         </Group>
 
         <Group>
-          {/* <Button
+          <Button
             variant="outline"
             color="#105476"
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
             {isReadOnly ? "View Documents" : "Attach Documents"}
-          </Button> */}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"

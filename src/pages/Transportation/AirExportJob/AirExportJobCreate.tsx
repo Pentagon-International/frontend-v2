@@ -35,6 +35,7 @@ import {
   IconRefresh,
   IconDownload,
   IconX,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -75,10 +76,18 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import {
+  buildDocumentIdsPayloadField,
+  extractHouseDocumentFields,
+  type HouseDocumentFields,
+} from "../../../utils/jobDocuments";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -169,7 +178,7 @@ type RoutingDetail = {
 
 // ContainerDetail removed for Air Export Jobs
 
-type HAWBDetail = {
+type HAWBDetail = HouseDocumentFields & {
   id: number;
   shipment_id: string;
   hawb_number: string;
@@ -417,7 +426,6 @@ function AirExportJobCreate() {
   // Track the last restored mawbDetails to prevent duplicate restorations
   const lastRestoredMawbDetailsRef = useRef<string | null>(null);
 
-
   // Cargo manifest PDF preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
@@ -578,8 +586,7 @@ function AirExportJobCreate() {
         ) ||
         location.state?.mawbDetails?.shipper_email ||
         "",
-      shipper_address_id:
-        location.state?.mawbDetails?.shipper_address_id || "",
+      shipper_address_id: location.state?.mawbDetails?.shipper_address_id || "",
       shipper_address:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_address ||
@@ -651,7 +658,8 @@ function AirExportJobCreate() {
   >([]);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
-  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
+    useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
   const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
@@ -880,7 +888,8 @@ function AirExportJobCreate() {
             consignee_email: savedMawbDetailsFromState.consignee_email || "",
             consignee_address_id:
               savedMawbDetailsFromState.consignee_address_id || "",
-            consignee_address: savedMawbDetailsFromState.consignee_address || "",
+            consignee_address:
+              savedMawbDetailsFromState.consignee_address || "",
             carrier_agent_id: savedMawbDetailsFromState.carrier_agent_id || "",
             carrier_agent_name:
               savedMawbDetailsFromState.carrier_agent_name || "",
@@ -1196,6 +1205,7 @@ function AirExportJobCreate() {
                     | undefined,
                 };
               })(),
+              ...extractHouseDocumentFields(house),
             }),
           );
           setHawbDetails(mappedHawbDetails);
@@ -1868,8 +1878,11 @@ function AirExportJobCreate() {
               (savedMawbDetails as { consignee_email?: string } | undefined)
                 ?.consignee_email || "",
             consignee_address_id:
-              (savedMawbDetails as { consignee_address_id?: string } | undefined)
-                ?.consignee_address_id || "",
+              (
+                savedMawbDetails as
+                  | { consignee_address_id?: string }
+                  | undefined
+              )?.consignee_address_id || "",
             consignee_address:
               (savedMawbDetails as { consignee_address?: string } | undefined)
                 ?.consignee_address || "",
@@ -1884,11 +1897,16 @@ function AirExportJobCreate() {
                 ?.carrier_agent_email || "",
             carrier_agent_address_id:
               (
-                savedMawbDetails as { carrier_agent_address_id?: string } | undefined
+                savedMawbDetails as
+                  | { carrier_agent_address_id?: string }
+                  | undefined
               )?.carrier_agent_address_id || "",
             carrier_agent_address:
-              (savedMawbDetails as { carrier_agent_address?: string } | undefined)
-                ?.carrier_agent_address || "",
+              (
+                savedMawbDetails as
+                  | { carrier_agent_address?: string }
+                  | undefined
+              )?.carrier_agent_address || "",
           });
 
           // Update origin agent data ref if available in location state
@@ -1997,7 +2015,8 @@ function AirExportJobCreate() {
       }
 
       if (hasMawbDetailsInState && location.state?.cargoDetails) {
-        const savedCargoDetails = location.state.cargoDetails as CargoDetailsForm;
+        const savedCargoDetails = location.state
+          .cargoDetails as CargoDetailsForm;
         cargoDetailsForm.setValues({
           commodity_description: savedCargoDetails.commodity_description || "",
           handling_information: savedCargoDetails.handling_information || "",
@@ -2207,7 +2226,9 @@ function AirExportJobCreate() {
     housingId?: number;
     jobId?: number;
   }) => {
-    const housingPk = housingId ? resolveHousingDetailsPrimaryKey({ id: housingId }) : 0;
+    const housingPk = housingId
+      ? resolveHousingDetailsPrimaryKey({ id: housingId })
+      : 0;
     const jobPk = jobId ? resolveJobPrimaryKey({ id: jobId }) : 0;
 
     if (!housingPk && !jobPk) {
@@ -2508,7 +2529,8 @@ function AirExportJobCreate() {
         consignee_address: partyDetailsForm.values.consignee_address || "",
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          partyDetailsForm.values.carrier_agent_address || "",
         commodity_description:
           cargoDetailsForm.values.commodity_description || null,
         handling_information:
@@ -2624,6 +2646,7 @@ function AirExportJobCreate() {
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
             }),
+          ...buildDocumentIdsPayloadField(hawb.document_ids),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
                 (
@@ -2758,7 +2781,6 @@ function AirExportJobCreate() {
       setIsSubmitting(false);
     }
   };
-
 
   if (isFetchingJobById) {
     return (
@@ -4158,16 +4180,8 @@ function AirExportJobCreate() {
                   }}
                 >
                   <Group mt="xs">
-                    <Radio
-                      value="true"
-                      label="Yes"
-                      disabled={isReadOnly}
-                    />
-                    <Radio
-                      value="false"
-                      label="No"
-                      disabled={isReadOnly}
-                    />
+                    <Radio value="true" label="Yes" disabled={isReadOnly} />
+                    <Radio value="false" label="No" disabled={isReadOnly} />
                   </Group>
                 </Radio.Group>
               </Grid.Col>
@@ -4462,7 +4476,9 @@ function AirExportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -4864,7 +4880,9 @@ function AirExportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -4982,31 +5000,28 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 ||
-            active === 2 ||
-            active === 3 ||
-            active === 4) &&
+          {(active === 1 || active === 2 || active === 3 || active === 4) &&
             !isReadOnly && (
-            <Button
-              leftSection={<IconChevronLeft size={16} />}
-              variant="outline"
-              color="#105476"
-              onClick={handlePrev}
-            >
-              Previous
-            </Button>
-          )}
+              <Button
+                leftSection={<IconChevronLeft size={16} />}
+                variant="outline"
+                color="#105476"
+                onClick={handlePrev}
+              >
+                Previous
+              </Button>
+            )}
         </Group>
 
         <Group>
-          {/* <Button
+          <Button
             variant="outline"
             color="#105476"
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
             {isReadOnly ? "View Documents" : "Attach Documents"}
-          </Button> */}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"
@@ -5471,54 +5486,61 @@ function AirExportJobCreate() {
                         </Menu.Item>
                         {mode === "edit" && hawb.id > 0 && (
                           <>
-                            {AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS.map((document) => {
-                              const previewTitle =
-                                getAirExportAirPdfMenuTitle(document);
-                              return (
-                                <Menu.Item
-                                  key={`house-air-pdf-${hawb.id}-${document}`}
-                                  leftSection={
-                                    <Box
-                                      style={{
-                                        backgroundColor: "#E7F5FF",
+                            {AIR_EXPORT_AIR_PDF_MENU_DOCUMENTS.map(
+                              (document) => {
+                                const previewTitle =
+                                  getAirExportAirPdfMenuTitle(document);
+                                return (
+                                  <Menu.Item
+                                    key={`house-air-pdf-${hawb.id}-${document}`}
+                                    leftSection={
+                                      <Box
+                                        style={{
+                                          backgroundColor: "#E7F5FF",
+                                          borderRadius: "6px",
+                                          padding: "6px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconFileInvoice
+                                          size={14}
+                                          color="#105476"
+                                        />
+                                      </Box>
+                                    }
+                                    styles={{
+                                      item: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
                                         borderRadius: "6px",
-                                        padding: "6px",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <IconFileInvoice size={14} color="#105476" />
-                                    </Box>
-                                  }
-                                  styles={{
-                                    item: {
-                                      fontFamily: "Inter",
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      borderRadius: "6px",
-                                      padding: "10px 12px",
-                                      "&:hover": { backgroundColor: "#F8F9FA" },
-                                    },
-                                    itemLabel: {
-                                      fontFamily: "Inter",
-                                      fontSize: "13px",
-                                      fontWeight: 500,
-                                      color: "#424242",
-                                    },
-                                  }}
-                                  onClick={() =>
-                                    handleAirExportAirPdfPreview({
-                                      previewTitle,
-                                      document,
-                                      housingId: hawb.id,
-                                    })
-                                  }
-                                >
-                                  {previewTitle}
-                                </Menu.Item>
-                              );
-                            })}
+                                        padding: "10px 12px",
+                                        "&:hover": {
+                                          backgroundColor: "#F8F9FA",
+                                        },
+                                      },
+                                      itemLabel: {
+                                        fontFamily: "Inter",
+                                        fontSize: "13px",
+                                        fontWeight: 500,
+                                        color: "#424242",
+                                      },
+                                    }}
+                                    onClick={() =>
+                                      handleAirExportAirPdfPreview({
+                                        previewTitle,
+                                        document,
+                                        housingId: hawb.id,
+                                      })
+                                    }
+                                  >
+                                    {previewTitle}
+                                  </Menu.Item>
+                                );
+                              },
+                            )}
                           </>
                         )}
                       </Menu.Dropdown>

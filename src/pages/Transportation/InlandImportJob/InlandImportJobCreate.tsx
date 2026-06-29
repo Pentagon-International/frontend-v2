@@ -35,6 +35,7 @@ import {
   IconRefresh,
   IconDownload,
   IconX,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -67,6 +68,13 @@ import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDele
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import JobDocumentsModal from "../../../components/JobDocumentsModal";
+import {
+  buildDocumentIdsPayloadField,
+  extractHouseDocumentFields,
+  type HouseDocumentFields,
+} from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -187,7 +195,7 @@ type RoutingDetail = {
 
 // ContainerDetail removed for Inland Import Jobs
 
-type HAWBDetail = {
+type HAWBDetail = HouseDocumentFields & {
   id: number;
   shipment_id: string;
   hawb_number: string;
@@ -456,6 +464,7 @@ function InlandImportJobCreate() {
   const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
     string | null
   >(null);
+  const jobDocuments = useJobDocuments();
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -1279,6 +1288,7 @@ function InlandImportJobCreate() {
                     | undefined,
                 };
               })(),
+              ...extractHouseDocumentFields(house),
             }),
           );
           setHawbDetails(mappedHawbDetails);
@@ -1481,6 +1491,9 @@ function InlandImportJobCreate() {
               sanitizedEstimates,
             },
           );
+        }
+        if (!location.state?.fromHouseCreate) {
+          jobDocuments.initFromJobData(jobData as Record<string, unknown>);
         }
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
@@ -2089,6 +2102,18 @@ function InlandImportJobCreate() {
     mode, // Add mode to dependencies
   ]);
 
+  useEffect(() => {
+    if (location.state?.fromHouseCreate === true) {
+      jobDocuments.restoreFromNavigationState(location.state);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    location.state?.fromHouseCreate,
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
+  ]);
+
   // Note: Container details restoration removed for Inland Import Jobs
 
   // Remove housing detail
@@ -2174,6 +2199,7 @@ function InlandImportJobCreate() {
           routings: routingsForm.values.routings,
           // Preserve master-level estimates so they can be restored on the job screen
           estimates: estimatesForm.values.estimates,
+          ...jobDocuments.getNavigationState(),
         },
       });
 
@@ -2191,6 +2217,7 @@ function InlandImportJobCreate() {
       jobData,
       location.state,
       navigate,
+      jobDocuments,
     ],
   );
 
@@ -2610,6 +2637,7 @@ function InlandImportJobCreate() {
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
             }),
+          ...buildDocumentIdsPayloadField(hawb.document_ids),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
                 (
@@ -2707,6 +2735,7 @@ function InlandImportJobCreate() {
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
+        document_ids: jobDocuments.document_ids,
       };
       console.log("Payload value---", payload);
 
@@ -4797,6 +4826,18 @@ function InlandImportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <JobDocumentsModal
+        opened={jobDocuments.documentsModalOpen}
+        onClose={() => jobDocuments.setDocumentsModalOpen(false)}
+        rows={jobDocuments.document_modal_rows}
+        readOnly={isReadOnly}
+        uploading={jobDocuments.documentUploading}
+        onAddRow={jobDocuments.addDocumentRow}
+        onUpdateRow={jobDocuments.updateDocumentRow}
+        onRemoveRow={jobDocuments.removeDocumentRow}
+        onSubmit={jobDocuments.handleSubmitDocumentsModal}
+      />
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -4820,6 +4861,14 @@ function InlandImportJobCreate() {
         </Group>
 
         <Group>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconPaperclip size={16} />}
+            onClick={jobDocuments.openDocumentsModal}
+          >
+            {isReadOnly ? "View Documents" : "Attach Documents"}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"

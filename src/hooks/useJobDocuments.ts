@@ -6,38 +6,24 @@ import { API_HEADER } from "../store/storeKeys";
 import {
   buildDocumentModalRowsFromDisplayList,
   EMPTY_JOB_DOCUMENT_MODAL_ROW,
+  extractUploadDocumentsFromApiBody,
+  isDocumentUploadSuccessful,
+  mapUploadDocumentsToDisplayList,
   parseJobDocumentsFromApi,
+  unwrapPostApiResponseBody,
   type JobDocumentDisplayItem,
   type JobDocumentModalRow,
   type JobDocumentsNavigationState,
 } from "../utils/jobDocuments";
 
-type UploadDocumentItem = {
-  id?: number;
-  document_name?: string;
-  document_url?: string;
-  user_file_name?: string;
+type UseJobDocumentsOptions = {
+  uploadEndpoint?: string;
+  onDocumentsUpdated?: (state: JobDocumentsNavigationState) => void;
 };
 
-function normalizeUploadResponse(
-  raw: unknown,
-): UploadDocumentItem[] {
-  if (
-    raw &&
-    Array.isArray((raw as { documents?: UploadDocumentItem[] }).documents)
-  ) {
-    return (raw as { documents?: UploadDocumentItem[] }).documents ?? [];
-  }
-  if (Array.isArray(raw)) {
-    return raw as UploadDocumentItem[];
-  }
-  if (raw) {
-    return [raw as UploadDocumentItem];
-  }
-  return [];
-}
-
-export function useJobDocuments() {
+export function useJobDocuments(options: UseJobDocumentsOptions = {}) {
+  const { uploadEndpoint = URL.jobCreateUploadDocument, onDocumentsUpdated } =
+    options;
   const [document_ids, setDocumentIds] = useState<number[]>([]);
   const [document_display_list, setDocumentDisplayList] = useState<
     JobDocumentDisplayItem[]
@@ -168,38 +154,65 @@ export function useJobDocuments() {
         ...API_HEADER.headers,
       };
 
-      const response = (await postAPICall(URL.uploadDocument, formData, {
+      const rawResponse = await postAPICall(uploadEndpoint, formData, {
         headers,
-      })) as { success?: boolean; data?: unknown; message?: string };
+      });
+      const body = unwrapPostApiResponseBody(rawResponse);
 
-      if (response?.success) {
-        const normalized = normalizeUploadResponse(response.data);
-        const newIds = normalized
-          .filter((d) => d.id != null)
-          .map((d) => Number(d.id!));
-        const updatedDisplayList = normalized.map((d) => ({
-          id: Number(d.id ?? 0),
-          documentName: String(d.document_name ?? ""),
-          userFileName: String(d.user_file_name ?? ""),
-          document_url:
-            d.document_url != null ? String(d.document_url) : undefined,
-        }));
+      if (isDocumentUploadSuccessful(body)) {
+        const uploadedItems = extractUploadDocumentsFromApiBody(body);
+        let fromApi = mapUploadDocumentsToDisplayList(uploadedItems);
+        if (fromApi.length > 0) {
+          fromApi = fromApi.map((doc, i) => {
+            const row = items[i]?.row;
+            const userFileName =
+              doc.userFileName ||
+              row?.userFileName ||
+              row?.file?.name ||
+              "";
+            return userFileName ? { ...doc, userFileName } : doc;
+          });
+        }
+        let updatedDisplayList: JobDocumentDisplayItem[];
+        if (fromApi.length > 0) {
+          const merged = new Map<number, JobDocumentDisplayItem>();
+          document_display_list.forEach((d) => merged.set(d.id, d));
+          fromApi.forEach((d) => merged.set(d.id, d));
+          updatedDisplayList = Array.from(merged.values());
+        } else {
+          updatedDisplayList = items
+            .filter((item) => item.row.id != null)
+            .map((item) => ({
+              id: Number(item.row.id),
+              documentName: item.row.documentName.trim(),
+              userFileName: item.row.userFileName ?? "",
+              document_url: item.row.document_url,
+            }));
+        }
+        const newIds = updatedDisplayList.map((d) => d.id);
+        const nextModalRows =
+          buildDocumentModalRowsFromDisplayList(updatedDisplayList);
 
         setDocumentIds(newIds);
         setDocumentDisplayList(updatedDisplayList);
-        setDocumentModalRows(
-          buildDocumentModalRowsFromDisplayList(updatedDisplayList),
-        );
+        setDocumentModalRows(nextModalRows);
+        onDocumentsUpdated?.({
+          document_ids: newIds,
+          document_display_list: updatedDisplayList,
+          document_modal_rows: nextModalRows,
+        });
         ToastNotification({
           type: "success",
-          message: "Document(s) saved successfully",
+          message:
+            String(body.message ?? "").trim() ||
+            "Document(s) saved successfully",
         });
         setDocumentsModalOpen(false);
       } else {
         ToastNotification({
           type: "error",
           message:
-            (response as { message?: string })?.message ??
+            String(body.message ?? "").trim() ||
             "Upload failed for one or more documents",
         });
       }
@@ -212,7 +225,12 @@ export function useJobDocuments() {
     } finally {
       setDocumentUploading(false);
     }
-  }, [document_modal_rows]);
+  }, [
+    document_display_list,
+    document_modal_rows,
+    onDocumentsUpdated,
+    uploadEndpoint,
+  ]);
 
   return {
     document_ids,

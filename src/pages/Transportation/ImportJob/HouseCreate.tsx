@@ -95,6 +95,12 @@ import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDele
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { useHousePageDocuments } from "../../../hooks/useHousePageDocuments";
+import {
+  HousePageDocumentsButton,
+  HousePageDocumentsModal,
+} from "../../../components/HousePageDocumentsAttach";
+import { pickHouseDocumentFields, spreadMasterDocumentsNavState } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -535,6 +541,9 @@ function HouseCreate() {
     location.state?.hawbDetails || location.state?.housingDetails || [];
   const editIndex = location.state?.editIndex;
   const editData = location.state?.editData;
+  const housePageDocuments = useHousePageDocuments(
+    (editData as Record<string, unknown> | undefined) ?? undefined,
+  );
   const {
     invoiceList,
     invoiceListLoading,
@@ -2390,6 +2399,7 @@ function HouseCreate() {
       cargo_details: cargoDetailsForPayload,
       charges: chargesForPayload,
       ...(similarBookingId != null && { booking_id: similarBookingId }),
+      ...pickHouseDocumentFields(housePageDocuments.getNavigationState()),
     };
 
     // Update existing housing details
@@ -2458,6 +2468,9 @@ function HouseCreate() {
         ...(location.state?.estimates && {
           estimates: location.state.estimates,
         }),
+        ...spreadMasterDocumentsNavState(
+          location.state as Record<string, unknown> | undefined,
+        ),
       },
     });
   };
@@ -5952,6 +5965,8 @@ function HouseCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <HousePageDocumentsModal documents={housePageDocuments} />
+
       <Group justify="space-between" mt="xl">
         <Button
           variant="outline"
@@ -5971,6 +5986,7 @@ function HouseCreate() {
         </Button>
 
         <Group>
+          <HousePageDocumentsButton documents={housePageDocuments} />
           {active > 0 && (
             <Button
               leftSection={<IconChevronLeft size={16} />}

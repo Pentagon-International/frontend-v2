@@ -35,6 +35,7 @@ import {
   IconRefresh,
   IconDownload,
   IconX,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -67,6 +68,13 @@ import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDele
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import JobDocumentsModal from "../../../components/JobDocumentsModal";
+import {
+  buildDocumentIdsPayloadField,
+  extractHouseDocumentFields,
+  type HouseDocumentFields,
+} from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -75,7 +83,10 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import {
   formatHouseCargoChargeableForPayload,
@@ -187,7 +198,7 @@ type RoutingDetail = {
 
 // ContainerDetail removed for Inland Export Jobs
 
-type HAWBDetail = {
+type HAWBDetail = HouseDocumentFields & {
   id: number;
   shipment_id: string;
   hawb_number: string;
@@ -440,7 +451,6 @@ function InlandExportJobCreate() {
   // Track the last restored mawbDetails to prevent duplicate restorations
   const lastRestoredMawbDetailsRef = useRef<string | null>(null);
 
-
   // Cargo manifest PDF preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
@@ -455,6 +465,7 @@ function InlandExportJobCreate() {
   const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
     string | null
   >(null);
+  const jobDocuments = useJobDocuments();
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -517,15 +528,15 @@ function InlandExportJobCreate() {
   // Do not refetch just because service_code is missing; this allows master-level
   // state passed back from House (Save AWB) to remain displayed without reload.
   useEffect(() => {
-    const jobFromState = location.state?.job as Record<string, unknown> | undefined;
+    const jobFromState = location.state?.job as
+      | Record<string, unknown>
+      | undefined;
     const jobId =
       (location.state?.jobId as number | undefined) ??
       (jobFromState?.id as number | undefined);
     if (jobId == null) return;
 
-    const shouldFetch =
-      location.state?.jobId != null ||
-      !location.state?.job;
+    const shouldFetch = location.state?.jobId != null || !location.state?.job;
 
     if (!shouldFetch) return;
     if (lastFetchedJobIdRef.current === jobId) return;
@@ -655,8 +666,7 @@ function InlandExportJobCreate() {
         ) ||
         location.state?.mawbDetails?.shipper_email ||
         "",
-      shipper_address_id:
-        location.state?.mawbDetails?.shipper_address_id || "",
+      shipper_address_id: location.state?.mawbDetails?.shipper_address_id || "",
       shipper_address:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_address ||
@@ -728,7 +738,8 @@ function InlandExportJobCreate() {
   >([]);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
-  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
+    useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
   const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
@@ -780,7 +791,10 @@ function InlandExportJobCreate() {
       "service_name",
       resolvedServiceByCode.service_name || resolvedServiceByCode.service_code,
     );
-  }, [resolvedServiceByCode?.service_code, resolvedServiceByCode?.service_name]);
+  }, [
+    resolvedServiceByCode?.service_code,
+    resolvedServiceByCode?.service_name,
+  ]);
 
   // Carrier Details Form - Initialize with jobData if available, or from location.state for create mode
   const carrierDetailsForm = useForm<CarrierDetailsForm>({
@@ -949,7 +963,8 @@ function InlandExportJobCreate() {
             consignee_email: savedMawbDetailsFromState.consignee_email || "",
             consignee_address_id:
               savedMawbDetailsFromState.consignee_address_id || "",
-            consignee_address: savedMawbDetailsFromState.consignee_address || "",
+            consignee_address:
+              savedMawbDetailsFromState.consignee_address || "",
             carrier_agent_id: savedMawbDetailsFromState.carrier_agent_id || "",
             carrier_agent_name:
               savedMawbDetailsFromState.carrier_agent_name || "",
@@ -1255,6 +1270,7 @@ function InlandExportJobCreate() {
                     | undefined,
                 };
               })(),
+              ...extractHouseDocumentFields(house),
             }),
           );
           setHawbDetails(mappedHawbDetails);
@@ -1457,6 +1473,9 @@ function InlandExportJobCreate() {
               sanitizedEstimates,
             },
           );
+        }
+        if (!location.state?.fromHouseCreate) {
+          jobDocuments.initFromJobData(jobData as Record<string, unknown>);
         }
         // Force re-render of SearchableSelect components after all values are set
         // Use a small delay to ensure setValues has completed
@@ -1900,8 +1919,11 @@ function InlandExportJobCreate() {
               (savedMawbDetails as { consignee_email?: string } | undefined)
                 ?.consignee_email || "",
             consignee_address_id:
-              (savedMawbDetails as { consignee_address_id?: string } | undefined)
-                ?.consignee_address_id || "",
+              (
+                savedMawbDetails as
+                  | { consignee_address_id?: string }
+                  | undefined
+              )?.consignee_address_id || "",
             consignee_address:
               (savedMawbDetails as { consignee_address?: string } | undefined)
                 ?.consignee_address || "",
@@ -1916,11 +1938,16 @@ function InlandExportJobCreate() {
                 ?.carrier_agent_email || "",
             carrier_agent_address_id:
               (
-                savedMawbDetails as { carrier_agent_address_id?: string } | undefined
+                savedMawbDetails as
+                  | { carrier_agent_address_id?: string }
+                  | undefined
               )?.carrier_agent_address_id || "",
             carrier_agent_address:
-              (savedMawbDetails as { carrier_agent_address?: string } | undefined)
-                ?.carrier_agent_address || "",
+              (
+                savedMawbDetails as
+                  | { carrier_agent_address?: string }
+                  | undefined
+              )?.carrier_agent_address || "",
           });
 
           // Update origin agent data ref if available in location state
@@ -2042,6 +2069,18 @@ function InlandExportJobCreate() {
     mode, // Add mode to dependencies
   ]);
 
+  useEffect(() => {
+    if (location.state?.fromHouseCreate === true) {
+      jobDocuments.restoreFromNavigationState(location.state);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    location.state?.fromHouseCreate,
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
+  ]);
+
   // Note: Container details restoration removed for Inland Export Jobs
 
   // Remove housing detail
@@ -2127,6 +2166,7 @@ function InlandExportJobCreate() {
           routings: routingsForm.values.routings,
           // Preserve master-level estimates so they can be restored on the job screen
           estimates: estimatesForm.values.estimates,
+          ...jobDocuments.getNavigationState(),
         },
       });
 
@@ -2144,6 +2184,7 @@ function InlandExportJobCreate() {
       jobData,
       location.state,
       navigate,
+      jobDocuments,
     ],
   );
 
@@ -2452,7 +2493,8 @@ function InlandExportJobCreate() {
         consignee_address: partyDetailsForm.values.consignee_address || "",
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          partyDetailsForm.values.carrier_agent_address || "",
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const normalizedTransportType = String(
             routing.transport_type || "",
@@ -2563,6 +2605,7 @@ function InlandExportJobCreate() {
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
             }),
+          ...buildDocumentIdsPayloadField(hawb.document_ids),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
                 (
@@ -2660,6 +2703,7 @@ function InlandExportJobCreate() {
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));
         })(),
+        document_ids: jobDocuments.document_ids,
       };
       console.log("Payload value---", payload);
 
@@ -2696,7 +2740,6 @@ function InlandExportJobCreate() {
       setIsSubmitting(false);
     }
   };
-
 
   if (isFetchingJobById) {
     return (
@@ -4252,7 +4295,9 @@ function InlandExportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -4654,7 +4699,9 @@ function InlandExportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -4750,6 +4797,18 @@ function InlandExportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <JobDocumentsModal
+        opened={jobDocuments.documentsModalOpen}
+        onClose={() => jobDocuments.setDocumentsModalOpen(false)}
+        rows={jobDocuments.document_modal_rows}
+        readOnly={isReadOnly}
+        uploading={jobDocuments.documentUploading}
+        onAddRow={jobDocuments.addDocumentRow}
+        onUpdateRow={jobDocuments.updateDocumentRow}
+        onRemoveRow={jobDocuments.removeDocumentRow}
+        onSubmit={jobDocuments.handleSubmitDocumentsModal}
+      />
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -4773,6 +4832,14 @@ function InlandExportJobCreate() {
         </Group>
 
         <Group>
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconPaperclip size={16} />}
+            onClick={jobDocuments.openDocumentsModal}
+          >
+            {isReadOnly ? "View Documents" : "Attach Documents"}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"

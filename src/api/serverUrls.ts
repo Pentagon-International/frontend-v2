@@ -95,6 +95,7 @@ export const URL = {
   customerServiceShipment: "customer-service-shipment/",
   customerServiceShipmentFilter: "customer-service-shipment/filter/",
   uploadDocument: "customer-service-shipment/upload-document/",
+  jobCreateUploadDocument: "job-create/upload-document/",
   airImportBooked: "customer-service-shipment/air-import-booked/",
   airExportBooked: "customer-service-shipment/air-export-booked/",
   oceanImportDsr: "customer-service-shipment/ocean-import/",

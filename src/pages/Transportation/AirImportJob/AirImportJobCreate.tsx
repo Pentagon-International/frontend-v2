@@ -33,6 +33,7 @@ import {
   IconDotsVertical,
   IconFileInvoice,
   IconRefresh,
+  IconPaperclip,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -74,10 +75,18 @@ import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import {
+  buildDocumentIdsPayloadField,
+  extractHouseDocumentFields,
+  type HouseDocumentFields,
+} from "../../../utils/jobDocuments";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -152,7 +161,7 @@ type RoutingDetail = {
 
 // ContainerDetail removed for Air Import Jobs
 
-type HAWBDetail = {
+type HAWBDetail = HouseDocumentFields & {
   id?: number;
   shipment_id: string;
   hawb_number: string;
@@ -250,7 +259,12 @@ const getAddressOptions = (
     }))
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
-    .map(({ value, label, email, address }) => ({ value, label, email, address }));
+    .map(({ value, label, email, address }) => ({
+      value,
+      label,
+      email,
+      address,
+    }));
 };
 
 // Invoice-related types for Accounts tab
@@ -405,7 +419,6 @@ function AirImportJobCreate() {
   // Track the last restored carrierDetails snapshot (restored independently of MAWB)
   const lastRestoredCarrierDetailsRef = useRef<string | null>(null);
 
-
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
@@ -552,7 +565,9 @@ function AirImportJobCreate() {
           : (location.state?.mawbDetails?.igm_date as Date | null) || null,
       shipper_id: location.state?.mawbDetails?.shipper_id || "",
       shipper_name:
-        String((jobData as Record<string, unknown> | undefined)?.shipper_name || "") ||
+        String(
+          (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
+        ) ||
         location.state?.mawbDetails?.shipper_name ||
         "",
       shipper_email:
@@ -564,20 +579,23 @@ function AirImportJobCreate() {
       shipper_address_id: location.state?.mawbDetails?.shipper_address_id || "",
       shipper_address:
         String(
-          (jobData as Record<string, unknown> | undefined)?.shipper_address || "",
+          (jobData as Record<string, unknown> | undefined)?.shipper_address ||
+            "",
         ) ||
         location.state?.mawbDetails?.shipper_address ||
         "",
       consignee_id: location.state?.mawbDetails?.consignee_id || "",
       consignee_name:
         String(
-          (jobData as Record<string, unknown> | undefined)?.consignee_name || "",
+          (jobData as Record<string, unknown> | undefined)?.consignee_name ||
+            "",
         ) ||
         location.state?.mawbDetails?.consignee_name ||
         "",
       consignee_email:
         String(
-          (jobData as Record<string, unknown> | undefined)?.consignee_email || "",
+          (jobData as Record<string, unknown> | undefined)?.consignee_email ||
+            "",
         ) ||
         location.state?.mawbDetails?.consignee_email ||
         "",
@@ -585,14 +603,16 @@ function AirImportJobCreate() {
         location.state?.mawbDetails?.consignee_address_id || "",
       consignee_address:
         String(
-          (jobData as Record<string, unknown> | undefined)?.consignee_address || "",
+          (jobData as Record<string, unknown> | undefined)?.consignee_address ||
+            "",
         ) ||
         location.state?.mawbDetails?.consignee_address ||
         "",
       carrier_agent_id: location.state?.mawbDetails?.carrier_agent_id || "",
       carrier_agent_name:
         String(
-          (jobData as Record<string, unknown> | undefined)?.carrier_agent_name || "",
+          (jobData as Record<string, unknown> | undefined)
+            ?.carrier_agent_name || "",
         ) ||
         location.state?.mawbDetails?.carrier_agent_name ||
         "",
@@ -668,7 +688,8 @@ function AirImportJobCreate() {
   >([]);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
-  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
+    useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
   const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
@@ -814,7 +835,9 @@ function AirImportJobCreate() {
           | Partial<CarrierDetailsForm>
           | undefined;
         const carrierSource =
-          hasHawbDetailsInState && stateCarrierDetails ? stateCarrierDetails : jobData;
+          hasHawbDetailsInState && stateCarrierDetails
+            ? stateCarrierDetails
+            : jobData;
 
         // Populate Carrier Details using setValues
         const carrierInitialValues = {
@@ -961,9 +984,13 @@ function AirImportJobCreate() {
                 const mapped = {
                   id: charge.id != null ? Number(charge.id) : undefined,
                   supplier_code:
-                    charge.supplier_code != null ? String(charge.supplier_code) : "",
+                    charge.supplier_code != null
+                      ? String(charge.supplier_code)
+                      : "",
                   supplier_name:
-                    charge.supplier_name != null ? String(charge.supplier_name) : "",
+                    charge.supplier_name != null
+                      ? String(charge.supplier_name)
+                      : "",
                   charge_id: chargeId,
                   charge_name: charge.charge_name
                     ? String(charge.charge_name)
@@ -983,7 +1010,9 @@ function AirImportJobCreate() {
                   local_amount: toNum(
                     charge.sell_local_amount ?? charge.local_amount,
                   ),
-                  cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
+                  cost_per_unit: toNum(
+                    charge.unit_cost ?? charge.cost_per_unit,
+                  ),
                   total_cost: toNum(charge.total_cost),
                   cost_local_amount: toNum(charge.cost_local_amount),
                 };
@@ -991,13 +1020,16 @@ function AirImportJobCreate() {
               });
 
               if (mawbChargesRaw.length > 0) {
-                console.log("🧾 [AIR_IMPORT_JOB] mawb_charges → charges mapping", {
-                  jobId: jobData?.job_id,
-                  houseId: house.id,
-                  mawbChargesCount: mawbChargesRaw.length,
-                  firstMawbCharge: mawbChargesRaw[0],
-                  firstMappedCharge: mappedCharges[0],
-                });
+                console.log(
+                  "🧾 [AIR_IMPORT_JOB] mawb_charges → charges mapping",
+                  {
+                    jobId: jobData?.job_id,
+                    houseId: house.id,
+                    mawbChargesCount: mawbChargesRaw.length,
+                    firstMawbCharge: mawbChargesRaw[0],
+                    firstMappedCharge: mappedCharges[0],
+                  },
+                );
               } else {
                 console.log("🧾 [AIR_IMPORT_JOB] No mawb_charges on house", {
                   jobId: jobData?.job_id,
@@ -1077,17 +1109,27 @@ function AirImportJobCreate() {
                 consignee_email: house.consignee_email
                   ? String(house.consignee_email)
                   : "",
-              notify_customer1_name: (house.notify1_customer_name ??
-                house.notify_customer1_name)
-                ? String(house.notify1_customer_name ?? house.notify_customer1_name)
+                notify_customer1_name:
+                  (house.notify1_customer_name ?? house.notify_customer1_name)
+                    ? String(
+                        house.notify1_customer_name ??
+                          house.notify_customer1_name,
+                      )
                     : "",
-              notify_customer1_address: (house.notify1_customer_address ??
+                notify_customer1_address:
+                  (house.notify1_customer_address ??
                   house.notify_customer1_address)
-                ? String(house.notify1_customer_address ?? house.notify_customer1_address)
+                    ? String(
+                        house.notify1_customer_address ??
+                          house.notify_customer1_address,
+                      )
                     : "",
-              notify_customer1_email: (house.notify1_customer_email ??
-                house.notify_customer1_email)
-                ? String(house.notify1_customer_email ?? house.notify_customer1_email)
+                notify_customer1_email:
+                  (house.notify1_customer_email ?? house.notify_customer1_email)
+                    ? String(
+                        house.notify1_customer_email ??
+                          house.notify_customer1_email,
+                      )
                     : "",
                 commodity_description: house.commodity_description
                   ? String(house.commodity_description)
@@ -1106,7 +1148,9 @@ function AirImportJobCreate() {
                           const gross = importHouseCargoWeightFromApi(
                             cargo.gross_weight,
                           );
-                          const vol = importHouseCargoWeightFromApi(cargo.volume);
+                          const vol = importHouseCargoWeightFromApi(
+                            cargo.volume,
+                          );
                           const chargeable = importHouseCargoWeightFromApi(
                             cargo.chargeable_weight,
                           );
@@ -1183,6 +1227,7 @@ function AirImportJobCreate() {
                       date: String(e.date ?? ""),
                     }))
                   : [],
+                ...extractHouseDocumentFields(house),
               };
             },
           );
@@ -1198,8 +1243,8 @@ function AirImportJobCreate() {
           });
           console.log("🧾 [AIR_IMPORT_JOB] first mapped charges (sell/cost)", {
             firstHouseId: (mappedHawbDetails[0] as { id?: unknown })?.id,
-            firstCharge:
-              (mappedHawbDetails[0] as { charges?: unknown[] })?.charges?.[0],
+            firstCharge: (mappedHawbDetails[0] as { charges?: unknown[] })
+              ?.charges?.[0],
           });
           setHawbDetails(mappedHawbDetails);
           hawbDetailsLoadedRef.current = true;
@@ -1215,7 +1260,9 @@ function AirImportJobCreate() {
             (routing: Record<string, unknown>) => {
               return {
                 ...(routing.id != null && { id: Number(routing.id) }),
-                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                transport_type: String(
+                  routing.transport_type ?? "",
+                ).toUpperCase(),
                 from_code: routing.from_port_code || routing.from_code || "",
                 from_name: routing.from_port_name || routing.from_name || "",
                 to_code: routing.to_port_code || routing.to_code || "",
@@ -1259,7 +1306,9 @@ function AirImportJobCreate() {
             (routing: Record<string, unknown>) => {
               return {
                 ...(routing.id != null && { id: Number(routing.id) }),
-                transport_type: String(routing.transport_type ?? "").toUpperCase(),
+                transport_type: String(
+                  routing.transport_type ?? "",
+                ).toUpperCase(),
                 from_code: routing.from_port_code || routing.from_code || "",
                 from_name: routing.from_port_name || routing.from_name || "",
                 to_code: routing.to_port_code || routing.to_code || "",
@@ -1318,7 +1367,9 @@ function AirImportJobCreate() {
             return Number.isNaN(n) ? null : n;
           };
           const normalizePpCc = (value: unknown): string => {
-            const raw = String(value ?? "").trim().toUpperCase();
+            const raw = String(value ?? "")
+              .trim()
+              .toUpperCase();
             if (raw === "PP" || raw === "PREPAID") return "Prepaid";
             if (raw === "CC" || raw === "COLLECT") return "Collect";
             return "";
@@ -1354,9 +1405,12 @@ function AirImportJobCreate() {
               total_cost: toNum(e.total_cost),
             };
           });
-          console.log("🧾 [AIR_IMPORT_JOB] mappedEstimates (before setValues)", {
-            mappedEstimates,
-          });
+          console.log(
+            "🧾 [AIR_IMPORT_JOB] mappedEstimates (before setValues)",
+            {
+              mappedEstimates,
+            },
+          );
 
           // Hard replace estimates list (avoid partial merges on array items)
           const sanitizedEstimates = mappedEstimates.map((row) => ({
@@ -1382,9 +1436,12 @@ function AirImportJobCreate() {
             sanitizedEstimates as unknown as typeof estimatesForm.values.estimates,
           );
 
-          console.log("🧾 [AIR_IMPORT_JOB] estimatesForm.setFieldValue applied", {
-            sanitizedEstimates,
-          });
+          console.log(
+            "🧾 [AIR_IMPORT_JOB] estimatesForm.setFieldValue applied",
+            {
+              sanitizedEstimates,
+            },
+          );
         }
 
         if (!location.state?.fromHouseCreate) {
@@ -1612,7 +1669,8 @@ function AirImportJobCreate() {
               shipper_id: mawbDetailsForm.values.shipper_id || "",
               shipper_name: mawbDetailsForm.values.shipper_name || "",
               shipper_email: mawbDetailsForm.values.shipper_email || "",
-              shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+              shipper_address_id:
+                mawbDetailsForm.values.shipper_address_id || "",
               shipper_address: mawbDetailsForm.values.shipper_address || "",
               consignee_id: mawbDetailsForm.values.consignee_id || "",
               consignee_name: mawbDetailsForm.values.consignee_name || "",
@@ -1674,7 +1732,8 @@ function AirImportJobCreate() {
               shipper_id: mawbDetailsForm.values.shipper_id || "",
               shipper_name: mawbDetailsForm.values.shipper_name || "",
               shipper_email: mawbDetailsForm.values.shipper_email || "",
-              shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+              shipper_address_id:
+                mawbDetailsForm.values.shipper_address_id || "",
               shipper_address: mawbDetailsForm.values.shipper_address || "",
               consignee_id: mawbDetailsForm.values.consignee_id || "",
               consignee_name: mawbDetailsForm.values.consignee_name || "",
@@ -1959,8 +2018,11 @@ function AirImportJobCreate() {
               (savedMawbDetails as { consignee_email?: string } | undefined)
                 ?.consignee_email || "",
             consignee_address_id:
-              (savedMawbDetails as { consignee_address_id?: string } | undefined)
-                ?.consignee_address_id || "",
+              (
+                savedMawbDetails as
+                  | { consignee_address_id?: string }
+                  | undefined
+              )?.consignee_address_id || "",
             consignee_address:
               (savedMawbDetails as { consignee_address?: string } | undefined)
                 ?.consignee_address || "",
@@ -1975,11 +2037,16 @@ function AirImportJobCreate() {
                 ?.carrier_agent_email || "",
             carrier_agent_address_id:
               (
-                savedMawbDetails as { carrier_agent_address_id?: string } | undefined
+                savedMawbDetails as
+                  | { carrier_agent_address_id?: string }
+                  | undefined
               )?.carrier_agent_address_id || "",
             carrier_agent_address:
-              (savedMawbDetails as { carrier_agent_address?: string } | undefined)
-                ?.carrier_agent_address || "",
+              (
+                savedMawbDetails as
+                  | { carrier_agent_address?: string }
+                  | undefined
+              )?.carrier_agent_address || "",
           });
 
           // Update origin agent data ref if available in location state
@@ -2184,7 +2251,8 @@ function AirImportJobCreate() {
         carrier_agent_email: mawbDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address_id:
           mawbDetailsForm.values.carrier_agent_address_id || "",
-        carrier_agent_address: mawbDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          mawbDetailsForm.values.carrier_agent_address || "",
         // Use ref first (most recent), then fallback to location.state
         origin_agent_data:
           originAgentDataRef.current ||
@@ -2345,9 +2413,7 @@ function AirImportJobCreate() {
     eventType: string,
   ): boolean =>
     Array.isArray(events) &&
-    events.some(
-      (e: { type?: string }) => String(e?.type ?? "") === eventType,
-    );
+    events.some((e: { type?: string }) => String(e?.type ?? "") === eventType);
 
   const patchHousingPdfReleasedEvent = async (
     housingId: number | undefined,
@@ -2355,7 +2421,9 @@ function AirImportJobCreate() {
   ) => {
     const jobId = jobData?.id;
     if (!jobId || !housingId) return;
-    const currentHawb = hawbDetails.find((h) => Number(h.id) === Number(housingId));
+    const currentHawb = hawbDetails.find(
+      (h) => Number(h.id) === Number(housingId),
+    );
     if (housingAlreadyHasEventType(currentHawb?.events, eventType)) return;
 
     const date = new Date().toISOString().slice(0, 10);
@@ -2365,13 +2433,19 @@ function AirImportJobCreate() {
     setHawbDetails((prev) =>
       prev.map((h) =>
         Number(h.id) === Number(housingId)
-          ? ({ ...h, events: [...(h.events ?? []), optimisticEvent] } as HAWBDetail)
+          ? ({
+              ...h,
+              events: [...(h.events ?? []), optimisticEvent],
+            } as HAWBDetail)
           : h,
       ),
     );
     setCurrentHawbForPreview((prev) =>
       prev && Number(prev.id) === Number(housingId)
-        ? ({ ...prev, events: [...(prev.events ?? []), optimisticEvent] } as HAWBDetail)
+        ? ({
+            ...prev,
+            events: [...(prev.events ?? []), optimisticEvent],
+          } as HAWBDetail)
         : prev,
     );
 
@@ -2547,7 +2621,9 @@ function AirImportJobCreate() {
   const [ediChecklistData, setEdiChecklistData] =
     useState<EdiChecklistResponse | null>(null);
 
-  const normalizeEdiChecklistResponse = (res: unknown): EdiChecklistResponse => {
+  const normalizeEdiChecklistResponse = (
+    res: unknown,
+  ): EdiChecklistResponse => {
     // `getAPICall` may return either:
     // - AxiosResponse { data, status:number, headers, ... }
     // - already-unwrapped payload { status:boolean, message, data }
@@ -2620,11 +2696,14 @@ function AirImportJobCreate() {
       );
 
       const payload =
-        res && typeof res === "object" && "data" in (res as Record<string, unknown>)
+        res &&
+        typeof res === "object" &&
+        "data" in (res as Record<string, unknown>)
           ? (res as { data?: unknown }).data
           : res;
 
-      const ediText = typeof payload === "string" ? payload : String(payload ?? "");
+      const ediText =
+        typeof payload === "string" ? payload : String(payload ?? "");
       if (!ediText.trim()) {
         throw new Error("Empty EDI response");
       }
@@ -2656,8 +2735,7 @@ function AirImportJobCreate() {
       });
     }
   };
- 
- 
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
@@ -2696,7 +2774,9 @@ function AirImportJobCreate() {
           (hawbDetails ?? [])
             .map((h) => (h as { booking_id?: unknown }).booking_id)
             .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter((n): n is number => typeof n === "number" && !Number.isNaN(n)),
+            .filter(
+              (n): n is number => typeof n === "number" && !Number.isNaN(n),
+            ),
         ),
       );
 
@@ -2758,7 +2838,8 @@ function AirImportJobCreate() {
         consignee_address: partyDetailsForm.values.consignee_address || "",
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          partyDetailsForm.values.carrier_agent_address || "",
         booking_ids: bookingIds,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const toIso = (d: Date | null) =>
@@ -2832,7 +2913,9 @@ function AirImportJobCreate() {
           notify1_customer_name:
             hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
           notify1_customer_address:
-            hawb.notify1_customer_address ?? hawb.notify_customer1_address ?? "",
+            hawb.notify1_customer_address ??
+            hawb.notify_customer1_address ??
+            "",
           notify1_customer_email:
             hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
           commodity_description: hawb.commodity_description || null,
@@ -2844,11 +2927,18 @@ function AirImportJobCreate() {
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
             }),
+          ...buildDocumentIdsPayloadField(hawb.document_ids),
           events: Array.isArray((hawb as { events?: unknown }).events)
             ? (
-                (hawb as {
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }).events ?? []
+                (
+                  hawb as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events ?? []
               ).map((e) => ({
                 ...(e.id != null && { id: Number(e.id) }),
                 type: String(e.type ?? ""),
@@ -2880,7 +2970,9 @@ function AirImportJobCreate() {
               charge_id:
                 charge.charge_id != null ? Number(charge.charge_id) : null,
               supplier_code:
-                charge.supplier_code != null ? String(charge.supplier_code) : null,
+                charge.supplier_code != null
+                  ? String(charge.supplier_code)
+                  : null,
               pp_cc: String(charge.pp_cc ?? ""),
               unit_id:
                 charge.unit_id != null
@@ -3065,7 +3157,6 @@ function AirImportJobCreate() {
     }
   };
 
-
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
@@ -3237,149 +3328,153 @@ function AirImportJobCreate() {
 
                   {jobData?.id != null && (
                     <>
-                    <Menu.Item
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconFileInvoice size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
                             borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconFileInvoice size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
                           },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() => {
-                        const allCollectCharges = hawbDetails.flatMap((hawb) => {
-                          const src =
-                            (hawb as { mawb_charges?: unknown }).mawb_charges;
-                          const arr: Record<string, unknown>[] = Array.isArray(src)
-                                ? (src as Record<string, unknown>[])
-                                : [];
-                            return arr
-                              .filter(
-                                (c) =>
-                                String((c as { pp_cc?: unknown }).pp_cc ?? "")
-                                  .trim() === "Collect",
-                              )
-                              .map((c) => ({
-                                ...c,
-                                shipment_id:
-                                  (hawb as { shipment_id?: string })
-                                    .shipment_id ??
-                                  (hawb as { shipment_no?: string })
-                                    .shipment_no ??
-                                  "",
-                                shipper_id:
-                                  (hawb as { shipper_code?: string })
-                                    .shipper_code ??
-                                (hawb as { shipper_id?: string }).shipper_id ??
-                                  "",
-                              }));
-                        });
-
-                        const firstHouse = hawbDetails[0];
-
-                        const housingDetailsForInvoice = [
-                          {
-                            ...firstHouse,
-                            charges: allCollectCharges,
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
                           },
-                        ];
+                        }}
+                        onClick={() => {
+                          const allCollectCharges = hawbDetails.flatMap(
+                            (hawb) => {
+                              const src = (hawb as { mawb_charges?: unknown })
+                                .mawb_charges;
+                              const arr: Record<string, unknown>[] =
+                                Array.isArray(src)
+                                  ? (src as Record<string, unknown>[])
+                                  : [];
+                              return arr
+                                .filter(
+                                  (c) =>
+                                    String(
+                                      (c as { pp_cc?: unknown }).pp_cc ?? "",
+                                    ).trim() === "Collect",
+                                )
+                                .map((c) => ({
+                                  ...c,
+                                  shipment_id:
+                                    (hawb as { shipment_id?: string })
+                                      .shipment_id ??
+                                    (hawb as { shipment_no?: string })
+                                      .shipment_no ??
+                                    "",
+                                  shipper_id:
+                                    (hawb as { shipper_code?: string })
+                                      .shipper_code ??
+                                    (hawb as { shipper_id?: string })
+                                      .shipper_id ??
+                                    "",
+                                }));
+                            },
+                          );
 
-                        navigate("/air/import-job/invoice", {
-                          state: {
-                            serviceType: "AIR",
-                            hawbDetails: housingDetailsForInvoice,
-                            housingDetails: housingDetailsForInvoice,
-                            is_agent: true,
-                            fromJobLevel: true,
-                            ...(jobWithMergedHousingDetails && {
-                              job: jobWithMergedHousingDetails,
-                            }),
-                            ...(location.state?.mawbDetails && {
-                              mawbDetails: location.state.mawbDetails,
-                            }),
-                            ...(location.state?.carrierDetails && {
-                              carrierDetails: location.state.carrierDetails,
-                            }),
-                            ...(location.state?.routings && {
-                              routings: location.state.routings,
-                            }),
-                          },
-                        });
-                      }}
-                    >
-                      Create Agent Invoice
-                    </Menu.Item>
-                    <Menu.Item
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
+                          const firstHouse = hawbDetails[0];
+
+                          const housingDetailsForInvoice = [
+                            {
+                              ...firstHouse,
+                              charges: allCollectCharges,
+                            },
+                          ];
+
+                          navigate("/air/import-job/invoice", {
+                            state: {
+                              serviceType: "AIR",
+                              hawbDetails: housingDetailsForInvoice,
+                              housingDetails: housingDetailsForInvoice,
+                              is_agent: true,
+                              fromJobLevel: true,
+                              ...(jobWithMergedHousingDetails && {
+                                job: jobWithMergedHousingDetails,
+                              }),
+                              ...(location.state?.mawbDetails && {
+                                mawbDetails: location.state.mawbDetails,
+                              }),
+                              ...(location.state?.carrierDetails && {
+                                carrierDetails: location.state.carrierDetails,
+                              }),
+                              ...(location.state?.routings && {
+                                routings: location.state.routings,
+                              }),
+                            },
+                          });
+                        }}
+                      >
+                        Create Agent Invoice
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={
+                          <Box
+                            style={{
+                              backgroundColor: "#E7F5FF",
+                              borderRadius: "6px",
+                              padding: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconFileInvoice size={16} color="#105476" />
+                          </Box>
+                        }
+                        styles={{
+                          item: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
                             borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconFileInvoice size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
+                            padding: "10px 12px",
+                            marginBottom: "4px",
+                            "&:hover": {
+                              backgroundColor: "#F8F9FA",
+                            },
                           },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() =>
-                        navigate("/job-ledger", {
-                          state: {
-                            jobId:
-                              jobData?.job_id,
+                          itemLabel: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "#424242",
+                          },
+                        }}
+                        onClick={() =>
+                          navigate("/job-ledger", {
+                            state: {
+                              jobId: jobData?.job_id,
                               service_name: "Air Import",
-                          },
-                        })
-                      }
-                    >
-                      Job Ledger
-                    </Menu.Item>
+                            },
+                          })
+                        }
+                      >
+                        Job Ledger
+                      </Menu.Item>
                     </>
                   )}
 
@@ -3915,18 +4010,25 @@ function AirImportJobCreate() {
                   (!partyDetailsForm.values.shipper_address_id ||
                     !shipperAddressOptions.some(
                       (item) =>
-                        item.value === partyDetailsForm.values.shipper_address_id,
+                        item.value ===
+                        partyDetailsForm.values.shipper_address_id,
                     ))) ? (
                   <FormTextInput
                     label="Shipper Address"
                     value={partyDetailsForm.values.shipper_address}
                     onChange={(e) => {
                       const nextValue = e.currentTarget.value;
-                      partyDetailsForm.setFieldValue("shipper_address", nextValue);
+                      partyDetailsForm.setFieldValue(
+                        "shipper_address",
+                        nextValue,
+                      );
                       if (!nextValue.trim()) {
                         setShipperAddressCustom(false);
                         setShipperAddressSearch("");
-                        partyDetailsForm.setFieldValue("shipper_address_id", "");
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address_id",
+                          "",
+                        );
                       }
                     }}
                   />
@@ -3943,12 +4045,19 @@ function AirImportJobCreate() {
                       setShipperAddressSearch(value);
                       const hasMatch = shipperAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setShipperAddressCustom(true);
-                        partyDetailsForm.setFieldValue("shipper_address_id", "");
-                        partyDetailsForm.setFieldValue("shipper_address", value);
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address_id",
+                          "",
+                        );
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address",
+                          value,
+                        );
                       }
                     }}
                     onChange={(value) => {
@@ -4012,7 +4121,10 @@ function AirImportJobCreate() {
                     if (!value) {
                       partyDetailsForm.setFieldValue("consignee_name", "");
                       partyDetailsForm.setFieldValue("consignee_email", "");
-                      partyDetailsForm.setFieldValue("consignee_address_id", "");
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address_id",
+                        "",
+                      );
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
@@ -4041,18 +4153,25 @@ function AirImportJobCreate() {
                   (!partyDetailsForm.values.consignee_address_id ||
                     !consigneeAddressOptions.some(
                       (item) =>
-                        item.value === partyDetailsForm.values.consignee_address_id,
+                        item.value ===
+                        partyDetailsForm.values.consignee_address_id,
                     ))) ? (
                   <FormTextInput
                     label="Consignee Address"
                     value={partyDetailsForm.values.consignee_address}
                     onChange={(e) => {
                       const nextValue = e.currentTarget.value;
-                      partyDetailsForm.setFieldValue("consignee_address", nextValue);
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address",
+                        nextValue,
+                      );
                       if (!nextValue.trim()) {
                         setConsigneeAddressCustom(false);
                         setConsigneeAddressSearch("");
-                        partyDetailsForm.setFieldValue("consignee_address_id", "");
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address_id",
+                          "",
+                        );
                       }
                     }}
                   />
@@ -4069,12 +4188,19 @@ function AirImportJobCreate() {
                       setConsigneeAddressSearch(value);
                       const hasMatch = consigneeAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setConsigneeAddressCustom(true);
-                        partyDetailsForm.setFieldValue("consignee_address_id", "");
-                        partyDetailsForm.setFieldValue("consignee_address", value);
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address_id",
+                          "",
+                        );
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address",
+                          value,
+                        );
                       }
                     }}
                     onChange={(value) => {
@@ -4115,7 +4241,9 @@ function AirImportJobCreate() {
                     label: String(item.customer_name ?? ""),
                   })}
                   value={partyDetailsForm.values.carrier_agent_id || null}
-                  displayValue={partyDetailsForm.values.carrier_agent_name || null}
+                  displayValue={
+                    partyDetailsForm.values.carrier_agent_name || null
+                  }
                   onChange={(value, selectedData, originalData) => {
                     const options = getAddressOptions(originalData);
                     const primary = options[0];
@@ -4146,7 +4274,10 @@ function AirImportJobCreate() {
                         "carrier_agent_address_id",
                         "",
                       );
-                      partyDetailsForm.setFieldValue("carrier_agent_address", "");
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address",
+                        "",
+                      );
                     }
                     setCarrierAgentAddressOptions(value ? options : []);
                     setCarrierAgentAddressSearch("");
@@ -4203,13 +4334,16 @@ function AirImportJobCreate() {
                       value: item.value,
                       label: item.label,
                     }))}
-                    value={partyDetailsForm.values.carrier_agent_address_id || null}
+                    value={
+                      partyDetailsForm.values.carrier_agent_address_id || null
+                    }
                     searchValue={carrierAgentAddressSearch}
                     onSearchChange={(value) => {
                       setCarrierAgentAddressSearch(value);
                       const hasMatch = carrierAgentAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setCarrierAgentAddressCustom(true);
@@ -4779,208 +4913,224 @@ function AirImportJobCreate() {
               </Text>
               {mode === "edit" && !isReadOnly && (
                 <Group gap="sm">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    const toStr = (v: unknown) => String(v ?? "").trim();
-                    const toNumOrNull = (v: unknown): number | null => {
-                      if (v == null || v === "") return null;
-                      const n = Number(v);
-                      return Number.isFinite(n) ? n : null;
-                    };
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const toNumOrNull = (v: unknown): number | null => {
+                        if (v == null || v === "") return null;
+                        const n = Number(v);
+                        return Number.isFinite(n) ? n : null;
+                      };
 
-                    const estimates = Array.isArray(estimatesForm.values.estimates)
-                      ? estimatesForm.values.estimates
-                      : [];
-                    const houseList = Array.isArray(hawbDetails) ? hawbDetails : [];
-
-                    // Supplier Invoice prefill is vendor-driven on the target page,
-                    // so we pass all charges and let vendor selection filter them.
-
-                    const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                    if (!jobId) {
-                      ToastNotification({
-                        type: "error",
-                        message: "Job ID not found for Supplier Invoice prefill.",
-                      });
-                      return;
-                    }
-
-                    const estimateCharges = estimates
-                      .map((e) => {
-                        const er = e as unknown as Record<string, unknown>;
-                        return {
-                        shipment_no: jobId, // common shipment no for this flow
-                        charge_id: toNumOrNull(er.charge_id),
-                        charge_name: toStr(er.charge_name),
-                        currency_id: er.currency_id ?? null,
-                        roe: er.roe ?? null,
-                        amount: er.total_cost ?? null,
-                        supplier_code: toStr(er.supplier_code),
-                        supplier_name: toStr(er.supplier_name),
-                        };
-                      })
-                      .filter(
-                        (c) =>
-                          toStr((c as { shipment_no?: unknown }).shipment_no) &&
-                          (c as { charge_id?: unknown }).charge_id != null &&
-                          (c as { amount?: unknown }).amount != null &&
-                          (c as { amount?: unknown }).amount !== "",
-                      );
-
-                    const houseCharges = houseList
-                      .flatMap((h) => {
-                        const hr = h as unknown as Record<string, unknown>;
-                        const shipmentNo = toStr(
-                          (hr as { shipment_id?: unknown }).shipment_id,
-                        ); // house shipment_id
-                        const chargesArr = Array.isArray(hr.charges)
-                          ? (hr.charges as unknown[])
-                          : Array.isArray(
-                                (hr as { mawb_charges?: unknown }).mawb_charges,
-                              )
-                            ? (((hr as { mawb_charges?: unknown }).mawb_charges as
-                                | unknown[]
-                                | undefined) ?? [])
-                            : [];
-                        return chargesArr
-                          .map((c) => {
-                            const cr = c as unknown as Record<string, unknown>;
-                            return {
-                            shipment_no: shipmentNo,
-                            charge_id:
-                              cr.charge_id != null ? Number(cr.charge_id) : null,
-                            charge_name: toStr(cr.charge_name),
-                            currency_id:
-                              (cr as { currency_id?: unknown }).currency_id ??
-                              (cr as { currency?: unknown }).currency ??
-                              null,
-                            roe: cr.roe ?? null,
-                            amount:
-                              cr.total_cost ??
-                              cr.cost_local_amount ??
-                              cr.amount ??
-                              null,
-                            supplier_code: toStr(cr.supplier_code),
-                            supplier_name: toStr(cr.supplier_name),
-                            };
-                          })
-                          .filter(
-                            (x) =>
-                              toStr((x as { shipment_no?: unknown }).shipment_no) &&
-                              (x as { charge_id?: unknown }).charge_id != null &&
-                              (x as { amount?: unknown }).amount != null &&
-                              (x as { amount?: unknown }).amount !== "",
-                          );
-                      })
-                      .filter(Boolean);
-
-                    const charges = [...estimateCharges, ...houseCharges];
-                    if (charges.length === 0) {
-                      ToastNotification({
-                        type: "error",
-                        message:
-                          "No charges found in Estimates/House charges to prefill.",
-                      });
-                      return;
-                    }
-
-                    navigate("/supplier-invoice/create", {
-                      state: {
-                        prefillSupplierInvoiceFromJob: {
-                          source: "air-import-job",
-                          job_id: jobId,
-                          charges,
-                        },
-                      },
-                    });
-                  }}
-                >
-                  Create Supplier Invoice
-                </Button>
-                <Button
-                  variant="light"
-                  color="#105476"
-                  size="sm"
-                  leftSection={<IconFileInvoice size={16} />}
-                  styles={{
-                    root: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                    },
-                  }}
-                  onClick={() => {
-                    const estimates = estimatesForm.values.estimates ?? [];
-                    const chargesFromEstimates = estimates
-                      .filter(
-                        (e) =>
-                          e.charge_id != null ||
-                          (e.charge_name && e.charge_name.trim() !== ""),
+                      const estimates = Array.isArray(
+                        estimatesForm.values.estimates,
                       )
-                      .map((e) => ({
-                        charge_id: e.charge_id,
-                        charge_name: e.charge_name ?? "",
-                        segment: "",
-                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                        sub_job: "",
-                        cn_r: "",
-                        currency: e.currency_code ?? "",
-                        currency_id: e.currency_id ?? "",
-                        roe: e.roe,
-                        unit_code: e.unit_code ?? "",
-                        unit_id: e.unit_id ?? "",
-                        no_of_unit: e.no_of_unit,
-                        amount_per_unit: e.cost_per_unit,
-                        amount: e.total_cost,
-                        amount_in_local:
-                          e.total_cost != null && e.roe != null
-                            ? Math.round(e.total_cost * e.roe * 100) / 100
-                            : e.total_cost,
-                        tax_code: "",
-                        tax: "false",
-                      }));
-                    const firstSupplier =
-                      estimates.find(
-                        (e) =>
-                          String(e.supplier_code ?? "").trim() !== "" ||
-                          String(e.supplier_name ?? "").trim() !== "",
-                      ) ?? null;
-                    navigate("/payment-request/create", {
-                      state: {
-                        serviceType: "AIR",
-                        voucherType: "AIR IMPORTS",
-                        chargesFromEstimates:
-                          chargesFromEstimates.length > 0
-                            ? chargesFromEstimates
-                            : undefined,
-                        supplier:
-                          firstSupplier != null
-                            ? {
-                                supplier_code: String(
-                                  firstSupplier.supplier_code ?? "",
-                                ),
-                                supplier_name: String(
-                                  firstSupplier.supplier_name ?? "",
-                                ),
-                              }
-                            : null,
-                        job_reference_1:
-                          jobData?.job_id != null
-                            ? String(jobData.job_id)
-                            : jobData?.id != null
-                              ? String(jobData.id)
-                              : "",
-                        ...(jobWithMergedHousingDetails && {
-                          job: jobWithMergedHousingDetails,
-                        }),
+                        ? estimatesForm.values.estimates
+                        : [];
+                      const houseList = Array.isArray(hawbDetails)
+                        ? hawbDetails
+                        : [];
+
+                      // Supplier Invoice prefill is vendor-driven on the target page,
+                      // so we pass all charges and let vendor selection filter them.
+
+                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                      if (!jobId) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Job ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
+
+                      const estimateCharges = estimates
+                        .map((e) => {
+                          const er = e as unknown as Record<string, unknown>;
+                          return {
+                            shipment_no: jobId, // common shipment no for this flow
+                            charge_id: toNumOrNull(er.charge_id),
+                            charge_name: toStr(er.charge_name),
+                            currency_id: er.currency_id ?? null,
+                            roe: er.roe ?? null,
+                            amount: er.total_cost ?? null,
+                            supplier_code: toStr(er.supplier_code),
+                            supplier_name: toStr(er.supplier_name),
+                          };
+                        })
+                        .filter(
+                          (c) =>
+                            toStr(
+                              (c as { shipment_no?: unknown }).shipment_no,
+                            ) &&
+                            (c as { charge_id?: unknown }).charge_id != null &&
+                            (c as { amount?: unknown }).amount != null &&
+                            (c as { amount?: unknown }).amount !== "",
+                        );
+
+                      const houseCharges = houseList
+                        .flatMap((h) => {
+                          const hr = h as unknown as Record<string, unknown>;
+                          const shipmentNo = toStr(
+                            (hr as { shipment_id?: unknown }).shipment_id,
+                          ); // house shipment_id
+                          const chargesArr = Array.isArray(hr.charges)
+                            ? (hr.charges as unknown[])
+                            : Array.isArray(
+                                  (hr as { mawb_charges?: unknown })
+                                    .mawb_charges,
+                                )
+                              ? (((hr as { mawb_charges?: unknown })
+                                  .mawb_charges as unknown[] | undefined) ?? [])
+                              : [];
+                          return chargesArr
+                            .map((c) => {
+                              const cr = c as unknown as Record<
+                                string,
+                                unknown
+                              >;
+                              return {
+                                shipment_no: shipmentNo,
+                                charge_id:
+                                  cr.charge_id != null
+                                    ? Number(cr.charge_id)
+                                    : null,
+                                charge_name: toStr(cr.charge_name),
+                                currency_id:
+                                  (cr as { currency_id?: unknown })
+                                    .currency_id ??
+                                  (cr as { currency?: unknown }).currency ??
+                                  null,
+                                roe: cr.roe ?? null,
+                                amount:
+                                  cr.total_cost ??
+                                  cr.cost_local_amount ??
+                                  cr.amount ??
+                                  null,
+                                supplier_code: toStr(cr.supplier_code),
+                                supplier_name: toStr(cr.supplier_name),
+                              };
+                            })
+                            .filter(
+                              (x) =>
+                                toStr(
+                                  (x as { shipment_no?: unknown }).shipment_no,
+                                ) &&
+                                (x as { charge_id?: unknown }).charge_id !=
+                                  null &&
+                                (x as { amount?: unknown }).amount != null &&
+                                (x as { amount?: unknown }).amount !== "",
+                            );
+                        })
+                        .filter(Boolean);
+
+                      const charges = [...estimateCharges, ...houseCharges];
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "No charges found in Estimates/House charges to prefill.",
+                        });
+                        return;
+                      }
+
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: jobId,
+                            charges,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    size="sm"
+                    leftSection={<IconFileInvoice size={16} />}
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
                       },
-                    });
-                  }}
-                >
-                  Create PRQ
-                </Button>
+                    }}
+                    onClick={() => {
+                      const estimates = estimatesForm.values.estimates ?? [];
+                      const chargesFromEstimates = estimates
+                        .filter(
+                          (e) =>
+                            e.charge_id != null ||
+                            (e.charge_name && e.charge_name.trim() !== ""),
+                        )
+                        .map((e) => ({
+                          charge_id: e.charge_id,
+                          charge_name: e.charge_name ?? "",
+                          segment: "",
+                          job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                          sub_job: "",
+                          cn_r: "",
+                          currency: e.currency_code ?? "",
+                          currency_id: e.currency_id ?? "",
+                          roe: e.roe,
+                          unit_code: e.unit_code ?? "",
+                          unit_id: e.unit_id ?? "",
+                          no_of_unit: e.no_of_unit,
+                          amount_per_unit: e.cost_per_unit,
+                          amount: e.total_cost,
+                          amount_in_local:
+                            e.total_cost != null && e.roe != null
+                              ? Math.round(e.total_cost * e.roe * 100) / 100
+                              : e.total_cost,
+                          tax_code: "",
+                          tax: "false",
+                        }));
+                      const firstSupplier =
+                        estimates.find(
+                          (e) =>
+                            String(e.supplier_code ?? "").trim() !== "" ||
+                            String(e.supplier_name ?? "").trim() !== "",
+                        ) ?? null;
+                      navigate("/payment-request/create", {
+                        state: {
+                          serviceType: "AIR",
+                          voucherType: "AIR IMPORTS",
+                          chargesFromEstimates:
+                            chargesFromEstimates.length > 0
+                              ? chargesFromEstimates
+                              : undefined,
+                          supplier:
+                            firstSupplier != null
+                              ? {
+                                  supplier_code: String(
+                                    firstSupplier.supplier_code ?? "",
+                                  ),
+                                  supplier_name: String(
+                                    firstSupplier.supplier_name ?? "",
+                                  ),
+                                }
+                              : null,
+                          job_reference_1:
+                            jobData?.job_id != null
+                              ? String(jobData.job_id)
+                              : jobData?.id != null
+                                ? String(jobData.id)
+                                : "",
+                          ...(jobWithMergedHousingDetails && {
+                            job: jobWithMergedHousingDetails,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create PRQ
+                  </Button>
                 </Group>
               )}
             </Group>
@@ -4993,9 +5143,11 @@ function AirImportJobCreate() {
               debugTag="AIR_IMPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
               summaryEstimatesTotalCost={
-                (jobData as {
-                  summary?: { estimates_total_cost?: number | string | null };
-                })?.summary?.estimates_total_cost
+                (
+                  jobData as {
+                    summary?: { estimates_total_cost?: number | string | null };
+                  }
+                )?.summary?.estimates_total_cost
               }
               userBranches={user?.branches}
             />
@@ -5073,7 +5225,9 @@ function AirImportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5475,7 +5629,9 @@ function AirImportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -5606,14 +5762,14 @@ function AirImportJobCreate() {
         </Group>
 
         <Group>
-          {/* <Button
+          <Button
             variant="outline"
             color="#105476"
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
             {isReadOnly ? "View Documents" : "Attach Documents"}
-          </Button> */}
+          </Button>
           {!isReadOnly && (
             <Button
               variant="outline"
@@ -5675,7 +5831,10 @@ function AirImportJobCreate() {
           Do you want to close it since the job is not saved
         </Text>
         <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
             Cancel
           </Button>
           <Button
@@ -5930,8 +6089,6 @@ function AirImportJobCreate() {
         onClose={() => {
           setEdiChecklistOpen(false);
           setEdiChecklistData(null);
-
-
         }}
         withCloseButton={false}
         // Use a plain div to avoid Mantine's internal scroll area (prevents double scrollbars)

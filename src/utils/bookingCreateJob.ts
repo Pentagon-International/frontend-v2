@@ -9,6 +9,10 @@ import {
   costLocalAmountForPayload,
   sellLocalAmountForPayload,
 } from "./houseChargeAmounts";
+import {
+  buildDocumentIdsPayloadField,
+  parseJobDocumentsFromApi,
+} from "./jobDocuments";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -454,6 +458,50 @@ function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
   return Number.isFinite(n) && n > 0 ? [n] : [];
 }
 
+/** Booking documents belong on the single housing row in job create payload. */
+function mapBookingDocumentsForHousingPayload(
+  booking: Record<string, unknown>,
+): { document_ids: number[] } | Record<string, never> {
+  const { document_ids } = parseJobDocumentsFromApi(booking);
+  return buildDocumentIdsPayloadField(document_ids);
+}
+
+async function resolveBookingRecordForJobCreate(
+  booking: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (parseJobDocumentsFromApi(booking).document_ids.length > 0) {
+    return booking;
+  }
+
+  const bookingIds = getBookingIdsFromBooking(booking);
+  if (bookingIds.length === 0) return booking;
+
+  try {
+    const response = (await getAPICall(
+      `${URL.customerServiceShipment}${bookingIds[0]}/`,
+      API_HEADER,
+    )) as {
+      success?: boolean;
+      status?: boolean;
+      data?: Record<string, unknown> | Record<string, unknown>[];
+    };
+    const raw = response?.data;
+    const detail = Array.isArray(raw)
+      ? raw.length > 0
+        ? (raw[0] as Record<string, unknown>)
+        : null
+      : raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)
+        : null;
+    if (!detail) return booking;
+
+    return { ...booking, ...detail };
+  } catch (err) {
+    console.error("Error fetching booking for job create documents:", err);
+    return booking;
+  }
+}
+
 function buildAirHousing(booking: Record<string, unknown>, trade: string) {
   return {
     hawb_no: resolveBookingHouseNumber(booking),
@@ -493,6 +541,7 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
       ? mapHouseChargesFromBooking(booking, true)
       : [],
     events: mapBookingEventsForJob(booking),
+    ...mapBookingDocumentsForHousingPayload(booking),
   };
 }
 
@@ -537,6 +586,7 @@ function buildOceanHousing(
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
     cargo_details: mapCargoDetails(booking),
     events: mapBookingEventsForJob(booking),
+    ...mapBookingDocumentsForHousingPayload(booking),
   };
 
   const profile = getOceanBookingChargeProfile(mode, booking);
@@ -706,7 +756,8 @@ export async function createJobFromBooking(
 
   onStart?.();
   try {
-    const payload = buildJobCreatePayloadFromBooking(booking, mode);
+    const bookingForPayload = await resolveBookingRecordForJobCreate(booking);
+    const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode);
     const response = (await apiCallProtected.post(
       URL.jobCreate,
       payload,
