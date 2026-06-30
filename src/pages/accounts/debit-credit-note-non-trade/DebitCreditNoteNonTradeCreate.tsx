@@ -37,6 +37,11 @@ import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import {
+  formatRoeAsString,
+  parseRoeForPayload,
+  sanitizeRoeInput,
+} from "../../../utils/exchangeRateRoe";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -729,7 +734,7 @@ export function DebitCreditNoteCreateBase({
       currency_id: form.values.currencyId
         ? Number(form.values.currencyId)
         : null,
-      roe: form.values.roe === "" ? "" : String(form.values.roe),
+      roe: form.values.roe === "" ? "" : formatRoeAsString(form.values.roe),
       document_date: form.values.documentDate
         ? dayjs(form.values.documentDate).format("YYYY-MM-DD")
         : "",
@@ -754,7 +759,7 @@ export function DebitCreditNoteCreateBase({
         currency_id: form.values.currencyId
           ? Number(form.values.currencyId)
           : null,
-        roe: l.roe === "" ? "" : String(l.roe),
+        roe: l.roe === "" ? "" : formatRoeAsString(l.roe),
         amount: l.amount === "" ? "" : String(l.amount),
         local_amount: l.local_amount === "" ? "" : String(l.local_amount),
         amount_in_inr: l.amount_in_inr === "" ? "" : String(l.amount_in_inr),
@@ -837,7 +842,7 @@ export function DebitCreditNoteCreateBase({
     if (headerCurrencyCode) {
       form.setFieldValue("currencyCode", headerCurrencyCode.toUpperCase());
     }
-    if (header?.roe != null) form.setFieldValue("roe", Number(header.roe));
+    if (header?.roe != null) form.setFieldValue("roe", parseRoeForPayload(header.roe) ?? "");
     if (header?.document_date != null)
       form.setFieldValue(
         "documentDate",
@@ -886,7 +891,7 @@ export function DebitCreditNoteCreateBase({
         cost_center_code: String(d.code ?? ""),
         cost_center_key: String(d.key ?? ""),
         currency: String(d.currency_code ?? fallbackCurrencyCode ?? localCurrency),
-        roe: d.roe != null ? Number(d.roe) : "",
+        roe: d.roe != null ? parseRoeForPayload(d.roe) ?? "" : "",
         amount: d.amount != null ? Number(d.amount) : "",
         amount_in_inr: d.amount_in_inr != null ? Number(d.amount_in_inr) : "",
         local_amount: d.local_amount != null ? Number(d.local_amount) : "",
@@ -1005,15 +1010,17 @@ export function DebitCreditNoteCreateBase({
   const isReadOnly = isViewMode || isPosted;
   const pageLabel = showTradeFields ? "Trade" : "Non Trade";
 
-  const applyHeaderRoeToLines = (roe: number, currencyCode?: string) => {
+  const applyHeaderRoeToLines = (roe: number | null, currencyCode?: string) => {
     const code = currencyCode?.trim().toUpperCase();
+    const lineRoe = roe ?? ("" as const);
     form.setFieldValue(
       "lines",
       form.values.lines.map((l) => ({
         ...l,
         ...(code ? { currency: code } : {}),
-        roe,
-        local_amount: computeLocalAmount(l.amount, roe),
+        roe: lineRoe,
+        local_amount:
+          roe != null ? computeLocalAmount(l.amount, roe) : ("" as const),
       })),
     );
   };
@@ -1021,16 +1028,10 @@ export function DebitCreditNoteCreateBase({
   const syncRoeAndApply = (
     code: string,
     currencyId: string | null,
-    onRoe: (roe: number) => void,
+    onRoe: (roe: number | null) => void,
   ) => {
     if (!code) return;
-    syncRoeForCurrencyChange(
-      code,
-      (roe) => {
-        if (roe != null) onRoe(roe);
-      },
-      currencyId,
-    );
+    syncRoeForCurrencyChange(code, onRoe, currencyId);
   };
 
   const handleLineCurrencyChange = (
@@ -1076,9 +1077,10 @@ export function DebitCreditNoteCreateBase({
     });
   };
 
-  // Branch currency: ROE = 1; foreign currency: fetch from exchange rate master.
+  // Branch currency: ROE = 1; foreign currency: fetch from exchange rate master (create only).
   useEffect(() => {
-    if (isReadOnly || isPrefillingRef.current || !headerCurrencyCode) return;
+    if (isReadOnly || isPrefillingRef.current || isEditMode || !headerCurrencyCode)
+      return;
 
     const isLocal = isLocalCurrency(
       headerCurrencyCode,
@@ -1106,6 +1108,7 @@ export function DebitCreditNoteCreateBase({
     headerCurrencyCode,
     form.values.currencyId,
     isReadOnly,
+    isEditMode,
     isLocalCurrency,
     syncRoeForCurrencyChange,
   ]);
@@ -1465,8 +1468,8 @@ export function DebitCreditNoteCreateBase({
               type="number"
               value={form.values.roe === "" ? "" : String(form.values.roe)}
               onChange={(e) => {
-                const v = e.currentTarget.value;
-                const nextRoe = v === "" ? null : Number(v);
+                const v = sanitizeRoeInput(e.currentTarget.value);
+                const nextRoe = v === "" ? null : parseRoeForPayload(v);
                 onRoeValueChange(
                   headerCurrencyCode,
                   nextRoe,
@@ -1898,8 +1901,8 @@ export function DebitCreditNoteCreateBase({
                     type="number"
                     value={l.roe === "" ? "" : String(l.roe)}
                     onChange={(e) => {
-                      const v = e.currentTarget.value;
-                      const nextRoe = v === "" ? "" : Number(v);
+                      const v = sanitizeRoeInput(e.currentTarget.value);
+                      const nextRoe = v === "" ? "" : v;
                       const { code: lineCode, currencyId: lineCurrencyId } =
                         resolveLineCurrencyContext(
                           l.currency,
@@ -1912,7 +1915,7 @@ export function DebitCreditNoteCreateBase({
                         });
                         return;
                       }
-                      const roeNum = nextRoe === "" ? null : Number(nextRoe);
+                      const roeNum = nextRoe === "" ? null : parseRoeForPayload(nextRoe);
                       const roeError = validateRoeField(
                         lineCode || headerCurrencyCode,
                         roeNum,

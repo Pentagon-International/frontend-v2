@@ -46,6 +46,11 @@ import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import {
+  formatRoeForAccountsPayload,
+  parseRoeForPayload,
+  ROE_DECIMAL_PLACES,
+} from "../../../utils/exchangeRateRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
@@ -367,7 +372,7 @@ function JournalVoucherReversal() {
             key: c.key ?? "",
             currency_id: c.currency_id != null ? String(c.currency_id) : "",
             currency_code: "",
-            roe: c.roe != null ? Number(c.roe) : null,
+            roe: parseRoeForPayload(c.roe),
             amount: c.amount != null ? Number(c.amount) : null,
             local_amount:
               c.local_amount != null ? Number(c.local_amount) : null,
@@ -477,7 +482,7 @@ function JournalVoucherReversal() {
         subledger: c.subledger_code ?? "",
         code: c.code ?? "",
         key: c.key ?? "",
-        roe: c.roe != null ? Number(c.roe).toFixed(3) : "0.000",
+        roe: formatRoeForAccountsPayload(c.roe),
         amount: c.amount != null ? Number(c.amount).toFixed(3) : "0.000",
         local_amount:
           c.local_amount != null ? Number(c.local_amount).toFixed(3) : "0.000",
@@ -1579,10 +1584,13 @@ function JournalVoucherReversal() {
                               syncRoeForCurrencyChange(
                                 code,
                                 (roe) => {
-                                  if (roe == null) return;
                                   form.setFieldValue(`charges.${index}.roe`, roe);
                                   const amt = form.values.charges[index].amount;
-                                  if (amt != null && amt > 0) {
+                                  if (
+                                    amt != null &&
+                                    amt > 0 &&
+                                    roe != null
+                                  ) {
                                     form.setFieldValue(
                                       `charges.${index}.local_amount`,
                                       clampAmt(amt * roe),
@@ -1602,6 +1610,7 @@ function JournalVoucherReversal() {
                             placeholder="ROE"
                             min={0}
                             hideControls
+                            decimalScale={ROE_DECIMAL_PLACES}
                             readOnly={
                               isReadOnly ||
                               isLocalCurrency(

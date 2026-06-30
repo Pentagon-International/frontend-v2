@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useExchangeRateRoe } from "./useExchangeRateRoe";
+import { clampRoeForAccounts } from "../utils/exchangeRateRoe";
 
 /**
  * Accounts documents: active branch currency defaults + exchange-rate-master ROE.
@@ -46,8 +47,9 @@ export function useAccountsDocumentCurrencyRoe() {
         return;
       }
       if (!code) return;
+      setRoe(null);
       void ensureRoeForCurrency(code).then((roe) => {
-        if (roe != null) setRoe(roe);
+        setRoe(roe != null ? clampRoeForAccounts(roe) : null);
       });
     },
     [ensureRoeForCurrency, isBaseCurrency],
@@ -68,8 +70,9 @@ export function useAccountsDocumentCurrencyRoe() {
         clearFieldError(fieldKey);
         return;
       }
-      setRoe(rawRoe ?? null);
-      const err = validateRoeField(currencyCode, rawRoe, currencyId);
+      const normalizedRoe = clampRoeForAccounts(rawRoe ?? null);
+      setRoe(normalizedRoe);
+      const err = validateRoeField(currencyCode, normalizedRoe, currencyId);
       if (err) setFieldError(fieldKey, err);
       else clearFieldError(fieldKey);
     },

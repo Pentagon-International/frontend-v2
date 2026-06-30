@@ -26,6 +26,7 @@ import {
   ToastNotification,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
+import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
 
 type CoaItem = {
   id?: number;
@@ -577,7 +578,7 @@ export default function DocumentAllocation() {
           document_no: r.document_no ?? "",
           document_date: r.document_date ?? "",
           currency_id: r.currency_id ?? null,
-          roe: formatFixed(roeNum, 3),
+          roe: formatFixed(roeNum, ROE_DECIMAL_PLACES),
           amount: formatFixed(amountNum, 3),
           amount_in_local: formatFixed(localNum, 3),
           Dr_Cr: r.Dr_Cr ?? "",

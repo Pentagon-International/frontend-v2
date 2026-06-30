@@ -104,6 +104,32 @@ export const formatRoeAsString = (
   return parsed != null ? String(parsed) : "";
 };
 
+/** Max ROE magnitude: 11 integer digits + 6 decimal places. */
+export const ROE_MAX_VALUE = 99999999999.999999;
+
+/** Clamp user-entered ROE for accounts documents (6 decimals, max magnitude). */
+export function clampRoeForAccounts(
+  value: number | null | undefined,
+): number | null {
+  if (value == null || !Number.isFinite(value)) {
+    return value === undefined ? null : value;
+  }
+  const rounded = roundRoeForPayload(value);
+  if (rounded == null || rounded === undefined) return null;
+  if (Math.abs(rounded) > ROE_MAX_VALUE) {
+    return rounded > 0 ? ROE_MAX_VALUE : -ROE_MAX_VALUE;
+  }
+  return rounded;
+}
+
+/** Format ROE for accounts APIs that expect string values. */
+export function formatRoeForAccountsPayload(
+  value: number | string | null | undefined,
+): string {
+  const parsed = parseRoeForPayload(value);
+  return parsed != null ? String(parsed) : "0";
+}
+
 export const fetchExchangeRateMaster = async (
   countryCode: string,
   currencyCode: string,

@@ -48,6 +48,11 @@ import {
   import { postAPICall } from "../../../service/postApiCall";
   import useAuthStore from "../../../store/authStore";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+  import {
+    parseRoeForPayload,
+    ROE_DECIMAL_PLACES,
+    ROE_MAX_VALUE,
+  } from "../../../utils/exchangeRateRoe";
   
   const RECEIPT_TYPE_OPTIONS = [
     { value: "CHEQUE", label: "CHEQUE" },
@@ -106,17 +111,6 @@ import {
       return [];
     }
   };
-  
-  // ROE: max 15 digits including 4 decimal places (11 integer + 4 decimal)
-  const ROE_MAX = 99999999999.9999;
-  
-  function clampROE(value: number | null | undefined): number | null {
-    if (value == null || !Number.isFinite(value))
-      return value === undefined ? null : value;
-    const rounded = Math.round(value * 10000) / 10000;
-    if (Math.abs(rounded) > ROE_MAX) return rounded > 0 ? ROE_MAX : -ROE_MAX;
-    return rounded;
-  }
   
   // Amount: max 15 digits including 2 decimal places (13 integer + 2 decimal)
   const AMOUNT_MAX = 9999999999999.99;
@@ -690,6 +684,7 @@ import {
   
     // Load from list: state is receipt row (Receipt Master) or reversal row (Receipt Reversal list for edit/view)
     const receiptFromState = location.state as ReceiptListItem | null | undefined;
+    const loadedFromListState = receiptFromState?.id != null;
     const pathname = location.pathname;
     const isReversalEditOrView =
       _isReversal &&
@@ -854,11 +849,18 @@ import {
       isReversalCreate,
     ]);
   
+    // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
+    // exchange rate master is called only when the user changes currency (dropdown onChange).
     useEffect(() => {
       const curr = form.values.currency?.trim();
-      if (!curr || !localCurrency) return;
+      if (!curr || !localCurrency || loadedFromListState) return;
       syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
-    }, [form.values.currency, localCurrency, syncRoeForCurrencyChange]);
+    }, [
+      form.values.currency,
+      localCurrency,
+      loadedFromListState,
+      syncRoeForCurrencyChange,
+    ]);
   
     // When party details change: header amount = Σ(Cr) − Σ(Dr) (same as ReceiptCreate)
     const partyNetSnapshot = form.values.details
@@ -1192,7 +1194,7 @@ import {
         day_book_id: dayBookId,
         type: (values.type ?? "CASH").toString().toUpperCase(),
         currency_id: currencyId,
-        roe: values.roe ?? 0,
+        roe: parseRoeForPayload(values.roe) ?? 0,
         amount: values.amount ?? 0,
         local_amount: values.local_amount ?? 0,
         narration: values.narration ?? "",
@@ -1207,7 +1209,7 @@ import {
           subledger_code: d.customer_code ?? "",
           narration: d.narration ?? "",
           currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-          roe: d.roe ?? 0,
+          roe: parseRoeForPayload(d.roe) ?? 0,
           amount: d.amount ?? 0,
           local_amount: d.local_amount ?? 0,
           dr_cr: (d.dr_cr ?? "Cr").toString(),
@@ -1270,7 +1272,7 @@ import {
         day_book_id: dayBookId,
         type: (values.type ?? "CASH").toString().toUpperCase(),
         currency_id: currencyId,
-        roe: values.roe ?? 0,
+        roe: parseRoeForPayload(values.roe) ?? 0,
         amount: values.amount ?? 0,
         local_amount: values.local_amount ?? 0,
         narration: values.narration ?? "",
@@ -1284,7 +1286,7 @@ import {
           subledger_code: d.customer_code ?? "",
           narration: d.narration ?? "",
           currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-          roe: d.roe ?? 0,
+          roe: parseRoeForPayload(d.roe) ?? 0,
           amount: d.amount ?? 0,
           local_amount: d.local_amount ?? 0,
           dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "Dr").toString(),
@@ -2189,7 +2191,11 @@ import {
                   onChange={(v) =>
                     onRoeValueChange(
                       form.values.currency,
-                      clampROE(typeof v === "string" ? parseFloat(v) : v) ?? null,
+                      typeof v === "string"
+                        ? Number.isFinite(parseFloat(v))
+                          ? parseFloat(v)
+                          : null
+                        : (v as number | null),
                       (roe) => form.setFieldValue("roe", roe),
                       form.setFieldError,
                       form.clearFieldError,
@@ -2197,8 +2203,8 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={4}
-                  max={ROE_MAX}
+                  decimalScale={ROE_DECIMAL_PLACES}
+                  max={ROE_MAX_VALUE}
                   hideControls
                   error={form.errors.roe}
                   styles={headerFieldStyles}
@@ -2522,9 +2528,11 @@ import {
                                 const detailCurrency =
                                   form.values.details[idx]?.currency ?? "";
                                 const newRoe =
-                                  clampROE(
-                                    typeof v === "string" ? parseFloat(v) : v,
-                                  ) ?? null;
+                                  typeof v === "string"
+                                    ? Number.isFinite(parseFloat(v))
+                                      ? parseFloat(v)
+                                      : null
+                                    : (v as number | null);
                                 onRoeValueChange(
                                   detailCurrency,
                                   newRoe,
@@ -2547,8 +2555,8 @@ import {
                                   );
                                 }
                               }}
-                              decimalScale={4}
-                              max={ROE_MAX}
+                              decimalScale={ROE_DECIMAL_PLACES}
+                              max={ROE_MAX_VALUE}
                               error={form.errors[`details.${idx}.roe`]}
                               styles={partyFieldStyles}
                               disabled={

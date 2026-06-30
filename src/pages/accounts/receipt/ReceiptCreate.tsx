@@ -48,6 +48,11 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import {
+  parseRoeForPayload,
+  ROE_DECIMAL_PLACES,
+  ROE_MAX_VALUE,
+} from "../../../utils/exchangeRateRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const RECEIPT_TYPE_OPTIONS = [
@@ -107,17 +112,6 @@ const fetchDaybookINV = async () => {
     return [];
   }
 };
-
-// ROE: max 15 digits including 4 decimal places (11 integer + 4 decimal)
-const ROE_MAX = 99999999999.9999;
-
-function clampROE(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 10000) / 10000;
-  if (Math.abs(rounded) > ROE_MAX) return rounded > 0 ? ROE_MAX : -ROE_MAX;
-  return rounded;
-}
 
 // Amount: max 15 digits including 2 decimal places (13 integer + 2 decimal)
 const AMOUNT_MAX = 9999999999999.99;
@@ -707,6 +701,7 @@ export default function ReceiptCreate({
 
   // Load from list: state is receipt row (Receipt Master) or reversal row (Receipt Reversal list for edit/view)
   const receiptFromState = location.state as ReceiptListItem | null | undefined;
+  const loadedFromListState = receiptFromState?.id != null;
   const pathname = location.pathname;
   const isReversalEditOrView =
     _isReversal &&
@@ -885,61 +880,88 @@ export default function ReceiptCreate({
     isReversalCreate,
   ]);
 
+  // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
+  // exchange rate master is called only when the user changes currency (dropdown onChange).
   useEffect(() => {
     const curr = form.values.currency?.trim();
-    if (!curr || !localCurrency) return;
+    if (!curr || !localCurrency || loadedFromListState) return;
     syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
-  }, [form.values.currency, localCurrency, syncRoeForCurrencyChange]);
+  }, [
+    form.values.currency,
+    localCurrency,
+    loadedFromListState,
+    syncRoeForCurrencyChange,
+  ]);
 
   // When party details change: header amount = Σ(Cr) − Σ(Dr)
   // This is important because backend may append extra party rows (ex: TDS) on save.
-  const partyNetSnapshot = form.values.details
-    .map(
-      (d) =>
-        `${d.dr_cr}|${d.amount ?? ""}|${d.local_amount ?? ""}|${d.roe ?? ""}`,
-    )
+  const partyLocalAmountsSnapshot = form.values.details
+    .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
     .join(";");
+  const partyAmountsSnapshot = form.values.details
+    .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
+    .join(";");
+  const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
+  const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
+  const prevPartyAmountsRef = useRef(partyAmountsSnapshot);
+  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
+
   useEffect(() => {
+    const partyLocalChanged =
+      prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
+    const partyAmountsChanged =
+      prevPartyAmountsRef.current !== partyAmountsSnapshot;
+    const headerAmountRoeChanged =
+      prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
+
     const details = form.values.details ?? [];
-    const netAmount = details.reduce((s, d) => {
-      const sign = d.dr_cr === "Dr" ? -1 : 1;
-      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-      return s + sign * amt;
-    }, 0);
-    const headerAmount = clampAmount(netAmount);
-    const roeVal = form.values.roe;
-    const headerLocal =
-      headerAmount != null &&
-      roeVal != null &&
-      Number.isFinite(roeVal) &&
-      roeVal !== 0
-        ? clampAmount(headerAmount * roeVal)
-        : null;
+    let amountForLocal = form.values.amount;
 
-    if (form.values.amount !== headerAmount) {
-      form.setFieldValue("amount", headerAmount);
+    if (partyAmountsChanged) {
+      const netAmount = details.reduce((s, d) => {
+        const sign = d.dr_cr === "Dr" ? -1 : 1;
+        const amt =
+          d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+        return s + sign * amt;
+      }, 0);
+      const headerAmount = clampAmount(netAmount);
+      if (form.values.amount !== headerAmount) {
+        form.setFieldValue("amount", headerAmount);
+      }
+      amountForLocal = headerAmount;
     }
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
-    }
-  }, [partyNetSnapshot, form.values.roe]);
 
-  // Header: keep local_amount aligned with amount only when no party rows exist
-  useEffect(() => {
-    if ((form.values.details ?? []).length > 0) return;
-    const amt = form.values.amount;
-    const roeVal = form.values.roe;
-    const local =
-      amt != null &&
-      Number.isFinite(amt) &&
-      roeVal != null &&
-      Number.isFinite(roeVal)
-        ? clampAmount(amt * roeVal)
-        : null;
-    if (form.values.local_amount !== local) {
-      form.setFieldValue("local_amount", local);
+    if (partyLocalChanged) {
+      const netLocal = details.reduce((s, d) => {
+        const sign = d.dr_cr === "Dr" ? -1 : 1;
+        const local =
+          d.local_amount != null && Number.isFinite(d.local_amount)
+            ? d.local_amount
+            : 0;
+        return s + sign * local;
+      }, 0);
+      const headerLocal = clampAmount(netLocal);
+      if (form.values.local_amount !== headerLocal) {
+        form.setFieldValue("local_amount", headerLocal);
+      }
+    } else if (headerAmountRoeChanged || partyAmountsChanged) {
+      const roeVal = form.values.roe;
+      const local =
+        amountForLocal != null &&
+        Number.isFinite(amountForLocal) &&
+        roeVal != null &&
+        Number.isFinite(roeVal)
+          ? clampAmount(amountForLocal * roeVal)
+          : null;
+      if (form.values.local_amount !== local) {
+        form.setFieldValue("local_amount", local);
+      }
     }
-  }, [form.values.amount, form.values.roe]);
+
+    prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+    prevPartyAmountsRef.current = partyAmountsSnapshot;
+    prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+  }, [partyLocalAmountsSnapshot, partyAmountsSnapshot, headerAmountRoeKey]);
 
   /** Sync party details from allocation totals: only call when adjustments actually change (Adj Curr Amount or invoice selection), not when user changes Amount/ROE. */
   const syncPartyDetailsFromAllocations = (
@@ -1317,7 +1339,7 @@ export default function ReceiptCreate({
       day_book_id: dayBookId,
       type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
-      roe: values.roe ?? 0,
+      roe: parseRoeForPayload(values.roe) ?? 0,
       amount: values.amount ?? 0,
       local_amount: values.local_amount ?? 0,
       narration: values.narration ?? "",
@@ -1333,7 +1355,7 @@ export default function ReceiptCreate({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-        roe: d.roe ?? 0,
+        roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
@@ -1396,7 +1418,7 @@ export default function ReceiptCreate({
       day_book_id: dayBookId,
       type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
-      roe: values.roe ?? 0,
+      roe: parseRoeForPayload(values.roe) ?? 0,
       amount: values.amount ?? 0,
       local_amount: values.local_amount ?? 0,
       narration: values.narration ?? "",
@@ -1412,7 +1434,7 @@ export default function ReceiptCreate({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-        roe: d.roe ?? 0,
+        roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr"
@@ -2284,7 +2306,11 @@ export default function ReceiptCreate({
                 onChange={(v) =>
                   onRoeValueChange(
                     form.values.currency,
-                    clampROE(typeof v === "string" ? parseFloat(v) : v) ?? null,
+                    typeof v === "string"
+                      ? Number.isFinite(parseFloat(v))
+                        ? parseFloat(v)
+                        : null
+                      : (v as number | null),
                     (roe) => form.setFieldValue("roe", roe),
                     form.setFieldError,
                     form.clearFieldError,
@@ -2292,8 +2318,8 @@ export default function ReceiptCreate({
                   )
                 }
                 min={0}
-                decimalScale={4}
-                max={ROE_MAX}
+                decimalScale={ROE_DECIMAL_PLACES}
+                max={ROE_MAX_VALUE}
                 hideControls
                 error={form.errors.roe}
                 styles={headerFieldStyles}
@@ -2643,9 +2669,11 @@ export default function ReceiptCreate({
                               const detailCurrency =
                                 form.values.details[idx]?.currency ?? "";
                               const newRoe =
-                                clampROE(
-                                  typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null;
+                                typeof v === "string"
+                                  ? Number.isFinite(parseFloat(v))
+                                    ? parseFloat(v)
+                                    : null
+                                  : (v as number | null);
                               onRoeValueChange(
                                 detailCurrency,
                                 newRoe,
@@ -2668,8 +2696,8 @@ export default function ReceiptCreate({
                                 );
                               }
                             }}
-                            decimalScale={4}
-                            max={ROE_MAX}
+                            decimalScale={ROE_DECIMAL_PLACES}
+                            max={ROE_MAX_VALUE}
                             error={form.errors[`details.${idx}.roe`]}
                             styles={partyFieldStyles}
                             disabled={

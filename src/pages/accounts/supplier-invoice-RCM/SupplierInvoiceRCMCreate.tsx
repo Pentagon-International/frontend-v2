@@ -41,6 +41,11 @@ import {
   import useAuthStore from "../../../store/authStore";
   import { isIndianUserCountry } from "../../../utils/userNumberFormat";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+  import {
+    formatRoeForAccountsPayload,
+    parseRoeForPayload,
+    ROE_DECIMAL_PLACES,
+  } from "../../../utils/exchangeRateRoe";
   
   const fetchCurrencyMaster = async () => {
     try {
@@ -1010,7 +1015,7 @@ import {
         Inv_Crn_no: (data.Inv_Crn_no ?? "") as string,
         roe:
           data.roe != null && data.roe !== ""
-            ? parseFloat(String(data.roe))
+            ? parseRoeForPayload(data.roe)
             : null,
         currency_id: data.currency_id != null ? String(data.currency_id) : "",
         taxable_amount:
@@ -1105,7 +1110,7 @@ import {
         charge_id: c.charge_id != null ? Number(c.charge_id) : null,
         charge_name: String(c.charge_name ?? ""),
         currency_id: c.currency_id != null ? Number(c.currency_id) : null,
-        roe: c.roe != null && c.roe !== "" ? parseFloat(String(c.roe)) || null : null,
+        roe: c.roe != null && c.roe !== "" ? parseRoeForPayload(c.roe) : null,
         amount: c.amount != null && c.amount !== "" ? parseFloat(String(c.amount)) || null : null,
         amount_in_local: c.local_amount != null && c.local_amount !== "" ? parseFloat(String(c.local_amount)) || null : null,
         tax_code: String(c.sac_code ?? ""),
@@ -1170,7 +1175,7 @@ import {
           shipment_no: c.shipment_no || "",
           charge_id: c.charge_id ?? null,
           currency_id: c.currency_id ?? null,
-          roe: String(c.roe ?? 0),
+          roe: formatRoeForAccountsPayload(c.roe),
           amount: formatAmountToTwoDecimals(c.amount ?? 0),
           amount_in_local: formatAmountToTwoDecimals(c.amount_in_local ?? 0),
           tax_code: c.tax_code || "",
@@ -1196,7 +1201,7 @@ import {
           ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
           : "",
         Inv_Crn_no: values.Inv_Crn_no || "",
-        roe: values.roe ?? null,
+        roe: parseRoeForPayload(values.roe) ?? null,
         currency_id: values.currency_id ? Number(values.currency_id) : null,
         taxable_amount: formatAmountToTwoDecimals(values.taxable_amount ?? 0),
         non_taxable_amount: formatAmountToTwoDecimals(
@@ -1673,9 +1678,7 @@ import {
         syncRoeForCurrencyChange(
           currCode,
           (roe) => {
-            if (roe != null) {
-              form.setFieldValue(`charges_data.${newIndex}.roe`, roe);
-            }
+            form.setFieldValue(`charges_data.${newIndex}.roe`, roe);
           },
           currencyIdStr,
         );
@@ -2111,7 +2114,7 @@ import {
                       )
                     }
                     min={0}
-                    decimalScale={4}
+                    decimalScale={ROE_DECIMAL_PLACES}
                     hideControls
                     disabled={
                       isReadOnly ||
@@ -2376,7 +2379,7 @@ import {
                                     charge_name: String(t.charge_name ?? ""),
                                     currency_id:
                                       currencyId != null ? Number(currencyId) : null,
-                                    roe: roe != null ? Number(roe) : null,
+                                    roe: parseRoeForPayload(roe),
                                     amount: amount != null ? Number(amount) : null,
                                     amount_in_local: amount != null ? Number(amount) : null,
                                     // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
@@ -2513,7 +2516,7 @@ import {
                                   charge_name: "",
                                   currency_id:
                                     currencyId != null ? Number(currencyId) : null,
-                                  roe: roe != null ? Number(roe) : null,
+                                  roe: parseRoeForPayload(roe),
                                   amount: Number(amount),
                                   amount_in_local: Number(amount),
                                   tax_code: "",
@@ -2903,12 +2906,10 @@ import {
                             syncRoeForCurrencyChange(
                               code,
                               (roe) => {
-                                if (roe != null) {
-                                  form.setFieldValue(
-                                    `charges_data.${index}.roe`,
-                                    roe,
-                                  );
-                                }
+                                form.setFieldValue(
+                                  `charges_data.${index}.roe`,
+                                  roe,
+                                );
                               },
                               v ?? "",
                             );
@@ -2954,7 +2955,7 @@ import {
                               );
                             }}
                             min={0}
-                            decimalScale={4}
+                            decimalScale={ROE_DECIMAL_PLACES}
                             hideControls
                             disabled={
                               isReadOnly ||

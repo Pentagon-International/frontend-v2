@@ -44,6 +44,11 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import {
+  parseRoeForPayload,
+  ROE_DECIMAL_PLACES,
+  ROE_MAX_VALUE,
+} from "../../../utils/exchangeRateRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -103,16 +108,6 @@ const fetchDaybookPMTREV = async () => {
     return [];
   }
 };
-
-const ROE_MAX = 99999999999.9999;
-
-function clampROE(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value))
-    return value === undefined ? null : value;
-  const rounded = Math.round(value * 10000) / 10000;
-  if (Math.abs(rounded) > ROE_MAX) return rounded > 0 ? ROE_MAX : -ROE_MAX;
-  return rounded;
-}
 
 const AMOUNT_MAX = 9999999999999.99;
 
@@ -896,49 +891,61 @@ export default function PaymentCreate({
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
     .join(";");
-  useEffect(() => {
-    const sum = (form.values.details ?? []).reduce(
-      (s, d) =>
-        s +
-        (d.local_amount != null && Number.isFinite(d.local_amount)
-          ? d.local_amount
-          : 0),
-      0,
-    );
-    const headerLocal = clampAmount(sum);
-    const roeVal = form.values.roe;
-    const derivedHeaderAmount =
-      headerLocal != null &&
-      roeVal != null &&
-      Number.isFinite(roeVal) &&
-      roeVal !== 0
-        ? clampAmount(headerLocal / roeVal)
-        : null;
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
-    }
-    if (
-      derivedHeaderAmount != null &&
-      form.values.amount !== derivedHeaderAmount
-    ) {
-      form.setFieldValue("amount", derivedHeaderAmount);
-    }
-  }, [partyLocalAmountsSnapshot]);
+  const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
+  const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
+  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
 
   useEffect(() => {
-    const amt = form.values.amount;
-    const roeVal = form.values.roe;
-    const local =
-      amt != null &&
-      Number.isFinite(amt) &&
-      roeVal != null &&
-      Number.isFinite(roeVal)
-        ? clampAmount(amt * roeVal)
-        : null;
-    if (form.values.local_amount !== local) {
-      form.setFieldValue("local_amount", local);
+    const partyLocalChanged =
+      prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
+    const headerAmountRoeChanged =
+      prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
+
+    if (partyLocalChanged) {
+      const sum = (form.values.details ?? []).reduce(
+        (s, d) =>
+          s +
+          (d.local_amount != null && Number.isFinite(d.local_amount)
+            ? d.local_amount
+            : 0),
+        0,
+      );
+      const headerLocal = clampAmount(sum);
+      const roeVal = form.values.roe;
+      const derivedHeaderAmount =
+        headerLocal != null &&
+        roeVal != null &&
+        Number.isFinite(roeVal) &&
+        roeVal !== 0
+          ? clampAmount(headerLocal / roeVal)
+          : null;
+      if (form.values.local_amount !== headerLocal) {
+        form.setFieldValue("local_amount", headerLocal);
+      }
+      if (
+        derivedHeaderAmount != null &&
+        form.values.amount !== derivedHeaderAmount
+      ) {
+        form.setFieldValue("amount", derivedHeaderAmount);
+      }
+    } else if (headerAmountRoeChanged) {
+      const amt = form.values.amount;
+      const roeVal = form.values.roe;
+      const local =
+        amt != null &&
+        Number.isFinite(amt) &&
+        roeVal != null &&
+        Number.isFinite(roeVal)
+          ? clampAmount(amt * roeVal)
+          : null;
+      if (form.values.local_amount !== local) {
+        form.setFieldValue("local_amount", local);
+      }
     }
-  }, [form.values.amount, form.values.roe]);
+
+    prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+    prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+  }, [partyLocalAmountsSnapshot, headerAmountRoeKey]);
 
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
@@ -1295,7 +1302,7 @@ export default function PaymentCreate({
       day_book_id: dayBookId,
       type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
-      roe: values.roe ?? 0,
+      roe: parseRoeForPayload(values.roe) ?? 0,
       amount: values.amount ?? 0,
       local_amount: values.local_amount ?? 0,
       narration: values.narration ?? "",
@@ -1310,7 +1317,7 @@ export default function PaymentCreate({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-        roe: d.roe ?? 0,
+        roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Dr").toString(),
@@ -1376,7 +1383,7 @@ export default function PaymentCreate({
       day_book_id: dayBookId,
       type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
-      roe: values.roe ?? 0,
+      roe: parseRoeForPayload(values.roe) ?? 0,
       account_code: (source?.account_code ?? "").toString(),
       received_from: (source?.received_from ?? "").toString(),
       amount: values.amount ?? 0,
@@ -1393,7 +1400,7 @@ export default function PaymentCreate({
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
-        roe: d.roe ?? 0,
+        roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
@@ -2149,7 +2156,11 @@ export default function PaymentCreate({
                 onChange={(v) =>
                   onRoeValueChange(
                     form.values.currency,
-                    clampROE(typeof v === "string" ? parseFloat(v) : v) ?? null,
+                    typeof v === "string"
+                      ? Number.isFinite(parseFloat(v))
+                        ? parseFloat(v)
+                        : null
+                      : (v as number | null),
                     (roe) => form.setFieldValue("roe", roe),
                     form.setFieldError,
                     form.clearFieldError,
@@ -2157,8 +2168,8 @@ export default function PaymentCreate({
                   )
                 }
                 min={0}
-                decimalScale={4}
-                max={ROE_MAX}
+                decimalScale={ROE_DECIMAL_PLACES}
+                max={ROE_MAX_VALUE}
                 hideControls
                 error={form.errors.roe}
                 styles={headerFieldStyles}
@@ -2466,9 +2477,11 @@ export default function PaymentCreate({
                               const detailCurrency =
                                 form.values.details[idx]?.currency ?? "";
                               const newRoe =
-                                clampROE(
-                                  typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null;
+                                typeof v === "string"
+                                  ? Number.isFinite(parseFloat(v))
+                                    ? parseFloat(v)
+                                    : null
+                                  : (v as number | null);
                               onRoeValueChange(
                                 detailCurrency,
                                 newRoe,
@@ -2491,8 +2504,8 @@ export default function PaymentCreate({
                                 );
                               }
                             }}
-                            decimalScale={4}
-                            max={ROE_MAX}
+                            decimalScale={ROE_DECIMAL_PLACES}
+                            max={ROE_MAX_VALUE}
                             error={form.errors[`details.${idx}.roe`]}
                             styles={partyFieldStyles}
                             disabled={
