@@ -3540,6 +3540,8 @@ function ImportJobCreate() {
                             jobId:
                               jobData?.job_id ,
                               service_name: "Ocean Import",
+                            jobReturnTo: location.pathname,
+                            jobReturnToState: location.state,
                           },
                         })
                       }

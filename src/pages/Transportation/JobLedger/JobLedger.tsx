@@ -132,6 +132,13 @@ const formatJobLedgerJobLabel = (response: JobLedgerApiResponse): string => {
   return `${serviceCode}-${jobId}`;
 };
 
+const JOB_EDIT_PATH_BY_SERVICE_NAME: Record<string, string> = {
+  "Air Import": "/air/import-job/edit",
+  "Air Export": "/air/export-job/edit",
+  "Ocean Import": "/SeaExport/import-job/edit",
+  "Ocean Export": "/SeaExport/export-job/edit",
+};
+
 type JobLedgerRequestFilters = {
   job_id: string;
   location: string;
@@ -182,25 +189,33 @@ type ChargeWiseData = {
   sno: number;
   chargeCode: string;
   chargeName: string;
-  debit: number | null;
-  credit: number | null;
-  provisionalRevenue: number | null;
-  provisionalCost: number | null;
-  provisionalNeutral: number | null;
-  actualRevenue: number | null;
-  actualCost: number | null;
-  actualNeutral: number | null;
+  debit: string;
+  credit: string;
+  provisionalRevenue: string;
+  provisionalCost: string;
+  provisionalNeutral: string;
+  actualRevenue: string;
+  actualCost: string;
+  actualNeutral: string;
 };
 
-const toNullableNumber = (v: unknown): number | null => {
-  if (v === null || v === undefined || v === "") return null;
+/** Preserve API amount formatting: strings as-is; JSON numbers with one decimal when whole. */
+const toApiDisplayAmount = (v: unknown): string => {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    return trimmed;
+  }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    return Number.isInteger(v) ? v.toFixed(1) : String(v);
+  }
+  return "";
+};
+
+const parseDisplayAmount = (v: string): number => {
+  if (!v.trim()) return 0;
   const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-const formatChargeAmount = (v: number | null): string => {
-  if (v === null) return "";
-  return v.toFixed(3);
+  return Number.isFinite(n) ? n : 0;
 };
 
 type ServiceMasterRow = {
@@ -242,6 +257,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
   const inferredHblHawbFinal: string | null =
     (navState?.hbl_hawb_no as string | null) ?? null;
+
+  const jobReturnTo = (navState?.jobReturnTo as string | undefined)?.trim() ?? "";
+  const jobReturnToState = navState?.jobReturnToState;
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -292,15 +310,52 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       segmentCode: filters.segmentCode,
       service_name: navState?.service_name,
       hbl_hawb_no: filters.hbl_hawb_no,
+      ...(jobReturnTo ? { jobReturnTo } : {}),
+      ...(jobReturnToState != null ? { jobReturnToState } : {}),
+      ...(navState?.job ? { job: navState.job } : {}),
     }),
     [
       filters.jobNo,
       filters.location,
       filters.segmentCode,
       filters.hbl_hawb_no,
+      jobReturnTo,
+      jobReturnToState,
+      navState?.job,
       navState?.service_name,
     ],
   );
+
+  const handleBack = useCallback(() => {
+    if (jobReturnTo && jobReturnTo !== "/job-ledger") {
+      navigate(
+        jobReturnTo,
+        jobReturnToState != null ? { state: jobReturnToState } : undefined,
+      );
+      return;
+    }
+
+    const serviceName = (navState?.service_name as string | undefined)?.trim() ?? "";
+    const fallbackPath = JOB_EDIT_PATH_BY_SERVICE_NAME[serviceName];
+    if (fallbackPath && filters.jobNo) {
+      navigate(fallbackPath, {
+        state: {
+          jobId: filters.jobNo,
+          ...(navState?.job ? { job: navState.job } : {}),
+        },
+      });
+      return;
+    }
+
+    navigate(-1);
+  }, [
+    navigate,
+    jobReturnTo,
+    jobReturnToState,
+    navState?.job,
+    navState?.service_name,
+    filters.jobNo,
+  ]);
 
   const getDocumentNavigationOptions = useCallback(
     () => ({
@@ -468,14 +523,14 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             sno: d?.sno ?? idx + 1,
             chargeCode: (d?.charge_code ?? "").toString(),
             chargeName: (d?.charge_name ?? "").toString(),
-            debit: toNullableNumber(d?.debit_local_amount),
-            credit: toNullableNumber(d?.credit_local_amount),
-            provisionalRevenue: toNullableNumber(d?.provisional_revenue),
-            provisionalCost: toNullableNumber(d?.provisional_cost),
-            provisionalNeutral: toNullableNumber(d?.provisional_neutral),
-            actualRevenue: toNullableNumber(d?.actual_revenue),
-            actualCost: toNullableNumber(d?.actual_cost),
-            actualNeutral: toNullableNumber(d?.actual_neutral),
+            debit: toApiDisplayAmount(d?.debit_local_amount),
+            credit: toApiDisplayAmount(d?.credit_local_amount),
+            provisionalRevenue: toApiDisplayAmount(d?.provisional_revenue),
+            provisionalCost: toApiDisplayAmount(d?.provisional_cost),
+            provisionalNeutral: toApiDisplayAmount(d?.provisional_neutral),
+            actualRevenue: toApiDisplayAmount(d?.actual_revenue),
+            actualCost: toApiDisplayAmount(d?.actual_cost),
+            actualNeutral: toApiDisplayAmount(d?.actual_neutral),
           };
         }),
       );
@@ -705,61 +760,69 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const chargeTotals = useMemo(() => {
     if (chargeSummary) {
       return {
-        totalDebit: toNumber(chargeSummary.total_debit),
-        totalCredit: toNumber(chargeSummary.total_credit),
-        provisionalRevenue: toNumber(chargeSummary.provisional?.total_revenue),
-        provisionalCost: toNumber(chargeSummary.provisional?.total_cost),
-        provisionalNeutral: toNumber(chargeSummary.provisional?.total_neutral),
-        actualRevenue: toNumber(chargeSummary.actual?.total_revenue),
-        actualCost: toNumber(chargeSummary.actual?.total_cost),
-        actualNeutral: toNumber(chargeSummary.actual?.total_neutral),
-        netProfitCreditDebit: toNumber(chargeSummary.net_profit_credit_debit),
+        totalDebit: toApiDisplayAmount(chargeSummary.total_debit),
+        totalCredit: toApiDisplayAmount(chargeSummary.total_credit),
+        provisionalRevenue: toApiDisplayAmount(
+          chargeSummary.provisional?.total_revenue,
+        ),
+        provisionalCost: toApiDisplayAmount(
+          chargeSummary.provisional?.total_cost,
+        ),
+        provisionalNeutral: toApiDisplayAmount(
+          chargeSummary.provisional?.total_neutral,
+        ),
+        actualRevenue: toApiDisplayAmount(chargeSummary.actual?.total_revenue),
+        actualCost: toApiDisplayAmount(chargeSummary.actual?.total_cost),
+        actualNeutral: toApiDisplayAmount(chargeSummary.actual?.total_neutral),
+        netProfitCreditDebit: toApiDisplayAmount(
+          chargeSummary.net_profit_credit_debit,
+        ),
       };
     }
 
     const totalDebit = chargeTableData.reduce(
-      (sum, row) => sum + (row.debit ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.debit),
       0,
     );
     const totalCredit = chargeTableData.reduce(
-      (sum, row) => sum + (row.credit ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.credit),
       0,
     );
     const provisionalRevenue = chargeTableData.reduce(
-      (sum, row) => sum + (row.provisionalRevenue ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.provisionalRevenue),
       0,
     );
     const provisionalCost = chargeTableData.reduce(
-      (sum, row) => sum + (row.provisionalCost ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.provisionalCost),
       0,
     );
     const provisionalNeutral = chargeTableData.reduce(
-      (sum, row) => sum + (row.provisionalNeutral ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.provisionalNeutral),
       0,
     );
     const actualRevenue = chargeTableData.reduce(
-      (sum, row) => sum + (row.actualRevenue ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.actualRevenue),
       0,
     );
     const actualCost = chargeTableData.reduce(
-      (sum, row) => sum + (row.actualCost ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.actualCost),
       0,
     );
     const actualNeutral = chargeTableData.reduce(
-      (sum, row) => sum + (row.actualNeutral ?? 0),
+      (sum, row) => sum + parseDisplayAmount(row.actualNeutral),
       0,
     );
 
     return {
-      totalDebit,
-      totalCredit,
-      provisionalRevenue,
-      provisionalCost,
-      provisionalNeutral,
-      actualRevenue,
-      actualCost,
-      actualNeutral,
-      netProfitCreditDebit: totalCredit - totalDebit,
+      totalDebit: toApiDisplayAmount(totalDebit),
+      totalCredit: toApiDisplayAmount(totalCredit),
+      provisionalRevenue: toApiDisplayAmount(provisionalRevenue),
+      provisionalCost: toApiDisplayAmount(provisionalCost),
+      provisionalNeutral: toApiDisplayAmount(provisionalNeutral),
+      actualRevenue: toApiDisplayAmount(actualRevenue),
+      actualCost: toApiDisplayAmount(actualCost),
+      actualNeutral: toApiDisplayAmount(actualNeutral),
+      netProfitCreditDebit: toApiDisplayAmount(totalCredit - totalDebit),
     };
   }, [chargeSummary, chargeTableData]);
 
@@ -1611,7 +1674,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               variant="outline"
               size="sm"
               leftSection={<IconChevronLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={handleBack}
               styles={{
                 root: {
                   borderRadius: "4px",
@@ -2213,36 +2276,36 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                               chargeTableAmountCellStyle,
                             )}
                           >
-                            {formatChargeAmount(row.debit)}
+                            {row.debit}
                           </td>
                           <td style={chargeTableAmountCellStyle}>
-                            {formatChargeAmount(row.credit)}
+                            {row.credit}
                           </td>
                           <td
                             style={withChargeSectionStart(
                               chargeTableAmountCellStyle,
                             )}
                           >
-                            {formatChargeAmount(row.provisionalRevenue)}
+                            {row.provisionalRevenue}
                           </td>
                           <td style={chargeTableAmountCellStyle}>
-                            {formatChargeAmount(row.provisionalCost)}
+                            {row.provisionalCost}
                           </td>
                           <td style={chargeTableAmountCellStyle}>
-                            {formatChargeAmount(row.provisionalNeutral)}
+                            {row.provisionalNeutral}
                           </td>
                           <td
                             style={withChargeSectionStart(
                               chargeTableAmountCellStyle,
                             )}
                           >
-                            {formatChargeAmount(row.actualRevenue)}
+                            {row.actualRevenue}
                           </td>
                           <td style={chargeTableAmountCellStyle}>
-                            {formatChargeAmount(row.actualCost)}
+                            {row.actualCost}
                           </td>
                           <td style={chargeTableAmountCellStyle}>
-                            {formatChargeAmount(row.actualNeutral)}
+                            {row.actualNeutral}
                           </td>
                         </tr>
                       ))
@@ -2281,28 +2344,28 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                           Total
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.totalDebit)}
+                          {chargeTotals.totalDebit}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.totalCredit)}
+                          {chargeTotals.totalCredit}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.provisionalRevenue)}
+                          {chargeTotals.provisionalRevenue}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.provisionalCost)}
+                          {chargeTotals.provisionalCost}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.provisionalNeutral)}
+                          {chargeTotals.provisionalNeutral}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.actualRevenue)}
+                          {chargeTotals.actualRevenue}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.actualCost)}
+                          {chargeTotals.actualCost}
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(chargeTotals.actualNeutral)}
+                          {chargeTotals.actualNeutral}
                         </td>
                       </tr>
                       <tr>
@@ -2316,9 +2379,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                           Profit (Credit-Debit)
                         </td>
                         <td style={chargeTableFooterAmountStyle}>
-                          {formatChargeAmount(
-                            chargeTotals.netProfitCreditDebit,
-                          )}
+                          {chargeTotals.netProfitCreditDebit}
                         </td>
                         <td style={chargeTableFooterAmountStyle} />
                         <td colSpan={6} style={chargeTableFooterAmountStyle} />

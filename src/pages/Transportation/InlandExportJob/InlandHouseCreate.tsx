@@ -2642,6 +2642,8 @@ function HouseCreate() {
                       housingDetails: [getCurrentHousingDetail()],
                       hawbDetails: [getCurrentHousingDetail()],
                       serviceType: "AIR",
+                      jobReturnTo: location.pathname,
+                      jobReturnToState: location.state,
                     },
                   });
                 }}

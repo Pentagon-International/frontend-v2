@@ -3335,6 +3335,8 @@ function ExportJobCreate() {
                           state: {
                             jobId: jobData?.job_id,
                             service_name: "Ocean Export",
+                            jobReturnTo: location.pathname,
+                            jobReturnToState: location.state,
                           },
                         })
                       }

@@ -3081,6 +3081,8 @@ function AirExportJobCreate() {
                         state: {
                           jobId: jobData?.job_id,
                           service_name: "Air Export",
+                          jobReturnTo: location.pathname,
+                          jobReturnToState: location.state,
                         },
                       });
                     }}
