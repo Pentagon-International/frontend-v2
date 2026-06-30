@@ -3,7 +3,7 @@ import { Loader } from "@mantine/core";
 import type { AnalyticsChatChart } from "./analyticsChatTypes";
 import styles from "./Chatbot.module.css";
 
-const Plot = lazy(() => import("react-plotly.js"));
+const Plot = lazy(() => import("../../lib/plotlyBasic"));
 
 type PlotlyFigure = {
   data?: unknown[];
@@ -24,14 +24,18 @@ const asPlotlyFigure = (raw: unknown): PlotlyFigure | null => {
 /** Backend may attach non-Plotly metadata on chart.config (e.g. data_shape, source_file). */
 const NON_PLOTLY_CONFIG_KEYS = new Set(["data_shape", "source_file"]);
 
-const plotlyConfigFromChart = (config?: Record<string, unknown>): Record<string, unknown> => {
+const plotlyConfigFromChart = (
+  config?: Record<string, unknown>,
+): Record<string, unknown> => {
   if (!config) return {};
   return Object.fromEntries(
     Object.entries(config).filter(([key]) => !NON_PLOTLY_CONFIG_KEYS.has(key)),
   );
 };
 
-export const AnalyticsChatChartBlock: FC<{ chart: AnalyticsChatChart }> = ({ chart }) => {
+export const AnalyticsChatChartBlock: FC<{ chart: AnalyticsChatChart }> = ({
+  chart,
+}) => {
   const figure = useMemo(() => asPlotlyFigure(chart.data), [chart.data]);
   if (!figure) return null;
 
@@ -44,7 +48,9 @@ export const AnalyticsChatChartBlock: FC<{ chart: AnalyticsChatChart }> = ({ cha
 
   return (
     <div className={styles.analyticsBlock}>
-      {chart.title ? <div className={styles.analyticsChartTitle}>{chart.title}</div> : null}
+      {chart.title ? (
+        <div className={styles.analyticsChartTitle}>{chart.title}</div>
+      ) : null}
       <div className={styles.chartScroll}>
         <Suspense
           fallback={

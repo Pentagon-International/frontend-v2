@@ -16,7 +16,7 @@ import { IconCheck, IconCheckbox } from "@tabler/icons-react";
 import { AxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ToastNotification } from "../../../components/index";
+import ToastNotification from "../../../components/ToastNotification";
 
 import { yupResolver } from "mantine-form-yup-resolver";
 import * as yup from "yup";

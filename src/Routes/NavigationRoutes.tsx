@@ -1,6 +1,8 @@
 import { Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
+import { lazy } from "react";
 import RootLayout from "../layout/RootLayout";
 import OdexLegacyJobRedirect from "./OdexLegacyJobRedirect";
+import { LazyRoute } from "./LazyRoute";
 import {
   CallModeEdit,
   CallModeMaster,
@@ -151,9 +153,6 @@ import {
   Invoice,
   OdexJobsMaster,
   OdexJobDetail,
-  Chatbot,
-  ChatbotGoogleApi,
-  ChatbotBrowser,
 } from "../pages";
 import Road from "../pages/dashboard/Road";
 import DemoPage from "../pages/dashboard/DemoPage";
@@ -184,9 +183,19 @@ import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
 import JournalVoucherMaster from "../pages/accounts/journalVoucher/JournalVoucherMaster";
 import JournalVoucherReversal from "../pages/accounts/journalVoucherReversal/JournalVoucherReversal";
 import JournalVoucherReversalMaster from "../pages/accounts/journalVoucherReversal/JournalVoucherReversalMaster";
-import QuotationMaster, {
-  QuotationApprovalMaster,
-} from "../pages/dashboard/QuotationMaster";
+const QuotationMaster = lazy(
+  () => import("../pages/dashboard/QuotationMaster"),
+);
+const QuotationApprovalMaster = lazy(() =>
+  import("../pages/dashboard/QuotationMaster").then((m) => ({
+    default: m.QuotationApprovalMaster,
+  })),
+);
+const Chatbot = lazy(() => import("../pages/Workflow/Chatbot"));
+const ChatbotGoogleApi = lazy(
+  () => import("../pages/Workflow/Chatbot_google_api"),
+);
+const ChatbotBrowser = lazy(() => import("../pages/Workflow/Chatbot_browser"));
 import OverseasPaymentMaster from "../pages/accounts/overseasPayment/OverseasPaymentMaster";
 import OverseasPaymentCreate from "../pages/accounts/overseasPayment/OverseasPaymentCreate";
 import JobLedger from "../pages/Transportation/JobLedger/JobLedger";
@@ -286,9 +295,39 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="import-job">
@@ -300,20 +339,56 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="export-job-generation">
             <Route index element={<InlandExportJobGenerationMaster />} />
-            <Route path="create" element={<InlandExportJobGenerationCreate />} />
+            <Route
+              path="create"
+              element={<InlandExportJobGenerationCreate />}
+            />
             <Route path="edit" element={<InlandExportJobGenerationCreate />} />
             <Route path="view" element={<InlandExportJobGenerationCreate />} />
           </Route>
           <Route path="job-generation">
             <Route index element={<InlandExportJobGenerationMaster />} />
-            <Route path="create" element={<InlandExportJobGenerationCreate />} />
+            <Route
+              path="create"
+              element={<InlandExportJobGenerationCreate />}
+            />
             <Route path="edit" element={<InlandExportJobGenerationCreate />} />
             <Route path="view" element={<InlandExportJobGenerationCreate />} />
           </Route>
@@ -340,9 +415,39 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="export-generation">
@@ -378,9 +483,39 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>
@@ -434,9 +569,39 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
           <Route path="import-job">
@@ -448,9 +613,39 @@ const NavigationRoutes = () => {
             <Route path="invoice" element={<InvoiceCreate />} />
             <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
             <Route path="invoice/view/:id" element={<InvoiceCreate />} />
-            <Route path="credit-note" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/edit/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
-            <Route path="credit-note/view/:id" element={<InvoiceCreate documentType="CRN" baseDrCr="Cr" chargeDefaultDrCr="Dr" documentLabel="Credit Note" />} />
+            <Route
+              path="credit-note"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/edit/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
+            <Route
+              path="credit-note/view/:id"
+              element={
+                <InvoiceCreate
+                  documentType="CRN"
+                  baseDrCr="Cr"
+                  chargeDefaultDrCr="Dr"
+                  documentLabel="Credit Note"
+                />
+              }
+            />
             <Route path="invoice/reverse" element={<InvoiceReverse />} />
           </Route>
         </Route>
@@ -459,7 +654,10 @@ const NavigationRoutes = () => {
           <Route path="job-profit" element={<JobProfit />} />
           <Route path="trial-balance" element={<TrialBalance />} />
           <Route path="aging-outstanding" element={<AgingOutstanding />} />
-          <Route path="subledger-outstanding" element={<SubledgerOutstanding />} />
+          <Route
+            path="subledger-outstanding"
+            element={<SubledgerOutstanding />}
+          />
           <Route path="purchase-register" element={<PurchaseRegister />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
@@ -480,12 +678,30 @@ const NavigationRoutes = () => {
         <Route path="/receipt/reversal/edit" element={<ReceiptReversal />} />
         <Route path="/receipt/reversal/create" element={<ReceiptReversal />} />
         <Route path="/overseas-receipt" element={<OverseasReceiptMaster />} />
-        <Route path="/overseas-receipt/view" element={<OverseasReceiptCreate />} />
-        <Route path="/overseas-receipt/edit" element={<OverseasReceiptCreate />} />
-        <Route path="/overseas-receipt/create" element={<OverseasReceiptCreate />} />
-        <Route path="/overseas-receipt/reversal/create" element={<OverseasReceiptCreate isReversal />} />
-        <Route path="/overseas-receipt/reversal/edit" element={<OverseasReceiptCreate isReversal />} />
-        <Route path="/overseas-receipt/reversal/view" element={<OverseasReceiptCreate isReversal />} />
+        <Route
+          path="/overseas-receipt/view"
+          element={<OverseasReceiptCreate />}
+        />
+        <Route
+          path="/overseas-receipt/edit"
+          element={<OverseasReceiptCreate />}
+        />
+        <Route
+          path="/overseas-receipt/create"
+          element={<OverseasReceiptCreate />}
+        />
+        <Route
+          path="/overseas-receipt/reversal/create"
+          element={<OverseasReceiptCreate isReversal />}
+        />
+        <Route
+          path="/overseas-receipt/reversal/edit"
+          element={<OverseasReceiptCreate isReversal />}
+        />
+        <Route
+          path="/overseas-receipt/reversal/view"
+          element={<OverseasReceiptCreate isReversal />}
+        />
         <Route path="/payment" element={<PaymentMaster />} />
         <Route path="/payment/view" element={<PaymentCreate />} />
         <Route path="/payment/edit" element={<PaymentCreate />} />
@@ -495,9 +711,18 @@ const NavigationRoutes = () => {
         <Route path="/payment/reversal/edit" element={<PaymentReversal />} />
         <Route path="/payment/reversal/create" element={<PaymentReversal />} />
         <Route path="/overseas-payment" element={<OverseasPaymentMaster />} />
-        <Route path="/overseas-payment/view" element={<OverseasPaymentCreate />} />
-        <Route path="/overseas-payment/edit" element={<OverseasPaymentCreate />} />
-        <Route path="/overseas-payment/create" element={<OverseasPaymentCreate />} />
+        <Route
+          path="/overseas-payment/view"
+          element={<OverseasPaymentCreate />}
+        />
+        <Route
+          path="/overseas-payment/edit"
+          element={<OverseasPaymentCreate />}
+        />
+        <Route
+          path="/overseas-payment/create"
+          element={<OverseasPaymentCreate />}
+        />
         <Route
           path="/overseas-payment/reversal/create"
           element={<OverseasPaymentCreate isReversal />}
@@ -511,22 +736,67 @@ const NavigationRoutes = () => {
           element={<OverseasPaymentCreate isReversal />}
         />
         <Route path="/unposted-documents" element={<UnpostedDocumentsList />} />
-        <Route path="/invoices" element={<Navigate to="/unposted-documents" replace />} />
+        <Route
+          path="/invoices"
+          element={<Navigate to="/unposted-documents" replace />}
+        />
         <Route path="/supplier-invoice" element={<SupplierInvoiceMaster />} />
-        <Route path="/supplier-invoice/create" element={<SupplierInvoiceCreate />} />
-        <Route path="/supplier-invoice/view/:id" element={<SupplierInvoiceCreate />} />
-        <Route path="/supplier-invoice/edit/:id" element={<SupplierInvoiceCreate />} />
-        <Route path="/supplier-invoice/view" element={<SupplierInvoiceCreate />} />
-        <Route path="/supplier-invoice/edit" element={<SupplierInvoiceCreate />} />
-        <Route path="/supplier-invoice-rcm" element={<SupplierInvoiceRCMMaster />} />
-        <Route path="/supplier-invoice-rcm/create" element={<SupplierInvoiceRCMCreate />} />
-        <Route path="/supplier-invoice-rcm/view" element={<SupplierInvoiceRCMCreate />} />
-        <Route path="/supplier-invoice-rcm/edit" element={<SupplierInvoiceRCMCreate />} />
-        <Route path="/supplier-invoice/reversal" element={<SupplierInvoiceReversalMaster />} />
-        <Route path="/supplier-invoice/reversal/view" element={<SupplierInvoiceReversal />} />
-        <Route path="/supplier-invoice/reversal/edit" element={<SupplierInvoiceReversal />} />
-        <Route path="/supplier-invoice/reversal/create" element={<SupplierInvoiceReversal />} />
-        <Route path="/supplier-invoice-rcm/reversal/create" element={<SupplierInvoiceReversal />} />
+        <Route
+          path="/supplier-invoice/create"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/view/:id"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/edit/:id"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/view"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/edit"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice-rcm"
+          element={<SupplierInvoiceRCMMaster />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/create"
+          element={<SupplierInvoiceRCMCreate />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/view"
+          element={<SupplierInvoiceRCMCreate />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/edit"
+          element={<SupplierInvoiceRCMCreate />}
+        />
+        <Route
+          path="/supplier-invoice/reversal"
+          element={<SupplierInvoiceReversalMaster />}
+        />
+        <Route
+          path="/supplier-invoice/reversal/view"
+          element={<SupplierInvoiceReversal />}
+        />
+        <Route
+          path="/supplier-invoice/reversal/edit"
+          element={<SupplierInvoiceReversal />}
+        />
+        <Route
+          path="/supplier-invoice/reversal/create"
+          element={<SupplierInvoiceReversal />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/reversal/create"
+          element={<SupplierInvoiceReversal />}
+        />
         <Route path="/journal-voucher" element={<JournalVoucherMaster />} />
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />
         <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />
@@ -535,12 +805,27 @@ const NavigationRoutes = () => {
           path="/journal-voucher-reversal"
           element={<JournalVoucherReversalMaster />}
         />
-        <Route path="/journal-voucher-reversal/create" element={<JournalVoucherReversal />} />
-        <Route path="/journal-voucher-reversal/edit/:id" element={<JournalVoucherReversal />} />
-        <Route path="/journal-voucher-reversal/view/:id" element={<JournalVoucherReversal />} />
+        <Route
+          path="/journal-voucher-reversal/create"
+          element={<JournalVoucherReversal />}
+        />
+        <Route
+          path="/journal-voucher-reversal/edit/:id"
+          element={<JournalVoucherReversal />}
+        />
+        <Route
+          path="/journal-voucher-reversal/view/:id"
+          element={<JournalVoucherReversal />}
+        />
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
-        <Route path="/document-allocation" element={<DocumentAllocationList />} />
-        <Route path="/document-allocation/create" element={<DocumentAllocation />} />
+        <Route
+          path="/document-allocation"
+          element={<DocumentAllocationList />}
+        />
+        <Route
+          path="/document-allocation/create"
+          element={<DocumentAllocation />}
+        />
         <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteNonTradeMaster />} />
           <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
@@ -556,10 +841,22 @@ const NavigationRoutes = () => {
         <Route path="/job-closure" element={<JobClosure />} />
         <Route path="/job-reopen" element={<JobOpen />} />
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
-        <Route path="/payment-request/create" element={<PaymentRequestCreate />} />
-        <Route path="/payment-request/edit/:id" element={<PaymentRequestCreate />} />
-        <Route path="/payment-request/view/:id" element={<PaymentRequestCreate />} />
-        <Route path="/payment-request-approval" element={<PaymentRequestApproval />} />
+        <Route
+          path="/payment-request/create"
+          element={<PaymentRequestCreate />}
+        />
+        <Route
+          path="/payment-request/edit/:id"
+          element={<PaymentRequestCreate />}
+        />
+        <Route
+          path="/payment-request/view/:id"
+          element={<PaymentRequestCreate />}
+        />
+        <Route
+          path="/payment-request-approval"
+          element={<PaymentRequestApproval />}
+        />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />
         <Route path="/lead-create" element={<CreateLead />} />
@@ -577,11 +874,19 @@ const NavigationRoutes = () => {
         <Route path="/quotation-create/:id" element={<QuotationCreatePage />} />
         <Route
           path="/quotation-approval"
-          element={<QuotationApprovalMaster />}
+          element={
+            <LazyRoute>
+              <QuotationApprovalMaster />
+            </LazyRoute>
+          }
         />
         <Route
           path="/quotation"
-          element={<QuotationMaster key="quotation-master" />}
+          element={
+            <LazyRoute>
+              <QuotationMaster key="quotation-master" />
+            </LazyRoute>
+          }
         />
         <Route path="/potential-customers" element={<PotentialCustomers />} />
         <Route path="/pipeline" element={<Pipeline />} />
@@ -606,7 +911,10 @@ const NavigationRoutes = () => {
         >
           <Route path="freight" element={<Freight />} />
           <Route path="contracts" element={<TariffContractsListRoute />}>
-            <Route path=":carrierCode/:service" element={<TariffContractsDetail />} />
+            <Route
+              path=":carrierCode/:service"
+              element={<TariffContractsDetail />}
+            />
           </Route>
           <Route path="contracts/create" element={<CreateContract />} />
           <Route path="freight/create" element={<FreightCreate />} />
@@ -624,7 +932,10 @@ const NavigationRoutes = () => {
           path="/automation/odex-jobs/:jobId"
           element={<OdexJobDetail />}
         />
-        <Route path="/odex-jobs" element={<Navigate to="/automation/odex-jobs" replace />} />
+        <Route
+          path="/odex-jobs"
+          element={<Navigate to="/automation/odex-jobs" replace />}
+        />
         <Route path="/odex-jobs/:jobId" element={<OdexLegacyJobRedirect />} />
         <Route
           path="/automation/job-creation"
@@ -646,9 +957,30 @@ const NavigationRoutes = () => {
           path="/hbl-document-manager"
           element={<Navigate to="/automation/import-job" replace />}
         />
-        <Route path="/workflow/chatbot" element={<Chatbot />} />
-        <Route path="/workflow/chatbot-google" element={<ChatbotGoogleApi />} />
-        <Route path="/workflow/chatbot-browser" element={<ChatbotBrowser />} />
+        <Route
+          path="/workflow/chatbot"
+          element={
+            <LazyRoute>
+              <Chatbot />
+            </LazyRoute>
+          }
+        />
+        <Route
+          path="/workflow/chatbot-google"
+          element={
+            <LazyRoute>
+              <ChatbotGoogleApi />
+            </LazyRoute>
+          }
+        />
+        <Route
+          path="/workflow/chatbot-browser"
+          element={
+            <LazyRoute>
+              <ChatbotBrowser />
+            </LazyRoute>
+          }
+        />
         <Route
           path="/workflow/analytics-chat"
           element={<Navigate to="/workflow/chatbot?type=analytics" replace />}
@@ -657,7 +989,10 @@ const NavigationRoutes = () => {
           path="/workflow/analytics-training"
           element={<Navigate to="/workflow/chatbot?type=analytics" replace />}
         />
-        <Route path="/chatbot" element={<NavigateKeepSearch to="/workflow/chatbot" />} />
+        <Route
+          path="/chatbot"
+          element={<NavigateKeepSearch to="/workflow/chatbot" />}
+        />
         <Route
           path="/chatbot-google"
           element={<NavigateKeepSearch to="/workflow/chatbot-google" />}

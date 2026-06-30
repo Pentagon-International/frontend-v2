@@ -587,17 +587,22 @@ export const generateNewQuotationPDF = async (
       ? rowData.customer_address[0]
       : rowData.customer_address;
 
+    const customerNameLinesCalc = doc.splitTextToSize(
+      String(rowData.customer_name || "N/A"),
+      leftHalfWidth - 6,
+    );
+
     // IMPORTANT: Customer address should wrap within LEFT HALF only
     const customerAddressLinesCalc = doc.splitTextToSize(
       addressText || "",
       leftHalfWidth - 6 // Use left half width for proper wrapping
     );
 
-    // Left side total height: row 1 (15) + label (4) + name (4) + address lines + bottom margin
+    // Left side total height: row 1 (15) + label (4) + name lines + address lines + bottom margin
     const leftSideContentHeight =
       18 + // row 1 height (fixed)
       4 + // CUSTOMER label
-      4 + // customer name
+      customerNameLinesCalc.length * 4 + // customer name (wrapped)
       customerAddressLinesCalc.length * 4 + // address lines (wrapped)
       3; // bottom margin
 
@@ -692,7 +697,7 @@ export const generateNewQuotationPDF = async (
     });
 
     // Row 2: Customer name & address (LEFT HALF only - no overflow to right)
-    leftYPos = headerStartY + 18;
+    leftYPos = headerStartY + 20;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
@@ -700,8 +705,10 @@ export const generateNewQuotationPDF = async (
     leftYPos += 4;
 
     doc.setFont("helvetica", "normal");
-    doc.text(rowData.customer_name || "N/A", margin + 3, leftYPos);
-    leftYPos += 4;
+    customerNameLinesCalc.forEach((line: string) => {
+      doc.text(line, margin + 3, leftYPos);
+      leftYPos += 4;
+    });
 
     // Render wrapped customer address line by line
     if (rowData.customer_address && customerAddressLinesCalc.length > 0) {
@@ -857,7 +864,7 @@ export const generateNewQuotationPDF = async (
         leftItems.forEach((item, index) => {
           // Draw horizontal line between items
           if (index > 0) {
-            doc.line(leftColX, currentY, midLine - 2, currentY);
+            doc.line(leftColX, currentY, midLine , currentY);
           }
 
           // Draw label and value
