@@ -65,7 +65,7 @@ export function getDefaultBookingChargeCurrencyFields(
 export const formatExchangeSellRate = (sellRate: string | number): number => {
   const num = typeof sellRate === "string" ? parseFloat(sellRate) : sellRate;
   if (!Number.isFinite(num)) return 1;
-  return Math.round(num * 100) / 100;
+  return Math.round(num * 10000) / 10000;
 };
 
 export const fetchExchangeRateMaster = async (

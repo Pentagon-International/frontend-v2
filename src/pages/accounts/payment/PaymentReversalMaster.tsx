@@ -213,13 +213,14 @@ export default function PaymentReversalMaster() {
                 <Box px={10} py={5}>
                   <UnstyledButton
                     onClick={() => {
-                      const {
-                        documents: _documents,
-                        supporting_documents: _supportingDocuments,
-                        ...paymentReversalDataWithoutDocuments
-                      } = (row.original as any) ?? {};
                       navigate("/payment/reversal/view", {
-                        state: paymentReversalDataWithoutDocuments,
+                        state: {
+                          ...row.original,
+                          documents:
+                            (row.original as any)?.documents ??
+                            (row.original as any)?.supporting_documents ??
+                            [],
+                        },
                       });
                     }}
                   >
@@ -238,13 +239,14 @@ export default function PaymentReversalMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
-                        const {
-                          documents: _documents,
-                          supporting_documents: _supportingDocuments,
-                          ...paymentReversalDataWithoutDocuments
-                        } = (row.original as any) ?? {};
                         navigate("/payment/reversal/edit", {
-                          state: paymentReversalDataWithoutDocuments,
+                          state: {
+                            ...row.original,
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
                         });
                       }}
                     >

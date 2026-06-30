@@ -663,6 +663,7 @@ export default function PaymentCreate({
   }, [localCurrency]);
 
   const paymentFromState = location.state as PaymentListItem | null | undefined;
+  const loadedFromListState = paymentFromState?.id != null;
   const pathname = location.pathname;
   const isReversalEditOrView =
     _isReversal &&
@@ -879,11 +880,18 @@ export default function PaymentCreate({
     isReversalCreate,
   ]);
 
+  // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
+  // exchange rate master is called only when the user changes currency (dropdown onChange).
   useEffect(() => {
     const curr = form.values.currency?.trim();
-    if (!curr || !localCurrency) return;
+    if (!curr || !localCurrency || loadedFromListState) return;
     syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
-  }, [form.values.currency, localCurrency, syncRoeForCurrencyChange]);
+  }, [
+    form.values.currency,
+    localCurrency,
+    loadedFromListState,
+    syncRoeForCurrencyChange,
+  ]);
 
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
