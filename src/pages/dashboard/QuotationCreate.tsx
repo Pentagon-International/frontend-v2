@@ -77,6 +77,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
 import { useExchangeRateRoe } from "../../hooks/useExchangeRateRoe";
 import { parseBookingRoe } from "../../hooks/useBookingChargesRoe";
+import {
+  formatRoeAsString,
+  parseRoeForPayload,
+  sanitizeRoeInput,
+} from "../../utils/exchangeRateRoe";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 import {
   getBookingCreatePath,
@@ -992,8 +997,8 @@ function QuotationCreate({
           ) {
             return;
           }
-          dynamicForm.setFieldValue(`charges.${index}.roe`, String(roe));
-          syncChargeTotalsAtIndex(index, { roe: String(roe) });
+          dynamicForm.setFieldValue(`charges.${index}.roe`, formatRoeAsString(roe));
+          syncChargeTotalsAtIndex(index, { roe: formatRoeAsString(roe) });
         });
       }
       clearChargeRoeError(index);
@@ -1017,9 +1022,10 @@ function QuotationCreate({
         clearChargeRoeError(index);
         return;
       }
-      dynamicForm.setFieldValue(`charges.${index}.roe`, rawValue);
-      syncChargeTotalsAtIndex(index, { roe: rawValue });
-      const roeError = validateRoeField(code, parseBookingRoe(rawValue));
+      const sanitized = sanitizeRoeInput(rawValue);
+      dynamicForm.setFieldValue(`charges.${index}.roe`, sanitized);
+      syncChargeTotalsAtIndex(index, { roe: sanitized });
+      const roeError = validateRoeField(code, parseBookingRoe(sanitized));
       setChargeRoeErrors((prev) => {
         if (roeError) return { ...prev, [index]: roeError };
         if (!prev[index]) return prev;
@@ -1170,7 +1176,7 @@ function QuotationCreate({
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency || "",
-          roe: charge.roe != null ? String(charge.roe) : "1",
+          roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit:
@@ -1504,7 +1510,7 @@ function QuotationCreate({
                   charge_name: charge.charge_name || "",
                   charge_id: charge.charge_id ?? null,
                   currency_country_code: charge.currency || "",
-                  roe: charge.roe != null ? String(charge.roe) : "1",
+                  roe: formatRoeAsString(charge.roe) || "1",
                   unit: charge.unit || "",
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
@@ -1598,7 +1604,7 @@ function QuotationCreate({
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency || "",
-          roe: Number(charge.roe) || 1,
+          roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit: charge.sell_per_unit?.toString() ?? "",
@@ -1608,7 +1614,7 @@ function QuotationCreate({
             no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
             sell_per_unit: charge.sell_per_unit?.toString() ?? "",
             cost_per_unit: charge.cost_per_unit?.toString() ?? "",
-            roe: Number(charge.roe) || 1,
+            roe: parseRoeForPayload(charge.roe) ?? 1,
           }),
           // preserve existing quotation charge id (fallbacks)
           id: charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
@@ -1958,7 +1964,7 @@ function QuotationCreate({
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
           currency_country_code: charge.currency_country_code || "INR",
-          roe: charge.roe != null ? charge.roe : 1.0,
+          roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units:
             charge.no_of_units != null
@@ -2044,8 +2050,8 @@ function QuotationCreate({
           return;
         }
         if (!stillEmpty) return;
-        dynamicForm.setFieldValue(`charges.${index}.roe`, String(roe));
-        syncChargeTotalsAtIndex(index, { roe: String(roe) });
+        dynamicForm.setFieldValue(`charges.${index}.roe`, formatRoeAsString(roe));
+        syncChargeTotalsAtIndex(index, { roe: formatRoeAsString(roe) });
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2762,7 +2768,7 @@ function QuotationCreate({
             ? Number(charge.charge_id)
             : null,
         currency_country_code: charge.currency_country_code,
-        roe: parseFloat(charge.roe.toString()) || 1.0,
+        roe: parseRoeForPayload(charge.roe) ?? 1,
         unit: charge.unit,
         no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
         sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
@@ -2928,7 +2934,7 @@ function QuotationCreate({
                   ? Number(charge.charge_id)
                   : null,
               currency_country_code: charge.currency_country_code,
-              roe: parseFloat(charge.roe.toString()) || 1.0,
+              roe: parseRoeForPayload(charge.roe) ?? 1,
               unit: charge.unit,
               no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
               sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
@@ -3441,7 +3447,7 @@ function QuotationCreate({
                   charge_name: charge.charge_name || "",
                   charge_id: charge.charge_id ?? null,
                   currency_country_code: charge.currency || "",
-                  roe: charge.roe != null ? String(charge.roe) : "1",
+                  roe: formatRoeAsString(charge.roe) || "1",
                   unit: charge.unit || "",
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,

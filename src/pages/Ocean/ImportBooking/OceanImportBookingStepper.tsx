@@ -58,7 +58,11 @@ import { SearchableSelect, Dropdown } from "../../../components";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
-import { getDefaultBookingChargeCurrencyFields } from "../../../utils/exchangeRateRoe";
+import {
+  getDefaultBookingChargeCurrencyFields,
+  ROE_DECIMAL_PLACES,
+  roundRoeForPayload,
+} from "../../../utils/exchangeRateRoe";
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
@@ -3056,7 +3060,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             // charge_name: charge.charge_name,
             pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
-            roe: roundToDecimals(parseFloat(charge.roe)) || 1,
+            roe: roundRoeForPayload(charge.roe) ?? 1,
             unit: charge.unit,
             no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
@@ -6569,7 +6573,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           }
                           error={bookingRoe.chargeRoeErrors[index]}
                           size="xs"
-                          decimalScale={2}
+                          decimalScale={ROE_DECIMAL_PLACES}
                         />
                       </Grid.Col>
                       <Grid.Col span={1}>

@@ -55,6 +55,7 @@ import {
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { ROE_DECIMAL_PLACES, roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
@@ -2339,7 +2340,7 @@ function HouseCreate() {
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
-            roe: roundToDecimals(charge.roe) ?? null,
+            roe: roundRoeForPayload(charge.roe) ?? null,
             amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
             amount: roundToDecimals(charge.amount) ?? null,
             sell_local_amount: roundToDecimals(charge.local_amount) ?? null,
@@ -4531,7 +4532,7 @@ function HouseCreate() {
                       placeholder="ROE"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={ROE_DECIMAL_PLACES}
                       readOnly={isChargeBaseCurrencyFor(
                         charge,
                         (currencyData ?? []) as {

@@ -38,6 +38,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../utils/textFormatter";
+import { parseRoeForPayload, sanitizeRoeInput } from "../../utils/exchangeRateRoe";
 
 interface ExportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -1125,7 +1126,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
         quotation_charges: charges.map((charge) => ({
           charge_name: charge.charge_name,
           currency_country_code: charge.currency_country_code,
-          roe: parseFloat(charge.roe) || 1,
+          roe: parseRoeForPayload(charge.roe) ?? 1,
           unit: charge.unit,
           no_of_units: parseFloat(charge.no_of_units) || 0,
           sell_per_unit: parseFloat(charge.sell_per_unit) || 0,
@@ -3173,7 +3174,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                           updateCharge(
                             charge.id,
                             "roe",
-                            event.currentTarget.value,
+                            sanitizeRoeInput(event.currentTarget.value),
                           )
                         }
                         size="xs"

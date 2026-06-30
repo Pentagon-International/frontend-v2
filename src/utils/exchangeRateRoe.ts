@@ -1,6 +1,9 @@
 import { getAPICall } from "../service/getApiCall";
 import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
+import { roundToDecimals } from "./numberInputUtils";
+
+export const ROE_DECIMAL_PLACES = 6;
 
 export type CurrencyMasterItem = {
   id?: number;
@@ -65,7 +68,40 @@ export function getDefaultBookingChargeCurrencyFields(
 export const formatExchangeSellRate = (sellRate: string | number): number => {
   const num = typeof sellRate === "string" ? parseFloat(sellRate) : sellRate;
   if (!Number.isFinite(num)) return 1;
-  return Math.round(num * 10000) / 10000;
+  return roundToDecimals(num, ROE_DECIMAL_PLACES) ?? 1;
+};
+
+/** Round ROE to at most 6 decimal places for API payloads. */
+export const roundRoeForPayload = (
+  value: number | string | null | undefined,
+): number | null | undefined => roundToDecimals(value, ROE_DECIMAL_PLACES);
+
+/** Parse ROE for API payload; returns null when invalid. */
+export const parseRoeForPayload = (
+  value: number | string | null | undefined,
+): number | null => {
+  const rounded = roundRoeForPayload(value);
+  if (rounded === null || rounded === undefined) return null;
+  return rounded;
+};
+
+/** Restrict free-text ROE input to at most 6 decimal places. */
+export const sanitizeRoeInput = (raw: string): string => {
+  if (raw === "" || raw === ".") return raw;
+  const normalized = raw.replace(/[^\d.]/g, "");
+  const dotIndex = normalized.indexOf(".");
+  if (dotIndex === -1) return normalized;
+  const intPart = normalized.slice(0, dotIndex);
+  const decPart = normalized.slice(dotIndex + 1).replace(/\./g, "");
+  return `${intPart}.${decPart.slice(0, ROE_DECIMAL_PLACES)}`;
+};
+
+/** Format fetched ROE for display/storage in string-based charge fields. */
+export const formatRoeAsString = (
+  value: number | string | null | undefined,
+): string => {
+  const parsed = parseRoeForPayload(value);
+  return parsed != null ? String(parsed) : "";
 };
 
 export const fetchExchangeRateMaster = async (

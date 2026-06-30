@@ -31,6 +31,7 @@ import {
   getBranchCurrencyDefaults,
   getDefaultBranchCurrencyFromUser,
   ROE_CANNOT_BE_ONE_TOAST,
+  ROE_DECIMAL_PLACES,
   validateEstimatesRoeRows,
   type BranchCurrencyLike,
 } from "../utils/exchangeRateRoe";
@@ -612,6 +613,7 @@ export function EstimatesSection({
               placeholder="ROE"
               min={0}
               hideControls
+              decimalScale={ROE_DECIMAL_PLACES}
               value={row.roe ?? undefined}
               readOnly={
                 readOnly ||

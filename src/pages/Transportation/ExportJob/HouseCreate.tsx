@@ -57,6 +57,7 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { ROE_DECIMAL_PLACES, roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
@@ -2158,7 +2159,7 @@ function HouseCreate() {
       currency_id: charge.currency_id || undefined,
       currency: charge.currency,
       no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
-      roe: roundToDecimals(charge.roe) ?? null,
+      roe: roundRoeForPayload(charge.roe) ?? null,
       amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
       amount: roundToDecimals(charge.amount) ?? null,
       sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
@@ -2499,7 +2500,7 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
-            roe: roundToDecimals(charge.roe) ?? null,
+            roe: roundRoeForPayload(charge.roe) ?? null,
             amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
             amount: roundToDecimals(charge.amount) ?? null,
             sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
@@ -4812,7 +4813,7 @@ function HouseCreate() {
                       placeholder="ROE"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={ROE_DECIMAL_PLACES}
                       readOnly={isChargeBaseCurrencyFor(
                         charge,
                         (currencyData ?? []) as {

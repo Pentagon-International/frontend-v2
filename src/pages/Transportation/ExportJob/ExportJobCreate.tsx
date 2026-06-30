@@ -67,6 +67,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
@@ -2865,7 +2866,7 @@ function ExportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
-              roe: charge.roe != null ? roundToDecimals(charge.roe) : null,
+              roe: charge.roe != null ? roundRoeForPayload(charge.roe) : null,
               amount_per_unit:
                 charge.amount_per_unit != null
                   ? roundToDecimals(charge.amount_per_unit)
@@ -2945,7 +2946,7 @@ function ExportJobCreate() {
             unit_id: e.unit_id ? Number(e.unit_id) : null,
             no_of_unit: parseNoOfUnitForPayload(e.no_of_unit),
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: roundToDecimals(e.roe) ?? null,
+            roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));

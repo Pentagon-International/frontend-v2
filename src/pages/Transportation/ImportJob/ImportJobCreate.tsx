@@ -65,6 +65,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
@@ -1159,12 +1160,7 @@ function ImportJobCreate() {
                         }
                         return "";
                       })(),
-                      roe:
-                        charge.roe != null
-                          ? typeof charge.roe === "string"
-                            ? parseFloat(charge.roe) || null
-                            : (charge.roe as number)
-                          : null,
+                      roe: roundRoeForPayload(charge.roe) ?? null,
                       amount_per_unit:
                         charge.amount_per_unit != null
                           ? typeof charge.amount_per_unit === "string"
@@ -1237,13 +1233,7 @@ function ImportJobCreate() {
                                 : ""),
                           ).trim();
 
-                          // Handle roe: can be string or number
-                          const roeValue =
-                            charge.roe !== null && charge.roe !== undefined
-                              ? typeof charge.roe === "string"
-                                ? parseFloat(charge.roe) || null
-                                : (charge.roe as number)
-                              : null;
+                          const roeValue = roundRoeForPayload(charge.roe) ?? null;
 
                           // Handle amount_per_unit: can be string or number
                           const amountPerUnit =
@@ -3058,7 +3048,7 @@ function ImportJobCreate() {
                     ? Number(charge.currency)
                     : null,
               no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
-              roe: roundToDecimals(charge.roe as number | string) ?? null,
+              roe: roundRoeForPayload(charge.roe as number | string) ?? null,
               amount_per_unit:
                 roundToDecimals(charge.amount_per_unit as number | string) ??
                 null,
@@ -3137,7 +3127,7 @@ function ImportJobCreate() {
             unit_id: e.unit_id ? Number(e.unit_id) : null,
             no_of_unit: parseNoOfUnitForPayload(e.no_of_unit),
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: roundToDecimals(e.roe) ?? null,
+            roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));

@@ -83,6 +83,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import {
@@ -2684,7 +2685,7 @@ function InlandImportJobCreate() {
                 currency_id: charge.currency_id
                   ? String(charge.currency_id)
                   : "",
-                roe: roundToDecimals(charge.roe) || null,
+                roe: roundRoeForPayload(charge.roe) ?? null,
                 amount_per_unit:
                   roundToDecimals(charge.amount_per_unit) || null,
                 amount: roundToDecimals(charge.amount) || null,
@@ -2730,7 +2731,7 @@ function InlandImportJobCreate() {
             unit_id: e.unit_id ? Number(e.unit_id) : null,
             no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
-            roe: roundToDecimals(e.roe) ?? null,
+            roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
             total_cost: roundToDecimals(e.total_cost) ?? null,
           }));

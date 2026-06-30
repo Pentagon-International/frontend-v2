@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { ToastNotification } from "../components";
 import { useExchangeRateRoe } from "./useExchangeRateRoe";
+import { formatRoeAsString } from "../utils/exchangeRateRoe";
 
 export type BookingChargeRoeRow = {
   currency_country_code?: string;
@@ -125,7 +126,7 @@ export function useBookingChargesRoe<T extends BookingChargeRoeRow>(
           const next = [...prev];
           next[index] = recalcBookingChargeTotals({
             ...next[index],
-            roe: String(roe),
+            roe: formatRoeAsString(roe),
           });
           return next;
         });
@@ -143,7 +144,7 @@ export function useBookingChargesRoe<T extends BookingChargeRoeRow>(
       } else {
         updateCharge(index, "roe", "");
         void ensureRoeForCurrency(code.toUpperCase()).then((roe) => {
-          if (roe != null) updateCharge(index, "roe", String(roe));
+          if (roe != null) updateCharge(index, "roe", formatRoeAsString(roe));
         });
       }
       clearChargeRoeError(index);

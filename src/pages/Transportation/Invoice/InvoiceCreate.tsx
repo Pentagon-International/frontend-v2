@@ -57,6 +57,11 @@ import FormTextArea from "../../../components/FormTextArea";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 import {
+  formatExchangeSellRate,
+  ROE_DECIMAL_PLACES,
+  roundRoeForPayload,
+} from "../../../utils/exchangeRateRoe";
+import {
   parseInvoiceMutationResponse,
   readIrnNoFromInvoiceData,
 } from "../../../utils/parseInvoiceMutationResponse";
@@ -161,12 +166,6 @@ const fetchCurrencyMaster = async () => {
     console.error("Error fetching currency master:", error);
     return [];
   }
-};
-
-const formatExchangeSellRate = (sellRate: string | number): number => {
-  const num = typeof sellRate === "string" ? parseFloat(sellRate) : sellRate;
-  if (!Number.isFinite(num)) return 1;
-  return Math.round(num * 100) / 100;
 };
 
 const ROE_CANNOT_BE_ONE_FIELD = "ROE can't be 1";
@@ -3205,7 +3204,7 @@ function InvoiceCreate({
               unit_id: unitId,
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
-              roe: charge.roe ?? 0,
+              roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
               amount: clampAmount(charge.amount ?? 0) ?? 0,
               amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
@@ -3246,7 +3245,7 @@ function InvoiceCreate({
             unit_id: unitId,
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
-            roe: charge.roe ?? 0,
+            roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
@@ -3297,7 +3296,7 @@ function InvoiceCreate({
         document_date: formatDateDDMMYYYY(values.document_date) || null,
         due_date: formatDateDDMMYYYY(values.due_date) || null,
         currency_id: currencyId,
-        roe: values.roe,
+        roe: roundRoeForPayload(values.roe),
         narration: values.narration || null,
         irn_no: isIndiaUser ? values.irn_no || null : null,
         fapiao_no: values.fapiao_no || null,
@@ -3591,7 +3590,7 @@ function InvoiceCreate({
               unit_id: unitId,
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
-              roe: charge.roe ?? 0,
+              roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
               amount: clampAmount(charge.amount ?? 0) ?? 0,
               amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
@@ -3632,7 +3631,7 @@ function InvoiceCreate({
             unit_id: unitId,
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
-            roe: charge.roe ?? 0,
+            roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
@@ -3752,7 +3751,7 @@ function InvoiceCreate({
         document_date: formatDateDDMMYYYY(values.document_date) || null,
         due_date: formatDateDDMMYYYY(values.due_date) || null,
         currency_id: currencyId,
-        roe: values.roe,
+        roe: roundRoeForPayload(values.roe),
         narration: values.narration || null,
         irn_no: isIndiaUser ? values.irn_no || null : null,
         fapiao_no: values.fapiao_no || null,
@@ -4464,7 +4463,7 @@ function InvoiceCreate({
                 label="ROE"
                 placeholder="Enter rate of exchange"
                 value={form.values.roe ?? undefined}
-                decimalScale={2}
+                decimalScale={ROE_DECIMAL_PLACES}
                 onChange={(value) => {
                   if (isBillingBaseCurrency) {
                     form.setFieldValue("roe", 1);
@@ -5069,6 +5068,7 @@ function InvoiceCreate({
                         placeholder="ROE"
                         min={0}
                         hideControls
+                        decimalScale={ROE_DECIMAL_PLACES}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={
