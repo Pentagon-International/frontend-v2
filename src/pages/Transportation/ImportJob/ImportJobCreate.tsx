@@ -6542,6 +6542,8 @@ function ImportJobCreate() {
         consolJobId={consolJobId}
         disabled={isReadOnly || isOdexRunningInBackground}
         onJobStarted={startBackgroundJob}
+        housingDetails={housingDetails}
+        mblContainers={containerDetailsForm.values.containers}
       />
 
       {/* PDF Preview Modal */}
