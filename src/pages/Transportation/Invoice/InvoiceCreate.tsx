@@ -1010,8 +1010,9 @@ function InvoiceCreate({
       ? `Edit ${resolvedDocumentLabel}`
       : `Create ${resolvedDocumentLabel}`;
 
-  // Ref for validate (state optional when agent / US / VAT invoice) — kept in sync
+  // Ref for validate (state required only for India GST invoice) — kept in sync
   const isAgentInvoiceRef = useRef(false);
+  const isGstInvoiceRef = useRef(false);
   const isVatInvoiceRef = useRef(false);
   const isUsInvoiceRef = useRef(false);
 
@@ -1131,28 +1132,30 @@ function InvoiceCreate({
     user?.country?.country_name,
   ]);
 
-  // China & Kenya: VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
-  const isVatInvoiceUser = useMemo(() => {
-    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
-    const countryName = (user?.country?.country_name ?? "").toUpperCase();
-    return (
-      countryCode === "CN" ||
-      countryName === "CHINA" ||
-      countryCode === "KE" ||
-      countryName.includes("KENYA")
-    );
-  }, [user?.country?.country_code, user?.country?.country_name]);
-
-  // US branch customer invoice: same tax-less UI/post as agent (no tax tab, no tax rows on post)
+  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
   const isUsInvoiceUser = useMemo(
     () => isUnitedStatesBranchUser(user),
     [user],
   );
 
-  const isGstInvoiceUser = useMemo(
-    () => !isAgentInvoice && !isVatInvoiceUser && !isUsInvoiceUser,
-    [isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
+  const isVatInvoiceUser = useMemo(
+    () => !isAgentInvoice && !isIndiaUser && !isUsInvoiceUser,
+    [isAgentInvoice, isIndiaUser, isUsInvoiceUser],
   );
+
+  // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).
+  const isGstInvoiceUser = useMemo(
+    () =>
+      isIndiaUser &&
+      !isAgentInvoice &&
+      !isVatInvoiceUser &&
+      !isUsInvoiceUser,
+    [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
+  );
+
+  useEffect(() => {
+    isGstInvoiceRef.current = isGstInvoiceUser;
+  }, [isGstInvoiceUser]);
 
   useEffect(() => {
     isVatInvoiceRef.current = isVatInvoiceUser;
@@ -1207,9 +1210,7 @@ function InvoiceCreate({
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
       state: (value) =>
-        isAgentInvoiceRef.current ||
-        isVatInvoiceRef.current ||
-        isUsInvoiceRef.current
+        !isGstInvoiceRef.current
           ? null
           : !value
             ? "State is required"
@@ -1423,7 +1424,7 @@ function InvoiceCreate({
     const isAgent =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
 
-    if (!firstHawb || isVatInvoiceUser || isUsInvoiceUser) return;
+    if (!firstHawb || !isGstInvoiceUser) return;
 
     const stateIdNum = resolvePartyStateIdFromHousing(
       isAgent,
@@ -1444,7 +1445,7 @@ function InvoiceCreate({
   }, [
     isStateLoading,
     stateData,
-    isUsInvoiceUser,
+    isGstInvoiceUser,
     location.key,
     location.state?.is_agent,
     invoiceUsesConsigneeParty,
@@ -2106,9 +2107,7 @@ function InvoiceCreate({
               (location.state as { job?: { service_id?: number } })?.job
                 ?.service_id ?? null;
             if (
-              !isAgent &&
-              !isVatInvoiceUser &&
-              !isUsInvoiceUser &&
+              isGstInvoiceUser &&
               jobServiceIdForSac &&
               mappedCharges.some((c: ChargeItem) => c.charge_id != null)
             ) {
@@ -3079,18 +3078,7 @@ function InvoiceCreate({
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
 
-      const isAgentInvoiceFlow =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
-      const isVatInvoiceFlow = isVatInvoiceUser;
-      const isUsInvoiceFlow = isUsInvoiceUser;
-      if (
-        !isAgentInvoiceFlow &&
-        !isVatInvoiceFlow &&
-        !isUsInvoiceFlow &&
-        (!stateId || stateId <= 0)
-      ) {
+      if (isGstInvoiceUser && (!stateId || stateId <= 0)) {
         ToastNotification({
           message: "Please select a valid State",
           type: "error",
@@ -3449,7 +3437,7 @@ function InvoiceCreate({
       const isVatPost = isVatInvoiceUser;
       const isUsPost = isUsInvoiceUser;
       const stateValid = stateId != null && stateId > 0;
-      const needsStateForPost = !isAgentPost && !isVatPost && !isUsPost;
+      const needsStateForPost = isGstInvoiceUser;
       if (
         (needsStateForPost && !stateValid) ||
         currencyId == null ||
@@ -3484,7 +3472,7 @@ function InvoiceCreate({
           });
         }
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
-      } else if (!isAgentPost && !isUsPost) {
+      } else if (isGstInvoiceUser) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
           breakupData = await fetchInvoiceCalculateGstBreakup({
