@@ -42,6 +42,10 @@ import {
   parseInvoiceMutationResponse,
   readIrnNoFromInvoiceData,
 } from "../../../utils/parseInvoiceMutationResponse";
+import {
+  isIndianOutstandingBranch,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -567,12 +571,18 @@ function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
-  const defaultBranchCurrency =
-    (
-      user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      ) as { currency?: { currency_code?: string } } | undefined
-    )?.currency?.currency_code ?? "";
+  const defaultBranch = user?.branches?.find(
+    (b: { is_default?: boolean }) => b.is_default === true,
+  ) as
+    | {
+        branch_code?: string;
+        branch_name?: string;
+        currency?: { currency_code?: string };
+        country?: { country_code?: string };
+      }
+    | undefined;
+  const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
+  const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
 
   const navigateBack = useCallback(() => {
     navigateFinanceReturn(navigate, location.state);
@@ -605,8 +615,28 @@ function InvoiceReverse() {
   const [isAgentInvoice, setIsAgentInvoice] = useState(false);
 
   const isAgentInvoiceRef = useRef(false);
+  const isGstInvoiceRef = useRef(false);
   const isVatInvoiceRef = useRef(false);
   const isUsInvoiceRef = useRef(false);
+
+  const isIndiaUser = useMemo(() => {
+    const branchCountryCode = (activeBranchCountryCode ?? "").toUpperCase();
+    const branchCurrencyCode = (defaultBranchCurrency ?? "").toUpperCase();
+    if (branchCountryCode || branchCurrencyCode) {
+      return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
+    }
+    return (
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india")
+    );
+  }, [
+    activeBranchCountryCode,
+    defaultBranchCurrency,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
   const isChinaUser = useMemo(() => {
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
@@ -620,25 +650,25 @@ function InvoiceReverse() {
     return countryCode === "KE" || countryName.includes("KENYA");
   }, [user?.country?.country_code, user?.country?.country_name]);
 
-  const isVatInvoiceUser = useMemo(() => {
-    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
-    const countryName = (user?.country?.country_name ?? "").toUpperCase();
-    return (
-      countryCode === "CN" ||
-      countryName === "CHINA" ||
-      countryCode === "KE" ||
-      countryName.includes("KENYA")
-    );
-  }, [user?.country?.country_code, user?.country?.country_name]);
-
   const isUsInvoiceUser = useMemo(
     () => isUnitedStatesBranchUser(user),
     [user],
   );
 
+  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
+  const isVatInvoiceUser = useMemo(
+    () => !isAgentInvoice && !isIndiaUser && !isUsInvoiceUser,
+    [isAgentInvoice, isIndiaUser, isUsInvoiceUser],
+  );
+
+  // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).
   const isGstInvoiceUser = useMemo(
-    () => !isAgentInvoice && !isVatInvoiceUser && !isUsInvoiceUser,
-    [isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
+    () =>
+      isIndiaUser &&
+      !isAgentInvoice &&
+      !isVatInvoiceUser &&
+      !isUsInvoiceUser,
+    [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
   const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
@@ -648,6 +678,10 @@ function InvoiceReverse() {
   }, [isAgentInvoice]);
 
   useEffect(() => {
+    isGstInvoiceRef.current = isGstInvoiceUser;
+  }, [isGstInvoiceUser]);
+
+  useEffect(() => {
     isVatInvoiceRef.current = isVatInvoiceUser;
   }, [isVatInvoiceUser]);
 
@@ -655,12 +689,7 @@ function InvoiceReverse() {
     isUsInvoiceRef.current = isUsInvoiceUser;
   }, [isUsInvoiceUser]);
 
-  const defaultBranchCurrencyCode =
-    (
-      user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      ) as { currency?: { currency_code?: string } } | undefined
-    )?.currency?.currency_code ?? "";
+  const defaultBranchCurrencyCode = defaultBranchCurrency;
 
   const userLocalCurrency = useMemo(() => {
     const code = user?.country?.country_code;
@@ -715,9 +744,7 @@ function InvoiceReverse() {
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
       state: (value) =>
-        isAgentInvoiceRef.current ||
-        isVatInvoiceRef.current ||
-        isUsInvoiceRef.current
+        !isGstInvoiceRef.current
           ? null
           : !value
             ? "State is required"
@@ -1274,8 +1301,7 @@ function InvoiceReverse() {
       const isVatPost = isVatInvoiceUser;
       const isUsPost = isUsInvoiceUser;
       const stateValid = stateId != null && stateId > 0;
-      const needsStateForPost =
-        !isAgentInvoice && !isVatPost && !isUsPost;
+      const needsStateForPost = isGstInvoiceUser;
       if (
         (needsStateForPost && !stateValid) ||
         currencyId == null ||
@@ -1316,7 +1342,7 @@ function InvoiceReverse() {
           });
         }
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
-      } else if (!isAgentInvoice && !isUsPost) {
+      } else if (isGstInvoiceUser) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
           breakupData = await fetchReverseInvoiceCalculateGstBreakup({
@@ -1822,12 +1848,7 @@ function InvoiceReverse() {
         currencyItem?.id != null ? Number(currencyItem.id) : null;
       const isVatSave = isVatInvoiceUser;
       const isUsSave = isUsInvoiceUser;
-      if (
-        !isAgentInvoice &&
-        !isVatSave &&
-        !isUsSave &&
-        (!stateId || stateId <= 0)
-      ) {
+      if (isGstInvoiceUser && (!stateId || stateId <= 0)) {
         ToastNotification({
           message: "Please select a valid State",
           type: "error",
