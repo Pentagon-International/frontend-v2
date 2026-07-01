@@ -506,12 +506,14 @@ export default function SupplierInvoiceCreate({
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate =
     isReversal && pathname.includes("/reversal/create");
+  const prefillFromJob = (location.state as any)
+    ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
   const financeReturnTo =
     (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const supplierInvoiceResolvedBackPath =
     isReversalCreate && !financeReturnTo
       ? "/supplier-invoice"
-      : financeReturnTo || backPath;
+      : financeReturnTo || (prefillFromJob ? undefined : backPath);
   const handleSupplierInvoiceBack = () => {
     navigateFinanceReturn(
       navigate,
@@ -526,8 +528,6 @@ export default function SupplierInvoiceCreate({
   const invoiceFromState =
     invoiceFromRouteFetch ??
     (location.state as SupplierInvoiceListItem | null | undefined);
-  const prefillFromJob = (location.state as any)
-    ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
 
   useEffect(() => {
     const idStr = supplierInvoiceIdFromRoute?.trim();

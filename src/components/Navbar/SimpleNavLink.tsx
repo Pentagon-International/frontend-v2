@@ -1,7 +1,11 @@
 import { NavLink, Tooltip } from "@mantine/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useLayoutStore } from "../../store/useLayoutStore";
-import { getLinkStyles, sectionIconColors, sectionIconBackground } from "./navbarStyles.ts";
+import {
+  getLinkStyles,
+  sectionIconColors,
+  sectionIconBackground,
+} from "./navbarStyles.ts";
 import { isWorkflowChatbotPath } from "../../pages/Workflow/jobcreation/workflowUrls";
 
 type Props = {
@@ -45,14 +49,16 @@ export const SimpleNavLink = ({
         ? pathname === "/chatbot" ||
           pathname.startsWith("/chatbot-") ||
           activeNav === label
-        : pathname === path || pathname.startsWith(`${path}/`) || activeNav === label;
+        : pathname === path ||
+          pathname.startsWith(`${path}/`) ||
+          activeNav === label;
 
   const style = getLinkStyles(
     isActive,
     label,
     undefined,
     undefined,
-    isSidebarCollapsed
+    isSidebarCollapsed,
   );
 
   const handleClick = () => {
@@ -72,7 +78,9 @@ export const SimpleNavLink = ({
     } else {
       // Normal navigation for other links
       const isOnTarget =
-        label === "Chatbot" ? isWorkflowChatbotPath(pathname) : pathname === path;
+        label === "Chatbot"
+          ? isWorkflowChatbotPath(pathname)
+          : pathname === path;
 
       if (title !== label || activeNav !== label || !isOnTarget) {
         setTitle(label);
