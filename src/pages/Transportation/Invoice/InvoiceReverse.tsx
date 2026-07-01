@@ -32,6 +32,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { getAPICall } from "../../../service/getApiCall";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -571,18 +572,12 @@ function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
-  const defaultBranch = user?.branches?.find(
-    (b: { is_default?: boolean }) => b.is_default === true,
-  ) as
-    | {
-        branch_code?: string;
-        branch_name?: string;
-        currency?: { currency_code?: string };
-        country?: { country_code?: string };
-      }
-    | undefined;
-  const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
-  const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
+  const defaultBranchCurrency =
+    (
+      user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      ) as { currency?: { currency_code?: string } } | undefined
+    )?.currency?.currency_code ?? "";
 
   const navigateBack = useCallback(() => {
     navigateFinanceReturn(navigate, location.state);
@@ -3578,6 +3573,7 @@ function InvoiceReverse() {
                     : "Save Invoice Reverse"}
                 </Button>
                 {saveResponse &&
+                  canPostDocuments &&
                   saveResponse.status?.toUpperCase() === "UNPOSTED" &&
                   !invoiceIsPosted && (
                     <Button

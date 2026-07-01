@@ -51,6 +51,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   formatRoeForAccountsPayload,
@@ -259,6 +260,7 @@ function JournalVoucher() {
   const location = useLocation();
   const { id: recordId } = useParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
+  const canPostDocuments = useCanPostDocuments();
 
   const isViewMode = location.pathname.includes("/view/");
   const isReadOnly = isViewMode;
@@ -2099,7 +2101,7 @@ function JournalVoucher() {
                   {isUpdate ? "Update" : "Save"}
                 </Button>
               )}
-              {!isReadOnly && isUpdate && (
+              {!isReadOnly && isUpdate && canPostDocuments && (
                 <Button
                   variant="filled"
                   color="green"

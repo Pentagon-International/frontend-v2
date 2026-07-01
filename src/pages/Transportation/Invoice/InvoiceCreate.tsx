@@ -51,6 +51,7 @@ import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNa
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -900,6 +901,7 @@ function InvoiceCreate({
   };
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+  const canPostDocuments = useCanPostDocuments();
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
@@ -6157,6 +6159,7 @@ function InvoiceCreate({
                     : `Save ${resolvedDocumentLabel}`}
                 </Button>
                 {saveResponse &&
+                  canPostDocuments &&
                   saveResponse.status?.toUpperCase() === "UNPOSTED" &&
                   !invoiceIsPosted && (
                     <Button

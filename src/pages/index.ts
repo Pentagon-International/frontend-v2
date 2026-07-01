@@ -169,6 +169,8 @@ import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMa
 import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCreate";
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
 import GLChargeMappingCreate from "./masters/gl-charge-mapping/GLChargeMappingCreate";
+import MakerCheckerMapping from "./masters/maker-checker-mapping/MakerCheckerMapping";
+import MakerCheckerMappingCreate from "./masters/maker-checker-mapping/MakerCheckerMappingCreate";
 import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
 import GSTSACCreate from "./masters/gst-sac/GSTSACCreate";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
@@ -270,6 +272,8 @@ export {
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
   GLChargeMappingCreate,
+  MakerCheckerMapping,
+  MakerCheckerMappingCreate,
   GSTSACMaster,
   GSTSACCreate,
   GSTRateMaster,

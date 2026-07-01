@@ -75,7 +75,14 @@ type UnpostedDeleteTarget =
   | { kind: "invoice"; id: number }
   | { kind: "reverse"; id: number };
 
-const LIST_KEY = "UNPOSTED_DOCUMENTS_LIST";
+const UNPOSTED_LIST_KEY = "UNPOSTED_DOCUMENTS_LIST";
+const CHECKER_LIST_KEY = "CHECKER_DOCUMENTS_LIST";
+
+export type FinanceDocumentsListVariant = "unposted" | "checker";
+
+type UnpostedDocumentsListProps = {
+  variant?: FinanceDocumentsListVariant;
+};
 
 type FinanceDocumentsFilterResponse = {
   index?: number;
@@ -180,7 +187,26 @@ function humanizeRecordType(recordType: string): string {
     .join(" ");
 }
 
-export default function UnpostedDocumentsList() {
+export default function UnpostedDocumentsList({
+  variant = "unposted",
+}: UnpostedDocumentsListProps = {}) {
+  const isCheckerList = variant === "checker";
+  const listKey = isCheckerList ? CHECKER_LIST_KEY : UNPOSTED_LIST_KEY;
+  const financeQueryKey = isCheckerList
+    ? "finance-checker-documents"
+    : "finance-unposted-documents";
+  const returnPath = isCheckerList ? "/checker" : "/unposted-documents";
+  const listStatLabel = isCheckerList ? "Pending review" : "Unposted";
+  const loadingMessage = isCheckerList
+    ? "Loading checker documents…"
+    : "Loading unposted documents…";
+  const emptyMessage = isCheckerList
+    ? "No documents pending checker review"
+    : "No unposted documents found";
+  const errorMessage = isCheckerList
+    ? "Error loading checker documents. Please try refreshing the page."
+    : "Error loading unposted documents. Please try refreshing the page.";
+
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -213,12 +239,12 @@ export default function UnpostedDocumentsList() {
       setAppliedFilters((prev) => {
         const next = updater(prev);
         setDraftFilters(next);
-        setStoreFilters(LIST_KEY, next);
+        setStoreFilters(listKey, next);
         return next;
       });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
     },
-    [setStoreFilters],
+    [listKey, setStoreFilters],
   );
 
   const formatFilterDateLabel = useCallback(
@@ -268,7 +294,7 @@ export default function UnpostedDocumentsList() {
       });
       setPendingDelete(null);
       await queryClient.invalidateQueries({
-        queryKey: ["finance-unposted-documents"],
+        queryKey: [financeQueryKey],
       });
     } catch {
       ToastNotification({
@@ -281,7 +307,7 @@ export default function UnpostedDocumentsList() {
     } finally {
       setDeletingId(null);
     }
-  }, [pendingDelete, queryClient]);
+  }, [pendingDelete, queryClient, financeQueryKey]);
 
   const appliedFiltersKey = useMemo(
     () =>
@@ -349,7 +375,7 @@ export default function UnpostedDocumentsList() {
   }, [debouncedSearch, appliedFiltersKey, isRestoring]);
 
   useEffect(() => {
-    const stored = getState(LIST_KEY);
+    const stored = getState(listKey);
     const shouldRestore = stored?.shouldRestore === true;
 
     if (!shouldRestore) {
@@ -370,16 +396,16 @@ export default function UnpostedDocumentsList() {
     }
 
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    clearAllExcept(LIST_KEY);
-    setShouldRestore(LIST_KEY, false);
+    clearAllExcept(listKey);
+    setShouldRestore(listKey, false);
     setIsRestoring(false);
-  }, [location.key, getState, clearAllExcept, setShouldRestore]);
+  }, [location.key, getState, clearAllExcept, setShouldRestore, listKey]);
 
   const applyFilters = () => {
     setAppliedFilters({ ...draftFilters });
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, draftFilters);
-    setStoreSearch(LIST_KEY, search);
+    setStoreFilters(listKey, draftFilters);
+    setStoreSearch(listKey, search);
     setShowFilters(false);
   };
 
@@ -388,7 +414,7 @@ export default function UnpostedDocumentsList() {
     setAppliedFilters({ ...EMPTY_UNPOSTED_FILTERS });
     setEditingHeaderId(null);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    clearAllStore(LIST_KEY);
+    clearAllStore(listKey);
   };
 
   const handlePageSizeChange = (size: number) => {
@@ -397,7 +423,8 @@ export default function UnpostedDocumentsList() {
 
   const buildListPayload = useCallback(
     (filtersState: UnpostedListFilters, searchValue: string) => {
-      const filters: Record<string, string> = { status: "UNPOSTED" };
+      const filters: Record<string, string | boolean> = { status: "UNPOSTED" };
+      if (isCheckerList) filters.maker_checker = true;
       if (searchValue.trim()) filters.search = searchValue.trim();
       if (filtersState.customer_name.trim()) {
         filters.customer_name = filtersState.customer_name.trim();
@@ -420,7 +447,7 @@ export default function UnpostedDocumentsList() {
       }
       return { filters };
     },
-    [],
+    [isCheckerList],
   );
 
   const {
@@ -429,7 +456,7 @@ export default function UnpostedDocumentsList() {
     error: listError,
   } = useQuery<FinanceListQueryResult>({
     queryKey: [
-      "finance-unposted-documents",
+      financeQueryKey,
       pagination.pageIndex,
       pagination.pageSize,
       debouncedSearch,
@@ -754,13 +781,13 @@ export default function UnpostedDocumentsList() {
             (recordType === "invoice" || recordType === "reverse_invoice");
 
           const run = async (mode: "edit" | "view") => {
-            setStoreFilters(LIST_KEY, appliedFilters);
-            setStoreSearch(LIST_KEY, search);
-            setShouldRestore(LIST_KEY, true);
+            setStoreFilters(listKey, appliedFilters);
+            setStoreSearch(listKey, search);
+            setShouldRestore(listKey, true);
             setOpeningKey(key);
             try {
               await openFinanceDocument(navigate, r, mode, {
-                returnTo: "/unposted-documents",
+                returnTo: returnPath,
               });
             } finally {
               setOpeningKey(null);
@@ -855,10 +882,12 @@ export default function UnpostedDocumentsList() {
       filterFieldStyles,
       formatFilterDateLabel,
       index,
+      listKey,
       navigate,
       openHeaderEditor,
       openingKey,
       primary,
+      returnPath,
       search,
       setShouldRestore,
       setStoreFilters,
@@ -908,12 +937,12 @@ export default function UnpostedDocumentsList() {
           <Stack align="center" gap="md">
             <Loader size="lg" color={primary} />
             <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              Loading unposted documents…
+              {loadingMessage}
             </Text>
           </Stack>
         ) : (
           <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            No unposted documents found
+            {emptyMessage}
           </Text>
         )}
       </Center>
@@ -1050,7 +1079,7 @@ export default function UnpostedDocumentsList() {
                   theme={erpTheme}
                   icon={<IconFiles size={14} color={primary} />}
                   value={totalRecords}
-                  label="Unposted"
+                  label={listStatLabel}
                 />
                 <ERPListStatPill
                   theme={erpTheme}
@@ -1286,8 +1315,7 @@ export default function UnpostedDocumentsList() {
                   c="dimmed"
                   style={{ fontFamily: erpTheme.fontSans }}
                 >
-                  Error loading unposted documents. Please try refreshing the
-                  page.
+                  {errorMessage}
                 </Text>
               </Center>
             ) : (

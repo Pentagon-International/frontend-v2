@@ -97,6 +97,9 @@ export const URL = {
   uploadDocument: "customer-service-shipment/upload-document/",
   jobCreateUploadDocument: "job-create/upload-document/",
   documentTypeMasterFilter: "filter/document-type-master/",
+  /** Maker & Checker mapping master */
+  makerCheckerMaster: "maker-checker-master/",
+  makerCheckerMasterFilter: "filter/maker-checker-master/",
   airImportBooked: "customer-service-shipment/air-import-booked/",
   airExportBooked: "customer-service-shipment/air-export-booked/",
   oceanImportDsr: "customer-service-shipment/ocean-import/",

@@ -47,6 +47,7 @@ import {
   import { API_HEADER } from "../../../store/storeKeys";
   import { postAPICall } from "../../../service/postApiCall";
   import useAuthStore from "../../../store/authStore";
+  import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   import {
     parseRoeForPayload,
@@ -486,6 +487,7 @@ import {
     const location = useLocation();
     const queryClient = useQueryClient();
     const { user } = useAuthStore();
+    const canPostDocuments = useCanPostDocuments();
     // const loadedFromStateIdRef = useRef<number | string | null>(null);
     /** When loading from list, hold details so Account Name displays for every row (state triggers re-render) */
     const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
@@ -3431,6 +3433,7 @@ import {
                   </Button>
                   {_isReversal &&
                     reverseReceiptSaveResponse &&
+                    canPostDocuments &&
                     String(
                       reverseReceiptSaveResponse.status ?? "",
                     ).toUpperCase() === "UNPOSTED" && (
@@ -3444,7 +3447,7 @@ import {
                         Post Receipt Reversal
                       </Button>
                     )}
-                  {!_isReversal && saveResponse && statusUpper === "UNPOSTED" && (
+                  {!_isReversal && saveResponse && canPostDocuments && statusUpper === "UNPOSTED" && (
                     <Button
                       type="button"
                       color="black"

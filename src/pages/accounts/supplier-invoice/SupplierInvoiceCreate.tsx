@@ -40,6 +40,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   formatRoeForAccountsPayload,
@@ -501,6 +502,7 @@ export default function SupplierInvoiceCreate({
   const location = useLocation();
   const { id: supplierInvoiceIdFromRoute } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+  const canPostDocuments = useCanPostDocuments();
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
@@ -4051,7 +4053,7 @@ export default function SupplierInvoiceCreate({
                       ? "Create Supplier Invoice Reverse"
                       : "Save Supplier Invoice"}
                 </Button>
-                {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
+                {saveResponse?.id != null && canPostDocuments && statusUpper === "UNPOSTED" && (
                   <Button
                     type="button"
                     color="black"

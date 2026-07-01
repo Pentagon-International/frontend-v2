@@ -42,6 +42,7 @@ export default function MastersPage() {
 
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
+    if (label === "Maker & Checker Mapping") return "maker-checker-mapping";
     return label.toLowerCase().replace(/\s+/g, "-");
   };
 
@@ -196,6 +197,10 @@ export default function MastersPage() {
           {
             icon: <IconLink size={28} color="#105476" />,
             label: "GL Charge Mapping",
+          },
+          {
+            icon: <IconUserCheck size={28} color="#105476" />,
+            label: "Maker & Checker Mapping",
           },
           {
             icon: <IconReceiptTax size={28} color="#105476" />,

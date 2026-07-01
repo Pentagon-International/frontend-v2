@@ -161,6 +161,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/invoice-reverse")) {
       setActiveNav("Desk");
       setActiveSubNav("Invoice Reverse");
+    } else if (path.startsWith("/checker")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Checker");
     } else if (path.startsWith("/unposted-documents") || path === "/invoices") {
       setActiveNav("Desk");
       setActiveSubNav("Unposted Documents");

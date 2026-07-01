@@ -27,6 +27,7 @@ import {
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 
 type CoaItem = {
   id?: number;
@@ -322,6 +323,7 @@ const putAllocationDocuments = async (
 export default function DocumentAllocation() {
   const navigate = useNavigate();
   const location = useLocation();
+  const canPostDocuments = useCanPostDocuments();
   const hydratedDocumentIdRef = useRef<number | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -1502,7 +1504,7 @@ export default function DocumentAllocation() {
                       {hasSavedId ? "Update" : "Save"}
                     </Button>
 
-                    {hasSavedId ? (
+                    {hasSavedId && canPostDocuments ? (
                       <Button
                         size="sm"
                         color="black"

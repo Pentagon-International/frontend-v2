@@ -60,6 +60,7 @@ import {
   IconTruck,
   IconLockOpen,
   IconCloudComputing,
+  IconUserCheck,
 } from "@tabler/icons-react";
 import {
   CHATBOT_PATH,
@@ -77,6 +78,7 @@ import { SectionTitle } from "./SectionTitle";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
+import { useCanAccessCheckerPage } from "../../hooks/useCanPostDocuments";
 
 const Navbar = ({
   opened,
@@ -93,6 +95,7 @@ const Navbar = ({
     user?.screen_permissions?.quotation_approval
   );
   const showQuotationApproval = isManagerOrAdmin && hasQuotationApprovalPermission;
+  const showCheckerPage = useCanAccessCheckerPage();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
   const [, setIsCustomerServiceOpen] = useState(false);
@@ -128,7 +131,8 @@ const Navbar = ({
       location.pathname.startsWith("/debit-credit-note-trade") ||
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
       location.pathname.startsWith("/job-closure") ||
-      location.pathname.startsWith("/job-reopen")
+      location.pathname.startsWith("/job-reopen") ||
+      location.pathname.startsWith("/checker")
     ) {
       setIsAccountsOpen(true);
     }
@@ -941,6 +945,21 @@ const Navbar = ({
                   setOpenedLocal={setIsAccountsOpen}
                   icon={IconReceipt2}
                 >
+                    {showCheckerPage && (
+                      <SubNavLink
+                        parent="Accounts"
+                        label="Checker"
+                        icon={IconUserCheck}
+                        path="/checker"
+                        collapsibles={{
+                          setIsSalesOpen,
+                          setIsTariffOpen,
+                          setIsCustomerServiceOpen,
+                          setIsAirOpen,
+                          setIsSeaExportOpen,
+                        }}
+                      />
+                    )}
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt"

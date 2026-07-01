@@ -39,6 +39,7 @@ import {
   import { API_HEADER } from "../../../store/storeKeys";
   import { postAPICall } from "../../../service/postApiCall";
   import useAuthStore from "../../../store/authStore";
+  import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { isIndianUserCountry } from "../../../utils/userNumberFormat";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   import {
@@ -398,6 +399,7 @@ import {
     const navigate = useNavigate();
     const location = useLocation();
     const user = useAuthStore((state) => state.user);
+    const canPostDocuments = useCanPostDocuments();
     const pathname = location.pathname;
     const isViewMode = pathname.includes("/view");
     const isEditMode = pathname.includes("/edit");
@@ -3492,7 +3494,7 @@ import {
                         ? "Create Supplier Invoice Reverse"
                         : "Save Supplier Invoice"}
                   </Button>
-                  {saveResponse?.id != null && statusUpper === "UNPOSTED" && (
+                  {saveResponse?.id != null && canPostDocuments && statusUpper === "UNPOSTED" && (
                     <Button
                       type="button"
                       color="black"

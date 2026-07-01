@@ -43,6 +43,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   parseRoeForPayload,
@@ -459,6 +460,7 @@ export default function OverseasPaymentCreate({
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const canPostDocuments = useCanPostDocuments();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
   const [reversePaymentSaveResponse, setReversePaymentSaveResponse] = useState<{
@@ -3157,6 +3159,7 @@ export default function OverseasPaymentCreate({
                 </Button>
                 {_isReversal
                   ? reversePaymentSaveResponse &&
+                    canPostDocuments &&
                     reversalStatusUpper === "UNPOSTED" && (
                       <Button
                         type="button"
@@ -3169,6 +3172,7 @@ export default function OverseasPaymentCreate({
                       </Button>
                     )
                   : saveResponse &&
+                    canPostDocuments &&
                     statusUpper === "UNPOSTED" && (
                       <Button
                         type="button"

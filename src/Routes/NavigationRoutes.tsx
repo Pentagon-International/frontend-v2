@@ -85,6 +85,8 @@ import {
   ChartOfAccountsCreate,
   GLChargeMappingMaster,
   GLChargeMappingCreate,
+  MakerCheckerMapping,
+  MakerCheckerMappingCreate,
   GSTSACMaster,
   GSTSACCreate,
   GSTRateMaster,
@@ -201,6 +203,7 @@ import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
 import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAllocation";
 import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
+import Checker from "../pages/accounts/checker/Checker";
 import DebitCreditNoteNonTradeMaster from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeMaster";
 import DebitCreditNoteNonTradeCreate from "../pages/accounts/debit-credit-note-non-trade/DebitCreditNoteNonTradeCreate";
 import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeMaster";
@@ -541,6 +544,7 @@ const NavigationRoutes = () => {
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
         <Route path="/document-allocation" element={<DocumentAllocationList />} />
         <Route path="/document-allocation/create" element={<DocumentAllocation />} />
+        <Route path="/checker" element={<Checker />} />
         <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteNonTradeMaster />} />
           <Route path="create" element={<DebitCreditNoteNonTradeCreate />} />
@@ -826,6 +830,12 @@ const NavigationRoutes = () => {
             <Route index element={<GLChargeMappingMaster />} />
             <Route path="create" element={<GLChargeMappingCreate />} />
             <Route path="edit" element={<GLChargeMappingCreate />} />
+          </Route>
+
+          <Route path="maker-checker-mapping">
+            <Route index element={<MakerCheckerMapping />} />
+            <Route path="create" element={<MakerCheckerMappingCreate />} />
+            <Route path="edit/:id" element={<MakerCheckerMappingCreate />} />
           </Route>
 
           <Route path="gst-sac">

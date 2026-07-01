@@ -37,6 +37,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import {
   formatRoeAsString,
   parseRoeForPayload,
@@ -258,6 +259,7 @@ export function DebitCreditNoteCreateBase({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const canPostDocuments = useCanPostDocuments();
   useParams(); // keep route `:id` segment for identification
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
@@ -2127,7 +2129,7 @@ export function DebitCreditNoteCreateBase({
           >
             {isEditMode ? "Update" : "Create"}
           </Button>
-          {isEditMode && !isPosted && (
+          {isEditMode && !isPosted && canPostDocuments && (
             <Button
               variant="outline"
               color="#105476"
