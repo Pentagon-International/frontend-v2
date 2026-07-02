@@ -59,6 +59,7 @@ import {
     { value: "ONLINE", label: "ONLINE" },
     { value: "CASH", label: "CASH" },
     { value: "NEFT", label: "NEFT" },
+    { value: "TT", label: "TT" },
   ];
   
   const DR_CR_OPTIONS = [

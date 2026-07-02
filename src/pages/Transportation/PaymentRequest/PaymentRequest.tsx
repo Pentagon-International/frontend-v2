@@ -352,11 +352,12 @@ const buildPaymentRequestFormData = (
 };
 
 const PAYMENT_TYPE_OPTIONS = [
-  { value: "Bank", label: "Bank" },
-  { value: "CASH", label: "Cash" },
+  { value: "Bank", label: "BANK" },
+  { value: "CASH", label: "CASH" },
   { value: "PDC", label: "PDC" },
-  { value: "ONLINE TRANSFER", label: "Online Transfer" },
+  { value: "ONLINE TRANSFER", label: "ONLINE TRANSFER" },
   { value: "DD/PO", label: "DD/PO" },
+  { value: "TT", label: "TT" },
 ];
 
 const VOUCHER_TYPE_OPTIONS = [
