@@ -58,6 +58,7 @@ import {
   type CustomerDocumentListItem,
 } from "../../../utils/customerDocuments";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
+import FormTextArea from "../../../components/FormTextArea";
 
 function parseYesNoBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -282,6 +283,7 @@ type TdsSectionPayloadRow = {
 
 type CustomerSubmitValues = CustomerFormData & {
   tds_section_data?: TdsSectionPayloadRow[];
+  bank_details_data?: BankDetailPayloadRow[];
 };
 
 type TdsSectionMasterItem = {
@@ -290,6 +292,113 @@ type TdsSectionMasterItem = {
   tds_section_name?: string;
   tds_section_rate?: string;
   status?: string;
+};
+
+type BankDetailRow = {
+  id?: number | null;
+  currency: string;
+  account_no: string;
+  account_name: string;
+  bank_name: string;
+  iban_no: string;
+  swift_no: string;
+  bank_address: string;
+  ifsc_code: string;
+};
+
+type BankDetailsFormValues = {
+  bank_details: BankDetailRow[];
+};
+
+type BankDetailPayloadRow = {
+  id?: number;
+  currency: string;
+  account_no: string;
+  account_name: string;
+  bank_name: string;
+  iban_no: string;
+  swift_no: string;
+  bank_address: string;
+  ifsc_code: string;
+};
+
+type CurrencyMasterItem = {
+  id?: number;
+  code?: string;
+  currency_code?: string;
+  currency_name?: string;
+};
+
+const emptyBankDetailRow = (): BankDetailRow => ({
+  id: null,
+  currency: "",
+  account_no: "",
+  account_name: "",
+  bank_name: "",
+  iban_no: "",
+  swift_no: "",
+  bank_address: "",
+  ifsc_code: "",
+});
+
+function mapBankDetailFromApi(
+  row: BankDetailPayloadRow & Record<string, unknown>,
+): BankDetailRow {
+  return {
+    ...(row.id != null ? { id: row.id } : {}),
+    currency: String(row.currency ?? ""),
+    account_no: String(row.account_no ?? ""),
+    account_name: String(row.account_name ?? ""),
+    bank_name: String(row.bank_name ?? ""),
+    iban_no: String(row.iban_no ?? ""),
+    swift_no: String(row.swift_no ?? ""),
+    bank_address: String(row.bank_address ?? ""),
+    ifsc_code: String(row.ifsc_code ?? ""),
+  };
+}
+
+function isBankDetailRowTouched(row: BankDetailRow): boolean {
+  return [
+    row.currency,
+    row.account_no,
+    row.account_name,
+    row.bank_name,
+    row.iban_no,
+    row.swift_no,
+    row.bank_address,
+    row.ifsc_code,
+  ].some((value) => String(value ?? "").trim() !== "");
+}
+
+function mapBankDetailToPayload(row: BankDetailRow): BankDetailPayloadRow {
+  const payload: BankDetailPayloadRow = {
+    currency: row.currency ?? "",
+    account_no: row.account_no ?? "",
+    account_name: row.account_name ?? "",
+    bank_name: row.bank_name ?? "",
+    iban_no: row.iban_no ?? "",
+    swift_no: row.swift_no ?? "",
+    bank_address: row.bank_address ?? "",
+    ifsc_code: row.ifsc_code ?? "",
+  };
+  if (row.id != null) {
+    payload.id = row.id;
+  }
+  return payload;
+}
+
+const bankDetailFieldStyles = {
+  input: {
+    fontSize: "13px",
+    fontFamily: "Inter",
+  },
+  label: {
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "#424242",
+    marginBottom: "4px",
+    fontFamily: "Inter",
+  },
 };
 
 const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
@@ -589,6 +698,7 @@ type CustomerDetailRecord = CustomerFormData & {
     valid_to?: string | null;
     tds_lower_limit?: string;
   }>;
+  bank_details_data?: BankDetailPayloadRow[];
   documents_list?: CustomerDocumentListItem[];
 };
 
@@ -872,6 +982,33 @@ const tdsDisplayValidationSchema = yup
         }),
       )
       .min(1, "At least one TDS section is required"),
+  })
+  .required();
+
+const requireWhenBankRowTouched = (message: string) =>
+  yup
+    .string()
+    .optional()
+    .test("required-when-touched", message, function (value) {
+      const row = this.parent as BankDetailRow;
+      if (!isBankDetailRowTouched(row)) return true;
+      return String(value ?? "").trim() !== "";
+    });
+
+const bankDetailsValidationSchema = yup
+  .object({
+    bank_details: yup.array().of(
+      yup.object({
+        currency: yup.string().optional(),
+        account_no: requireWhenBankRowTouched("Account number is required"),
+        account_name: requireWhenBankRowTouched("Account name is required"),
+        bank_name: requireWhenBankRowTouched("Bank name is required"),
+        iban_no: yup.string().optional(),
+        swift_no: yup.string().optional(),
+        bank_address: yup.string().optional(),
+        ifsc_code: requireWhenBankRowTouched("IFSC code is required"),
+      }),
+    ),
   })
   .required();
 
@@ -1541,6 +1678,7 @@ function CustomerCreate() {
   const [addressStateRestored, setAddressStateRestored] = useState(false);
   /** Prevents auto-resolve effect from overwriting user edits to Assign To in edit mode. */
   const assignToUserEditedRef = useRef(false);
+  const originalBankDetailsRef = useRef<BankDetailPayloadRow[]>([]);
   // For edit flow: keep existing row IDs keyed by `section_id` so we can send them back on update.
   const [tdsIdBySectionId, setTdsIdBySectionId] = useState<
     Record<number, number>
@@ -1574,13 +1712,22 @@ function CustomerCreate() {
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
   const isCreateMode = !params.id;
-  const maxStep = isVendorMasterRoute ? 2 : 1;
+  const maxStep = isVendorMasterRoute ? 3 : 1;
 
   const tdsDisplayForm = useForm<TdsDisplayFormValues>({
     initialValues: {
       tds_sections: [emptyTdsSectionRow()],
     },
     validate: isViewMode ? undefined : yupResolver(tdsDisplayValidationSchema),
+    validateInputOnChange: false,
+    validateInputOnBlur: false,
+  });
+
+  const bankDetailsForm = useForm<BankDetailsFormValues>({
+    initialValues: {
+      bank_details: [emptyBankDetailRow()],
+    },
+    validate: isViewMode ? undefined : yupResolver(bankDetailsValidationSchema),
     validateInputOnChange: false,
     validateInputOnBlur: false,
   });
@@ -1793,6 +1940,32 @@ function CustomerCreate() {
       }));
   }, [tdsSectionMaster]);
 
+  const { data: currencyMasterData = [] } = useQuery({
+    queryKey: ["currencyMaster"],
+    queryFn: async () => {
+      try {
+        const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
+        const raw = (response as { data?: unknown[] })?.data ?? response;
+        return Array.isArray(raw) ? (raw as CurrencyMasterItem[]) : [];
+      } catch (error) {
+        console.error("Error fetching currency master:", error);
+        return [];
+      }
+    },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    enabled: isVendorMasterRoute,
+  });
+
+  const currencyOptions = useMemo(() => {
+    return currencyMasterData
+      .map((c) => {
+        const code = String(c?.currency_code ?? c?.code ?? "").trim();
+        return code ? { value: code, label: code } : null;
+      })
+      .filter(Boolean) as Array<{ value: string; label: string }>;
+  }, [currencyMasterData]);
+
   // Memoize city options (large dataset - 1292kb)
   const cityOptions = useMemo(() => {
     return cities
@@ -1959,6 +2132,19 @@ function CustomerCreate() {
         tdsDisplayForm.setValues({ tds_sections: rows });
       }
 
+      if (isVendorMasterRoute) {
+        const bankRows: BankDetailRow[] =
+          Array.isArray(record.bank_details_data) &&
+          record.bank_details_data.length > 0
+            ? record.bank_details_data.map((r) => mapBankDetailFromApi(r))
+            : [emptyBankDetailRow()];
+        bankDetailsForm.setValues({ bank_details: bankRows });
+      } else {
+        originalBankDetailsRef.current = Array.isArray(record.bank_details_data)
+          ? record.bank_details_data.map((r) => mapBankDetailToPayload(mapBankDetailFromApi(r)))
+          : [];
+      }
+
       const {
         newSelectedCountries,
         newSelectedStates,
@@ -1992,6 +2178,7 @@ function CustomerCreate() {
       addressForm,
       isVendorMasterRoute,
       tdsDisplayForm,
+      bankDetailsForm,
       salespersonsData,
       isEditMode,
       isViewMode,
@@ -2596,6 +2783,7 @@ function CustomerCreate() {
           ? {
               tds_type: tdsType,
               tds_section_data: values.tds_section_data ?? [],
+              bank_details_data: values.bank_details_data ?? [],
             }
           : {}),
       };
@@ -2745,8 +2933,11 @@ function CustomerCreate() {
           ? {
               tds_type: tdsType,
               tds_section_data: values.tds_section_data ?? [],
+              bank_details_data: values.bank_details_data ?? [],
             }
-          : {}),
+          : originalBankDetailsRef.current.length > 0
+            ? { bank_details_data: originalBankDetailsRef.current }
+            : {}),
         // },
       };
 
@@ -2852,11 +3043,16 @@ function CustomerCreate() {
     const customerResult = customerForm.validate();
     const addressResult = addressForm.validate();
     const tdsResult = isVendorMasterRoute ? tdsDisplayForm.validate() : null;
+    const bankDetailsResult = isVendorMasterRoute
+      ? bankDetailsForm.validate()
+      : null;
 
     if (
       !customerResult.hasErrors &&
       !addressResult.hasErrors &&
-      (!isVendorMasterRoute || (tdsResult && !tdsResult.hasErrors))
+      (!isVendorMasterRoute || (tdsResult && !tdsResult.hasErrors)) &&
+      (!isVendorMasterRoute ||
+        (bankDetailsResult && !bankDetailsResult.hasErrors))
     ) {
       // Combine data from both forms
       if (customerForm.values.assigned_to === "Agent") {
@@ -2894,6 +3090,11 @@ function CustomerCreate() {
                 })()
               : null,
           }));
+        finalData.bank_details_data = (
+          bankDetailsForm.values.bank_details || []
+        )
+          .filter((r) => r.id != null || isBankDetailRowTouched(r))
+          .map((r) => mapBankDetailToPayload(r));
       }
 
       // Decide between create and update strictly based on route mode,
@@ -2917,12 +3118,23 @@ function CustomerCreate() {
         tdsDisplayForm.validate();
         if (!customerResult.hasErrors && !addressResult.hasErrors) setActive(2);
       }
+      if (isVendorMasterRoute && bankDetailsResult?.hasErrors) {
+        bankDetailsForm.validate();
+        if (
+          !customerResult.hasErrors &&
+          !addressResult.hasErrors &&
+          !(tdsResult?.hasErrors)
+        ) {
+          setActive(3);
+        }
+      }
 
       // Show validation errors in console for debugging
       console.log("Customer form errors:", customerResult.errors);
       console.log("Address form errors:", addressResult.errors);
       if (isVendorMasterRoute) {
         console.log("TDS form errors:", tdsDisplayForm.errors);
+        console.log("Bank details form errors:", bankDetailsForm.errors);
       }
     }
   };
@@ -3076,6 +3288,23 @@ function CustomerCreate() {
                   }}
                 >
                   TDS Section
+                </Tabs.Tab>
+              )}
+
+              {isVendorMasterRoute && (
+                <Tabs.Tab
+                  value="3"
+                  style={{
+                    textAlign: "center",
+                    padding: "12px",
+                    backgroundColor: "transparent",
+                    borderBottom: active === 3 ? "3px solid #105476" : "none",
+                    color: "#105476",
+                    fontSize: 16,
+                    fontWeight: active === 3 ? 600 : 400,
+                  }}
+                >
+                  Bank Details
                 </Tabs.Tab>
               )}
             </Tabs.List>
@@ -3726,6 +3955,178 @@ function CustomerCreate() {
                               tdsDisplayForm.insertListItem(
                                 "tds_sections",
                                 emptyTdsSectionRow(),
+                              )
+                            }
+                            disabled={isViewMode}
+                            color="#105476"
+                          >
+                            Add
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Card>
+                  </Box>
+                </Box>
+              </Tabs.Panel>
+            )}
+
+            {isVendorMasterRoute && (
+              <Tabs.Panel value="3" style={{ flex: 1, minHeight: 0 }}>
+                <Box
+                  style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    paddingBottom: "16px",
+                    backgroundColor: "#F8F8F8",
+                  }}
+                >
+                  <Box mt="md">
+                    <Card shadow="sm" padding="lg" radius="md">
+                      <Stack gap="md">
+                        {bankDetailsForm.values.bank_details.map((row, index) => {
+                          const rowTouched = isBankDetailRowTouched(row);
+                          return (
+                          <Card
+                            key={`bank-${bankDetailsForm.values.bank_details[index]?.id ?? index}`}
+                            withBorder
+                            padding="md"
+                            radius="md"
+                            bg="#fafafa"
+                          >
+                            <Group
+                              justify="space-between"
+                              align="center"
+                              mb="sm"
+                            >
+                              <Text size="sm" fw={600} c="#105476">
+                                Bank Detail {index + 1}
+                              </Text>
+                              {!isViewMode &&
+                                bankDetailsForm.values.bank_details.length >
+                                  1 && (
+                                  <ActionIcon
+                                    variant="light"
+                                    color="red"
+                                    onClick={() =>
+                                      bankDetailsForm.removeListItem(
+                                        "bank_details",
+                                        index,
+                                      )
+                                    }
+                                    aria-label="Remove bank detail"
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
+                                )}
+                            </Group>
+                            <Grid gutter="sm">
+                              <Grid.Col span={4}>
+                                <Select
+                                  label="Currency"
+                                  placeholder="Select currency"
+                                  searchable
+                                  disabled={isViewMode}
+                                  data={currencyOptions}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.currency`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="Account No"
+                                  placeholder="Enter account number"
+                                  withAsterisk={rowTouched}
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.account_no`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="Account Name"
+                                  placeholder="Enter account name"
+                                  withAsterisk={rowTouched}
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.account_name`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="Bank Name"
+                                  placeholder="Enter bank name"
+                                  withAsterisk={rowTouched}
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.bank_name`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="IBAN No"
+                                  placeholder="Enter IBAN number"
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.iban_no`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="SWIFT No"
+                                  placeholder="Enter SWIFT code"
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.swift_no`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={4}>
+                                <TextInput
+                                  label="IFSC Code"
+                                  placeholder="Enter IFSC code"
+                                  withAsterisk={rowTouched}
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.ifsc_code`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                              <Grid.Col span={8}>
+                                <FormTextArea
+                                  label="Bank Address"
+                                  placeholder="Enter bank address"
+                                  disabled={isViewMode}
+                                  {...bankDetailsForm.getInputProps(
+                                    `bank_details.${index}.bank_address`,
+                                  )}
+                                  styles={bankDetailFieldStyles}
+                                />
+                              </Grid.Col>
+                            </Grid>
+                          </Card>
+                          );
+                        })}
+
+                        <Group justify="flex-end">
+                          <Button
+                            variant="outline"
+                            leftSection={<IconPlus size={16} />}
+                            onClick={() =>
+                              bankDetailsForm.insertListItem(
+                                "bank_details",
+                                emptyBankDetailRow(),
                               )
                             }
                             disabled={isViewMode}

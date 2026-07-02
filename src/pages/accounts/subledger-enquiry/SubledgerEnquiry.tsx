@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import {
   IconBook2,
+  IconCoin,
   IconFilter,
   IconInfoCircle,
   IconRefresh,
@@ -735,6 +736,11 @@ export default function SubledgerEnquiry() {
     setAppliedFilters(null);
   };
 
+  const openingBalanceLabelDisplay = useMemo(() => {
+    if (enquirySummary?.opening_balance == null) return "—";
+    return formatAmount(enquirySummary.opening_balance);
+  }, [enquirySummary]);
+
   const appliedFilterItems = useMemo(() => {
     if (!appliedFilters) return [];
     const items: Array<{ key: string; value: string }> = [];
@@ -816,22 +822,16 @@ export default function SubledgerEnquiry() {
                     ))}
                   </Text>
                 ) : null}
-                {/* <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconCoin size={14} color="#059669" />}
-                  iconBackground="#d1fae5"
-                  iconColor="#059669"
-                  value={openingBalanceLabelDisplay}
-                  label="Opening"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconCoin size={14} color="#d97706" />}
-                  iconBackground="#fef3c7"
-                  iconColor="#d97706"
-                  value={closingBalanceLabel ?? "—"}
-                  label="Closing"
-                /> */}
+                {enquirySummary ? (
+                  <ERPListStatPill
+                    theme={erpTheme}
+                    icon={<IconCoin size={14} color="#059669" />}
+                    iconBackground="#d1fae5"
+                    iconColor="#059669"
+                    value={openingBalanceLabelDisplay}
+                    label="Opening Balance"
+                  />
+                ) : null}
               </>
             ),
             // secondary: selectedAccount ? (

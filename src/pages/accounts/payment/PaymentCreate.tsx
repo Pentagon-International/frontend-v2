@@ -57,6 +57,7 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: "ONLINE", label: "ONLINE" },
   { value: "CASH", label: "CASH" },
   { value: "NEFT", label: "NEFT" },
+  { value: "TT", label: "TT" },
 ];
 
 const DR_CR_OPTIONS = [
@@ -183,6 +184,45 @@ type InvoiceCombinedItem = {
   amount_in_local?: number | string;
   [key: string]: unknown;
 };
+
+function parseAllocationDocumentRoe(roe: unknown): number | null {
+  if (roe == null || roe === "") return null;
+  if (typeof roe === "number") return Number.isFinite(roe) ? roe : null;
+  const n = parseFloat(String(roe));
+  return Number.isFinite(n) ? n : null;
+}
+
+function seedAllocationRoeMap(
+  map: Map<string, number>,
+  items: InvoiceCombinedItem[],
+) {
+  for (const inv of items) {
+    const docNo = (inv.document_no ?? "").toString().trim();
+    const roe = parseAllocationDocumentRoe(inv.roe);
+    if (docNo && roe != null) map.set(docNo, roe);
+  }
+}
+
+function resolveAdjustmentDocumentRoe(
+  adjustment: AdjustmentRow,
+  roeByDocument: Map<string, number>,
+): number | null {
+  const fromRow = parseAllocationDocumentRoe(adjustment.roe);
+  if (fromRow != null) return fromRow;
+  const docNo = (adjustment.document_no ?? "").toString().trim();
+  if (!docNo) return null;
+  const fromMap = roeByDocument.get(docNo);
+  return fromMap != null && Number.isFinite(fromMap) ? fromMap : null;
+}
+
+function calcAdjLocalFromCurr(
+  curr: number | null,
+  documentRoe: number | null,
+): number | null {
+  if (curr == null || !Number.isFinite(curr)) return null;
+  if (documentRoe == null || !Number.isFinite(documentRoe)) return null;
+  return clampAmount(curr * documentRoe);
+}
 
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
@@ -511,6 +551,7 @@ export default function PaymentCreate({
   const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
     useState<{ account_code: string; subledger_code: string } | null>(null);
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
+  const allocationRoeByDocumentRef = useRef<Map<string, number>>(new Map());
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
@@ -785,7 +826,7 @@ export default function PaymentCreate({
               document_no: String(aAny.document_no ?? "").trim(),
               doc_date: parseDocumentDate(aAny.document_date),
               currency: (aAny.currency_code ?? localCurrency).toString().trim(),
-              roe: parseNum(roeFromApi),
+              roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: parseNum(aAny.adj_local_amount),
             };
@@ -876,6 +917,69 @@ export default function PaymentCreate({
     isReversalEditOrView,
     isReversalCreate,
   ]);
+
+  const partyAccountCodeBackfillKey = (form.values.details ?? [])
+    .map((d) => `${d.customer_code}|${d.account_code ?? ""}`)
+    .join(";");
+
+  // Edit: backfill document ROE from outstanding allocations when list rows omit it.
+  useEffect(() => {
+    if (!loadedFromListState) return;
+
+    const adjustments = form.values.adjustments ?? [];
+    const needsLookup = adjustments.some(
+      (a) =>
+        (a.document_no ?? "").toString().trim() &&
+        resolveAdjustmentDocumentRoe(a, allocationRoeByDocumentRef.current) ==
+          null,
+    );
+    if (!needsLookup) return;
+
+    const partyKeys = new Map<
+      string,
+      { account_code: string; subledger_code: string }
+    >();
+    for (const d of form.values.details ?? []) {
+      const accountCode = (d.account_code ?? "").toString().trim();
+      const subledgerCode = (d.customer_code ?? "").toString().trim();
+      if (!accountCode || !subledgerCode) continue;
+      partyKeys.set(`${accountCode}|${subledgerCode}`, {
+        account_code: accountCode,
+        subledger_code: subledgerCode,
+      });
+    }
+    if (partyKeys.size === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const party of partyKeys.values()) {
+        try {
+          const list = await fetchOutstandingAllocations(party);
+          if (cancelled) return;
+          seedAllocationRoeMap(allocationRoeByDocumentRef.current, list);
+        } catch {
+          // ignore lookup failures
+        }
+      }
+      if (cancelled) return;
+
+      let changed = false;
+      const updated = adjustments.map((a) => {
+        const documentRoe = resolveAdjustmentDocumentRoe(
+          a,
+          allocationRoeByDocumentRef.current,
+        );
+        if (documentRoe == null || a.roe != null) return a;
+        changed = true;
+        return { ...a, roe: documentRoe };
+      });
+      if (changed) form.setFieldValue("adjustments", updated);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedFromListState, paymentFromState?.id, partyAccountCodeBackfillKey]);
 
   // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
   // exchange rate master is called only when the user changes currency (dropdown onChange).
@@ -1053,6 +1157,7 @@ export default function PaymentCreate({
   useEffect(() => {
     if (!invoiceModalOpen || !filterInvoiceData) return;
     const list = filterInvoiceData;
+    seedAllocationRoeMap(allocationRoeByDocumentRef.current, list);
     setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
@@ -1221,14 +1326,7 @@ export default function PaymentCreate({
               ? parseFloat(inv.amount_in_local) || null
               : null
           : null;
-      const invRoe =
-        inv.roe != null
-          ? typeof inv.roe === "number"
-            ? inv.roe
-            : typeof inv.roe === "string"
-              ? parseFloat(inv.roe) || null
-              : null
-          : null;
+      const invRoe = parseAllocationDocumentRoe(inv.roe);
       const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
@@ -1268,6 +1366,10 @@ export default function PaymentCreate({
     if (nextAdjustments.length === 0) {
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
+    seedAllocationRoeMap(
+      allocationRoeByDocumentRef.current,
+      sorted.map((listIdx) => invoiceList[listIdx]),
+    );
     form.setFieldValue("adjustments", nextAdjustments);
     syncPartyDetailsFromAllocations(nextAdjustments);
     setInvoiceModalOpen(false);
@@ -2792,31 +2894,40 @@ export default function PaymentCreate({
                               clampAmount(
                                 typeof v === "string" ? parseFloat(v) : v,
                               ) ?? null;
+                            const adjustment = form.values.adjustments[idx];
+                            const documentRoe = resolveAdjustmentDocumentRoe(
+                              adjustment,
+                              allocationRoeByDocumentRef.current,
+                            );
+                            if (
+                              documentRoe != null &&
+                              adjustment.roe !== documentRoe
+                            ) {
+                              form.setFieldValue(
+                                `adjustments.${idx}.roe`,
+                                documentRoe,
+                              );
+                            }
+                            const newLocal = calcAdjLocalFromCurr(
+                              newCurr,
+                              documentRoe,
+                            );
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
                               newCurr,
                             );
-                            const rowRoe = form.values.adjustments[idx]?.roe;
-                            let newLocal: number | null = null;
-                            if (
-                              newCurr != null &&
-                              rowRoe != null &&
-                              Number.isFinite(rowRoe)
-                            ) {
-                              newLocal = clampAmount(newCurr * rowRoe);
-                              form.setFieldValue(
-                                `adjustments.${idx}.adj_local_amount`,
-                                newLocal,
-                              );
-                            }
+                            form.setFieldValue(
+                              `adjustments.${idx}.adj_local_amount`,
+                              newLocal,
+                            );
                             const effectiveAdjustments =
                               form.values.adjustments.map((a, i) =>
                                 i === idx
                                   ? {
                                       ...a,
+                                      roe: documentRoe ?? a.roe,
                                       adj_curr_amount: newCurr,
-                                      adj_local_amount:
-                                        newLocal ?? a.adj_local_amount,
+                                      adj_local_amount: newLocal,
                                     }
                                   : a,
                               );
