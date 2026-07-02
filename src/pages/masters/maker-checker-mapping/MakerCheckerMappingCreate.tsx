@@ -97,6 +97,60 @@ function parseLimitAmount(
   return Number.isFinite(num) ? num : "";
 }
 
+function readApiResponseBody(response: unknown): {
+  status?: boolean;
+  message?: string;
+} | null {
+  if (!response || typeof response !== "object") return null;
+  return response as { status?: boolean; message?: string };
+}
+
+function parseMakerCheckerMutationResponse(
+  response: unknown,
+  fallbackSuccess: string,
+  fallbackError: string,
+): { ok: true; message: string } | { ok: false; message: string } {
+  const body = readApiResponseBody(response);
+  if (!body) {
+    return { ok: true, message: fallbackSuccess };
+  }
+
+  if (body.status === false) {
+    return {
+      ok: false,
+      message: (body.message ?? "").trim() || fallbackError,
+    };
+  }
+
+  return {
+    ok: true,
+    message: (body.message ?? "").trim() || fallbackSuccess,
+  };
+}
+
+function readApiErrorMessage(err: unknown): string {
+  if (err && typeof err === "object") {
+    const direct = err as Record<string, unknown>;
+    if (typeof direct.message === "string" && direct.message.trim()) {
+      return direct.message.trim();
+    }
+    if ("response" in err) {
+      const data = (err as { response?: { data?: unknown } }).response?.data;
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        const body = data as Record<string, unknown>;
+        if (typeof body.message === "string" && body.message.trim()) {
+          return body.message.trim();
+        }
+        if (typeof body.detail === "string" && body.detail.trim()) {
+          return body.detail.trim();
+        }
+      }
+    }
+  }
+  if (err instanceof Error && err.message.trim()) return err.message.trim();
+  return "Unknown error";
+}
+
 async function fetchMakerCheckerMappingById(
   id: number,
 ): Promise<MakerCheckerMappingRecord | null> {
@@ -195,23 +249,37 @@ export default function MakerCheckerMappingCreate() {
     }
 
     try {
-      if (isEditMode && editId != null) {
-        await putAPICall(
-          URL.makerCheckerMaster,
-          { ...payload, id: editId },
-          API_HEADER,
-        );
+      const response =
+        isEditMode && editId != null
+          ? await putAPICall(
+              URL.makerCheckerMaster,
+              { ...payload, id: editId },
+              API_HEADER,
+            )
+          : await postAPICall(URL.makerCheckerMaster, payload, API_HEADER);
+
+      const result = parseMakerCheckerMutationResponse(
+        response,
+        isEditMode
+          ? "Maker & Checker Mapping updated successfully"
+          : "Maker & Checker Mapping created successfully",
+        isEditMode
+          ? "Failed to update Maker & Checker Mapping"
+          : "Failed to create Maker & Checker Mapping",
+      );
+
+      if (!result.ok) {
         ToastNotification({
-          type: "success",
-          message: "Maker & Checker Mapping updated successfully",
+          type: "error",
+          message: result.message,
         });
-      } else {
-        await postAPICall(URL.makerCheckerMaster, payload, API_HEADER);
-        ToastNotification({
-          type: "success",
-          message: "Maker & Checker Mapping created successfully",
-        });
+        return;
       }
+
+      ToastNotification({
+        type: "success",
+        message: result.message,
+      });
 
       await queryClient.invalidateQueries({
         queryKey: ["maker-checker-master"],
@@ -224,10 +292,9 @@ export default function MakerCheckerMappingCreate() {
 
       navigate("/master/maker-checker-mapping");
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
         type: "error",
-        message: `Error ${isEditMode ? "updating" : "creating"} Maker & Checker Mapping: ${errorMessage}`,
+        message: readApiErrorMessage(err),
       });
     } finally {
       setIsSubmitting(false);

@@ -16,6 +16,13 @@ export type FinanceDocumentListRow = {
   created_by?: string;
   api_endpoint?: string;
   filter_id_key?: string;
+  billing_amt?: number | null;
+  billing_currency?: string | null;
+  local_amt?: number | null;
+  local_currency?: string | null;
+  job_id?: string[] | null;
+  shipment_id?: string[] | null;
+  house_no?: string[] | null;
 };
 
 export async function postFinanceFilterOne(

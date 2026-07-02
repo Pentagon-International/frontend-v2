@@ -103,6 +103,8 @@ type UnpostedListFilters = {
   document_no: string;
   /** Day book document type code (e.g. GLJ); sent as `filters.daybook_type`. */
   daybook_type: string | null;
+  job_id: string;
+  shipment_id: string;
   document_date_from: Date | null;
   document_date_to: Date | null;
 };
@@ -113,6 +115,8 @@ const EMPTY_UNPOSTED_FILTERS: UnpostedListFilters = {
   customer_code: null,
   document_no: "",
   daybook_type: null,
+  job_id: "",
+  shipment_id: "",
   document_date_from: null,
   document_date_to: null,
 };
@@ -136,6 +140,8 @@ function restoreUnpostedFilters(
       raw.daybook_type != null && raw.daybook_type !== ""
         ? String(raw.daybook_type)
         : null,
+    job_id: String(raw.job_id ?? ""),
+    shipment_id: String(raw.shipment_id ?? ""),
     document_date_from: raw.document_date_from
       ? new Date(String(raw.document_date_from))
       : null,
@@ -147,22 +153,36 @@ function restoreUnpostedFilters(
 
 const columnLabels = {
   sno: "S.No",
+  branch_code: "Branch",
   record_type: "Type",
   customer_name: "Customer / party",
-  daybook_type: "Daybook",
-  document_no: "Document No",
+  daybook_type: "Doc Type",
+  document_no: "Draft Document No",
   document_date: "Document date",
+  billing_currency: "Currency",
+  billing_amt: "Currency amount",
+  local_currency: "Local currency",
+  local_amt: "Local amount",
+  job_id: "Job ID",
+  shipment_id: "Shipment ID",
 } as const;
 
 type ColumnKey = keyof typeof columnLabels;
 
 const columnDefault: Record<ColumnKey, boolean> = {
   sno: true,
+  branch_code: true,
   record_type: false,
   customer_name: true,
   daybook_type: true,
   document_no: true,
   document_date: true,
+  billing_amt: true,
+  billing_currency: true,
+  local_amt: true,
+  local_currency: false,
+  job_id: true,
+  shipment_id: true,
 };
 
 function columnId<T extends Record<string, unknown>>(
@@ -176,6 +196,28 @@ function columnId<T extends Record<string, unknown>>(
 function formatCell(value: unknown): string {
   if (value == null || value === "") return "-";
   return String(value);
+}
+
+function formatAmount(value: unknown): string {
+  if (value == null || value === "") return "-";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (Number.isNaN(n)) return "-";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatArrayCell(value: unknown): string {
+  if (value == null) return "-";
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+    return items.length > 0 ? items.join(", ") : "-";
+  }
+  const text = String(value).trim();
+  return text || "-";
 }
 
 function humanizeRecordType(recordType: string): string {
@@ -316,6 +358,8 @@ export default function UnpostedDocumentsList({
         customer_code: appliedFilters.customer_code ?? "",
         document_no: appliedFilters.document_no,
         daybook_type: appliedFilters.daybook_type ?? "",
+        job_id: appliedFilters.job_id,
+        shipment_id: appliedFilters.shipment_id,
         document_date_from:
           appliedFilters.document_date_from?.toISOString() ?? "",
         document_date_to: appliedFilters.document_date_to?.toISOString() ?? "",
@@ -444,6 +488,12 @@ export default function UnpostedDocumentsList({
       }
       if (filtersState.daybook_type?.trim()) {
         filters.daybook_type = filtersState.daybook_type.trim();
+      }
+      if (filtersState.job_id.trim()) {
+        filters.job_id = filtersState.job_id.trim();
+      }
+      if (filtersState.shipment_id.trim()) {
+        filters.shipment_id = filtersState.shipment_id.trim();
       }
       return { filters };
     },
@@ -586,6 +636,16 @@ export default function UnpostedDocumentsList({
         Cell: ({ row }) => row.original?.sno ?? index + row.index + 1,
       },
       {
+        accessorKey: "branch_code",
+        header: "Branch",
+        size: 100,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
         accessorKey: "record_type",
         header: "Type",
         size: 160,
@@ -627,11 +687,11 @@ export default function UnpostedDocumentsList({
       },
       {
         accessorKey: "daybook_type",
-        header: "Daybook",
+        header: "Doc Type",
         size: 160,
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Daybook"
+            label="Doc Type"
             value={appliedFilters.daybook_type ?? ""}
             displayValue={
               daybookFilterOptions.find((o) => o.value === appliedFilters.daybook_type)?.label ??
@@ -646,7 +706,7 @@ export default function UnpostedDocumentsList({
             renderEditor={({ autoFocus, onClose }) => (
               <Select
                 autoFocus={autoFocus}
-                placeholder="All daybooks"
+                placeholder="All doc types"
                 clearable
                 searchable
                 size="xs"
@@ -677,15 +737,15 @@ export default function UnpostedDocumentsList({
       },
       {
         accessorKey: "document_no",
-        header: "Document No",
-        size: 180,
+        header: "Draft Document No",
+        size: 200,
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Document No"
+            label="Draft Document No"
             value={appliedFilters.document_no}
             displayValue={appliedFilters.document_no}
             theme={erpTheme}
-            placeholder="Filter document no"
+            placeholder="Filter draft document no"
             isEditing={editingHeaderId === "document_no"}
             onStartEdit={() => openHeaderEditor("document_no")}
             onStopEdit={() => collapseHeaderEditor("document_no")}
@@ -700,6 +760,62 @@ export default function UnpostedDocumentsList({
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "job_id",
+        header: "Job ID",
+        size: 180,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Job ID"
+            value={appliedFilters.job_id}
+            displayValue={appliedFilters.job_id}
+            theme={erpTheme}
+            placeholder="Filter job ID"
+            isEditing={editingHeaderId === "job_id"}
+            onStartEdit={() => openHeaderEditor("job_id")}
+            onStopEdit={() => collapseHeaderEditor("job_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                job_id: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatArrayCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "shipment_id",
+        header: "Shipment ID",
+        size: 200,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Shipment ID"
+            value={appliedFilters.shipment_id}
+            displayValue={appliedFilters.shipment_id}
+            theme={erpTheme}
+            placeholder="Filter shipment ID"
+            isEditing={editingHeaderId === "shipment_id"}
+            onStartEdit={() => openHeaderEditor("shipment_id")}
+            onStopEdit={() => collapseHeaderEditor("shipment_id")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                shipment_id: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatArrayCell(cell.getValue())}
           </Text>
         ),
       },
@@ -747,6 +863,46 @@ export default function UnpostedDocumentsList({
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {dayjs(formatCell(cell.getValue())).format(dateFormat)}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "billing_currency",
+        header: "Currency",
+        size: 120,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "billing_amt",
+        header: "Currency amount",
+        size: 130,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatAmount(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "local_currency",
+        header: "Local currency",
+        size: 120,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatCell(cell.getValue())}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "local_amt",
+        header: "Local amount",
+        size: 130,
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {formatAmount(cell.getValue())}
           </Text>
         ),
       },
@@ -1161,7 +1317,7 @@ export default function UnpostedDocumentsList({
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Customer, document no, daybook, document date range",
+            subtitle: "Customer, draft document number, doc type, document date range",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1177,7 +1333,7 @@ export default function UnpostedDocumentsList({
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <TextInput
-                      label="Document no"
+                      label="Draft document number"
                       placeholder="e.g. JV-2605-0078"
                       value={draftFilters.document_no}
                       onChange={(e) =>
@@ -1198,8 +1354,8 @@ export default function UnpostedDocumentsList({
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <Select
-                      label="Daybook"
-                      placeholder="All daybooks"
+                      label="Doc Type"
+                      placeholder="All doc types"
                       clearable
                       searchable
                       data={daybookFilterOptions}
