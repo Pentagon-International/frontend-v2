@@ -78,6 +78,18 @@ type AddressData = {
   longitude?: number;
 };
 
+type BankDetailData = {
+  id?: number;
+  currency?: string;
+  account_no?: string;
+  account_name?: string;
+  bank_name?: string;
+  iban_no?: string;
+  swift_no?: string;
+  bank_address?: string;
+  ifsc_code?: string;
+};
+
 type CustomerData = {
   id: number;
   customer_code: string;
@@ -94,6 +106,7 @@ type CustomerData = {
   assigned_to?: string | null;
   assigned_to_display?: string | null;
   addresses_data?: AddressData[];
+  bank_details_data?: BankDetailData[];
   documents_list?: CustomerDocumentListItem[];
 };
 
