@@ -92,9 +92,10 @@ const Navbar = ({
   const user = useAuthStore((state) => state.user);
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
   const hasQuotationApprovalPermission = Boolean(
-    user?.screen_permissions?.quotation_approval
+    user?.screen_permissions?.quotation_approval,
   );
-  const showQuotationApproval = isManagerOrAdmin && hasQuotationApprovalPermission;
+  const showQuotationApproval =
+    isManagerOrAdmin && hasQuotationApprovalPermission;
   const showCheckerPage = useCanAccessCheckerPage();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
@@ -140,7 +141,6 @@ const Navbar = ({
       setIsFinanceDashboardOpen(true);
     }
   }, [location.pathname]);
-
 
   const handleLogoClick = () => {
     // Navigate to dashboard with reset flag if not already at base level
@@ -408,27 +408,6 @@ const Navbar = ({
                     label="Lead"
                     icon={IconUsers}
                     path="/lead"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
-                  />
-                  <SubNavLink
-                    parent="Sales"
-                    label="Call Entry"
-                    icon={IconKeyboard}
-                    path="/call-entry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
-                  />
-                  <SubNavLink
-                    parent="Sales"
-                    label="Enquiry"
-                    icon={IconMessageQuestion}
-                    path="/enquiry"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
-                  />
-                  <SubNavLink
-                    parent="Sales"
-                    label="RFQ"
-                    icon={IconMessageQuestion}
-                    path="/rfq"
                     collapsibles={{
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
@@ -439,10 +418,56 @@ const Navbar = ({
                   />
                   <SubNavLink
                     parent="Sales"
+                    label="Call Entry"
+                    icon={IconKeyboard}
+                    path="/call-entry"
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Sales"
+                    label="Enquiry"
+                    icon={IconMessageQuestion}
+                    path="/enquiry"
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Sales"
+                    label="RFQ"
+                    icon={IconMessageQuestion}
+                    path="/rfq"
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Sales"
                     label="Quotation"
                     icon={IconFileDescription}
                     path="/quotation"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
                   />
                   {showQuotationApproval && (
                     <SubNavLink
@@ -463,14 +488,26 @@ const Navbar = ({
                     label="Potential Customers"
                     icon={IconUserPlus}
                     path="/potential-customers"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
                   />
                   <SubNavLink
                     parent="Sales"
                     label="Pipeline"
                     icon={IconGitBranch}
                     path="/pipeline"
-                    collapsibles={{ setIsTariffOpen, setIsCustomerServiceOpen, setIsAirOpen, setIsSeaExportOpen, setIsAccountsOpen }}
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
                   />
 
                   {/* Tariff collapsible submenu */}
@@ -627,6 +664,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -640,6 +678,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -653,6 +692,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -666,6 +706,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -679,6 +720,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -692,6 +734,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -705,6 +748,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -718,6 +762,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -819,6 +864,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -832,6 +878,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -845,6 +892,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -858,6 +906,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -871,6 +920,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -884,6 +934,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -897,6 +948,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -910,6 +962,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />
@@ -923,6 +976,7 @@ const Navbar = ({
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
                       setIsAirOpen,
+                      setIsInlandOpen,
                       setIsSeaExportOpen,
                     }}
                   />

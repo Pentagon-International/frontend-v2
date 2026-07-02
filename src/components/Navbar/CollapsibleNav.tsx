@@ -1,5 +1,12 @@
 // CollapsibleNav.tsx
-import { NavLink, Collapse, Box, Portal, Tooltip, ScrollArea } from "@mantine/core";
+import {
+  NavLink,
+  Collapse,
+  Box,
+  Portal,
+  Tooltip,
+  ScrollArea,
+} from "@mantine/core";
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconChevronDown,
@@ -63,6 +70,7 @@ export const CollapsibleNav = ({
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
     (label === "Ocean" && activeSubNav.startsWith("FCL")) ||
     (label === "Ocean" && activeSubNav.startsWith("LCL")) ||
+    (label === "Inland" && activeSubNav.startsWith("Inland")) ||
     (label === "Accounts" &&
       (activeSubNav === "Receipt" ||
         activeSubNav === "Receipt Reversal" ||
@@ -84,7 +92,7 @@ export const CollapsibleNav = ({
   const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;
 
   // now compute isActive (depends on opened)
-  // Note: For "Air" and "Ocean", we deliberately rely on `hasActiveChild`
+  // Note: For "Air", "Ocean", and "Inland", we deliberately rely on `hasActiveChild`
   // (which inspects activeSubNav prefixes) rather than `activeNav === "Transportation"`
   // — otherwise both collapsibles light up together for any Transportation sub-page.
   const isActive = activeNav === label || hasActiveChild || opened;
@@ -106,7 +114,7 @@ export const CollapsibleNav = ({
     label,
     opened,
     activeNav,
-    isSidebarCollapsed
+    isSidebarCollapsed,
   );
 
   // keep local state in sync for expanded mode - only auto-close when navigating away
@@ -119,7 +127,7 @@ export const CollapsibleNav = ({
       if (activeNavChanged) {
         const shouldBeOpen =
           activeNav === label ||
-          (label === "Air" || label === "Ocean"
+          (label === "Air" || label === "Ocean" || label === "Inland"
             ? activeNav === "Transportation"
             : false) ||
           hasActiveChild;
@@ -149,7 +157,7 @@ export const CollapsibleNav = ({
       if (activeNavChanged) {
         const shouldBeOpen =
           activeNav === label ||
-          (label === "Air" || label === "Ocean"
+          (label === "Air" || label === "Ocean" || label === "Inland"
             ? activeNav === "Transportation"
             : false) ||
           hasActiveChild;
@@ -197,7 +205,7 @@ export const CollapsibleNav = ({
       const top = el.getBoundingClientRect().top;
       const bottomPadding = 16;
       setAccountsScrollMaxHeight(
-        Math.max(120, window.innerHeight - top - bottomPadding)
+        Math.max(120, window.innerHeight - top - bottomPadding),
       );
       return true;
     };
@@ -235,7 +243,7 @@ export const CollapsibleNav = ({
       if (flyoutRef.current?.contains(target)) {
         // Check if clicking on a nested nav link - keep flyout open for navigation
         const nestedLink = (target as HTMLElement).closest(
-          "[data-nested-nav-link]"
+          "[data-nested-nav-link]",
         );
         if (nestedLink) {
           return;
@@ -263,25 +271,35 @@ export const CollapsibleNav = ({
       if (isOpening) {
         if (label === "Air") {
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Ocean") {
           setOpenCollapsible("Air", false);
+          setOpenCollapsible("Inland", false);
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
+        } else if (label === "Inland") {
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Sales") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Dashboard") {
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
           setOpenCollapsible("Finance Dashboard", false);
         } else if (label === "Finance Dashboard") {
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
           setOpenCollapsible("Dashboard", false);
         }
       }

@@ -1,5 +1,5 @@
 import { AppShell, Box } from "@mantine/core";
-import { Navbar } from "../components/index";
+import Navbar from "../components/Navbar/Navbar";
 import MainSectionHeader from "../components/MainSectionHeader";
 import GlobalOperationsChatModal from "../pages/Workflow/GlobalOperationsChatModal";
 import { useLayoutStore } from "../store/useLayoutStore";

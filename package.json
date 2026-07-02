@@ -31,7 +31,8 @@
     "jspdf-autotable": "^5.0.2",
     "mantine-form-yup-resolver": "^2.0.0",
     "mantine-react-table": "^2.0.0-beta.9",
-    "plotly.js": "^3.5.1",
+    "pdfjs-dist": "^4.8.69",
+    "plotly.js-basic-dist": "^3.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.4.1",
@@ -62,5 +63,8 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
+  },
+  "overrides": {
+    "plotly.js": "npm:plotly.js-basic-dist@^3.6.0"
   }
 }

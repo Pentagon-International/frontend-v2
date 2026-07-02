@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback, lazy, Suspense } from "react";
 import {
   ToastNotification,
   SearchableSelect,
@@ -75,6 +75,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
 import { useListFilterStore } from "../../store/listFilterStore";
 import { generateNewQuotationPDF } from "./QuotationPDFTemplate";
+
+const PdfEditor = lazy(() =>
+  import("../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
+);
 import { postAPICall } from "../../service/postApiCall";
 import { API_HEADER } from "../../store/storeKeys";
 import { getAPICall } from "../../service/getApiCall";
@@ -215,7 +219,9 @@ function normalizeQuotationListStatusKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function normalizeQuotationListStatusCounts(raw: unknown): Record<string, number> | null {
+function normalizeQuotationListStatusCounts(
+  raw: unknown,
+): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
@@ -251,7 +257,9 @@ function parseQuotationFilterResponse(data: any): {
       : Array.isArray(data?.result)
         ? data.result
         : [];
-  const statusCounts = normalizeQuotationListStatusCounts(data?.summary?.status_counts);
+  const statusCounts = normalizeQuotationListStatusCounts(
+    data?.summary?.status_counts,
+  );
 
   const indexRaw = data?.index;
   const requestOffset =
@@ -292,6 +300,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     number | null
   >(null);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+  const [previewUserCurrency, setPreviewUserCurrency] = useState<
+    string | undefined
+  >(undefined);
+  const [previewHasUnsavedChanges, setPreviewHasUnsavedChanges] =
+    useState(false);
   const [currentQuotation, setCurrentQuotation] = useState<any>(null);
   const [isApprovingQuotation, setIsApprovingQuotation] = useState(false);
   const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
@@ -314,12 +327,12 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Refs to persist returnToDashboard flag and dashboard state
   const returnToDashboardRef = useRef<boolean>(
-    Boolean(location.state?.returnToDashboard)
+    Boolean(location.state?.returnToDashboard),
   ); // Persist returnToDashboard flag
   const dashboardStateRef = useRef<any>(location.state?.dashboardState); // Persist dashboard state
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
   const hasQuotationApprovalPermission = Boolean(
-    user?.screen_permissions?.quotation_approval
+    user?.screen_permissions?.quotation_approval,
   );
   const isApprovalMode = mode === "approval";
   const pageTitle = isApprovalMode
@@ -332,7 +345,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const clearStoreFilters = useListFilterStore((state) => state.clearFilters);
   const clearStoreSearch = useListFilterStore((state) => state.clearSearch);
   const clearStoreAllExcept = useListFilterStore(
-    (state) => state.clearAllExcept
+    (state) => state.clearAllExcept,
   );
 
   // Check if we have initialFilters to determine initial date state
@@ -340,10 +353,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   // Date range state - don't set default dates if coming from dashboard
   const [fromDate, setFromDate] = useState<Date | null>(
-    hasInitialFilters ? null : getDefaultFromDate()
+    hasInitialFilters ? null : getDefaultFromDate(),
   );
   const [toDate, setToDate] = useState<Date | null>(
-    hasInitialFilters ? null : getDefaultToDate()
+    hasInitialFilters ? null : getDefaultToDate(),
   );
   const isMountedRef = useRef(false);
   const initialFiltersProcessed = useRef(false);
@@ -373,24 +386,23 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const [listTotalRecords, setListTotalRecords] = useState(0);
 
   /** Column visibility for ERP list toolbar (actions column always shown). */
-  const [quotationVisibleColumns, setQuotationVisibleColumns] = useState<
-    QuotationVisibleColumns
-  >({
-    sno: true,
-    enquiry_id: true,
-    quotation_id: true,
-    customer_name: true,
-    sales_person: true,
-    created_at: true,
-    route: true,
-    service: true,
-    volume: true,
-    reference_no: true,
-    status: true,
-    valid_upto_list: true,
-    revision: true,
-    reject_remark: true,
-  });
+  const [quotationVisibleColumns, setQuotationVisibleColumns] =
+    useState<QuotationVisibleColumns>({
+      sno: true,
+      enquiry_id: true,
+      quotation_id: true,
+      customer_name: true,
+      sales_person: true,
+      created_at: true,
+      route: true,
+      service: true,
+      volume: true,
+      reference_no: true,
+      status: true,
+      valid_upto_list: true,
+      revision: true,
+      reject_remark: true,
+    });
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -422,7 +434,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         filters: filtersWithDates,
         search: searchQuery,
         timestamp: new Date().toISOString(),
-      }
+      },
     );
   }, [
     filters,
@@ -450,7 +462,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     console.log(
       "restore state",
       hasRestoredFromStore.current,
-      useListFilterStore.getState().getState(currentListKey)
+      useListFilterStore.getState().getState(currentListKey),
     );
     if (hasRestoredFromStore.current) return;
 
@@ -483,7 +495,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       if (restoredFilters && Object.keys(restoredFilters).length > 0) {
         console.log(
           `📥 [Quotation${isApprovalMode ? " Approval" : ""}] Restoring filters from store:`,
-          restoredFilters
+          restoredFilters,
         );
         setFilters(restoredFilters);
         // Restore date range from filters
@@ -507,7 +519,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             restoredFilters.revision ||
             restoredFilters.enquiry_id ||
             (restoredFilters.enquiry_received_date &&
-              restoredFilters.enquiry_received_date_to)
+              restoredFilters.enquiry_received_date_to),
         );
         console.log("📥 [Quotation] Filter restoration check:", {
           hasFilters,
@@ -532,7 +544,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       ) {
         console.log(
           `📥 [Quotation${isApprovalMode ? " Approval" : ""}] Restoring search from store:`,
-          restoredState.search
+          restoredState.search,
         );
         setSearchQuery(restoredState.search);
         hasSearch = true;
@@ -649,7 +661,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       if (overridePayload) return overridePayload;
       return memoizedFilterPayload;
     },
-    [memoizedFilterPayload]
+    [memoizedFilterPayload],
   );
 
   async function fetchRevision(service_id: number) {
@@ -672,7 +684,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       const response: any = await postAPICall(
         URL.quotationChargeHistory,
         payload,
-        API_HEADER
+        API_HEADER,
       );
       console.log("Revision response:", response);
 
@@ -734,7 +746,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           : URL.quotationFilter;
         const response = await apiCallProtected.post(
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
-          requestBody
+          requestBody,
         );
         const { rows, total, statusCounts } = parseQuotationFilterResponse(
           response as any,
@@ -770,7 +782,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         filters.enquiry_id ||
         (fromDate && toDate) ||
         debouncedSearch.trim() ||
-        isApprovalMode
+        isApprovalMode,
     );
   }, [filters, fromDate, toDate, debouncedSearch, isApprovalMode]);
 
@@ -823,7 +835,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           : URL.quotationFilter;
         const response = await apiCallProtected.post(
           `${endpoint}?index=${(listCurrentPage - 1) * listPageSize}&limit=${listPageSize}`,
-          requestBody
+          requestBody,
         );
         const { rows, total, statusCounts } = parseQuotationFilterResponse(
           response as any,
@@ -851,7 +863,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const refetchFilteredQuotations = useCallback(async () => {
     if (isRefetchingRef.current) {
       console.log(
-        "⏸️ [Quotation] Refetch already in progress, skipping duplicate call"
+        "⏸️ [Quotation] Refetch already in progress, skipping duplicate call",
       );
       return { data: filteredQuotationResult, status: "skipped" } as any;
     }
@@ -924,7 +936,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     string | null
   >(null);
   const [originDisplayValue, setOriginDisplayValue] = useState<string | null>(
-    null
+    null,
   );
   const [destinationDisplayValue, setDestinationDisplayValue] = useState<
     string | null
@@ -1000,8 +1012,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       sales_person: filters.sales_person ?? "",
       origin: filters.origin_code ?? "",
       destination: filters.destination_code ?? "",
-      status:
-        !filters.status || filters.status === "all" ? "" : filters.status,
+      status: !filters.status || filters.status === "all" ? "" : filters.status,
       valid_upto_list: filters.valid_upto
         ? dayjs(filters.valid_upto).format("YYYY-MM-DD")
         : "",
@@ -1026,11 +1037,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       return filteredQuotationResult?.data || [];
     }
     return quotationResult?.data || [];
-  }, [
-    quotationResult,
-    filteredQuotationResult,
-    showFilteredQuotationData,
-  ]);
+  }, [quotationResult, filteredQuotationResult, showFilteredQuotationData]);
 
   const summaryListTotalRecords = useMemo(() => {
     if (showFilteredQuotationData) {
@@ -1090,7 +1097,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             listPageSize,
             isApprovalMode,
           ],
-          result.data
+          result.data,
         );
       }
     } finally {
@@ -1137,14 +1144,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         const parsedFrom = dayjs(
           initialFilters.enquiry_received_date_from,
           "YYYY-MM-DD",
-          true
+          true,
         );
         if (parsedFrom.isValid()) {
           parsedFromDate = parsedFrom.toDate();
         } else {
           console.error(
             "Invalid from date:",
-            initialFilters.enquiry_received_date_from
+            initialFilters.enquiry_received_date_from,
           );
         }
       }
@@ -1153,14 +1160,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         const parsedTo = dayjs(
           initialFilters.enquiry_received_date_to,
           "YYYY-MM-DD",
-          true
+          true,
         );
         if (parsedTo.isValid()) {
           parsedToDate = parsedTo.toDate();
         } else {
           console.error(
             "Invalid to date:",
-            initialFilters.enquiry_received_date_to
+            initialFilters.enquiry_received_date_to,
           );
         }
       }
@@ -1704,7 +1711,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       const match = currencyList.find(
         (item) =>
           item.country_code &&
-          item.country_code.toUpperCase() === userCountryCode.toUpperCase()
+          item.country_code.toUpperCase() === userCountryCode.toUpperCase(),
       );
       console.log("--------------------------", match);
 
@@ -1784,7 +1791,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
           ) {
             return item.quotation
               .map(
-                (q: any) => q.shipment_terms || q.shipment_terms_code || "N/A"
+                (q: any) => q.shipment_terms || q.shipment_terms_code || "N/A",
               )
               .join(", ");
           }
@@ -1848,7 +1855,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               .map((q: any) => q.destination || "N/A")
               .join("\n");
           }
-          return item.destination_code_list && item.destination_code_list.length > 0
+          return item.destination_code_list &&
+            item.destination_code_list.length > 0
             ? item.destination_code_list.join("\n")
             : "N/A";
         },
@@ -1869,7 +1877,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                   const containerTypes = q.cargo_details
                     ?.map(
                       (cd: any) =>
-                        cd.container_type || cd.container_type_code || ""
+                        cd.container_type || cd.container_type_code || "",
                     )
                     .filter(Boolean)
                     .join(", ");
@@ -1896,7 +1904,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               if (q.service_type === "FCL" && q.cargo_details) {
                 const total = q.cargo_details.reduce(
                   (sum: number, cd: any) => sum + (cd.no_of_containers || 0),
-                  0
+                  0,
                 );
                 return total || 0;
               }
@@ -1924,7 +1932,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               const total =
                 q.charges?.reduce(
                   (sum: number, charge: any) => sum + (charge.total_cost || 0),
-                  0
+                  0,
                 ) || 0;
               return total;
             });
@@ -1950,7 +1958,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
               const total =
                 q.charges?.reduce(
                   (sum: number, charge: any) => sum + (charge.total_sell || 0),
-                  0
+                  0,
                 ) || 0;
               return total;
             });
@@ -2033,7 +2041,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         },
       },
     ],
-    []
+    [],
   );
 
   // useEffect(() => {
@@ -2092,6 +2100,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     setPreviewOpen(false);
     setPdfBlob(null);
     setCurrentQuotation(null);
+    setPreviewUserCurrency(undefined);
+    setPreviewHasUnsavedChanges(false);
     if (pdfBlob) {
       window.URL.revokeObjectURL(pdfBlob);
     }
@@ -2114,7 +2124,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   };
 
   const handleSendEmailClick = () => {
-    console.log("RRR:",user?.screen_permissions)
+    console.log("RRR:", user?.screen_permissions);
     if (currentQuotation) {
       // Set default email from customer_email field (if available)
       const enquiryId = currentQuotation.enquiry_id || "";
@@ -2153,7 +2163,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         // Fallback to old format if no quotation services
         subject = `Quotation - ${enquiryId}`;
       }
-console.log("currentQuotation: ", currentQuotation);
+      console.log("currentQuotation: ", currentQuotation);
       setEmailForm({
         to_email: currentQuotation.customer_email || "",
         cc_email: currentQuotation.salesperson_email || "",
@@ -2317,7 +2327,7 @@ console.log("currentQuotation: ", currentQuotation);
 
     // Validate each to_email
     const invalidToEmails = toEmailArray.filter(
-      (email) => !isValidEmail(email)
+      (email) => !isValidEmail(email),
     );
     if (invalidToEmails.length > 0) {
       setEmailErrors({
@@ -2339,7 +2349,7 @@ console.log("currentQuotation: ", currentQuotation);
       if (ccEmailArray.length > 0) {
         // Validate each cc_email
         const invalidCcEmails = ccEmailArray.filter(
-          (email) => !isValidEmail(email)
+          (email) => !isValidEmail(email),
         );
         if (invalidCcEmails.length > 0) {
           setEmailErrors({
@@ -2376,7 +2386,7 @@ console.log("currentQuotation: ", currentQuotation);
         const pdfFile = new File(
           [blob],
           `Quotation_${currentQuotation.enquiry_id}.pdf`,
-          { type: "application/pdf" }
+          { type: "application/pdf" },
         );
 
         // Create FormData
@@ -2426,13 +2436,14 @@ console.log("currentQuotation: ", currentQuotation);
       const country = defaultBranch?.country ?? user?.country ?? null;
       setPreviewOpen(true);
       const userCurrency = await getUserCurrencyCode(
-        user?.country?.country_code
+        user?.country?.country_code,
       );
+      setPreviewUserCurrency(userCurrency);
       const blobUrl = await generateNewQuotationPDF(
         rowData,
         defaultBranch,
         country,
-        userCurrency
+        userCurrency,
       );
       setPdfBlob(blobUrl);
     } catch (error) {
@@ -2442,6 +2453,24 @@ console.log("currentQuotation: ", currentQuotation);
         message: "Error generating PDF preview",
       });
     }
+  };
+
+  const regeneratePreviewPdf = async (rowData: any) => {
+    const country = defaultBranch?.country ?? user?.country ?? null;
+    const blobUrl = await generateNewQuotationPDF(
+      rowData,
+      defaultBranch,
+      country,
+      previewUserCurrency,
+    );
+    return blobUrl;
+  };
+
+  const handlePreviewPdfRegenerated = (newBlobUrl: string) => {
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(newBlobUrl);
   };
 
   const showQuotationPreview = (rowData: any) => {
@@ -2474,7 +2503,7 @@ console.log("currentQuotation: ", currentQuotation);
         // Fetch the quotation data first
         const response: any = await getAPICall(
           `${URL.quotation}${quotationId}/`,
-          API_HEADER
+          API_HEADER,
         );
 
         if (response && response.status && response.data) {
@@ -2495,7 +2524,7 @@ console.log("currentQuotation: ", currentQuotation);
           const updateResponse = await putAPICall(
             URL.quotation,
             payload,
-            API_HEADER
+            API_HEADER,
           );
 
           if (updateResponse) {
@@ -2610,7 +2639,7 @@ console.log("currentQuotation: ", currentQuotation);
         // Fetch the quotation data first
         const response: any = await getAPICall(
           `${URL.quotation}${quotationId}/`,
-          API_HEADER
+          API_HEADER,
         );
 
         if (response && response.status && response.data) {
@@ -2631,7 +2660,7 @@ console.log("currentQuotation: ", currentQuotation);
           const updateResponse = await putAPICall(
             URL.quotation,
             payload,
-            API_HEADER
+            API_HEADER,
           );
 
           if (updateResponse) {
@@ -2711,7 +2740,7 @@ console.log("currentQuotation: ", currentQuotation);
         ...row,
         sno: (listCurrentPage - 1) * listPageSize + index + 1,
       })),
-    [displayData, listCurrentPage, listPageSize]
+    [displayData, listCurrentPage, listPageSize],
   );
 
   const rowMenuCtx: QuotationRowMenuContext = useMemo(
@@ -2721,8 +2750,7 @@ console.log("currentQuotation: ", currentQuotation);
       returnToDashboardRef,
       primaryActionLabel,
       PrimaryActionIcon,
-      showQuotationPreview: (row) =>
-        showQuotationPreview(row as QuotationData),
+      showQuotationPreview: (row) => showQuotationPreview(row as QuotationData),
       handlePrimaryAction: (row) => handlePrimaryAction(row as QuotationData),
       canCreateBookingFromRow: (row) =>
         canCreateBookingFromRow(row as QuotationData),
@@ -2739,27 +2767,135 @@ console.log("currentQuotation: ", currentQuotation);
       handlePrimaryAction,
       canCreateBookingFromRow,
       handleCreateBookingFromRow,
-    ]
+    ],
   );
 
   const quotationColumnToggleItems: ERPListColumnToggleItem[] = useMemo(
     () => [
-      { id: "sno", label: "S.No", checked: quotationVisibleColumns.sno !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sno: !p.sno })) },
-      { id: "enquiry_id", label: "Enquiry ID", checked: quotationVisibleColumns.enquiry_id !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, enquiry_id: !p.enquiry_id })) },
-      { id: "quotation_id", label: "Quotation ID", checked: quotationVisibleColumns.quotation_id !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, quotation_id: !p.quotation_id })) },
-      { id: "customer_name", label: "Customer Name", checked: quotationVisibleColumns.customer_name !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, customer_name: !p.customer_name })) },
-      { id: "sales_person", label: "Sales Person", checked: quotationVisibleColumns.sales_person !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, sales_person: !p.sales_person })) },
-      { id: "created_at", label: "Quote Date", checked: quotationVisibleColumns.created_at !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, created_at: !p.created_at })) },
-      { id: "route", label: "Route", checked: quotationVisibleColumns.route !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, route: !p.route })) },
-      { id: "service", label: "Service", checked: quotationVisibleColumns.service !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, service: !p.service })) },
-      { id: "volume", label: "Volume", checked: quotationVisibleColumns.volume !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, volume: !p.volume })) },
-      { id: "reference_no", label: "Reference No", checked: quotationVisibleColumns.reference_no !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reference_no: !p.reference_no })) },
-      { id: "status", label: "Status", checked: quotationVisibleColumns.status !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })) },
-      { id: "valid_upto_list", label: "Valid Upto", checked: quotationVisibleColumns.valid_upto_list !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, valid_upto_list: !p.valid_upto_list })) },
-      { id: "revision", label: "Revision", checked: quotationVisibleColumns.revision !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, revision: !p.revision })) },
-      { id: "reject_remark", label: "Remark", checked: quotationVisibleColumns.reject_remark !== false, onToggle: () => setQuotationVisibleColumns((p) => ({ ...p, reject_remark: !p.reject_remark })) },
+      {
+        id: "sno",
+        label: "S.No",
+        checked: quotationVisibleColumns.sno !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, sno: !p.sno })),
+      },
+      {
+        id: "enquiry_id",
+        label: "Enquiry ID",
+        checked: quotationVisibleColumns.enquiry_id !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            enquiry_id: !p.enquiry_id,
+          })),
+      },
+      {
+        id: "quotation_id",
+        label: "Quotation ID",
+        checked: quotationVisibleColumns.quotation_id !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            quotation_id: !p.quotation_id,
+          })),
+      },
+      {
+        id: "customer_name",
+        label: "Customer Name",
+        checked: quotationVisibleColumns.customer_name !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            customer_name: !p.customer_name,
+          })),
+      },
+      {
+        id: "sales_person",
+        label: "Sales Person",
+        checked: quotationVisibleColumns.sales_person !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            sales_person: !p.sales_person,
+          })),
+      },
+      {
+        id: "created_at",
+        label: "Quote Date",
+        checked: quotationVisibleColumns.created_at !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            created_at: !p.created_at,
+          })),
+      },
+      {
+        id: "route",
+        label: "Route",
+        checked: quotationVisibleColumns.route !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, route: !p.route })),
+      },
+      {
+        id: "service",
+        label: "Service",
+        checked: quotationVisibleColumns.service !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, service: !p.service })),
+      },
+      {
+        id: "volume",
+        label: "Volume",
+        checked: quotationVisibleColumns.volume !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, volume: !p.volume })),
+      },
+      {
+        id: "reference_no",
+        label: "Reference No",
+        checked: quotationVisibleColumns.reference_no !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            reference_no: !p.reference_no,
+          })),
+      },
+      {
+        id: "status",
+        label: "Status",
+        checked: quotationVisibleColumns.status !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })),
+      },
+      {
+        id: "valid_upto_list",
+        label: "Valid Upto",
+        checked: quotationVisibleColumns.valid_upto_list !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            valid_upto_list: !p.valid_upto_list,
+          })),
+      },
+      {
+        id: "revision",
+        label: "Revision",
+        checked: quotationVisibleColumns.revision !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, revision: !p.revision })),
+      },
+      {
+        id: "reject_remark",
+        label: "Remark",
+        checked: quotationVisibleColumns.reject_remark !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            reject_remark: !p.reject_remark,
+          })),
+      },
     ],
-    [quotationVisibleColumns]
+    [quotationVisibleColumns],
   );
 
   // Reset pagination when filters or search change to prevent empty table rendering
@@ -2787,7 +2923,11 @@ console.log("currentQuotation: ", currentQuotation);
     saveFiltersToStore();
     setIsInitialLoading(true);
     void refetchFilteredQuotations().finally(() => setIsInitialLoading(false));
-  }, [debouncedHeaderFilterTick, refetchFilteredQuotations, saveFiltersToStore]);
+  }, [
+    debouncedHeaderFilterTick,
+    refetchFilteredQuotations,
+    saveFiltersToStore,
+  ]);
 
   // Stable reference — the header-filter `renderInput` memo depends on
   // `erpTheme`, so an inline object literal (new reference every render)
@@ -3048,14 +3188,18 @@ console.log("currentQuotation: ", currentQuotation);
   return (
     <>
       <MantineProvider theme={erpListGeistMantineTheme}>
-        <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+        <Box
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          style={erpListGeistRootTypography}
+        >
           <ERPListScreen
             theme={erpTheme}
             className={ERP_LIST_GEIST_ROOT_CLASS}
             toolbar={{
               leading: (
                 <>
-                  {(location.state?.returnToDashboard || returnToDashboardRef.current) && (
+                  {(location.state?.returnToDashboard ||
+                    returnToDashboardRef.current) && (
                     <Button
                       size="xs"
                       variant="default"
@@ -3063,10 +3207,14 @@ console.log("currentQuotation: ", currentQuotation);
                       styles={erpToolbarOutlineButtonStyles(erpTheme)}
                       onClick={() => {
                         const dashboardState =
-                          location.state?.dashboardState || dashboardStateRef.current;
+                          location.state?.dashboardState ||
+                          dashboardStateRef.current;
                         if (dashboardState) {
                           navigate("/", {
-                            state: { returnToEnquiryDetailedView: true, dashboardState },
+                            state: {
+                              returnToEnquiryDetailedView: true,
+                              dashboardState,
+                            },
                           });
                         } else {
                           navigate("/");
@@ -3156,7 +3304,8 @@ console.log("currentQuotation: ", currentQuotation);
                               filters.origin_code ||
                               filters.destination_code ||
                               filters.valid_upto ||
-                              (filters.quote_type && filters.quote_type !== "all") ||
+                              (filters.quote_type &&
+                                filters.quote_type !== "all") ||
                               (filters.status && filters.status !== "all") ||
                               filters.remark ||
                               filters.revision ||
@@ -3244,306 +3393,317 @@ console.log("currentQuotation: ", currentQuotation);
               ),
               children: (
                 <>
-                            <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
-                              {/* Customer Name Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <SearchableSelect
-                                  size="xs"
-                                  label="Customer Name"
-                                  placeholder="Type customer name"
-                                  apiEndpoint={URL.customer}
-                                  searchFields={["customer_code", "customer_name"]}
-                                  displayFormat={(item: any) => ({
-                                    value: String(item.customer_code),
-                                    label: String(item.customer_name),
-                                  })}
-                                  value={filters.customer_code}
-                                  displayValue={customerDisplayValue}
-                                  onChange={(value, selectedData) => {
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      customer_code: value || null,
-                                    }));
-                                    setCustomerDisplayValue(selectedData?.label || null);
-                                  }}
-                                  minSearchLength={3}
-                                  dropdownZIndex={1000}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                  className="filter-searchable-select"
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Sales Person Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <Select
-                                  key={`sales-person-${filters.sales_person}`}
-                                  label="Sales Person"
-                                  placeholder={
-                                    salespersonsLoading
-                                      ? "Loading salespersons..."
-                                      : "Select Sales Person"
-                                  }
-                                  searchable
-                                  clearable
-                                  size="xs"
-                                  data={salespersonOptions}
-                                  disabled={salespersonsLoading}
-                                  value={filters.sales_person}
-                                  onChange={(value) =>
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      sales_person: value || null,
-                                    }))
-                                  }
-                                  onFocus={(event) => {
-                                    const input = event.target as HTMLInputElement;
-                                    if (input && input.value) {
-                                      input.select();
-                                    }
-                                  }}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Origin Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <SearchableSelect
-                                  size="xs"
-                                  label="Origin"
-                                  placeholder="Type origin code or name"
-                                  apiEndpoint={URL.portMaster}
-                                  searchFields={["port_code", "port_name"]}
-                                  displayFormat={(item: any) => ({
-                                    value: String(item.port_code),
-                                    label: `${item.port_name} (${item.port_code})`,
-                                  })}
-                                  value={filters.origin_code}
-                                  displayValue={originDisplayValue}
-                                  onChange={(value, selectedData) => {
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      origin_code: value || null,
-                                    }));
-                                    setOriginDisplayValue(selectedData?.label || null);
-                                  }}
-                                  minSearchLength={3}
-                                  dropdownZIndex={1000}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                  className="filter-searchable-select"
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Destination Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <SearchableSelect
-                                  size="xs"
-                                  label="Destination"
-                                  placeholder="Type destination code or name"
-                                  apiEndpoint={URL.portMaster}
-                                  searchFields={["port_code", "port_name"]}
-                                  displayFormat={(item: any) => ({
-                                    value: String(item.port_code),
-                                    label: `${item.port_name} (${item.port_code})`,
-                                  })}
-                                  value={filters.destination_code}
-                                  displayValue={destinationDisplayValue}
-                                  onChange={(value, selectedData) => {
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      destination_code: value || null,
-                                    }));
-                                    setDestinationDisplayValue(selectedData?.label || null);
-                                  }}
-                                  minSearchLength={3}
-                                  dropdownZIndex={1000}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                  className="filter-searchable-select"
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Quote Date Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <SingleDateInput
-                                  key={`quote-date-${filters.valid_upto}`}
-                                  label="Quote Date"
-                                  placeholder="YYYY-MM-DD"
-                                  size="xs"
-                                  value={filters.valid_upto}
-                                  onChange={(date) =>
-                                    setFilters((prev) => ({ ...prev, valid_upto: date }))
-                                  }
-                                  allowDeselection
-                                  classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Date Range Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_TWO_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <DateRangeInput
-                                  fromDate={fromDate}
-                                  toDate={toDate}
-                                  onFromDateChange={setFromDate}
-                                  onToDateChange={setToDate}
-                                  fromLabel="From Date"
-                                  toLabel="To Date"
-                                  size="xs"
-                                  allowDeselection={true}
-                                  showRangeInCalendar={false}
-                                  filterFieldStyles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                  dateInputClassNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Quote Type Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <Select
-                                  key={`quote-type-${filters.quote_type}`}
-                                  label="Quote Type"
-                                  placeholder="Select Quote Type"
-                                  searchable
-                                  clearable
-                                  size="xs"
-                                  data={[
-                                    { value: "Standard", label: "Standard" },
-                                    { value: "All Inclusive", label: "All Inclusive" },
-                                    { value: "Lumpsum", label: "Lumpsum" },
-                                    { value: "all", label: "All" },
-                                  ]}
-                                  value={filters.quote_type}
-                                  onChange={(value) =>
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      quote_type: value || null,
-                                    }))
-                                  }
-                                  onFocus={(event) => {
-                                    // Auto-select all text when input is focused
-                                    const input = event.target as HTMLInputElement;
-                                    if (input && input.value) {
-                                      input.select();
-                                    }
-                                  }}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Approval Status Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <Select
-                                  key={`approval-status-${filters.status}`}
-                                  label="Approval Status"
-                                  placeholder="Select Status"
-                                  searchable
-                                  clearable
-                                  size="xs"
-                                  data={[
-                                    { value: "GAINED", label: "Gained" },
-                                    { value: "LOST", label: "Lost" },
-                                    { value: "QUOTE CREATED", label: "Quote Created" },
-                                    { value: "all", label: "All" },
-                                  ]}
-                                  value={filters.status}
-                                  onChange={(value) =>
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      status: value || null,
-                                    }))
-                                  }
-                                  onFocus={(event) => {
-                                    // Auto-select all text when input is focused
-                                    const input = event.target as HTMLInputElement;
-                                    if (input && input.value) {
-                                      input.select();
-                                    }
-                                  }}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Enquiry ID Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <TextInput
-                                  label="Enquiry ID"
-                                  placeholder="Enter Enquiry ID"
-                                  size="xs"
-                                  value={filters.enquiry_id || ""}
-                                  onChange={(e) =>
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      enquiry_id: e.currentTarget.value || null,
-                                    }))
-                                  }
-                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                
-                              {/* Remark Filter */}
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <TextInput
-                                  label="Remark"
-                                  placeholder="Search Remark"
-                                  size="xs"
-                                  value={filters.remark || ""}
-                                  onChange={(e) =>
-                                    setFilters((prev) => ({
-                                      ...prev,
-                                      remark: e.currentTarget.value,
-                                    }))
-                                  }
-                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                              <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
-                                <Box style={erpListFilterFieldCellStyle}>
-                                <TextInput
-                                  label="Revision"
-                                  placeholder="Search Revision"
-                                  size="xs"
-                                  value={filters.revision || ""}
-                                  onChange={(e) => {
-                                    const val = e.currentTarget.value;
-                                    if (/^\d*$/.test(val)) {
-                                      setFilters((prev) => ({
-                                        ...prev,
-                                        revision: val,
-                                      }));
-                                    }
-                                  }}
-                                  classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                                  styles={erpListFilterUnifiedMantineStyles(erpTheme)}
-                                />
-                                </Box>
-                              </Grid.Col>
-                            </Grid>
+                  <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
+                    {/* Customer Name Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Customer Name"
+                          placeholder="Type customer name"
+                          apiEndpoint={URL.customer}
+                          searchFields={["customer_code", "customer_name"]}
+                          displayFormat={(item: any) => ({
+                            value: String(item.customer_code),
+                            label: String(item.customer_name),
+                          })}
+                          value={filters.customer_code}
+                          displayValue={customerDisplayValue}
+                          onChange={(value, selectedData) => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              customer_code: value || null,
+                            }));
+                            setCustomerDisplayValue(
+                              selectedData?.label || null,
+                            );
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Sales Person Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`sales-person-${filters.sales_person}`}
+                          label="Sales Person"
+                          placeholder={
+                            salespersonsLoading
+                              ? "Loading salespersons..."
+                              : "Select Sales Person"
+                          }
+                          searchable
+                          clearable
+                          size="xs"
+                          data={salespersonOptions}
+                          disabled={salespersonsLoading}
+                          value={filters.sales_person}
+                          onChange={(value) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              sales_person: value || null,
+                            }))
+                          }
+                          onFocus={(event) => {
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Origin Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Origin"
+                          placeholder="Type origin code or name"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: any) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={filters.origin_code}
+                          displayValue={originDisplayValue}
+                          onChange={(value, selectedData) => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              origin_code: value || null,
+                            }));
+                            setOriginDisplayValue(selectedData?.label || null);
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Destination Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SearchableSelect
+                          size="xs"
+                          label="Destination"
+                          placeholder="Type destination code or name"
+                          apiEndpoint={URL.portMaster}
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: any) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={filters.destination_code}
+                          displayValue={destinationDisplayValue}
+                          onChange={(value, selectedData) => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              destination_code: value || null,
+                            }));
+                            setDestinationDisplayValue(
+                              selectedData?.label || null,
+                            );
+                          }}
+                          minSearchLength={3}
+                          dropdownZIndex={1000}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                          className="filter-searchable-select"
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Quote Date Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <SingleDateInput
+                          key={`quote-date-${filters.valid_upto}`}
+                          label="Quote Date"
+                          placeholder="YYYY-MM-DD"
+                          size="xs"
+                          value={filters.valid_upto}
+                          onChange={(date) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              valid_upto: date,
+                            }))
+                          }
+                          allowDeselection
+                          classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Date Range Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_TWO_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <DateRangeInput
+                          fromDate={fromDate}
+                          toDate={toDate}
+                          onFromDateChange={setFromDate}
+                          onToDateChange={setToDate}
+                          fromLabel="From Date"
+                          toLabel="To Date"
+                          size="xs"
+                          allowDeselection={true}
+                          showRangeInCalendar={false}
+                          filterFieldStyles={erpListFilterUnifiedMantineStyles(
+                            erpTheme,
+                          )}
+                          dateInputClassNames={{
+                            dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                          }}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Quote Type Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`quote-type-${filters.quote_type}`}
+                          label="Quote Type"
+                          placeholder="Select Quote Type"
+                          searchable
+                          clearable
+                          size="xs"
+                          data={[
+                            { value: "Standard", label: "Standard" },
+                            { value: "All Inclusive", label: "All Inclusive" },
+                            { value: "Lumpsum", label: "Lumpsum" },
+                            { value: "all", label: "All" },
+                          ]}
+                          value={filters.quote_type}
+                          onChange={(value) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              quote_type: value || null,
+                            }))
+                          }
+                          onFocus={(event) => {
+                            // Auto-select all text when input is focused
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Approval Status Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <Select
+                          key={`approval-status-${filters.status}`}
+                          label="Approval Status"
+                          placeholder="Select Status"
+                          searchable
+                          clearable
+                          size="xs"
+                          data={[
+                            { value: "GAINED", label: "Gained" },
+                            { value: "LOST", label: "Lost" },
+                            { value: "QUOTE CREATED", label: "Quote Created" },
+                            { value: "all", label: "All" },
+                          ]}
+                          value={filters.status}
+                          onChange={(value) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              status: value || null,
+                            }))
+                          }
+                          onFocus={(event) => {
+                            // Auto-select all text when input is focused
+                            const input = event.target as HTMLInputElement;
+                            if (input && input.value) {
+                              input.select();
+                            }
+                          }}
+                          classNames={erpListGeistSelectClassNames}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Enquiry ID Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <TextInput
+                          label="Enquiry ID"
+                          placeholder="Enter Enquiry ID"
+                          size="xs"
+                          value={filters.enquiry_id || ""}
+                          onChange={(e) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              enquiry_id: e.currentTarget.value || null,
+                            }))
+                          }
+                          classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+
+                    {/* Remark Filter */}
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <TextInput
+                          label="Remark"
+                          placeholder="Search Remark"
+                          size="xs"
+                          value={filters.remark || ""}
+                          onChange={(e) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              remark: e.currentTarget.value,
+                            }))
+                          }
+                          classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                    <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_FIFTHS}>
+                      <Box style={erpListFilterFieldCellStyle}>
+                        <TextInput
+                          label="Revision"
+                          placeholder="Search Revision"
+                          size="xs"
+                          value={filters.revision || ""}
+                          onChange={(e) => {
+                            const val = e.currentTarget.value;
+                            if (/^\d*$/.test(val)) {
+                              setFilters((prev) => ({
+                                ...prev,
+                                revision: val,
+                              }));
+                            }
+                          }}
+                          classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                          styles={erpListFilterUnifiedMantineStyles(erpTheme)}
+                        />
+                      </Box>
+                    </Grid.Col>
+                  </Grid>
                 </>
               ),
             }}
@@ -3638,57 +3798,75 @@ console.log("currentQuotation: ", currentQuotation);
       </MantineProvider>
       {/* PDF Preview Modal */}
       <Modal
-          opened={previewOpen}
-          onClose={handleClosePreview}
-          title={
-            <Text size="lg" fw={600} c="#105476">
-              Quotation Preview - {currentQuotation?.enquiry_id}
-            </Text>
-          }
-          size="95%"
-          centered
-          overlayProps={{
-            backgroundOpacity: 0.55,
-            blur: 3,
-          }}
-          styles={{
-            content: {
-              minHeight: "90vh",
-              maxWidth: "1200px",
-            },
-            body: {
-              padding: 0,
-              height: "100%",
-            },
-          }}
-        >
-          <Stack h="82vh">
-            {pdfBlob ? (
-              <>
-                <iframe
-                  src={pdfBlob}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    border: "none",
-                    borderRadius: "8px",
-                  }}
-                  title="PDF Preview"
-                />
-                <Group
-                  justify="flex-end"
-                  p="md"
-                  style={{ borderTop: "1px solid #e9ecef" }}
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title={
+          <Text size="lg" fw={600} c="#105476">
+            Quotation Preview - {currentQuotation?.enquiry_id}
+          </Text>
+        }
+        size="95%"
+        centered
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="80vh" style={{ width: "100%" }}>
+          {pdfBlob && currentQuotation ? (
+            <>
+              <Box
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  width: "100%",
+                }}
+              >
+                <Suspense
+                  fallback={
+                    <Center style={{ flex: 1 }}>
+                      <Loader size="lg" />
+                    </Center>
+                  }
                 >
-                  <Button
-                    variant="outline"
-                    onClick={handleClosePreview}
-                    leftSection={<IconX size={16} />}
-                  >
-                    Close
-                  </Button>
-                  {/* Conditionally show Download PDF, Send Email, and Approve Quotation buttons */}
-                  {/* 
+                  <PdfEditor
+                    pdfBlobUrl={pdfBlob}
+                    rowData={currentQuotation}
+                    generatePdf={regeneratePreviewPdf}
+                    onQuotationChange={setCurrentQuotation}
+                    onPdfRegenerated={handlePreviewPdfRegenerated}
+                    onUnsavedChangesChange={setPreviewHasUnsavedChanges}
+                    editorContext={{ userCurrency: previewUserCurrency }}
+                    editable
+                  />
+                </Suspense>
+              </Box>
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                {/* Conditionally show Download PDF, Send Email, and Approve Quotation buttons */}
+                {/* 
                     Logic:
                     - If status is NOT "QUOTE CREATED": Show all buttons for everyone
                     - If status IS "QUOTE CREATED":
@@ -3697,557 +3875,551 @@ console.log("currentQuotation: ", currentQuotation);
                         - If NOT manager/admin: Hide all buttons except Close
                         - If IS manager/admin: Show all buttons
                   */}
-                  {(() => {
-                    const status = currentQuotation?.status;
-                    const isQuoteCreated =
-                      status === "QUOTE CREATED" || status === "Quote Created";
+                {(() => {
+                  const status = currentQuotation?.status;
+                  const isQuoteCreated =
+                    status === "QUOTE CREATED" || status === "Quote Created";
 
-                    // Hide buttons only if: status is "QUOTE CREATED" AND quotation_approval is true AND user is NOT manager/admin
-                    const shouldHideButtons =
-                      isQuoteCreated &&
-                      hasQuotationApprovalPermission &&
-                      !isManagerOrAdmin;
+                  // Hide buttons only if: status is "QUOTE CREATED" AND quotation_approval is true AND user is NOT manager/admin
+                  const shouldHideButtons =
+                    isQuoteCreated &&
+                    hasQuotationApprovalPermission &&
+                    !isManagerOrAdmin;
 
-                    return !shouldHideButtons ? (
-                      <>
-                        <Button
-                          onClick={handleDownloadPDF}
-                          leftSection={<IconDownload size={16} />}
-                          color="#105476"
-                        >
-                          Download PDF
-                        </Button>
-                        <Button
-                          onClick={handleSendEmailClick}
-                          leftSection={<IconSend size={16} />}
-                          color="#105476"
-                          variant="outline"
-                        >
-                          Send Email
-                        </Button>
-                        {currentQuotation &&
-                          // For managers/admins with quotation_approval permission, use edit functionality
-                          // For others, use the external approval link
-                          (hasQuotationApprovalPermission &&
-                          isManagerOrAdmin ? (
-                            <Button
-                              color="green"
-                              variant="filled"
-                              leftSection={
-                                <IconEye size={16} style={{ color: "white" }} />
-                              }
-                              style={{ marginLeft: "8px" }}
-                              onClick={handleApproveQuotationFromPreview}
-                            >
-                              Approve Quotation
-                            </Button>
-                          ) : (
-                            <a
-                              href={`${import.meta.env.VITE_QUOTATION_APPROVE_URL || window.location.origin}/quotation/approvalrequest/${currentQuotation.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ textDecoration: "none" }}
-                            >
-                              <Button
-                                color="green"
-                                variant="filled"
-                                leftSection={
-                                  <IconEye
-                                    size={16}
-                                    style={{ color: "white" }}
-                                  />
-                                }
-                                style={{ marginLeft: "8px" }}
-                              >
-                                Approve Quotation
-                              </Button>
-                            </a>
-                          ))}
-                      </>
-                    ) : null;
-                  })()}
-                </Group>
-              </>
-            ) : (
-              <Center h="100%">
-                <Stack align="center">
-                  <Loader size="lg" color="#105476" />
-                  <Text c="dimmed">Generating PDF preview...</Text>
-                </Stack>
-              </Center>
-            )}
-          </Stack>
-        </Modal>
-
-        {/* Send Email Modal */}
-        <Modal
-          opened={sendEmailOpened}
-          onClose={closeSendEmail}
-          title={
-            <Text size="lg" fw={600} c="#105476">
-              Send Email - {currentQuotation?.enquiry_id}
-            </Text>
-          }
-          size="lg"
-          centered
-          overlayProps={{
-            backgroundOpacity: 0.55,
-            blur: 3,
-          }}
-        >
-          <Stack gap="md">
-            <TextInput
-              label="To Email"
-              placeholder="name@example.com, name2@example.com or name@example.com; name2@example.com"
-              value={emailForm.to_email}
-              onChange={(e) => {
-                setEmailForm({ ...emailForm, to_email: e.target.value });
-                // Clear error when user starts typing
-                if (emailErrors.to_email) {
-                  setEmailErrors({ ...emailErrors, to_email: "" });
-                }
-              }}
-              error={emailErrors.to_email}
-              required
-            />
-
-            <TextInput
-              label="CC Email"
-              placeholder="cc@example.com, cc2@example.com"
-              value={emailForm.cc_email}
-              onChange={(e) => {
-                setEmailForm({ ...emailForm, cc_email: e.target.value });
-                // Clear error when user starts typing
-                if (emailErrors.cc_email) {
-                  setEmailErrors({ ...emailErrors, cc_email: "" });
-                }
-              }}
-              error={emailErrors.cc_email}
-            />
-
-            <TextInput
-              label="Subject"
-              placeholder="Enter email subject"
-              value={emailForm.subject}
-              onChange={(e) =>
-                setEmailForm({ ...emailForm, subject: e.target.value })
-              }
-            />
-
-            <Textarea
-              label="Message"
-              placeholder="Enter email message"
-              value={emailForm.message}
-              onChange={(e) =>
-                setEmailForm({ ...emailForm, message: e.target.value })
-              }
-              minRows={4}
-            />
-
-            {pdfBlob && (
-              <Box>
-                <Text size="sm" fw={500} mb="xs">
-                  Quotation PDF:
-                </Text>
-                <iframe
-                  src={pdfBlob}
-                  style={{
-                    width: "100%",
-                    height: "130px",
-                    border: "1px solid #e9ecef",
-                    borderRadius: "8px",
-                  }}
-                  title="PDF Preview"
-                />
-              </Box>
-            )}
-
-            <Group justify="flex-end" mt="md">
-              <Button
-                variant="outline"
-                onClick={closeSendEmail}
-                disabled={sendingEmail}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSendEmail}
-                loading={sendingEmail}
-                leftSection={<IconSend size={16} />}
-                color="#105476"
-              >
-                Send
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
-
-        <Modal
-          opened={openedRevision}
-          onClose={closeRevision}
-          title={
-            <Text fw={700} c="#105475" size="xl">
-              Revision History
-            </Text>
-          }
-          size="80vw"
-          radius={10}
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          {isLoadingRevisionHistory ? (
-            <Center p="md">
-              <Loader color="#105475" />
+                  return !shouldHideButtons ? (
+                    <>
+                      <Button
+                        onClick={handleDownloadPDF}
+                        leftSection={<IconDownload size={16} />}
+                        color="#105476"
+                        disabled={previewHasUnsavedChanges}
+                      >
+                        Download PDF
+                      </Button>
+                      <Button
+                        onClick={handleSendEmailClick}
+                        leftSection={<IconSend size={16} />}
+                        color="#105476"
+                        variant="outline"
+                        disabled={previewHasUnsavedChanges}
+                      >
+                        Send Email
+                      </Button>
+                      {currentQuotation &&
+                        // For managers/admins with quotation_approval permission, use edit functionality
+                        // For others, use the external approval link
+                        (hasQuotationApprovalPermission && isManagerOrAdmin ? (
+                          <Button
+                            color="green"
+                            variant="filled"
+                            leftSection={
+                              <IconEye size={16} style={{ color: "white" }} />
+                            }
+                            style={{ marginLeft: "8px" }}
+                            onClick={handleApproveQuotationFromPreview}
+                            disabled={previewHasUnsavedChanges}
+                          >
+                            Approve Quotation
+                          </Button>
+                        ) : (
+                          <Button
+                            component="a"
+                            href={
+                              previewHasUnsavedChanges
+                                ? undefined
+                                : `${import.meta.env.VITE_QUOTATION_APPROVE_URL || window.location.origin}/quotation/approvalrequest/${currentQuotation.id}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            color="green"
+                            variant="filled"
+                            leftSection={
+                              <IconEye size={16} style={{ color: "white" }} />
+                            }
+                            style={{ marginLeft: "8px" }}
+                            disabled={previewHasUnsavedChanges}
+                          >
+                            Approve Quotation
+                          </Button>
+                        ))}
+                    </>
+                  ) : null;
+                })()}
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
             </Center>
-          ) : revisionHistoryData && revisionHistoryData.length > 0 ? (
-            <Stack gap="xs">
-              {revisionHistoryData.map((revision, index) => {
-                const isExpanded = expandedRevisionIndex === index;
-                const charges = revision.charges || [];
+          )}
+        </Stack>
+      </Modal>
 
-                // Helper function to get action by user
-                const getActionBy = (charge: any) => {
-                  if (charge.action_type === "CREATED")
-                    return charge.created_by || "-";
-                  if (charge.action_type === "UPDATED")
-                    return charge.updated_by || "-";
-                  if (charge.action_type === "DELETED")
-                    return charge.deleted_by || "-";
-                  return "-";
-                };
+      {/* Send Email Modal */}
+      <Modal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        title={
+          <Text size="lg" fw={600} c="#105476">
+            Send Email - {currentQuotation?.enquiry_id}
+          </Text>
+        }
+        size="lg"
+        centered
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+      >
+        <Stack gap="md">
+          <TextInput
+            label="To Email"
+            placeholder="name@example.com, name2@example.com or name@example.com; name2@example.com"
+            value={emailForm.to_email}
+            onChange={(e) => {
+              setEmailForm({ ...emailForm, to_email: e.target.value });
+              // Clear error when user starts typing
+              if (emailErrors.to_email) {
+                setEmailErrors({ ...emailErrors, to_email: "" });
+              }
+            }}
+            error={emailErrors.to_email}
+            required
+          />
 
-                return (
-                  <Box key={index}>
-                    <Card
-                      shadow="md"
-                      radius="md"
-                      withBorder
-                      mt="md"
+          <TextInput
+            label="CC Email"
+            placeholder="cc@example.com, cc2@example.com"
+            value={emailForm.cc_email}
+            onChange={(e) => {
+              setEmailForm({ ...emailForm, cc_email: e.target.value });
+              // Clear error when user starts typing
+              if (emailErrors.cc_email) {
+                setEmailErrors({ ...emailErrors, cc_email: "" });
+              }
+            }}
+            error={emailErrors.cc_email}
+          />
+
+          <TextInput
+            label="Subject"
+            placeholder="Enter email subject"
+            value={emailForm.subject}
+            onChange={(e) =>
+              setEmailForm({ ...emailForm, subject: e.target.value })
+            }
+          />
+
+          <Textarea
+            label="Message"
+            placeholder="Enter email message"
+            value={emailForm.message}
+            onChange={(e) =>
+              setEmailForm({ ...emailForm, message: e.target.value })
+            }
+            minRows={4}
+          />
+
+          {pdfBlob && (
+            <Box>
+              <Text size="sm" fw={500} mb="xs">
+                Quotation PDF:
+              </Text>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "130px",
+                  border: "1px solid #e9ecef",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+            </Box>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="outline"
+              onClick={closeSendEmail}
+              disabled={sendingEmail}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              loading={sendingEmail}
+              leftSection={<IconSend size={16} />}
+              color="#105476"
+            >
+              Send
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={openedRevision}
+        onClose={closeRevision}
+        title={
+          <Text fw={700} c="#105475" size="xl">
+            Revision History
+          </Text>
+        }
+        size="80vw"
+        radius={10}
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        {isLoadingRevisionHistory ? (
+          <Center p="md">
+            <Loader color="#105475" />
+          </Center>
+        ) : revisionHistoryData && revisionHistoryData.length > 0 ? (
+          <Stack gap="xs">
+            {revisionHistoryData.map((revision, index) => {
+              const isExpanded = expandedRevisionIndex === index;
+              const charges = revision.charges || [];
+
+              // Helper function to get action by user
+              const getActionBy = (charge: any) => {
+                if (charge.action_type === "CREATED")
+                  return charge.created_by || "-";
+                if (charge.action_type === "UPDATED")
+                  return charge.updated_by || "-";
+                if (charge.action_type === "DELETED")
+                  return charge.deleted_by || "-";
+                return "-";
+              };
+
+              return (
+                <Box key={index}>
+                  <Card
+                    shadow="md"
+                    radius="md"
+                    withBorder
+                    mt="md"
+                    style={{
+                      padding: 0,
+                      backgroundColor: "#fafafa",
+                      display: "flex",
+                      flexDirection: "column",
+                      borderWidth: "2px",
+                      transition: "0.25s ease",
+                      borderColor: isExpanded ? "#105475" : "#e0e0e0",
+                      overflow: "hidden",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isExpanded) {
+                        e.currentTarget.style.borderColor = "#105475";
+                        e.currentTarget.style.boxShadow =
+                          "0 4px 12px rgba(0,0,0,0.15)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isExpanded) {
+                        e.currentTarget.style.borderColor = "#e0e0e0";
+                        e.currentTarget.style.boxShadow =
+                          "0 2px 6px rgba(0,0,0,0.05)";
+                      }
+                    }}
+                  >
+                    <Box
                       style={{
-                        padding: 0,
-                        backgroundColor: "#fafafa",
                         display: "flex",
-                        flexDirection: "column",
-                        borderWidth: "2px",
-                        transition: "0.25s ease",
-                        borderColor: isExpanded ? "#105475" : "#e0e0e0",
-                        overflow: "hidden",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        padding: "0 16px",
+                        cursor: "pointer",
+                        width: "100%",
                       }}
-                      onMouseEnter={(e) => {
-                        if (!isExpanded) {
-                          e.currentTarget.style.borderColor = "#105475";
-                          e.currentTarget.style.boxShadow =
-                            "0 4px 12px rgba(0,0,0,0.15)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isExpanded) {
-                          e.currentTarget.style.borderColor = "#e0e0e0";
-                          e.currentTarget.style.boxShadow =
-                            "0 2px 6px rgba(0,0,0,0.05)";
-                        }
+                      onClick={() => {
+                        setExpandedRevisionIndex(isExpanded ? null : index);
                       }}
                     >
+                      <Box px="md" py="md" style={{ flex: 1 }}>
+                        <Text fw={700} c="#105475" size="lg">
+                          Revision {revision.revision}
+                        </Text>
+                        <Text c="grey" fw={600} size="sm" mt={4}>
+                          Count: {revision.count}
+                        </Text>
+                      </Box>
                       <Box
+                        px="md"
+                        py="md"
                         style={{
                           display: "flex",
-                          flexDirection: "row",
+                          flex: 2,
                           alignItems: "center",
-                          padding: "0 16px",
-                          cursor: "pointer",
-                          width: "100%",
-                        }}
-                        onClick={() => {
-                          setExpandedRevisionIndex(isExpanded ? null : index);
+                          justifyContent: "space-between",
                         }}
                       >
-                        <Box px="md" py="md" style={{ flex: 1 }}>
-                          <Text fw={700} c="#105475" size="lg">
-                            Revision {revision.revision}
+                        <Box style={{ flex: 1 }}>
+                          <Text fw={600} size="sm">
+                            Total Cost
                           </Text>
-                          <Text c="grey" fw={600} size="sm" mt={4}>
-                            Count: {revision.count}
+                          <Badge color="#085e61ff">{revision.total_cost}</Badge>
+                        </Box>
+
+                        <Box style={{ flex: 1 }}>
+                          <Text fw={600} size="sm">
+                            Total Sell
                           </Text>
+                          <Badge color="#105475">{revision.total_sell}</Badge>
                         </Box>
-                        <Box
-                          px="md"
-                          py="md"
-                          style={{
-                            display: "flex",
-                            flex: 2,
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Box style={{ flex: 1 }}>
-                            <Text fw={600} size="sm">
-                              Total Cost
-                            </Text>
-                            <Badge color="#085e61ff">
-                              {revision.total_cost}
-                            </Badge>
-                          </Box>
 
-                          <Box style={{ flex: 1 }}>
-                            <Text fw={600} size="sm">
-                              Total Sell
-                            </Text>
-                            <Badge color="#105475">{revision.total_sell}</Badge>
-                          </Box>
-
-                          <Box style={{ flex: 1 }}>
-                            <Text fw={600} size="sm">
-                              Profit
-                            </Text>
-                            <Badge
-                              color={
-                                revision.profit > 0
-                                  ? "#0a7020ff"
-                                  : revision.profit == 0
-                                    ? "#f3a703ff"
-                                    : "#e00707ff"
-                              }
-                            >
-                              {revision.profit}
-                            </Badge>
-                          </Box>
-                          <Box style={{ flex: 2 }}>
-                            <Text fw={600} size="sm">
-                              Remark
-                            </Text>
-                            <Text>{revision?.remark || "-"}</Text>
-                          </Box>
+                        <Box style={{ flex: 1 }}>
+                          <Text fw={600} size="sm">
+                            Profit
+                          </Text>
+                          <Badge
+                            color={
+                              revision.profit > 0
+                                ? "#0a7020ff"
+                                : revision.profit == 0
+                                  ? "#f3a703ff"
+                                  : "#e00707ff"
+                            }
+                          >
+                            {revision.profit}
+                          </Badge>
                         </Box>
-                        <Box
-                          style={{
-                            flex: 0,
-                            transition: "transform 0.25s ease",
-                          }}
-                        >
-                          {isExpanded ? (
-                            <IconChevronUp color="#105475" size={20} />
-                          ) : (
-                            <IconChevronDown color="#105475" size={20} />
-                          )}
+                        <Box style={{ flex: 2 }}>
+                          <Text fw={600} size="sm">
+                            Remark
+                          </Text>
+                          <Text>{revision?.remark || "-"}</Text>
                         </Box>
                       </Box>
+                      <Box
+                        style={{
+                          flex: 0,
+                          transition: "transform 0.25s ease",
+                        }}
+                      >
+                        {isExpanded ? (
+                          <IconChevronUp color="#105475" size={20} />
+                        ) : (
+                          <IconChevronDown color="#105475" size={20} />
+                        )}
+                      </Box>
+                    </Box>
 
-                      <Collapse in={isExpanded}>
-                        <Box
-                          style={{
-                            backgroundColor: "#ffffff",
-                            borderTop: "1px solid #e0e0e0",
-                            padding: "16px",
-                            overflowX: "auto",
-                            overflowY: "visible",
-                            maxWidth: "100%",
-                          }}
-                        >
-                          {charges.length > 0 ? (
-                            <Box
-                              style={{ minWidth: "100%", width: "max-content" }}
+                    <Collapse in={isExpanded}>
+                      <Box
+                        style={{
+                          backgroundColor: "#ffffff",
+                          borderTop: "1px solid #e0e0e0",
+                          padding: "16px",
+                          overflowX: "auto",
+                          overflowY: "visible",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        {charges.length > 0 ? (
+                          <Box
+                            style={{ minWidth: "100%", width: "max-content" }}
+                          >
+                            <Table
+                              striped
+                              highlightOnHover
+                              withTableBorder
+                              withColumnBorders
+                              style={{
+                                fontSize: "12px",
+                                minWidth: "100%",
+                                textAlign: "center",
+                              }}
                             >
-                              <Table
-                                striped
-                                highlightOnHover
-                                withTableBorder
-                                withColumnBorders
-                                style={{
-                                  fontSize: "12px",
-                                  minWidth: "100%",
-                                  textAlign: "center",
-                                }}
-                              >
-                                <Table.Thead>
-                                  <Table.Tr>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "80px",
-                                      }}
-                                    >
-                                      Action
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "120px",
-                                      }}
-                                    >
-                                      Charge Name
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "70px",
-                                      }}
-                                    >
-                                      Currency
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "60px",
-                                      }}
-                                    >
-                                      ROE
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "70px",
-                                      }}
-                                    >
-                                      Unit
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "80px",
-                                      }}
-                                    >
-                                      No. of Units
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "90px",
-                                      }}
-                                    >
-                                      Sell Per Unit
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "90px",
-                                      }}
-                                    >
-                                      Min Sell
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "90px",
-                                      }}
-                                    >
-                                      Cost Per Unit
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "80px",
-                                      }}
-                                    >
-                                      Total Cost
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "80px",
-                                      }}
-                                    >
-                                      Total Sell
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "100px",
-                                      }}
-                                    >
-                                      Action By
-                                    </Table.Th>
-                                    <Table.Th
-                                      style={{
-                                        textAlign: "center",
-                                        minWidth: "150px",
-                                      }}
-                                    >
-                                      Timestamp
-                                    </Table.Th>
-                                  </Table.Tr>
-                                </Table.Thead>
-                                <Table.Tbody>
-                                  {charges.map(
-                                    (charge: any, chargeIndex: number) => (
-                                      <Table.Tr key={chargeIndex}>
-                                        <Table.Td>
-                                          <Badge
-                                            color={
-                                              charge.action_type === "CREATED"
-                                                ? "green"
-                                                : charge.action_type ===
-                                                    "UPDATED"
-                                                  ? "blue"
-                                                  : "red"
-                                            }
-                                            size="sm"
-                                          >
-                                            {charge.action_type || "-"}
-                                          </Badge>
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.charge_name || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.currency_code || "-"}
-                                        </Table.Td>
-                                        <Table.Td>{charge.roe || "-"}</Table.Td>
-                                        <Table.Td>
-                                          {charge.unit || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.no_of_units || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.sell_per_unit || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.min_sell || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.cost_per_unit || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.total_cost || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.total_sell || "-"}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {getActionBy(charge)}
-                                        </Table.Td>
-                                        <Table.Td>
-                                          {charge.action_timestamp
-                                            ? dayjs(
-                                                charge.action_timestamp
-                                              ).format("YYYY-MM-DD HH:mm:ss")
-                                            : "-"}
-                                        </Table.Td>
-                                      </Table.Tr>
-                                    )
-                                  )}
-                                </Table.Tbody>
-                              </Table>
-                            </Box>
-                          ) : (
-                            <Text c="dimmed" ta="center" py="md">
-                              No charges found for this revision
-                            </Text>
-                          )}
-                        </Box>
-                      </Collapse>
-                    </Card>
-                  </Box>
-                );
-              })}
-            </Stack>
-          ) : (
-            <Text>No Data</Text>
-          )}
-        </Modal>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "80px",
+                                    }}
+                                  >
+                                    Action
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "120px",
+                                    }}
+                                  >
+                                    Charge Name
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "70px",
+                                    }}
+                                  >
+                                    Currency
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "60px",
+                                    }}
+                                  >
+                                    ROE
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "70px",
+                                    }}
+                                  >
+                                    Unit
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "80px",
+                                    }}
+                                  >
+                                    No. of Units
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "90px",
+                                    }}
+                                  >
+                                    Sell Per Unit
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "90px",
+                                    }}
+                                  >
+                                    Min Sell
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "90px",
+                                    }}
+                                  >
+                                    Cost Per Unit
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "80px",
+                                    }}
+                                  >
+                                    Total Cost
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "80px",
+                                    }}
+                                  >
+                                    Total Sell
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "100px",
+                                    }}
+                                  >
+                                    Action By
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={{
+                                      textAlign: "center",
+                                      minWidth: "150px",
+                                    }}
+                                  >
+                                    Timestamp
+                                  </Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {charges.map(
+                                  (charge: any, chargeIndex: number) => (
+                                    <Table.Tr key={chargeIndex}>
+                                      <Table.Td>
+                                        <Badge
+                                          color={
+                                            charge.action_type === "CREATED"
+                                              ? "green"
+                                              : charge.action_type === "UPDATED"
+                                                ? "blue"
+                                                : "red"
+                                          }
+                                          size="sm"
+                                        >
+                                          {charge.action_type || "-"}
+                                        </Badge>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.charge_name || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.currency_code || "-"}
+                                      </Table.Td>
+                                      <Table.Td>{charge.roe || "-"}</Table.Td>
+                                      <Table.Td>{charge.unit || "-"}</Table.Td>
+                                      <Table.Td>
+                                        {charge.no_of_units || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.sell_per_unit || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.min_sell || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.cost_per_unit || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.total_cost || "-"}
+                                      </Table.Td>
+                                      <Table.Td>
+                                        {charge.total_sell || "-"}
+                                      </Table.Td>
+                                      <Table.Td>{getActionBy(charge)}</Table.Td>
+                                      <Table.Td>
+                                        {charge.action_timestamp
+                                          ? dayjs(
+                                              charge.action_timestamp,
+                                            ).format("YYYY-MM-DD HH:mm:ss")
+                                          : "-"}
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  ),
+                                )}
+                              </Table.Tbody>
+                            </Table>
+                          </Box>
+                        ) : (
+                          <Text c="dimmed" ta="center" py="md">
+                            No charges found for this revision
+                          </Text>
+                        )}
+                      </Box>
+                    </Collapse>
+                  </Card>
+                </Box>
+              );
+            })}
+          </Stack>
+        ) : (
+          <Text>No Data</Text>
+        )}
+      </Modal>
     </>
   );
 }
@@ -4257,7 +4429,7 @@ export const QuotationApprovalMaster = () => {
   const navigate = useNavigate();
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
   const hasQuotationApprovalPermission = Boolean(
-    user?.screen_permissions?.quotation_approval
+    user?.screen_permissions?.quotation_approval,
   );
 
   // Only show approval page if user has permission and is manager/admin
