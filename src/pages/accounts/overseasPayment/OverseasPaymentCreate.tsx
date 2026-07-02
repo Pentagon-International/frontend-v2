@@ -41,6 +41,7 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
+import { commonSearchAPI } from "../../../service/searchApi";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
@@ -164,6 +165,7 @@ type AdjustmentRow = {
 
 type InvoiceCombinedItem = {
   id?: number;
+  doc_id?: number | string;
   document_no?: string;
   document_date?: string;
   due_date?: string;
@@ -181,6 +183,58 @@ type InvoiceCombinedItem = {
   amount_in_local?: number | string;
   [key: string]: unknown;
 };
+
+function parseAllocationDocumentRoe(roe: unknown): number | null {
+  if (roe == null || roe === "") return null;
+  if (typeof roe === "number") return Number.isFinite(roe) ? roe : null;
+  const n = parseFloat(String(roe));
+  return Number.isFinite(n) ? n : null;
+}
+
+function seedAllocationRoeMap(
+  map: Map<string, number>,
+  items: InvoiceCombinedItem[],
+) {
+  for (const inv of items) {
+    const docNo = (inv.document_no ?? "").toString().trim();
+    const roe = parseAllocationDocumentRoe(inv.roe);
+    if (docNo && roe != null) map.set(docNo, roe);
+  }
+}
+
+function resolveAdjustmentDocumentRoe(
+  adjustment: AdjustmentRow,
+  roeByDocument: Map<string, number>,
+): number | null {
+  const fromRow = parseAllocationDocumentRoe(adjustment.roe);
+  if (fromRow != null) return fromRow;
+  const docNo = (adjustment.document_no ?? "").toString().trim();
+  if (!docNo) return null;
+  const fromMap = roeByDocument.get(docNo);
+  return fromMap != null && Number.isFinite(fromMap) ? fromMap : null;
+}
+
+function calcAdjLocalFromCurr(
+  curr: number | null,
+  documentRoe: number | null,
+): number | null {
+  if (curr == null || !Number.isFinite(curr)) return null;
+  if (documentRoe == null || !Number.isFinite(documentRoe)) return null;
+  return clampAmount(curr * documentRoe);
+}
+
+function resolveSupplierInvoiceId(inv: InvoiceCombinedItem): number | null {
+  const docIdRaw = inv.doc_id;
+  if (docIdRaw != null) {
+    const docId = Number(docIdRaw);
+    if (Number.isFinite(docId) && docId > 0) return docId;
+  }
+  if (inv.id != null) {
+    const id = Number(inv.id);
+    if (Number.isFinite(id) && id > 0) return id;
+  }
+  return null;
+}
 
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
@@ -227,6 +281,8 @@ type PaymentListItem = {
     subledger_id?: number;
     subledger_code?: string;
     subledger_name?: string;
+    account_code?: string;
+    gl_account_code?: string;
     narration?: string;
     currency_code?: string;
     currency_id?: number;
@@ -306,6 +362,7 @@ const getDefaultDetailRow = (
   isReversalFlow = false,
 ): DetailRow => ({
   subledger_id: null,
+  account_code: "",
   customer_code: "",
   customer_display: "",
   narration: "",
@@ -505,6 +562,7 @@ export default function OverseasPaymentCreate({
   const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
     useState<{ account_code: string; subledger_code: string } | null>(null);
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
+  const allocationRoeByDocumentRef = useRef<Map<string, number>>(new Map());
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
@@ -651,6 +709,10 @@ export default function OverseasPaymentCreate({
 
   const paymentFromState = location.state as PaymentListItem | null | undefined;
   const loadedFromListState = paymentFromState?.id != null;
+  const suppressAutoCalculationsRef = useRef(loadedFromListState);
+  const enableAutoCalculations = () => {
+    suppressAutoCalculationsRef.current = false;
+  };
   const pathname = location.pathname;
   const isReversalEditOrView =
     _isReversal &&
@@ -690,6 +752,7 @@ export default function OverseasPaymentCreate({
               subledger_code?: string;
               subledger_name?: string;
               account_code?: string;
+              gl_account_code?: string;
               subledger?: string;
               narration?: string;
               currency_code?: string;
@@ -702,6 +765,9 @@ export default function OverseasPaymentCreate({
               id: pAny.id ?? null,
               subledger_id:
                 pAny.subledger_id != null ? String(pAny.subledger_id) : null,
+              account_code: String(
+                pAny.account_code ?? pAny.gl_account_code ?? "",
+              ).trim(),
               customer_code: String(
                 pAny.subledger_code ?? pAny.account_code ?? "",
               ).trim(),
@@ -764,7 +830,7 @@ export default function OverseasPaymentCreate({
               document_no: String(aAny.document_no ?? "").trim(),
               doc_date: parseDocumentDate(aAny.document_date),
               currency: (aAny.currency_code ?? localCurrency).toString().trim(),
-              roe: parseNum(roeFromApi),
+              roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: parseNum(aAny.adj_local_amount),
             };
@@ -853,6 +919,7 @@ export default function OverseasPaymentCreate({
         })),
       );
     }
+    suppressAutoCalculationsRef.current = true;
     // Re-run when state changes (e.g. navigating from list to edit/view with different row)
   }, [
     paymentFromState,
@@ -860,6 +927,113 @@ export default function OverseasPaymentCreate({
     _isReversal,
     isReversalEditOrView,
     isReversalCreate,
+  ]);
+
+  const partyAccountCodeBackfillKey = (form.values.details ?? [])
+    .map((d) => `${d.customer_code}|${d.account_code ?? ""}`)
+    .join(";");
+
+  // Edit: backfill GL account code when list parties omit account_code (legacy saves).
+  useEffect(() => {
+    if (!loadedFromListState) return;
+
+    const pending = (form.values.details ?? [])
+      .map((d, idx) => ({ d, idx }))
+      .filter(
+        ({ d }) =>
+          !(d.account_code ?? "").trim() && (d.customer_code ?? "").trim(),
+      );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const { d, idx } of pending) {
+        if (cancelled) return;
+        const subledgerCode = d.customer_code.trim();
+        try {
+          const results = (await commonSearchAPI({
+            endpoint: URL.chartOfAccounts,
+            query: subledgerCode,
+          })) as Array<{ sl_code?: string; gl_account_code?: string }>;
+          const match = results.find(
+            (r) => String(r.sl_code ?? "").trim() === subledgerCode,
+          );
+          const glCode = String(match?.gl_account_code ?? "").trim();
+          if (!cancelled && glCode) {
+            form.setFieldValue(`details.${idx}.account_code`, glCode);
+          }
+        } catch {
+          // ignore lookup failures
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedFromListState, partyAccountCodeBackfillKey]);
+
+  // Edit: backfill document ROE from outstanding allocations when list rows omit it.
+  useEffect(() => {
+    if (!loadedFromListState) return;
+
+    const adjustments = form.values.adjustments ?? [];
+    const needsLookup = adjustments.some(
+      (a) =>
+        (a.document_no ?? "").toString().trim() &&
+        resolveAdjustmentDocumentRoe(a, allocationRoeByDocumentRef.current) ==
+          null,
+    );
+    if (!needsLookup) return;
+
+    const partyKeys = new Map<
+      string,
+      { account_code: string; subledger_code: string }
+    >();
+    for (const d of form.values.details ?? []) {
+      const accountCode = (d.account_code ?? "").toString().trim();
+      const subledgerCode = (d.customer_code ?? "").toString().trim();
+      if (!accountCode || !subledgerCode) continue;
+      partyKeys.set(`${accountCode}|${subledgerCode}`, {
+        account_code: accountCode,
+        subledger_code: subledgerCode,
+      });
+    }
+    if (partyKeys.size === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const party of partyKeys.values()) {
+        try {
+          const list = await fetchOutstandingAllocations(party);
+          if (cancelled) return;
+          seedAllocationRoeMap(allocationRoeByDocumentRef.current, list);
+        } catch {
+          // ignore lookup failures
+        }
+      }
+      if (cancelled) return;
+
+      let changed = false;
+      const updated = adjustments.map((a) => {
+        const documentRoe = resolveAdjustmentDocumentRoe(
+          a,
+          allocationRoeByDocumentRef.current,
+        );
+        if (documentRoe == null || a.roe != null) return a;
+        changed = true;
+        return { ...a, roe: documentRoe };
+      });
+      if (changed) form.setFieldValue("adjustments", updated);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loadedFromListState,
+    paymentFromState?.id,
+    partyAccountCodeBackfillKey,
   ]);
 
   // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
@@ -878,9 +1052,110 @@ export default function OverseasPaymentCreate({
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => d.local_amount ?? "")
     .join(";");
-  useEffect(() => {}, [partyLocalAmountsSnapshot]);
+  const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
+  const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
+  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
 
-  useEffect(() => {}, [form.values.amount, form.values.roe]);
+  useEffect(() => {
+    if (suppressAutoCalculationsRef.current) {
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      return;
+    }
+
+    const partyLocalChanged =
+      prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
+    const headerAmountRoeChanged =
+      prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
+
+    if (partyLocalChanged) {
+      const sum = (form.values.details ?? []).reduce(
+        (s, d) =>
+          s +
+          (d.local_amount != null && Number.isFinite(d.local_amount)
+            ? d.local_amount
+            : 0),
+        0,
+      );
+      const headerLocal = clampAmount(sum);
+      const roeVal = form.values.roe;
+      const derivedHeaderAmount =
+        headerLocal != null &&
+        roeVal != null &&
+        Number.isFinite(roeVal) &&
+        roeVal !== 0
+          ? clampAmount(headerLocal / roeVal)
+          : null;
+      if (form.values.local_amount !== headerLocal) {
+        form.setFieldValue("local_amount", headerLocal);
+      }
+      if (
+        derivedHeaderAmount != null &&
+        form.values.amount !== derivedHeaderAmount
+      ) {
+        form.setFieldValue("amount", derivedHeaderAmount);
+      }
+    } else if (headerAmountRoeChanged) {
+      const amt = form.values.amount;
+      const roeVal = form.values.roe;
+      const local =
+        amt != null &&
+        Number.isFinite(amt) &&
+        roeVal != null &&
+        Number.isFinite(roeVal)
+          ? clampAmount(amt * roeVal)
+          : null;
+      if (form.values.local_amount !== local) {
+        form.setFieldValue("local_amount", local);
+      }
+    }
+
+    prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+    prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+  }, [partyLocalAmountsSnapshot, headerAmountRoeKey]);
+
+  const syncPartyDetailsFromAllocations = (
+    adjustmentsToUse?: AdjustmentRow[],
+  ) => {
+    const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
+    form.values.details.forEach((row, idx) => {
+      const partyCode = (row.customer_code ?? "").toString().trim();
+      const partyDisplay = (row.customer_display ?? "").toString().trim();
+      const matchingAllocations = adjustments.filter(
+        (a) =>
+          (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
+          (partyDisplay &&
+            (a.subledger_display ?? "").toString().trim() === partyDisplay),
+      );
+      if (matchingAllocations.length === 0) return;
+      const sum = matchingAllocations.reduce(
+        (s, a) =>
+          s +
+          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+            ? a.adj_local_amount
+            : 0),
+        0,
+      );
+      const local = clampAmount(sum);
+      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
+      const derivedAmount =
+        local != null &&
+        roeVal != null &&
+        Number.isFinite(roeVal) &&
+        roeVal !== 0
+          ? clampAmount(local / roeVal)
+          : null;
+      if (form.values.details[idx].local_amount !== local) {
+        form.setFieldValue(`details.${idx}.local_amount`, local);
+      }
+      if (
+        derivedAmount != null &&
+        form.values.details[idx].amount !== derivedAmount
+      ) {
+        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+      }
+    });
+  };
 
   const detailsSnapshotForLocal = form.values.details
     .map(
@@ -888,11 +1163,24 @@ export default function OverseasPaymentCreate({
         `${r.customer_code}|${r.customer_display}|${r.currency}|${r.amount}|${r.roe}`,
     )
     .join(";");
-  useEffect(() => {}, [detailsSnapshotForLocal, localCurrency]);
+  useEffect(() => {
+    if (suppressAutoCalculationsRef.current) return;
+
+    form.values.details.forEach((row, idx) => {
+      const amt = row.amount;
+      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
+      const local =
+        amt != null && Number.isFinite(amt) ? clampAmount(amt * roeVal) : null;
+      if (form.values.details[idx].local_amount !== local) {
+        form.setFieldValue(`details.${idx}.local_amount`, local);
+      }
+    });
+  }, [detailsSnapshotForLocal, localCurrency]);
 
   const showChequeSection = form.values.type === "CHEQUE";
 
   const addDetailRow = () => {
+    enableAutoCalculations();
     setLoadedDetails(null);
     form.insertListItem(
       "details",
@@ -902,24 +1190,55 @@ export default function OverseasPaymentCreate({
 
   const removeDetailRow = (idx: number) => {
     if (form.values.details.length <= 1) return;
+    enableAutoCalculations();
     setLoadedDetails(null);
     form.removeListItem("details", idx);
   };
 
   const addAdjustmentRow = () => {
+    enableAutoCalculations();
     form.insertListItem("adjustments", getDefaultAdjustmentRow(localCurrency));
   };
 
   const removeAdjustmentRow = (idx: number) => {
     if (form.values.adjustments.length <= 1) return;
+    enableAutoCalculations();
     form.removeListItem("adjustments", idx);
+  };
+
+  const resolvePartyAccountCode = (row: DetailRow | undefined): string => {
+    const direct = (row?.account_code ?? "").toString().trim();
+    if (direct) return direct;
+
+    const subledgerCode = (row?.customer_code ?? "").toString().trim();
+    const parties = paymentFromState?.parties;
+    if (subledgerCode && Array.isArray(parties)) {
+      const match = parties.find(
+        (p) => String(p.subledger_code ?? "").trim() === subledgerCode,
+      );
+      const fromParty = String(
+        match?.account_code ?? match?.gl_account_code ?? "",
+      ).trim();
+      if (fromParty) return fromParty;
+    }
+
+    return String(paymentFromState?.account_code ?? "").trim();
   };
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
-    const accountCode = (row?.account_code ?? "").toString().trim();
+    const accountCode = resolvePartyAccountCode(row);
     const subledgerCode = (row?.customer_code ?? "").toString().trim();
-    if (!accountCode || !subledgerCode) return;
+    if (!accountCode || !subledgerCode) {
+      ToastNotification({
+        type: "warning",
+        message: "Account name must include a GL account and subledger",
+      });
+      return;
+    }
+    if (!row?.account_code) {
+      form.setFieldValue(`details.${detailRowIndex}.account_code`, accountCode);
+    }
     setInvoiceModalDetailRowIndex(detailRowIndex);
     setInvoiceModalAllocationFilter({
       account_code: accountCode,
@@ -933,6 +1252,7 @@ export default function OverseasPaymentCreate({
   useEffect(() => {
     if (!invoiceModalOpen || !filterInvoiceData) return;
     const list = filterInvoiceData;
+    seedAllocationRoeMap(allocationRoeByDocumentRef.current, list);
     setInvoiceList(list);
     const existingDocNos = new Set(
       form.values.adjustments
@@ -970,6 +1290,7 @@ export default function OverseasPaymentCreate({
 
   const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
+    enableAutoCalculations();
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
       ToastNotification({
@@ -1019,14 +1340,7 @@ export default function OverseasPaymentCreate({
               ? parseFloat(inv.amount_in_local) || null
               : null
           : null;
-      const invRoe =
-        inv.roe != null
-          ? typeof inv.roe === "number"
-            ? inv.roe
-            : typeof inv.roe === "string"
-              ? parseFloat(inv.roe) || null
-              : null
-          : null;
+      const invRoe = parseAllocationDocumentRoe(inv.roe);
       const daybookId = inv.day_book_id ?? inv.daybook_id;
       return {
         location: branchCode,
@@ -1047,7 +1361,7 @@ export default function OverseasPaymentCreate({
             : totalNum != null && invRoe != null
               ? clampAmount(totalNum * invRoe)
               : totalNum,
-        invoice_id: inv.id != null ? Number(inv.id) : null,
+        invoice_id: resolveSupplierInvoiceId(inv),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1066,8 +1380,12 @@ export default function OverseasPaymentCreate({
     if (nextAdjustments.length === 0) {
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
+    seedAllocationRoeMap(
+      allocationRoeByDocumentRef.current,
+      sorted.map((listIdx) => invoiceList[listIdx]),
+    );
     form.setFieldValue("adjustments", nextAdjustments);
-    // Overseas Payment: do not auto-sync party amounts from adjustments.
+    syncPartyDetailsFromAllocations(nextAdjustments);
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
     setInvoiceModalAllocationFilter(null);
@@ -1079,6 +1397,19 @@ export default function OverseasPaymentCreate({
     values: PaymentFormValues,
     options: { status?: string } = {},
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1100,6 +1431,7 @@ export default function OverseasPaymentCreate({
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1108,7 +1440,7 @@ export default function OverseasPaymentCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         location: a.location ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
@@ -1140,6 +1472,19 @@ export default function OverseasPaymentCreate({
       detailsOverride?: DetailRow[];
     },
   ) => {
+    const rawAdjustments = values.adjustments ?? [];
+    const nonEmptyAdjustments = rawAdjustments.filter((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+
     const dayBookId = Number(values.daybook_id) || 0;
     const currencyId =
       currencyIdByCode[values.currency?.trim().toUpperCase()] ?? 0;
@@ -1172,6 +1517,7 @@ export default function OverseasPaymentCreate({
       chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
       dr_cr: "Dr",
       parties: details.map((d) => ({
+        account_code: d.account_code ?? "",
         subledger_code: d.customer_code ?? "",
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1180,7 +1526,7 @@ export default function OverseasPaymentCreate({
         local_amount: d.local_amount ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
-      allocations: (values.adjustments ?? []).map((a) => ({
+      allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
         day_book_id: Number(a.daybook_id) || 0,
@@ -1283,6 +1629,42 @@ export default function OverseasPaymentCreate({
         ToastNotification({ type: "error", message: detailRoeToastError });
         return;
       }
+    }
+
+    const hasAdjustments = (values.adjustments ?? []).some((a) => {
+      const hasAmounts =
+        (a.adj_local_amount != null &&
+          Number.isFinite(a.adj_local_amount) &&
+          a.adj_local_amount !== 0) ||
+        (a.adj_curr_amount != null &&
+          Number.isFinite(a.adj_curr_amount) &&
+          a.adj_curr_amount !== 0);
+      const hasDocument = (a.document_no ?? "").trim() !== "";
+      return hasAmounts || hasDocument;
+    });
+    const partyAmountTotal =
+      (values.details ?? []).reduce(
+        (sum, d) =>
+          sum +
+          (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
+        0,
+      ) ?? 0;
+    const adjCurrTotal =
+      (values.adjustments ?? []).reduce(
+        (sum, a) =>
+          sum +
+          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+            ? a.adj_curr_amount
+            : 0),
+        0,
+      ) ?? 0;
+    if (hasAdjustments && partyAmountTotal < adjCurrTotal) {
+      ToastNotification({
+        type: "error",
+        message:
+          "The total Amount of Payment cannot be less than the total Curr Amount of Invoice.",
+      });
+      return;
     }
 
     setIsSubmitting(true);
@@ -1947,6 +2329,7 @@ export default function OverseasPaymentCreate({
                 data={currencyOptions}
                 value={form.values.currency}
                 onChange={(v) => {
+                  enableAutoCalculations();
                   form.setFieldValue("currency", v ?? "");
                   form.clearFieldError("roe");
                   if (v) {
@@ -1967,7 +2350,8 @@ export default function OverseasPaymentCreate({
                 label="ROE"
                 placeholder="Rate of exchange"
                 value={form.values.roe ?? undefined}
-                onChange={(v) =>
+                onChange={(v) => {
+                  enableAutoCalculations();
                   onRoeValueChange(
                     form.values.currency,
                     typeof v === "string"
@@ -1979,8 +2363,8 @@ export default function OverseasPaymentCreate({
                     form.setFieldError,
                     form.clearFieldError,
                     "roe",
-                  )
-                }
+                  );
+                }}
                 min={0}
                 decimalScale={ROE_DECIMAL_PLACES}
                 max={ROE_MAX_VALUE}
@@ -1999,13 +2383,14 @@ export default function OverseasPaymentCreate({
                 label="Amount"
                 placeholder="Amount"
                 value={form.values.amount ?? undefined}
-                onChange={(v) =>
+                onChange={(v) => {
+                  enableAutoCalculations();
                   form.setFieldValue(
                     "amount",
                     clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
                       null,
-                  )
-                }
+                  );
+                }}
                 min={0}
                 decimalScale={2}
                 max={AMOUNT_MAX}
@@ -2019,13 +2404,14 @@ export default function OverseasPaymentCreate({
                 label="Local Amount"
                 placeholder="Local amount"
                 value={form.values.local_amount ?? undefined}
-                onChange={(v) =>
+                onChange={(v) => {
+                  enableAutoCalculations();
                   form.setFieldValue(
                     "local_amount",
                     clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
                       null,
-                  )
-                }
+                  );
+                }}
                 min={0}
                 decimalScale={2}
                 max={AMOUNT_MAX}
@@ -2266,6 +2652,7 @@ export default function OverseasPaymentCreate({
                 // value={form.values.currency}
                 value={form.values.details[idx].currency}
                 onChange={(v) => {
+                  enableAutoCalculations();
                   form.setFieldValue(`details.${idx}.currency`, v ?? "");
                   form.clearFieldError(`details.${idx}.roe`);
                   if (v) {
@@ -2288,6 +2675,7 @@ export default function OverseasPaymentCreate({
                             hideControls
                             value={form.values.details[idx].roe ?? undefined}
                             onChange={(v) => {
+                              enableAutoCalculations();
                               const detailCurrency =
                                 form.values.details[idx]?.currency ?? "";
                               const newRoe =
@@ -2339,6 +2727,7 @@ export default function OverseasPaymentCreate({
                             hideControls
                             value={form.values.details[idx].amount ?? undefined}
                             onChange={(v) => {
+                              enableAutoCalculations();
                               const newAmount =
                                 clampAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
@@ -2376,14 +2765,15 @@ export default function OverseasPaymentCreate({
                             value={
                               form.values.details[idx].local_amount ?? undefined
                             }
-                            onChange={(v) =>
+                            onChange={(v) => {
+                              enableAutoCalculations();
                               form.setFieldValue(
                                 `details.${idx}.local_amount`,
                                 clampAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
                                 ) ?? null,
-                              )
-                            }
+                              );
+                            }}
                             decimalScale={2}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
@@ -2446,8 +2836,10 @@ export default function OverseasPaymentCreate({
                                 (invoiceModalDetailRowIndex === idx &&
                                   (filterInvoiceLoading ||
                                     filterInvoiceFetching)) ||
-                                (!form.values.details[idx].customer_code &&
-                                  !form.values.details[idx].customer_display)
+                                !resolvePartyAccountCode(
+                                  form.values.details[idx],
+                                ) ||
+                                !form.values.details[idx].customer_code
                               }
                               onClick={() => openInvoiceModal(idx)}
                               leftSection={
@@ -2599,30 +2991,51 @@ export default function OverseasPaymentCreate({
                             undefined
                           }
                           onChange={(v) => {
+                            enableAutoCalculations();
                             const newCurr =
-                              v == null || v === ""
-                                ? null
-                                : typeof v === "string"
-                                  ? parseFloat(v) || 0
-                                  : v;
+                              clampAmount(
+                                typeof v === "string" ? parseFloat(v) : v,
+                              ) ?? null;
+                            const adjustment = form.values.adjustments[idx];
+                            const documentRoe = resolveAdjustmentDocumentRoe(
+                              adjustment,
+                              allocationRoeByDocumentRef.current,
+                            );
+                            if (
+                              documentRoe != null &&
+                              adjustment.roe !== documentRoe
+                            ) {
+                              form.setFieldValue(
+                                `adjustments.${idx}.roe`,
+                                documentRoe,
+                              );
+                            }
+                            const newLocal = calcAdjLocalFromCurr(
+                              newCurr,
+                              documentRoe,
+                            );
                             form.setFieldValue(
                               `adjustments.${idx}.adj_curr_amount`,
                               newCurr,
                             );
-                            const rowRoe = form.values.adjustments[idx]?.roe;
-                            let newLocal: number | null = null;
-                            if (
-                              newCurr != null &&
-                              rowRoe != null &&
-                              Number.isFinite(rowRoe)
-                            ) {
-                              newLocal = newCurr * rowRoe;
-                              form.setFieldValue(
-                                `adjustments.${idx}.adj_local_amount`,
-                                newLocal,
+                            form.setFieldValue(
+                              `adjustments.${idx}.adj_local_amount`,
+                              newLocal,
+                            );
+                            const effectiveAdjustments =
+                              form.values.adjustments.map((a, i) =>
+                                i === idx
+                                  ? {
+                                      ...a,
+                                      roe: documentRoe ?? a.roe,
+                                      adj_curr_amount: newCurr,
+                                      adj_local_amount: newLocal,
+                                    }
+                                  : a,
                               );
-                            }
-                            // Overseas Payment: do not auto-sync party amounts from adjustments.
+                            syncPartyDetailsFromAllocations(
+                              effectiveAdjustments,
+                            );
                           }}
                           decimalScale={2}
                           styles={
