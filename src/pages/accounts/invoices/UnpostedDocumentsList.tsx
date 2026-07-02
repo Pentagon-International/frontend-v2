@@ -156,6 +156,7 @@ const columnLabels = {
   branch_code: "Branch",
   record_type: "Type",
   customer_name: "Customer / party",
+  daybook_name: "Daybook",
   daybook_type: "Doc Type",
   document_no: "Draft Document No",
   document_date: "Document date",
@@ -174,6 +175,7 @@ const columnDefault: Record<ColumnKey, boolean> = {
   branch_code: true,
   record_type: false,
   customer_name: true,
+  daybook_name: true,
   daybook_type: true,
   document_no: true,
   document_date: true,
@@ -218,6 +220,37 @@ function formatArrayCell(value: unknown): string {
   }
   const text = String(value).trim();
   return text || "-";
+}
+
+function compactTableCell(
+  value: unknown,
+  fontSans: string,
+  format: (value: unknown) => string = formatCell,
+) {
+  const text = format(value);
+  return (
+    <Text
+      size="sm"
+      truncate
+      title={text === "-" ? undefined : text}
+      style={{ fontFamily: fontSans, display: "block", maxWidth: "100%" }}
+    >
+      {text}
+    </Text>
+  );
+}
+
+function toFilterStringArray(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function listCellPadding(columnId: string | undefined): string {
+  if (columnId === "sno" || columnId === "branch_code") return "8px 6px";
+  if (columnId === "customer_name") return "8px 8px";
+  return "8px 10px";
 }
 
 function humanizeRecordType(recordType: string): string {
@@ -467,7 +500,9 @@ export default function UnpostedDocumentsList({
 
   const buildListPayload = useCallback(
     (filtersState: UnpostedListFilters, searchValue: string) => {
-      const filters: Record<string, string | boolean> = { status: "UNPOSTED" };
+      const filters: Record<string, string | boolean | string[]> = {
+        status: "UNPOSTED",
+      };
       if (isCheckerList) filters.maker_checker = true;
       if (searchValue.trim()) filters.search = searchValue.trim();
       if (filtersState.customer_name.trim()) {
@@ -489,11 +524,13 @@ export default function UnpostedDocumentsList({
       if (filtersState.daybook_type?.trim()) {
         filters.daybook_type = filtersState.daybook_type.trim();
       }
-      if (filtersState.job_id.trim()) {
-        filters.job_id = filtersState.job_id.trim();
+      const jobIds = toFilterStringArray(filtersState.job_id);
+      if (jobIds.length > 0) {
+        filters.job_id = jobIds;
       }
-      if (filtersState.shipment_id.trim()) {
-        filters.shipment_id = filtersState.shipment_id.trim();
+      const shipmentIds = toFilterStringArray(filtersState.shipment_id);
+      if (shipmentIds.length > 0) {
+        filters.shipment_id = shipmentIds;
       }
       return { filters };
     },
@@ -631,14 +668,18 @@ export default function UnpostedDocumentsList({
       {
         id: "sno",
         header: "S.No",
-        size: 70,
+        size: 52,
+        maxSize: 52,
+        grow: false,
         enableSorting: false,
         Cell: ({ row }) => row.original?.sno ?? index + row.index + 1,
       },
       {
         accessorKey: "branch_code",
         header: "Branch",
-        size: 100,
+        size: 72,
+        maxSize: 72,
+        grow: false,
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {formatCell(cell.getValue())}
@@ -658,7 +699,9 @@ export default function UnpostedDocumentsList({
       {
         accessorKey: "customer_name",
         header: "Customer / party",
-        size: 320,
+        size: 180,
+        maxSize: 180,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Customer / party"
@@ -679,16 +722,22 @@ export default function UnpostedDocumentsList({
             }
           />
         ),
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
-          </Text>
-        ),
+        Cell: ({ cell }) => compactTableCell(cell.getValue(), erpTheme.fontSans),
+      },
+      {
+        accessorKey: "daybook_name",
+        header: "Daybook",
+        size: 120,
+        maxSize: 120,
+        grow: false,
+        Cell: ({ cell }) => compactTableCell(cell.getValue(), erpTheme.fontSans),
       },
       {
         accessorKey: "daybook_type",
         header: "Doc Type",
-        size: 160,
+        size: 100,
+        maxSize: 100,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Doc Type"
@@ -729,11 +778,7 @@ export default function UnpostedDocumentsList({
             )}
           />
         ),
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
-          </Text>
-        ),
+        Cell: ({ cell }) => compactTableCell(cell.getValue(), erpTheme.fontSans),
       },
       {
         accessorKey: "document_no",
@@ -785,11 +830,8 @@ export default function UnpostedDocumentsList({
             }
           />
         ),
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatArrayCell(cell.getValue())}
-          </Text>
-        ),
+        Cell: ({ cell }) =>
+          compactTableCell(cell.getValue(), erpTheme.fontSans, formatArrayCell),
       },
       {
         accessorKey: "shipment_id",
@@ -813,11 +855,8 @@ export default function UnpostedDocumentsList({
             }
           />
         ),
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatArrayCell(cell.getValue())}
-          </Text>
-        ),
+        Cell: ({ cell }) =>
+          compactTableCell(cell.getValue(), erpTheme.fontSans, formatArrayCell),
       },
       {
         accessorKey: "document_date",
@@ -869,22 +908,19 @@ export default function UnpostedDocumentsList({
       {
         accessorKey: "billing_currency",
         header: "Currency",
-        size: 120,
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatCell(cell.getValue())}
-          </Text>
-        ),
+        size: 85,
+        maxSize: 85,
+        grow: false,
+        Cell: ({ cell }) => compactTableCell(cell.getValue(), erpTheme.fontSans),
       },
       {
         accessorKey: "billing_amt",
         header: "Currency amount",
-        size: 130,
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatAmount(cell.getValue())}
-          </Text>
-        ),
+        size: 105,
+        maxSize: 105,
+        grow: false,
+        Cell: ({ cell }) =>
+          compactTableCell(cell.getValue(), erpTheme.fontSans, formatAmount),
       },
       {
         accessorKey: "local_currency",
@@ -899,12 +935,11 @@ export default function UnpostedDocumentsList({
       {
         accessorKey: "local_amt",
         header: "Local amount",
-        size: 130,
-        Cell: ({ cell }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            {formatAmount(cell.getValue())}
-          </Text>
-        ),
+        size: 105,
+        maxSize: 105,
+        grow: false,
+        Cell: ({ cell }) =>
+          compactTableCell(cell.getValue(), erpTheme.fontSans, formatAmount),
       },
       {
         id: "actions",
@@ -1108,6 +1143,10 @@ export default function UnpostedDocumentsList({
       highlightOnHover: true,
       withTableBorder: false,
       withColumnBorders: false,
+      style: {
+        width: "max-content",
+        minWidth: "100%",
+      },
     },
     mantinePaperProps: {
       shadow: "none",
@@ -1124,7 +1163,8 @@ export default function UnpostedDocumentsList({
     },
     mantineTableBodyCellProps: ({ column }) => {
       const colSize = column.getSize();
-      const isActions = column.id === "actions";
+      const colKey = column.id ?? "";
+      const isActions = colKey === "actions";
       const extraStyles = isActions
         ? {
             position: "sticky" as const,
@@ -1139,18 +1179,21 @@ export default function UnpostedDocumentsList({
         style: {
           width: colSize,
           minWidth: colSize,
-          padding: "8px 16px",
+          maxWidth: isActions ? undefined : colSize,
+          padding: listCellPadding(colKey),
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: cardBg,
+          overflow: isActions ? undefined : "hidden",
           ...extraStyles,
         },
       };
     },
     mantineTableHeadCellProps: ({ column }) => {
       const colSize = column.getSize();
-      const isActions = column.id === "actions";
+      const colKey = column.id ?? "";
+      const isActions = colKey === "actions";
       const extraStyles = isActions
         ? {
             position: "sticky" as const,
@@ -1165,7 +1208,8 @@ export default function UnpostedDocumentsList({
         style: {
           width: colSize,
           minWidth: colSize,
-          padding: "8px 16px",
+          maxWidth: isActions ? undefined : colSize,
+          padding: listCellPadding(colKey),
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: erpTheme.headerBg,
@@ -1183,7 +1227,8 @@ export default function UnpostedDocumentsList({
         flexGrow: 1,
         minHeight: 0,
         position: "relative",
-        overflow: "auto",
+        overflowX: "auto",
+        overflowY: "auto",
       },
     },
   });
@@ -1317,7 +1362,8 @@ export default function UnpostedDocumentsList({
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Customer, draft document number, doc type, document date range",
+            subtitle:
+              "Customer, draft document number, doc type, job ID, shipment ID, document date range",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1390,6 +1436,48 @@ export default function UnpostedDocumentsList({
                           customer_name: e.currentTarget.value,
                           customer_code: null,
                           customer_display: null,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Job ID"
+                      placeholder="e.g. AI-2604INMUM0103"
+                      value={draftFilters.job_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_id: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Shipment ID"
+                      placeholder="e.g. AIR/2604/IMP-0017"
+                      value={draftFilters.shipment_id}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          shipment_id: e.currentTarget.value,
                         }))
                       }
                       size="xs"

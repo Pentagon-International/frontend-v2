@@ -1065,16 +1065,17 @@ function InvoiceCreate({
     [location.state],
   );
 
-  // Show "Shipment id" column in charges tab when from Air/Sea Export/Import Job Create (job level), hide when from House Create
-  const showShipmentIdInCharges = useMemo(
-    () =>
-      isFromAirExportJob &&
-      (location.pathname.includes("/air/export-job") ||
-        location.pathname.includes("/air/import-job") ||
-        location.pathname.includes("/SeaExport/export-job") ||
-        location.pathname.includes("/SeaExport/import-job")),
-    [isFromAirExportJob, location.pathname],
-  );
+  // Show "Shipment id" column in charges tab when from job level (Air/Sea), or any agent invoice at job level
+  const showShipmentIdInCharges = useMemo(() => {
+    if (!isFromAirExportJob) return false;
+    if (isAgentInvoice) return true;
+    return (
+      location.pathname.includes("/air/export-job") ||
+      location.pathname.includes("/air/import-job") ||
+      location.pathname.includes("/SeaExport/export-job") ||
+      location.pathname.includes("/SeaExport/import-job")
+    );
+  }, [isFromAirExportJob, isAgentInvoice, location.pathname]);
 
   // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
   const invoiceUsesConsigneeParty = useMemo(() => {
@@ -4764,11 +4765,26 @@ function InvoiceCreate({
                     {showShipmentIdInCharges && (
                       <Grid.Col span={chargeGridCols.shipment}>
                         <FormTextInput
+                          format="normal"
                           value={charge.shipment_id ?? ""}
-                          readOnly
+                          readOnly={!isAgentInvoice || isReadOnly}
+                          placeholder={
+                            isAgentInvoice && !isReadOnly
+                              ? "Shipment id"
+                              : undefined
+                          }
+                          onChange={(e) => {
+                            form.setFieldValue(
+                              `charges.${index}.shipment_id`,
+                              e.currentTarget.value,
+                            );
+                          }}
                           styles={{
                             input: {
-                              backgroundColor: "var(--mantine-color-gray-0)",
+                              backgroundColor:
+                                !isAgentInvoice || isReadOnly
+                                  ? "var(--mantine-color-gray-0)"
+                                  : undefined,
                             },
                           }}
                         />
@@ -5772,13 +5788,27 @@ function InvoiceCreate({
                                 const newIndex = form.values.charges.length;
                                 chargeUnitsByIndexRef.current[newIndex] =
                                   "|";
+                                const defaultShipmentId = (() => {
+                                  if (!isAgentInvoice) return undefined;
+                                  const fromExisting = form.values.charges.find(
+                                    (c) =>
+                                      c.shipment_id != null &&
+                                      String(c.shipment_id).trim() !== "",
+                                  )?.shipment_id;
+                                  if (fromExisting)
+                                    return String(fromExisting).trim();
+                                  const headerShipment = String(
+                                    form.values.shipment_no ?? "",
+                                  ).trim();
+                                  return headerShipment || undefined;
+                                })();
                                 void ensureRoeForCurrency(
                                   newChargeCurrency,
                                 ).then((roe) => {
                                   form.insertListItem("charges", {
                                     charge_id: null,
                                     charge_name: "",
-                                    shipment_id: undefined,
+                                    shipment_id: defaultShipmentId,
                                     shipper_id: "",
                                     unit_code: "",
                                     unit_id: "",

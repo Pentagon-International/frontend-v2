@@ -10,6 +10,7 @@ export type FinanceDocumentListRow = {
   document_date?: string;
   status?: string;
   customer_name?: string;
+  daybook_name?: string | null;
   daybook_type?: string;
   branch_code?: string;
   company_code?: string;
