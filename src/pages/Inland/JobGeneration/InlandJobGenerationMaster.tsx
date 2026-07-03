@@ -1154,7 +1154,9 @@ function InlandJobGenerationMaster() {
                           verticalAlign: "middle",
                           boxSizing: "border-box",
                         }}
-                      />
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

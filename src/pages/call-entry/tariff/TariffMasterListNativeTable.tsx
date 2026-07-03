@@ -420,7 +420,7 @@ export function TariffMasterListNativeTable<TRow>({
               </th>
             );
           })}
-          <th style={erpListStickyActionThStyle(theme, 80)} aria-label="Actions" />
+          <th style={erpListStickyActionThStyle(theme, 80)}>Actions</th>
         </tr>
       </thead>
       <tbody>

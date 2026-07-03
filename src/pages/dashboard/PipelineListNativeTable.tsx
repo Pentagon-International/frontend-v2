@@ -698,7 +698,7 @@ export function PipelineListNativeTable({
           </th>
           <th style={erpListThStyle(theme, { textAlign: "right" })}>Total Profit</th>
           <th style={erpListThStyle(theme, { textAlign: "right" })}>Total Volume</th>
-          <th style={erpListStickyActionThStyle(theme, 80)} aria-label="Actions" />
+          <th style={erpListStickyActionThStyle(theme, 80)}>Actions</th>
         </tr>
       </thead>
       <tbody>

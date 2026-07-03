@@ -33,10 +33,10 @@ import type { ErpListTheme } from "../../components/ERPListPage/erpListTheme";
 import {
   erpListDataRowProps,
   erpListRouteListCell,
-  erpListRowActionMenuTdStyle,
+  erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
   erpListTableElementStyle,
   erpListTdPaddingStyle,
-  erpListThActionsSpacer,
   erpListThStyle,
 } from "../../components";
 import { EnquirySummaryRowMenu, type EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
@@ -999,7 +999,7 @@ export function EnquirySummaryNativeTable({
             </th>
           )}
           {visible.remark && <th style={erpListThStyle(theme)}>Remark</th>}
-          <th style={erpListThActionsSpacer(theme, 44)} />
+          <th style={erpListStickyActionThStyle(theme, 80)}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -1213,7 +1213,12 @@ export function EnquirySummaryNativeTable({
                 {visible.remark && (
                   <td style={erpListTdPaddingStyle()}>{renderRemarkCell(row.services, fg, fontSans)}</td>
                 )}
-                <td style={erpListRowActionMenuTdStyle()}>
+                <td
+                  style={{
+                    ...erpListStickyActionTdStyle(theme),
+                    textAlign: "center",
+                  }}
+                >
                   <EnquirySummaryRowMenu
                     row={row}
                     opened={actionsOpenKey === k}

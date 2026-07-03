@@ -78,8 +78,8 @@ import {
   erpListTableElementStyle,
   erpListThStyle,
   erpListTdPaddingStyle,
-  erpListThActionsSpacer,
   erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
   erpListDataRowProps,
 } from "../../components";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
@@ -2770,7 +2770,9 @@ function CallEntry() {
                           Remark
                         </th>
                       )}
-                      <th style={erpListThActionsSpacer(erpTheme)} />
+                      <th style={erpListStickyActionThStyle(erpTheme, 80)}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

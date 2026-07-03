@@ -444,7 +444,9 @@ export default function OdexJobsMaster() {
                           verticalAlign: "middle",
                           boxSizing: "border-box",
                         }}
-                      />
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

@@ -70,8 +70,8 @@ import {
   erpListTableElementStyle,
   erpListThStyle,
   erpListTdPaddingStyle,
-  erpListThActionsSpacer,
   erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
   erpListDataRowProps,
 } from "../../components";
 import SingleDateInput from "../../components/SingleDateInput";
@@ -2261,7 +2261,9 @@ function LeadList() {
                           )}
                         </th>
                       )}
-                      <th style={erpListThActionsSpacer(erpTheme)} />
+                      <th style={erpListStickyActionThStyle(erpTheme, 80)}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

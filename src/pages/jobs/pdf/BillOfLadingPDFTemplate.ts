@@ -157,6 +157,39 @@ const isUsBranchForBillOfLading = (
   );
 };
 
+const isIndiaBranchForBillOfLading = (
+  country?: { country_code?: string; country_name?: string } | null,
+  defaultBranch?: {
+    country?: { country_code?: string; country_name?: string };
+  } | null,
+): boolean => {
+  const codes: string[] = [];
+  const names: string[] = [];
+  const add = (code?: string, name?: string) => {
+    if (code) codes.push(String(code).trim().toUpperCase());
+    if (name) names.push(String(name).trim().toUpperCase());
+  };
+  add(country?.country_code, country?.country_name);
+  add(defaultBranch?.country?.country_code, defaultBranch?.country?.country_name);
+  try {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      add(user?.country?.country_code, user?.country?.country_name);
+      const def = user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      );
+      add(def?.country?.country_code, def?.country?.country_name);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return (
+    codes.includes("IN") ||
+    names.some((n) => n.includes("INDIA"))
+  );
+};
+
 // Helper function to draw a box/rectangle
 const drawBox = (
   doc: jsPDF,
@@ -169,6 +202,179 @@ const drawBox = (
   doc.setLineWidth(lineWidth);
   doc.setDrawColor(0, 0, 0);
   doc.rect(x, y, width, height);
+};
+
+/** Draw label + value within a fixed column width; returns bottom Y of cell content. */
+const drawTransportCell = (
+  doc: jsPDF,
+  x: number,
+  y: number,
+  width: number,
+  label: string,
+  value: string,
+  compact = false,
+  contentTopPad = 0,
+): number => {
+  const pad = compact ? 1 : 1.5;
+  const lineHeight = compact ? 2.4 : 2.8;
+  const topPad = compact ? 1.8 : 2.5;
+  const contentY = y + topPad + contentTopPad;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6);
+  const labelLines = doc.splitTextToSize(label, width - pad * 2);
+  doc.text(labelLines, x + pad, contentY);
+  let bottomY = contentY + labelLines.length * lineHeight;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  const valueLines = doc.splitTextToSize(value || "", width - pad * 2);
+  if (valueLines.length > 0 && valueLines[0] !== "") {
+    doc.text(valueLines, x + pad, bottomY + (compact ? 0.3 : 0.5));
+    bottomY += (compact ? 0.3 : 0.5) + valueLines.length * lineHeight;
+  }
+  return bottomY + (compact ? 0.5 : 1);
+};
+
+type IndiaTransportColumn = { widthPct: number; label: string; value: string };
+
+/** Draw a transport row with wrapped text per column. */
+const drawTransportRow = (
+  doc: jsPDF,
+  startY: number,
+  rowX: number,
+  rowWidth: number,
+  columns: IndiaTransportColumn[],
+  minRowHeight = 9,
+): number => {
+  const colBoundaries: number[] = [rowX];
+  columns.forEach((col) => {
+    colBoundaries.push(colBoundaries[colBoundaries.length - 1] + rowWidth * col.widthPct);
+  });
+
+  let maxBottom = startY + minRowHeight;
+  columns.forEach((col, i) => {
+    const colX = colBoundaries[i];
+    const colW = colBoundaries[i + 1] - colX;
+    const bottom = drawTransportCell(doc, colX, startY, colW, col.label, col.value);
+    maxBottom = Math.max(maxBottom, bottom);
+  });
+
+  const endY = minRowHeight > 0 ? Math.max(maxBottom, startY + minRowHeight) : maxBottom;
+  doc.line(rowX, endY, rowX + rowWidth, endY);
+  for (let i = 1; i < colBoundaries.length - 1; i++) {
+    doc.line(colBoundaries[i], startY, colBoundaries[i], endY);
+  }
+  return endY;
+};
+
+/** Draw a transport row with a fixed height (used for aligned India rows). */
+const drawTransportRowFixed = (
+  doc: jsPDF,
+  startY: number,
+  rowX: number,
+  rowWidth: number,
+  columns: IndiaTransportColumn[],
+  rowHeight: number,
+  drawBottom = true,
+  compact = false,
+  columnTopPads?: number[],
+): number => {
+  const endY = startY + rowHeight;
+  const colBoundaries: number[] = [rowX];
+  columns.forEach((col) => {
+    colBoundaries.push(colBoundaries[colBoundaries.length - 1] + rowWidth * col.widthPct);
+  });
+
+  columns.forEach((col, i) => {
+    const colX = colBoundaries[i];
+    const colW = colBoundaries[i + 1] - colX;
+    const contentTopPad = columnTopPads?.[i] ?? 0;
+    drawTransportCell(doc, colX, startY, colW, col.label, col.value, compact, contentTopPad);
+  });
+
+  if (drawBottom) {
+    doc.line(rowX, endY, rowX + rowWidth, endY);
+  }
+  for (let i = 1; i < colBoundaries.length - 1; i++) {
+    doc.line(colBoundaries[i], startY, colBoundaries[i], endY);
+  }
+  return endY;
+};
+
+/** Draw consignor / consignee / notify in a fixed-height India left column cell. */
+const drawIndiaPartySection = (
+  doc: jsPDF,
+  startY: number,
+  sectionHeight: number,
+  innerMargin: number,
+  midLineX: number,
+  leftBoxWidth: number,
+  boxPadding: number,
+  title: string,
+  name: string,
+  address: string,
+): number => {
+  const textX = innerMargin + boxPadding;
+  const textWidth = leftBoxWidth - 2 * boxPadding;
+  const titleTopPad = 4;
+  let y = startY + titleTopPad;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text(title, textX, y);
+  y += 4;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  const nameAddressLineHeight = 3;
+  const nameLines = doc.splitTextToSize(name || "", textWidth);
+  doc.text(nameLines, textX, y);
+  y += nameLines.length * nameAddressLineHeight + 0.5;
+  const addressLines = doc.splitTextToSize(address || "", textWidth);
+  doc.text(addressLines, textX, y);
+  const endY = startY + sectionHeight;
+  doc.line(innerMargin, endY, midLineX, endY);
+  return endY;
+};
+
+/** Draw India delivery contact in a fixed-height right column cell. */
+const drawIndiaDeliveryContactSection = (
+  doc: jsPDF,
+  startY: number,
+  sectionHeight: number,
+  midLineX: number,
+  boxPadding: number,
+  rightBoxWidth: number,
+  company: string,
+  address: string,
+  tel: string,
+  email: string,
+): void => {
+  const textX = midLineX + boxPadding;
+  const textWidth = rightBoxWidth - 2 * boxPadding;
+  let y = startY + 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("To Obtain Delivery Contact", textX, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  if (company) {
+    doc.text(company, textX, y);
+    y += 4;
+  }
+  const addressLines = doc.splitTextToSize(address || "", textWidth);
+  if (addressLines.length > 0 && addressLines[0] !== "") {
+    doc.text(addressLines, textX, y);
+    y += addressLines.length * 3.5 + 1;
+  }
+  if (tel) {
+    doc.text(`Tel: ${tel}`, textX, y);
+    y += 4;
+  }
+  if (email) {
+    doc.text(`Email: ${email}`, textX, y);
+  }
+  doc.line(midLineX, startY, midLineX, startY + sectionHeight);
 };
 
 export const generateBillOfLadingPDF = (
@@ -204,6 +410,21 @@ export const generateBillOfLadingPDF = (
     ];
 
     const activeBranch = defaultBranch || getActiveBranchFromStore();
+    const isIndiaBranch = isIndiaBranchForBillOfLading(country, defaultBranch);
+    const transportLabelGap = isIndiaBranch ? 3 : 4;
+    const transportDataHeight = isIndiaBranch ? 5 : 8;
+    const transportSectionGap = isIndiaBranch ? 3 : 5;
+    const indiaContainerCol1Pct = 0.18;
+    const indiaContainerCol2Pct = 0.14;
+    const indiaContainerCol3Pct = 0.44;
+    const indiaContainerCol4Pct = 0.12;
+    const indiaContainerCol5Pct = 0.12;
+    const indiaMainContentLeftPct =
+      indiaContainerCol1Pct + indiaContainerCol2Pct + indiaContainerCol3Pct;
+    const indiaMainContentRightPct =
+      indiaContainerCol4Pct + indiaContainerCol5Pct;
+    const indiaThirdRowPct = indiaMainContentLeftPct / 3;
+    const indiaVesselModesPct = indiaMainContentLeftPct - 0.5;
 
     const branchInfo = {
       name:
@@ -340,7 +561,15 @@ export const generateBillOfLadingPDF = (
     let rightY = mainBoxStartY + boxPadding;
 
     // ===== LEFT BOX CONTENT =====
-    
+    let notifySectionEndY = mainBoxStartY + boxPadding;
+    let twoCol1SectionEndY = notifySectionEndY;
+    let twoCol2SectionTopBorder = notifySectionEndY;
+    let twoCol2SectionEndY = notifySectionEndY;
+    let twoCol1X = innerMargin + boxPadding;
+    let twoCol2X = midLineX;
+    let indiaTransportTopBorder = notifySectionEndY;
+
+    if (!isIndiaBranch) {
     // Consignor Section
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
@@ -392,76 +621,76 @@ export const generateBillOfLadingPDF = (
     const notifyAddressLines = doc.splitTextToSize(notifyAddress || "", leftBoxWidth - 2 * boxPadding);
     doc.text(notifyAddressLines, innerMargin + boxPadding, leftY);
     leftY += notifyAddressLines.length * 3.5 + 5;
-    const notifySectionEndY = leftY;
+    notifySectionEndY = leftY;
 
     // Draw horizontal line (bottom border of Notify Address section - touches left and middle borders)
     doc.line(innerMargin, notifySectionEndY, midLineX, notifySectionEndY);
     leftY += 5;
 
-    // Three Column Section: Place of acceptance, Date of acceptance, Port of Loading
-    const threeColSectionTopBorder = leftY - 5; // Top border is the previous section's bottom border
-    const threeColWidth = (leftBoxWidth - 2 * boxPadding - 4) / 3;
-    const threeCol1X = innerMargin + boxPadding;
-    const threeCol2X = innerMargin + boxPadding + threeColWidth;
-    const threeCol3X = innerMargin + boxPadding + threeColWidth * 2;
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Place of acceptance:", threeCol1X, leftY);
-    doc.text("Date of acceptance:", threeCol2X, leftY);
-    doc.text("Port of Loading:", threeCol3X, leftY);
-    leftY += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text(houseOrigin || "", threeCol1X, leftY);
-    doc.text(dateOfAcceptance || "", threeCol2X, leftY);
-    doc.text(masterOrigin || "", threeCol3X, leftY);
-    leftY += 8;
-    const threeColSectionEndY = leftY;
+    // Transport rows on left half (non-India legacy layout)
+    twoCol1SectionEndY = notifySectionEndY;
+    twoCol2SectionTopBorder = leftY;
+    twoCol2SectionEndY = notifySectionEndY;
 
-    // Draw vertical borders for three-column section (touching top border)
-    doc.line(threeCol2X - 2, threeColSectionTopBorder, threeCol2X - 2, threeColSectionEndY);
-    doc.line(threeCol3X - 2, threeColSectionTopBorder, threeCol3X - 2, threeColSectionEndY);
+      // Three Column Section: Place of acceptance, Date of acceptance, Port of Loading
+      const threeColSectionTopBorder = leftY - transportSectionGap;
+      const threeColWidth = (leftBoxWidth - 2 * boxPadding - 4) / 3;
+      const threeCol1X = innerMargin + boxPadding;
+      const threeCol2X = innerMargin + boxPadding + threeColWidth;
+      const threeCol3X = innerMargin + boxPadding + threeColWidth * 2;
 
-    // Draw horizontal line (bottom border - touches left and middle borders)
-    doc.line(innerMargin, threeColSectionEndY, midLineX, threeColSectionEndY);
-    leftY += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Place of acceptance:", threeCol1X, leftY);
+      doc.text("Date of acceptance:", threeCol2X, leftY);
+      doc.text("Port of Loading:", threeCol3X, leftY);
+      leftY += transportLabelGap;
+      doc.setFont("helvetica", "normal");
+      doc.text(houseOrigin || "", threeCol1X, leftY);
+      doc.text(dateOfAcceptance || "", threeCol2X, leftY);
+      doc.text(masterOrigin || "", threeCol3X, leftY);
+      leftY += transportDataHeight;
+      const threeColSectionEndY = leftY;
 
-    // Two Column Section: Place of Discharge, Place of Delivery
-    const twoCol1SectionTopBorder = leftY - 5; // Top border is the previous section's bottom border
-    const twoColWidth = (leftBoxWidth - 2 * boxPadding - 2) / 2;
-    const twoCol1X = innerMargin + boxPadding;
-    const twoCol2X = innerMargin + boxPadding + twoColWidth;
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Place of Discharge:", twoCol1X, leftY);
-    doc.text("Place of Delivery:", twoCol2X, leftY);
-    leftY += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text(masterDestination || "", twoCol1X, leftY);
-    doc.text(houseDestination || "", twoCol2X, leftY);
-    leftY += 8;
-    const twoCol1SectionEndY = leftY;
+      doc.line(threeCol2X - 2, threeColSectionTopBorder, threeCol2X - 2, threeColSectionEndY);
+      doc.line(threeCol3X - 2, threeColSectionTopBorder, threeCol3X - 2, threeColSectionEndY);
+      doc.line(innerMargin, threeColSectionEndY, midLineX, threeColSectionEndY);
+      leftY += transportSectionGap;
 
-    // Draw vertical border for two-column section (touching top border)
-    doc.line(twoCol2X - 2, twoCol1SectionTopBorder, twoCol2X - 2, twoCol1SectionEndY);
+      // Two Column Section: Place of Discharge, Place of Delivery
+      const twoCol1SectionTopBorder = leftY - transportSectionGap;
+      const twoColWidth = (leftBoxWidth - 2 * boxPadding - 2) / 2;
+      twoCol1X = innerMargin + boxPadding;
+      twoCol2X = innerMargin + boxPadding + twoColWidth;
 
-    // Draw horizontal line (bottom border - touches left and middle borders)
-    doc.line(innerMargin, twoCol1SectionEndY, midLineX, twoCol1SectionEndY);
-    leftY += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Place of Discharge:", twoCol1X, leftY);
+      doc.text("Place of Delivery:", twoCol2X, leftY);
+      leftY += transportLabelGap;
+      doc.setFont("helvetica", "normal");
+      doc.text(masterDestination || "", twoCol1X, leftY);
+      doc.text(houseDestination || "", twoCol2X, leftY);
+      leftY += transportDataHeight;
+      twoCol1SectionEndY = leftY;
 
-    // Two Column Section: Vessel Voy No, Date of Period of Delivery
-    const twoCol2SectionTopBorder = leftY - 5; // Top border is the previous section's bottom border
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Vessel Voy No:", twoCol1X, leftY);
-    doc.text("Date of Period of Delivery:", twoCol2X, leftY);
-    leftY += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text(vesselVoyNo || "", twoCol1X, leftY);
-    doc.text(dateOfPeriodOfDelivery || "", twoCol2X, leftY);
-    leftY += 8;
-    const twoCol2SectionEndY = leftY;
+      doc.line(twoCol2X - 2, twoCol1SectionTopBorder, twoCol2X - 2, twoCol1SectionEndY);
+      doc.line(innerMargin, twoCol1SectionEndY, midLineX, twoCol1SectionEndY);
+      leftY += transportSectionGap;
+
+      // Two Column Section: Vessel Voy No, Date of Period of Delivery
+      twoCol2SectionTopBorder = leftY - transportSectionGap;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Vessel Voy No:", twoCol1X, leftY);
+      doc.text("Date of Period of Delivery:", twoCol2X, leftY);
+      leftY += transportLabelGap;
+      doc.setFont("helvetica", "normal");
+      doc.text(vesselVoyNo || "", twoCol1X, leftY);
+      doc.text(dateOfPeriodOfDelivery || "", twoCol2X, leftY);
+      leftY += transportDataHeight;
+      twoCol2SectionEndY = leftY;
+    } // end non-India left box
 
     // Vessel section borders drawn after column alignment (single bottom line at container table)
 
@@ -475,7 +704,16 @@ export const generateBillOfLadingPDF = (
       midLineX + boxPadding,
       rightY,
     );
-    rightY += 8;
+    rightY += isIndiaBranch ? 6 : 8;
+    if (isIndiaBranch) {
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        "MTO NO : MTO/DGS/3208/SEP/2026",
+        midLineX + boxPadding,
+        rightY,
+      );
+      rightY += 4;
+    }
     const billTitleSectionEndY = rightY;
 
     // Draw horizontal line (bottom border of Bill of Lading title - touches middle and right borders)
@@ -552,99 +790,269 @@ export const generateBillOfLadingPDF = (
 
     // Draw horizontal line (bottom border of Company section - touches middle and right borders)
     doc.line(midLineX, companySectionEndY, innerMargin + innerWidth, companySectionEndY);
-    rightY += 5;
+    rightY += isIndiaBranch ? 2 : 5;
+    if (isIndiaBranch) {
+      rightY += 1.5;
+    }
 
     // Condition Section
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7); // Increased from 6 to 7 for better readability
+    doc.setFontSize(isIndiaBranch ? 6 : 7);
     const conditionParagraph1 = "Taken in charge in apparently good condition here in at the place of receipt for transport and delivery as mentioned above, unless otherwise stated. The MTO in accordance with the provisions contained in the MTD undertakes to perform or to procure the performance of the multimodal transport from the place at which the goods are taken in charge, to the place designated for delivery and assumes responsibility for such transport.";
     const conditionParagraph2 = "One of the MTD (s) must be surrendered, duly endorsed in exchange for the goods. In witness where of the original MTD all of this tenure and date have been signed in the number indicated below one of which being accomplished the other(s) to be void.";
     
-    const conditionLines1 = doc.splitTextToSize(conditionParagraph1, rightBoxWidth - 2 * boxPadding);
-    doc.text(conditionLines1, midLineX + boxPadding, rightY);
-    rightY += 20; // Increased line height from 3 to 4.5 for better readability
-    
-    // Add spacing between paragraphs
-    // rightY += 3;
-    
-    const conditionLines2 = doc.splitTextToSize(conditionParagraph2, rightBoxWidth - 2 * boxPadding);
-    doc.text(conditionLines2, midLineX + boxPadding, rightY);
-    rightY += conditionLines2.length * 3.5; // Increased line height from 3 to 4.5 for better readability
+    const conditionLineHeight = isIndiaBranch ? 2.5 : 3.5;
+    const conditionHorizontalPad = isIndiaBranch ? 2 : boxPadding;
+    const conditionTextWidth = rightBoxWidth - 2 * conditionHorizontalPad;
+    const conditionLines1 = doc.splitTextToSize(conditionParagraph1, conditionTextWidth);
+    doc.text(conditionLines1, midLineX + conditionHorizontalPad, rightY);
+    rightY += isIndiaBranch
+      ? conditionLines1.length * conditionLineHeight + 0.5
+      : 20;
+
+    const conditionLines2 = doc.splitTextToSize(conditionParagraph2, conditionTextWidth);
+    doc.text(conditionLines2, midLineX + conditionHorizontalPad, rightY);
+    rightY += isIndiaBranch
+      ? conditionLines2.length * conditionLineHeight
+      : conditionLines2.length * 3.5;
     const conditionSectionEndY = rightY;
 
     // Draw horizontal line (bottom border of Condition section - touches middle and right borders)
     doc.line(midLineX, conditionSectionEndY, innerMargin + innerWidth, conditionSectionEndY);
-    rightY += 5;
-
-    // Delivery Contact Section
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("To Obtain delivery Contact", midLineX + boxPadding, rightY);
-    rightY += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.text(`${deliveryContactCompany || ""}`, midLineX + boxPadding, rightY);
-    rightY += 4;
-    const deliveryAddressLines = doc.splitTextToSize(`${deliveryContactAddress || ""}`, rightBoxWidth - 2 * boxPadding);
-    doc.text(deliveryAddressLines, midLineX + boxPadding, rightY);
-    rightY += deliveryAddressLines.length * 3.5;
-    if (deliveryContactTel) {
-      doc.text(`Tel: ${deliveryContactTel}`, midLineX + boxPadding, rightY);
-      rightY += 4;
+    if (!isIndiaBranch) {
+      rightY += 5;
     }
-    if (deliveryContactEmail) {
-      doc.text(`Email: ${deliveryContactEmail}`, midLineX + boxPadding, rightY);
+
+    let deliveryContactSectionEndY = conditionSectionEndY;
+
+    if (!isIndiaBranch) {
+      // Delivery Contact Section
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("To Obtain Delivery Contact", midLineX + boxPadding, rightY);
+      rightY += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text(`${deliveryContactCompany || ""}`, midLineX + boxPadding, rightY);
       rightY += 4;
+      const deliveryAddressLines = doc.splitTextToSize(`${deliveryContactAddress || ""}`, rightBoxWidth - 2 * boxPadding);
+      doc.text(deliveryAddressLines, midLineX + boxPadding, rightY);
+      rightY += deliveryAddressLines.length * 3.5;
+      if (deliveryContactTel) {
+        doc.text(`Tel: ${deliveryContactTel}`, midLineX + boxPadding, rightY);
+        rightY += 4;
+      }
+      if (deliveryContactEmail) {
+        doc.text(`Email: ${deliveryContactEmail}`, midLineX + boxPadding, rightY);
+        rightY += 4;
+      }
+      deliveryContactSectionEndY = rightY;
+
+      // Draw horizontal line (bottom border of Delivery Contact section - touches middle and right borders)
+      doc.line(midLineX, deliveryContactSectionEndY, innerMargin + innerWidth, deliveryContactSectionEndY);
+      rightY += transportSectionGap;
     }
-    // rightY += 5;
-    const deliveryContactSectionEndY = rightY;
 
-    // Draw horizontal line (bottom border of Delivery Contact section - touches middle and right borders)
-    doc.line(midLineX, deliveryContactSectionEndY, innerMargin + innerWidth, deliveryContactSectionEndY);
-    rightY += 5;
+    // India: left party sections, transport rows, delivery contact, and vessel row
+    let mainTopSectionEndY = deliveryContactSectionEndY;
+    if (isIndiaBranch) {
+      const indiaTransportRow1Height = 9;
+      const indiaDischargeRowHeight = 9;
+      const indiaVesselRowHeight = 9;
+      const indiaTransportHeightSaved = 7;
+      const indiaTransportContentTopPad = 1.5;
+      const parallelZoneStartY = mainBoxStartY;
+      const partyZoneEndY = conditionSectionEndY;
+      const indiaBasePartySectionHeight = (partyZoneEndY - parallelZoneStartY) / 3;
+      const indiaNotifySectionHeight =
+        indiaBasePartySectionHeight + indiaTransportHeightSaved;
 
-    // Means of Transport Section - Divided into two halves with vertical border
-    const meansOfTransportSectionTopBorder = rightY - 5; // Top border is the previous section's bottom border
-    const meansOfTransportHalfWidth = (rightBoxWidth - 2 * boxPadding - 2) / 2;
-    const meansOfTransportLeftX = midLineX + boxPadding;
-    const meansOfTransportRightX = midLineX + boxPadding + meansOfTransportHalfWidth;
-    const meansOfTransportMidX = midLineX + boxPadding + meansOfTransportHalfWidth;
-    
-    // Left half: Modes/ Means of Transport
-    let leftHalfY = rightY;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Modes/ Means of Transport:", meansOfTransportLeftX, leftHalfY);
-    leftHalfY += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text(modesOfTransport || "", meansOfTransportLeftX, leftHalfY);
-    leftHalfY += 4;
+      let partyY = parallelZoneStartY;
+      partyY = drawIndiaPartySection(
+        doc,
+        partyY,
+        indiaBasePartySectionHeight,
+        innerMargin,
+        midLineX,
+        leftBoxWidth,
+        boxPadding,
+        "CONSIGNOR",
+        consignorName,
+        consignorAddress,
+      );
+      partyY = drawIndiaPartySection(
+        doc,
+        partyY,
+        indiaBasePartySectionHeight,
+        innerMargin,
+        midLineX,
+        leftBoxWidth,
+        boxPadding,
+        "CONSIGNEE",
+        consigneeName,
+        consigneeAddress,
+      );
+      const notifyEndY = drawIndiaPartySection(
+        doc,
+        partyY,
+        indiaNotifySectionHeight,
+        innerMargin,
+        midLineX,
+        leftBoxWidth,
+        boxPadding,
+        "NOTIFY ADDRESS",
+        notifyName,
+        notifyAddress,
+      );
 
-    // Right half: Route/ Place of Transhipments
-    let rightHalfY = rightY;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Route/ Place of Transhipments (if any):", meansOfTransportRightX + 2, rightHalfY);
-    rightHalfY += 4;
-    doc.setFont("helvetica", "normal");
-    const routeLines = doc.splitTextToSize(routePlaceOfTransshipment || "", meansOfTransportHalfWidth - 2);
-    doc.text(routeLines, meansOfTransportRightX + 2, rightHalfY);
-    rightHalfY += Math.max(routeLines.length * 3.5, 4);
+      notifySectionEndY = notifyEndY;
+      let transportLeftY = notifyEndY;
 
-    rightY = Math.max(leftHalfY, rightHalfY);
+      transportLeftY = drawTransportRowFixed(
+        doc,
+        transportLeftY,
+        innerMargin,
+        leftBoxWidth,
+        [
+          { widthPct: 1 / 3, label: "Place of acceptance:", value: houseOrigin || "" },
+          { widthPct: 1 / 3, label: "Date of acceptance:", value: dateOfAcceptance || "" },
+          { widthPct: 1 / 3, label: "Port of Loading:", value: masterOrigin || "" },
+        ],
+        indiaTransportRow1Height,
+        true,
+        true,
+        [
+          indiaTransportContentTopPad,
+          indiaTransportContentTopPad,
+          indiaTransportContentTopPad,
+        ],
+      );
+
+      const deliveryContactStartY = partyZoneEndY;
+      transportLeftY = drawTransportRowFixed(
+        doc,
+        transportLeftY,
+        innerMargin,
+        leftBoxWidth,
+        [
+          { widthPct: 0.5, label: "Place of Discharge:", value: masterDestination || "" },
+          { widthPct: 0.5, label: "Place of Delivery:", value: houseDestination || "" },
+        ],
+        indiaDischargeRowHeight,
+        false,
+        true,
+        [indiaTransportContentTopPad, indiaTransportContentTopPad],
+      );
+
+      const sharedTransportBottomY = transportLeftY;
+      const deliveryContactHeight = sharedTransportBottomY - deliveryContactStartY;
+
+      drawIndiaDeliveryContactSection(
+        doc,
+        deliveryContactStartY,
+        deliveryContactHeight,
+        midLineX,
+        boxPadding,
+        rightBoxWidth,
+        deliveryContactCompany || "",
+        deliveryContactAddress || "",
+        deliveryContactTel || "",
+        deliveryContactEmail || "",
+      );
+
+      doc.line(innerMargin, sharedTransportBottomY, innerMargin + innerWidth, sharedTransportBottomY);
+
+      deliveryContactSectionEndY = sharedTransportBottomY;
+      twoCol1SectionEndY = sharedTransportBottomY;
+      indiaTransportTopBorder = sharedTransportBottomY;
+      leftY = sharedTransportBottomY;
+
+      mainTopSectionEndY = drawTransportRowFixed(
+        doc,
+        sharedTransportBottomY,
+        innerMargin,
+        innerWidth,
+        [
+          { widthPct: 0.25, label: "Vessel Voy No:", value: vesselVoyNo || "" },
+          {
+            widthPct: 0.25,
+            label: "Date of Period of Delivery:",
+            value: dateOfPeriodOfDelivery || "",
+          },
+          {
+            widthPct: indiaVesselModesPct,
+            label: "Modes/ Means of Transport:",
+            value: modesOfTransport || "",
+          },
+          {
+            widthPct: indiaMainContentRightPct,
+            label: "Route/ Place of Transshipment (if any):",
+            value: routePlaceOfTransshipment || "",
+          },
+        ],
+        indiaVesselRowHeight,
+        true,
+        true,
+        [
+          indiaTransportContentTopPad,
+          indiaTransportContentTopPad,
+          indiaTransportContentTopPad,
+          indiaTransportContentTopPad,
+        ],
+      );
+    }
+
+    // Means of Transport Section - Divided into two halves with vertical border (non-India only)
+    const meansOfTransportSectionTopBorder = rightY - transportSectionGap;
+    let meansOfTransportMidX = midLineX;
+    if (!isIndiaBranch) {
+      const meansOfTransportHalfWidth = (rightBoxWidth - 2 * boxPadding - 2) / 2;
+      const meansOfTransportLeftX = midLineX + boxPadding;
+      const meansOfTransportRightX = midLineX + boxPadding + meansOfTransportHalfWidth;
+      meansOfTransportMidX = midLineX + boxPadding + meansOfTransportHalfWidth;
+      
+      // Left half: Modes/ Means of Transport
+      let leftHalfY = rightY;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Modes/ Means of Transport:", meansOfTransportLeftX, leftHalfY);
+      leftHalfY += transportLabelGap;
+      doc.setFont("helvetica", "normal");
+      doc.text(modesOfTransport || "", meansOfTransportLeftX, leftHalfY);
+      leftHalfY += transportDataHeight;
+
+      // Right half: Route/ Place of Transhipments
+      let rightHalfY = rightY;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Route/ Place of Transhipments (if any):", meansOfTransportRightX + 2, rightHalfY);
+      rightHalfY += transportLabelGap;
+      doc.setFont("helvetica", "normal");
+      const routeLines = doc.splitTextToSize(routePlaceOfTransshipment || "", meansOfTransportHalfWidth - 2);
+      doc.text(routeLines, meansOfTransportRightX + 2, rightHalfY);
+      rightHalfY += Math.max(routeLines.length * 3.5, transportDataHeight);
+
+      rightY = Math.max(leftHalfY, rightHalfY);
+    }
 
     // Calculate actual main box height (align left vessel and right sections to same bottom)
-    const finalLeftY = twoCol2SectionEndY;
-    const finalRightY = rightY;
-    const mainTopSectionEndY = Math.max(finalLeftY, finalRightY);
+    if (!isIndiaBranch) {
+      const finalLeftY = twoCol2SectionEndY;
+      const finalRightY = rightY;
+      mainTopSectionEndY = Math.max(finalLeftY, finalRightY);
+    }
 
     leftY = mainTopSectionEndY;
     rightY = mainTopSectionEndY;
 
-    const actualMainBoxHeight = mainTopSectionEndY - mainBoxStartY + boxPadding;
-    
-    // The shared border between top box and bottom box (container details section)
-    const bottomBoxStartY = mainBoxStartY + actualMainBoxHeight;
+    const actualMainBoxHeight = isIndiaBranch
+      ? mainTopSectionEndY - mainBoxStartY
+      : mainTopSectionEndY - mainBoxStartY + boxPadding;
+
+    // Container table starts immediately below vessel row (no extra padding row)
+    const bottomBoxStartY = isIndiaBranch
+      ? mainTopSectionEndY
+      : mainBoxStartY + actualMainBoxHeight;
     
     // Calculate footer section height
     const footerSectionHeight = 35; // Approximate height for footer section (top row + bottom section)
@@ -659,19 +1067,23 @@ export const generateBillOfLadingPDF = (
     // Draw the full box border (top box + container details section as one continuous box)
     drawBox(doc, innerMargin, mainBoxStartY, mainBoxWidth, fullBoxHeight);
     // Center divider and section splits — single bottom at Gross Weight / container table
-    doc.line(midLineX, mainBoxStartY, midLineX, bottomBoxStartY);
-    doc.line(
-      twoCol2X - 2,
-      twoCol2SectionTopBorder,
-      twoCol2X - 2,
-      bottomBoxStartY,
-    );
-    doc.line(
-      meansOfTransportMidX,
-      meansOfTransportSectionTopBorder,
-      meansOfTransportMidX,
-      bottomBoxStartY,
-    );
+    if (isIndiaBranch) {
+      doc.line(midLineX, mainBoxStartY, midLineX, indiaTransportTopBorder);
+    } else {
+      doc.line(midLineX, mainBoxStartY, midLineX, bottomBoxStartY);
+      doc.line(
+        twoCol2X - 2,
+        twoCol2SectionTopBorder,
+        twoCol2X - 2,
+        bottomBoxStartY,
+      );
+      doc.line(
+        meansOfTransportMidX,
+        meansOfTransportSectionTopBorder,
+        meansOfTransportMidX,
+        bottomBoxStartY,
+      );
+    }
 
     // Draw the shared horizontal border between top box and container details section
     doc.line(innerMargin, bottomBoxStartY, innerMargin + mainBoxWidth, bottomBoxStartY);
@@ -680,11 +1092,11 @@ export const generateBillOfLadingPDF = (
     let containerDetailsY = bottomBoxStartY + boxPadding;
     
     // Define column widths (5 columns)
-    const containerCol1Width = mainBoxWidth * 0.25; // Container No. (S) - 25%
-    const containerCol2Width = mainBoxWidth * 0.15; // Marks and Numbers - 15%
-    const containerCol3Width = mainBoxWidth * 0.30; // Description - 30%
-    const containerCol4Width = mainBoxWidth * 0.15; // Gross Weight - 15%
-    const containerCol5Width = mainBoxWidth * 0.15; // Measurement - 15%
+    const containerCol1Width = mainBoxWidth * (isIndiaBranch ? indiaContainerCol1Pct : 0.25);
+    const containerCol2Width = mainBoxWidth * (isIndiaBranch ? indiaContainerCol2Pct : 0.15);
+    const containerCol3Width = mainBoxWidth * (isIndiaBranch ? indiaContainerCol3Pct : 0.3);
+    const containerCol4Width = mainBoxWidth * (isIndiaBranch ? indiaContainerCol4Pct : 0.15);
+    const containerCol5Width = mainBoxWidth * (isIndiaBranch ? indiaContainerCol5Pct : 0.15);
     
     // Calculate column X positions
     const containerCol1X = innerMargin;
@@ -695,23 +1107,56 @@ export const generateBillOfLadingPDF = (
     
     // Draw header row - start from the top border of container details section
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    const headerY = bottomBoxStartY + 3; // Reduced spacing (was boxPadding, now 3)
+    const containerHeaderFontSize = isIndiaBranch ? 6 : 7;
+    const containerHeaderLineHeight = isIndiaBranch ? 2.6 : 3.5;
+    const containerHeaderMinPad = isIndiaBranch ? 2 : 5;
+    const containerHeaderTopPad = isIndiaBranch ? 4 : 3;
+    doc.setFontSize(containerHeaderFontSize);
+    const headerY = bottomBoxStartY + containerHeaderTopPad;
     
     // Header texts - Column 1
     doc.text("Container No. (S)", containerCol1X + boxPadding, headerY);
     
-    // Header texts - Column 2 - Center aligned
+    // Header texts - Column 2
     const marksHeaderText = "Marks and Numbers";
-    const marksHeaderWidth = doc.getTextWidth(marksHeaderText);
-    const marksHeaderCenterX = containerCol2X + (containerCol2Width / 2) - (marksHeaderWidth / 2);
-    doc.text(marksHeaderText, marksHeaderCenterX, headerY);
+    if (isIndiaBranch) {
+      const marksHeaderLines = doc.splitTextToSize(
+        marksHeaderText,
+        containerCol2Width - 2 * boxPadding,
+      );
+      doc.text(marksHeaderLines, containerCol2X + boxPadding, headerY);
+    } else {
+      const marksHeaderWidth = doc.getTextWidth(marksHeaderText);
+      const marksHeaderCenterX =
+        containerCol2X + containerCol2Width / 2 - marksHeaderWidth / 2;
+      doc.text(marksHeaderText, marksHeaderCenterX, headerY);
+    }
     
-    // Header texts - Column 3 (split into multiple lines)
-    const descHeaderText = "Number of packages, kinds of packages, general description of goods. (said to contain)";
-    const descHeaderLines = doc.splitTextToSize(descHeaderText, containerCol3Width - 2 * boxPadding);
-    doc.text(descHeaderLines, containerCol3X + boxPadding, headerY);
-    const descHeaderHeight = descHeaderLines.length * 3.5;
+    // Header texts - Column 3 (description — fixed two-line title for India)
+    const descHeaderLine1 = "Number of packages, kinds of packages, general";
+    const descHeaderLine2 = "description of goods. (said to contain)";
+    let descHeaderHeight: number;
+    if (isIndiaBranch) {
+      const descHeaderCenterX = containerCol3X + containerCol3Width / 2;
+      doc.text(descHeaderLine1, descHeaderCenterX, headerY, { align: "center" });
+      doc.text(descHeaderLine2, descHeaderCenterX, headerY + containerHeaderLineHeight, {
+        align: "center",
+      });
+      descHeaderHeight = 2 * containerHeaderLineHeight;
+    } else {
+      const descHeaderText =
+        "Number of packages, kinds of packages, general description of goods. (said to contain)";
+      const descHeaderLines = doc.splitTextToSize(
+        descHeaderText,
+        containerCol3Width - 2 * boxPadding,
+      );
+      doc.text(descHeaderLines, containerCol3X + boxPadding, headerY);
+      descHeaderHeight = descHeaderLines.length * containerHeaderLineHeight;
+    }
+    const marksHeaderHeight = isIndiaBranch
+      ? doc.splitTextToSize(marksHeaderText, containerCol2Width - 2 * boxPadding).length *
+        containerHeaderLineHeight
+      : 0;
     
     // Header texts - Column 4
     doc.text("Gross Weight", containerCol4X + boxPadding, headerY);
@@ -719,8 +1164,10 @@ export const generateBillOfLadingPDF = (
     // Header texts - Column 5
     doc.text("Measurement", containerCol5X + boxPadding, headerY);
     
-    // Calculate header height based on the tallest column - increased bottom padding
-    const headerBottomY = headerY + Math.max(5, descHeaderHeight) ; // Added 3 units of bottom padding
+    // Calculate header height based on the tallest column
+    const headerBottomY =
+      headerY +
+      Math.max(containerHeaderMinPad, descHeaderHeight, marksHeaderHeight);
     
     // Draw header row bottom border
     doc.line(innerMargin, headerBottomY, innerMargin + mainBoxWidth, headerBottomY);
@@ -856,26 +1303,58 @@ export const generateBillOfLadingPDF = (
       
       // Draw headers
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      const pageHeaderY = pageBoxStartY + 3;
+      doc.setFontSize(isIndiaBranch ? 6 : 7);
+      const pageHeaderY = pageBoxStartY + (isIndiaBranch ? 4 : 3);
+      const pageHeaderLineHeight = isIndiaBranch ? 2.6 : 3.5;
+      const pageHeaderMinPad = isIndiaBranch ? 2 : 5;
       
       // Header texts
       doc.text("Container No. (S)", containerCol1X + boxPadding, pageHeaderY);
       
       const marksHeaderText = "Marks and Numbers";
-      const marksHeaderWidth = doc.getTextWidth(marksHeaderText);
-      const marksHeaderCenterX = containerCol2X + (containerCol2Width / 2) - (marksHeaderWidth / 2);
-      doc.text(marksHeaderText, marksHeaderCenterX, pageHeaderY);
+      if (isIndiaBranch) {
+        const marksHeaderLines = doc.splitTextToSize(
+          marksHeaderText,
+          containerCol2Width - 2 * boxPadding,
+        );
+        doc.text(marksHeaderLines, containerCol2X + boxPadding, pageHeaderY);
+      } else {
+        const marksHeaderWidth = doc.getTextWidth(marksHeaderText);
+        const marksHeaderCenterX =
+          containerCol2X + containerCol2Width / 2 - marksHeaderWidth / 2;
+        doc.text(marksHeaderText, marksHeaderCenterX, pageHeaderY);
+      }
       
-      const descHeaderText = "Number of packages, kinds of packages, general description of goods. (said to contain)";
-      const descHeaderLines = doc.splitTextToSize(descHeaderText, containerCol3Width - 2 * boxPadding);
-      doc.text(descHeaderLines, containerCol3X + boxPadding, pageHeaderY);
-      const pageDescHeaderHeight = descHeaderLines.length * 3.5;
+      const descHeaderLine1 = "Number of packages, kinds of packages, general";
+      const descHeaderLine2 = "description of goods. (said to contain)";
+      let pageDescHeaderHeight: number;
+      if (isIndiaBranch) {
+        const descHeaderCenterX = containerCol3X + containerCol3Width / 2;
+        doc.text(descHeaderLine1, descHeaderCenterX, pageHeaderY, { align: "center" });
+        doc.text(descHeaderLine2, descHeaderCenterX, pageHeaderY + pageHeaderLineHeight, {
+          align: "center",
+        });
+        pageDescHeaderHeight = 2 * pageHeaderLineHeight;
+      } else {
+        const descHeaderText =
+          "Number of packages, kinds of packages, general description of goods. (said to contain)";
+        const descHeaderLines = doc.splitTextToSize(
+          descHeaderText,
+          containerCol3Width - 2 * boxPadding,
+        );
+        doc.text(descHeaderLines, containerCol3X + boxPadding, pageHeaderY);
+        pageDescHeaderHeight = descHeaderLines.length * pageHeaderLineHeight;
+      }
+      const pageMarksHeaderHeight = isIndiaBranch
+        ? doc.splitTextToSize(marksHeaderText, containerCol2Width - 2 * boxPadding).length *
+          pageHeaderLineHeight
+        : 0;
       
       doc.text("Gross Weight", containerCol4X + boxPadding, pageHeaderY);
       doc.text("Measurement", containerCol5X + boxPadding, pageHeaderY);
       
-      const pageHeaderBottomY = pageHeaderY + Math.max(5, pageDescHeaderHeight);
+      const pageHeaderBottomY =
+        pageHeaderY + Math.max(pageHeaderMinPad, pageDescHeaderHeight, pageMarksHeaderHeight);
       
       // Draw header row bottom border
       doc.line(innerMargin, pageHeaderBottomY, innerMargin + pageBoxWidth, pageHeaderBottomY);
@@ -1015,11 +1494,16 @@ export const generateBillOfLadingPDF = (
     
     // Top row with 4 columns: Freight Amount, Freight Payable at, Number of Original MTD, Place and Date of issue
     const footerTopRowHeight = 10;
-    const footerColWidth = mainBoxWidth / 4;
     const footerCol1X = innerMargin;
-    const footerCol2X = footerCol1X + footerColWidth;
-    const footerCol3X = footerCol2X + footerColWidth;
-    const footerCol4X = footerCol3X + footerColWidth;
+    const footerCol2X = isIndiaBranch
+      ? innerMargin + mainBoxWidth * indiaThirdRowPct
+      : footerCol1X + mainBoxWidth / 4;
+    const footerCol3X = isIndiaBranch
+      ? innerMargin + mainBoxWidth * indiaThirdRowPct * 2
+      : footerCol2X + mainBoxWidth / 4;
+    const footerCol4X = isIndiaBranch
+      ? innerMargin + mainBoxWidth * indiaMainContentLeftPct
+      : footerCol3X + mainBoxWidth / 4;
     
     // Draw vertical lines for footer top row
     doc.line(footerCol2X, footerStartY, footerCol2X, footerStartY + footerTopRowHeight);
@@ -1069,19 +1553,22 @@ export const generateBillOfLadingPDF = (
     doc.text(noteText, innerMargin + boxPadding, noteY);
     
     // Right side: Company name and Authorised Signatory
-    footerY = footerBottomSectionY + boxPadding;
+    const signatoryTextWidth = footerBottomRightWidth - 2 * boxPadding;
+    let signatoryY = footerBottomSectionY + boxPadding;
     doc.setFont("helvetica", "italic");
     doc.setFontSize(7);
     const companyText = `For ${branchInfo.name}`;
-    doc.text(companyText, footerBottomRightX + boxPadding, footerY);
-    
-    footerY += 8;
+    const companyLines = doc.splitTextToSize(companyText, signatoryTextWidth);
+    doc.text(companyLines, footerBottomRightX + boxPadding, signatoryY);
+    signatoryY += companyLines.length * 3.5 + 4;
+
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     const signatoryText = "AUTHORISED SIGNATORY";
-    const signatoryTextWidth = doc.getTextWidth(signatoryText);
-    const signatoryCenterX = footerBottomRightX + (footerBottomRightWidth / 2) - (signatoryTextWidth / 2);
-    doc.text(signatoryText, signatoryCenterX, footerY);
+    const signatoryLabelWidth = doc.getTextWidth(signatoryText);
+    const signatoryCenterX =
+      footerBottomRightX + footerBottomRightWidth / 2 - signatoryLabelWidth / 2;
+    doc.text(signatoryText, signatoryCenterX, signatoryY);
     
     // Draw bottom border of footer section
     const footerBottomY = footerStartY + footerSectionHeight;

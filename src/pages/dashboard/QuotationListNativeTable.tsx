@@ -42,10 +42,10 @@ import { ERP_LIST_GEIST_ROOT_CLASS } from "../../components/ERPListPage/erpListG
 import {
   erpListDataRowProps,
   erpListRouteListCell,
-  erpListRowActionMenuTdStyle,
+  erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
   erpListTableElementStyle,
   erpListTdPaddingStyle,
-  erpListThActionsSpacer,
   erpListThStyle,
   getQuotationServiceVolume,
 } from "../../components";
@@ -915,7 +915,7 @@ export function QuotationListNativeTable({
               )}
             </th>
           )}
-          <th style={erpListThActionsSpacer(theme, 44)} />
+          <th style={erpListStickyActionThStyle(theme, 80)}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -1209,7 +1209,12 @@ export function QuotationListNativeTable({
                     )}
                   </td>
                 )}
-                <td style={erpListRowActionMenuTdStyle()}>
+                <td
+                  style={{
+                    ...erpListStickyActionTdStyle(theme),
+                    textAlign: "center",
+                  }}
+                >
                   <QuotationRowMenu
                     row={row}
                     ctx={{
