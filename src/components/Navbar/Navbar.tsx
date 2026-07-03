@@ -47,6 +47,7 @@ import {
   IconReportMoney,
   IconCashOff,
   IconChecklist,
+  IconBriefcase,
   IconFileInvoiceFilled,
   IconFileInvoice,
   IconBook2,
@@ -131,6 +132,7 @@ const Navbar = ({
       location.pathname.startsWith("/document-allocation") ||
       location.pathname.startsWith("/debit-credit-note-trade") ||
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
+      location.pathname.startsWith("/service-job") ||
       location.pathname.startsWith("/job-closure") ||
       location.pathname.startsWith("/job-reopen") ||
       location.pathname.startsWith("/checker")
@@ -1236,6 +1238,19 @@ const Navbar = ({
                       }}
                     />
                     <SubNavLink
+                    parent="Accounts"
+                    label="Service Job"
+                    icon={IconBriefcase}
+                    path="/service-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
                       parent="Accounts"
                       label="Job Closure"
                       icon={IconCircleCheck}

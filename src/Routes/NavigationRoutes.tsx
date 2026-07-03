@@ -219,6 +219,8 @@ import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trad
 import DebitCreditNoteTradeCreate from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeCreate";
 import JobClosure from "../pages/accounts/job-closure/JobClosure";
 import JobOpen from "../pages/accounts/job-reopen/JobOpen";
+import ServiceJobMaster from "../pages/accounts/service-job/ServiceJobMaster";
+import ServiceJobCreate from "../pages/accounts/service-job/ServiceJobCreate";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -835,6 +837,15 @@ const NavigationRoutes = () => {
           <Route path="create" element={<DebitCreditNoteTradeCreate />} />
           <Route path="edit/:id" element={<DebitCreditNoteTradeCreate />} />
           <Route path="view/:id" element={<DebitCreditNoteTradeCreate />} />
+        </Route>
+        <Route path="/service-job" element={<Outlet />}>
+          <Route index element={<ServiceJobMaster />} />
+          <Route path="create" element={<ServiceJobCreate />} />
+          <Route path="edit/:id" element={<ServiceJobCreate />} />
+          <Route path="invoice" element={<InvoiceCreate />} />
+          <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
+          <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+          <Route path="invoice/reverse" element={<InvoiceReverse />} />
         </Route>
         <Route path="/job-closure" element={<JobClosure />} />
         <Route path="/job-reopen" element={<JobOpen />} />

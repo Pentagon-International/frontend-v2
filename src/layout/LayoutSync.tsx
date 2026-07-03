@@ -206,6 +206,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/debit-credit-note-non-trade")) {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");
+    } else if (path.startsWith("/service-job")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Service Job");
     } else if (path.startsWith("/job-closure")) {
       setActiveNav("Desk");
       setActiveSubNav("Job Closure");
