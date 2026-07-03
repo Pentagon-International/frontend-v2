@@ -213,6 +213,7 @@ type ReverseInvoiceItem = {
   total?: string | number;
   status?: string;
   day_book_name?: string;
+  bill_to_name?: string;
   [key: string]: unknown;
 };
 
@@ -228,6 +229,7 @@ type InvoiceListItem = {
   due_date?: string;
   status?: string;
   bill_to?: string;
+  bill_to_name?: string;
   currency_code?: string;
   total?: string | number;
   charges?: Array<{
@@ -559,7 +561,6 @@ function HouseCreate() {
     activeTab: active,
     accountsTabIndex: 4,
     shipmentNo: editData?.shipment_id,
-    isAgent: false,
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
@@ -5438,6 +5439,9 @@ function HouseCreate() {
                           Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Party Name
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
@@ -5454,7 +5458,7 @@ function HouseCreate() {
                     <Table.Tbody>
                       {invoiceList.length === 0 ? (
                         <Table.Tr>
-                          <Table.Td colSpan={6}>
+                          <Table.Td colSpan={7}>
                             <Center py="xl">
                               <Text c="dimmed">No invoices to display</Text>
                             </Center>
@@ -5524,6 +5528,11 @@ function HouseCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   {row.document_no ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
+                                >
+                                  {row.bill_to_name ?? "-"}
                                 </Table.Td>
                                 <Table.Td
                                   style={{ fontSize: "13px", width: "15%" }}
@@ -5774,7 +5783,7 @@ function HouseCreate() {
                               {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{
                                       padding: 0,
                                       verticalAlign: "top",
@@ -5817,8 +5826,17 @@ function HouseCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                            >
+                                                                                        >
                                               Document Number
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Party Name
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5884,6 +5902,14 @@ function HouseCreate() {
                                                   <Table.Td
                                                     style={{
                                                       fontSize: "12px",
+                                                      width: "20%",
+                                                    }}
+                                                  >
+                                                    {rev.bill_to_name ?? "-"}
+                                                  </Table.Td>
+                                                  <Table.Td
+                                                    style={{
+                                                      fontSize: "12px",
                                                       width: "15%",
                                                     }}
                                                   >
@@ -5942,7 +5968,7 @@ function HouseCreate() {
                                           ) : (
                                             <Table.Tr>
                                               <Table.Td
-                                                colSpan={6}
+                                                colSpan={7}
                                                 style={{ fontSize: "12px" }}
                                               >
                                                 <Center py="md">

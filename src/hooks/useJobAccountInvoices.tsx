@@ -14,7 +14,7 @@ type UseJobAccountInvoicesOptions = {
   activeTab: number;
   accountsTabIndex: number;
   shipmentNo?: string | null;
-  isAgent: boolean;
+  isAgent?: boolean;
   enabled?: boolean;
 };
 

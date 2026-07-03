@@ -278,6 +278,7 @@ type ReverseInvoiceItem = {
   total?: string | number;
   status?: string;
   day_book_name?: string;
+  bill_to_name?: string;
   [key: string]: unknown;
 };
 
@@ -292,6 +293,7 @@ type InvoiceListItem = {
   due_date?: string;
   status?: string;
   bill_to?: string;
+  bill_to_name?: string;
   currency_code?: string;
   total?: string | number;
   charges?: Array<{
@@ -5189,6 +5191,9 @@ function AirImportJobCreate() {
                           Document Number
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
+                          Party Name
+                        </Table.Th>
+                        <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
                           Invoice Date
                         </Table.Th>
                         <Table.Th style={{ fontSize: "12px", fontWeight: 600 }}>
@@ -5205,7 +5210,7 @@ function AirImportJobCreate() {
                     <Table.Tbody>
                       {invoiceList.length === 0 ? (
                         <Table.Tr>
-                          <Table.Td colSpan={6}>
+                          <Table.Td colSpan={7}>
                             <Center py="xl">
                               <Text c="dimmed">No invoices to display</Text>
                             </Center>
@@ -5277,6 +5282,11 @@ function AirImportJobCreate() {
                                   style={{ fontSize: "13px", width: "20%" }}
                                 >
                                   {row.document_no ?? "-"}
+                                </Table.Td>
+                                <Table.Td
+                                  style={{ fontSize: "13px", width: "20%" }}
+                                >
+                                  {row.bill_to_name ?? "-"}
                                 </Table.Td>
                                 <Table.Td
                                   style={{ fontSize: "13px", width: "15%" }}
@@ -5527,7 +5537,7 @@ function AirImportJobCreate() {
                               {hasReverseInvoices && isExpanded && (
                                 <Table.Tr>
                                   <Table.Td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{
                                       padding: 0,
                                       verticalAlign: "top",
@@ -5570,8 +5580,17 @@ function AirImportJobCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                            >
+                                                                                        >
                                               Document Number
+                                            </Table.Th>
+                                            <Table.Th
+                                              style={{
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                width: "20%",
+                                              }}
+                                            >
+                                              Party Name
                                             </Table.Th>
                                             <Table.Th
                                               style={{
@@ -5697,7 +5716,7 @@ function AirImportJobCreate() {
                                           ) : (
                                             <Table.Tr>
                                               <Table.Td
-                                                colSpan={6}
+                                                colSpan={7}
                                                 style={{ fontSize: "12px" }}
                                               >
                                                 <Center py="md">

@@ -4,11 +4,16 @@ import { API_HEADER } from "../store/storeKeys";
 
 export async function fetchJobInvoiceList<T>(
   shipmentNo: string,
-  isAgent: boolean,
+  isAgent?: boolean,
 ): Promise<T[]> {
   const res = await postAPICall(
     URL.invoiceCombined,
-    { filters: { shipment_no: shipmentNo, is_agent: isAgent } },
+    {
+      filters: {
+        shipment_no: shipmentNo,
+        ...(isAgent !== undefined ? { is_agent: isAgent } : {}),
+      },
+    },
     API_HEADER,
   );
   const data = (res as { data?: T[] })?.data;
