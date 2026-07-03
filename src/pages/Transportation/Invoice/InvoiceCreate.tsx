@@ -1056,8 +1056,8 @@ function InvoiceCreate({
     isAgentInvoiceRef.current = isAgentInvoice;
   }, [isAgentInvoice]);
 
-  // When opened from Air Export Job Create (job level): show "Job id" instead of "Shipment No"
-  // When opened from Air House Create (house level): show "Shipment No"
+  // When opened from job level: show "Job id" instead of "Shipment No"
+  // When opened from house level: show "Shipment No" (including house-level agent invoice)
   const isFromAirExportJob = useMemo(
     () =>
       (location.state as { fromJobLevel?: boolean } | null)?.fromJobLevel ===
@@ -1065,8 +1065,16 @@ function InvoiceCreate({
     [location.state],
   );
 
-  // Show "Shipment id" column in charges tab when from job level (Air/Sea), or any agent invoice at job level
+  const isFromHouseLevel = useMemo(
+    () =>
+      (location.state as { fromHouseLevel?: boolean } | null)?.fromHouseLevel ===
+      true,
+    [location.state],
+  );
+
+  // Show "Shipment id" column in charges tab for job-level agent invoice or house-level agent invoice
   const showShipmentIdInCharges = useMemo(() => {
+    if (isFromHouseLevel && isAgentInvoice) return true;
     if (!isFromAirExportJob) return false;
     if (isAgentInvoice) return true;
     return (
@@ -1075,7 +1083,12 @@ function InvoiceCreate({
       location.pathname.includes("/SeaExport/export-job") ||
       location.pathname.includes("/SeaExport/import-job")
     );
-  }, [isFromAirExportJob, isAgentInvoice, location.pathname]);
+  }, [
+    isFromAirExportJob,
+    isFromHouseLevel,
+    isAgentInvoice,
+    location.pathname,
+  ]);
 
   // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
   const invoiceUsesConsigneeParty = useMemo(() => {

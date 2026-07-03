@@ -82,6 +82,7 @@ import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -2591,6 +2592,13 @@ function HouseCreate() {
               >
                 Events
               </Menu.Item>
+
+              <HouseCreateAgentInvoiceMenuItem
+                invoicePath="/inland/import-job/invoice"
+                serviceType="AIR"
+                getCurrentHousingDetail={getCurrentHousingDetail}
+                jobId={location.state?.job?.id}
+              />
 
               <Menu.Item
                 leftSection={

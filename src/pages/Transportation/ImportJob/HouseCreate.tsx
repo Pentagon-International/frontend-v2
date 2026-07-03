@@ -93,6 +93,7 @@ import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplat
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -3109,6 +3110,13 @@ function HouseCreate() {
               >
                 Events
               </Menu.Item>
+
+              <HouseCreateAgentInvoiceMenuItem
+                invoicePath="/SeaExport/import-job/invoice"
+                serviceType={location.state?.mblDetails?.service || "FCL"}
+                getCurrentHousingDetail={getCurrentHousingDetail}
+                jobId={location.state?.job?.id}
+              />
 
               <Menu.Item
                 leftSection={
