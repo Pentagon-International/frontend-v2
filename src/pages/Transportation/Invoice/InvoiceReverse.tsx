@@ -82,7 +82,7 @@ const fetchDaybookCRN = async () => {
 
 const fetchUnitMaster = async () => {
   try {
-    const payload = { filters: { service_type: "AIR" } };
+    const payload = { filters: {} };
     const response = await postAPICall(
       URL.unitMasterFilter,
       payload,
@@ -572,12 +572,19 @@ function InvoiceReverse() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
-  const defaultBranchCurrency =
-    (
-      user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      ) as { currency?: { currency_code?: string } } | undefined
-    )?.currency?.currency_code ?? "";
+  const defaultBranch = user?.branches?.find(
+    (b: { is_default?: boolean }) => b.is_default === true,
+  ) as
+    | {
+        branch_code?: string;
+        branch_name?: string;
+        currency?: { currency_id?: number; currency_code?: string };
+        country?: { country_code?: string; country_name?: string };
+      }
+    | undefined;
+  const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
+  const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
+  const canPostDocuments = useCanPostDocuments();
 
   const navigateBack = useCallback(() => {
     navigateFinanceReturn(navigate, location.state);
@@ -634,16 +641,33 @@ function InvoiceReverse() {
   ]);
 
   const isChinaUser = useMemo(() => {
+    const branchCountry = (activeBranchCountryCode ?? "").toUpperCase();
+    if (branchCountry === "CN") return true;
+    const branchCode = (defaultBranch?.branch_code ?? "").toUpperCase();
+    const branchName = (defaultBranch?.branch_name ?? "").toUpperCase();
+    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
     const countryName = (user?.country?.country_name ?? "").toUpperCase();
     return countryCode === "CN" || countryName === "CHINA";
-  }, [user?.country?.country_code, user?.country?.country_name]);
+  }, [
+    activeBranchCountryCode,
+    defaultBranch?.branch_code,
+    defaultBranch?.branch_name,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
   const isKenyaUser = useMemo(() => {
+    const branchCountry = (activeBranchCountryCode ?? "").toUpperCase();
+    if (branchCountry === "KE") return true;
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
     const countryName = (user?.country?.country_name ?? "").toUpperCase();
     return countryCode === "KE" || countryName.includes("KENYA");
-  }, [user?.country?.country_code, user?.country?.country_name]);
+  }, [
+    activeBranchCountryCode,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
   const isUsInvoiceUser = useMemo(
     () => isUnitedStatesBranchUser(user),
@@ -769,7 +793,7 @@ function InvoiceReverse() {
     staleTime: Infinity,
   });
   const { data: unitData = [] } = useQuery({
-    queryKey: ["unitMaster", "AIR"],
+    queryKey: ["unitMaster", "invoice-reverse"],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
   });
