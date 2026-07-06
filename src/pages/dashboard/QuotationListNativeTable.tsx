@@ -63,6 +63,7 @@ export type QuotationTableRow = {
   valid_upto_list?: string[];
   reject_remark?: string;
   status?: string;
+  temp_customer?: boolean;
   service?: string;
   quotation?: Array<{
     quotation_id?: string;

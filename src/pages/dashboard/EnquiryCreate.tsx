@@ -51,6 +51,7 @@ import { Dropzone } from "@mantine/dropzone";
 import {
   ToastNotification,
   SearchableSelect,
+  CustomerNameSelect,
   Dropdown,
   DateRangeInput,
   SingleDateInput,
@@ -69,6 +70,14 @@ import FormNumberInput from "../../components/FormNumberInput";
 import useAuthStore from "../../store/authStore";
 import CustomerDataDrawer from "../../components/CustomerDataDrawer/CustomerDataDrawer";
 import LastEnquiriesList from "./LastEnquiriesList";
+import {
+  buildCustomerCreatePayloadFields,
+  INITIAL_CUSTOMER_SELECTION,
+  isNewCustomerDetailsPending,
+  NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+  type CustomerSelectionState,
+  type CustomerSelectionType,
+} from "../../utils/customerSelection";
 
 // Type definitions
 
@@ -980,6 +989,11 @@ function EnquiryCreate() {
       ...customerFormDataWithoutFiles,
       network_id: networkIdVal ? Number(networkIdVal) : null,
       ...(enq?.call_entry_id && { call_entry: enq.call_entry_id }),
+      ...buildCustomerCreatePayloadFields({
+        selection: customerSelection,
+        customerFieldValue: customerFormDataWithoutFiles.customer_code,
+        fieldKey: "customer_code",
+      }),
       services: serviceForm.values.service_details.map((serviceDetail) => {
         const cargo = serviceDetail.cargo_details[0];
         const servicePayload: any = {
@@ -1527,6 +1541,15 @@ function EnquiryCreate() {
       return;
     }
 
+    if (isNewCustomerDetailsPending(customerSelection)) {
+      customerForm.setFieldError(
+        "customer_code",
+        NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+      );
+      setActive(0);
+      return;
+    }
+
     if (!hasCustomerFormErrors && !hasServiceFormErrors) {
       const isEditMode =
         enq?.actionType === "edit" || (enq?.id && enq?.quoteType !== "CHATBOT");
@@ -1783,6 +1806,15 @@ function EnquiryCreate() {
       serviceFormResult.hasErrors || Object.keys(serviceForm.errors).length > 0;
     if (hasCustomerFormErrors || hasServiceFormErrors) return;
 
+    if (isNewCustomerDetailsPending(customerSelection)) {
+      customerForm.setFieldError(
+        "customer_code",
+        NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+      );
+      setActive(0);
+      return;
+    }
+
     if (!enq?.id) {
       ToastNotification({
         type: "warning",
@@ -1819,6 +1851,8 @@ function EnquiryCreate() {
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
     null
   );
+  const [customerSelection, setCustomerSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
   const [isInitialDataLoad, setIsInitialDataLoad] = useState(false);
   const [salespersonsApiCalled, setSalespersonsApiCalled] = useState(false);
 
@@ -3105,6 +3139,111 @@ function EnquiryCreate() {
     }
   };
 
+  const handleEnquiryCustomerChange = ({
+    value,
+    customerName,
+    selectionType,
+    tempCode,
+    originalData,
+  }: {
+    value: string;
+    customerName: string;
+    selectionType: CustomerSelectionType;
+    tempCode: string | null;
+    originalData?: Record<string, unknown> | null;
+  }) => {
+    customerForm.setFieldValue("customer_code", value || "");
+    setCustomerSelection({
+      selectionType,
+      customerName,
+      tempCode,
+    });
+
+    if (selectionType !== "freeText") {
+      customerForm.clearFieldError("customer_code");
+    }
+
+    if (value) {
+      setCustomerDisplayName(customerName);
+      setSelectedCustomerName(customerName);
+
+      if (selectionType === "master" && originalData) {
+        const customerData = originalData;
+        if (customerData.network_id != null || customerData.network_name) {
+          customerForm.setFieldValue(
+            "network_id",
+            customerData.network_id != null
+              ? String(customerData.network_id)
+              : ""
+          );
+          customerForm.setFieldValue(
+            "network_name",
+            (customerData.network_name as string) || ""
+          );
+        }
+        if (
+          customerData.addresses_data &&
+          Array.isArray(customerData.addresses_data)
+        ) {
+          const primaryAddress = customerData.addresses_data.find(
+            (addr: any) =>
+              addr?.address_type &&
+              addr.address_type.toUpperCase() === "PRIMARY"
+          );
+
+          const shouldSetAddress =
+            !isInitialDataLoad &&
+            (enq?.actionType !== "edit" ||
+              enq?.customer_code_read !== value ||
+              !customerForm.values.customer_address);
+
+          if (primaryAddress?.address && shouldSetAddress) {
+            customerForm.setFieldValue(
+              "customer_address",
+              primaryAddress.address
+            );
+          }
+        }
+
+        if (
+          !isInitialDataLoad &&
+          (enq?.actionType !== "edit" || enq?.customer_code_read !== value)
+        ) {
+          handleCustomerSelection(value);
+        }
+
+        serviceForm.values.service_details.forEach((_, idx) => {
+          const serviceDetail = serviceForm.values.service_details[idx];
+          if (serviceDetail?.service && serviceDetail?.trade) {
+            setTimeout(() => {
+              checkSalespersonData(idx);
+            }, 200);
+          }
+        });
+      } else if (selectionType !== "master") {
+        customerForm.setFieldValue("customer_address", "");
+        customerForm.setFieldValue("network_id", "");
+        customerForm.setFieldValue("network_name", "");
+      }
+    } else {
+      setCustomerDisplayName(null);
+      setSelectedCustomerName(null);
+      setCustomerSelection(INITIAL_CUSTOMER_SELECTION);
+      customerForm.clearFieldError("customer_code");
+      customerForm.setFieldValue("customer_address", "");
+      customerForm.setFieldValue("network_id", "");
+      customerForm.setFieldValue("network_name", "");
+      if (
+        !isInitialDataLoad &&
+        enq?.actionType !== "edit" &&
+        !salespersonsApiCalled
+      ) {
+        refetchSalespersons();
+        setSalespersonsApiCalled(true);
+      }
+    }
+  };
+
   const fetchCustomerData = async (
     customerCode: string,
     fromDate?: Date | null,
@@ -3593,7 +3732,7 @@ function EnquiryCreate() {
                               transition: "flex 0.3s ease",
                             }}
                           >
-                            <SearchableSelect
+                            <CustomerNameSelect
                               key={customerForm.key("customer_code")}
                               label="Customer Name"
                               required
@@ -3603,127 +3742,13 @@ function EnquiryCreate() {
                               returnOriginalData={true}
                               displayFormat={(item: any) => ({
                                 value: String(item.customer_code),
-                                label: String(item.customer_name), // Show only customer name
+                                label: String(item.customer_name),
                               })}
                               value={customerForm.values.customer_code}
                               displayValue={customerDisplayName}
-                              onChange={(value, selectedData, originalData) => {
-                                customerForm.setFieldValue(
-                                  "customer_code",
-                                  value || ""
-                                );
-                                // Update display name and selected name
-                                if (value && selectedData) {
-                                  const customerName = selectedData.label;
-                                  setCustomerDisplayName(customerName);
-                                  setSelectedCustomerName(customerName);
-
-                                  // Extract primary address from originalData
-                                  if (
-                                    originalData &&
-                                    typeof originalData === "object"
-                                  ) {
-                                    const customerData = originalData as Record<string, unknown>;
-                                    if (
-                                      customerData.network_id != null ||
-                                      customerData.network_name
-                                    ) {
-                                      customerForm.setFieldValue(
-                                        "network_id",
-                                        customerData.network_id != null
-                                          ? String(customerData.network_id)
-                                          : ""
-                                      );
-                                      customerForm.setFieldValue(
-                                        "network_name",
-                                        (customerData.network_name as string) || ""
-                                      );
-                                    }
-                                    if (
-                                      customerData.addresses_data &&
-                                      Array.isArray(customerData.addresses_data)
-                                    ) {
-                                      // Find primary address (case-insensitive match)
-                                      const primaryAddress =
-                                        customerData.addresses_data.find(
-                                          (addr: any) =>
-                                            addr?.address_type &&
-                                            addr.address_type.toUpperCase() ===
-                                              "PRIMARY"
-                                        );
-
-                                      // Set customer_address only if:
-                                      // 1. Not initial load AND not in edit mode, OR
-                                      // 2. Not initial load AND in edit mode but customer changed, OR
-                                      // 3. Not initial load AND in edit mode and customer_address is empty
-                                      const shouldSetAddress =
-                                        !isInitialDataLoad &&
-                                        (enq?.actionType !== "edit" ||
-                                          enq?.customer_code_read !== value ||
-                                          !customerForm.values
-                                            .customer_address);
-
-                                      if (
-                                        primaryAddress?.address &&
-                                        shouldSetAddress
-                                      ) {
-                                        customerForm.setFieldValue(
-                                          "customer_address",
-                                          primaryAddress.address
-                                        );
-                                      }
-                                    }
-                                  }
-
-                                  // Only call handleCustomerSelection if this is not initial data load and not edit mode or if customer changed
-                                  if (
-                                    !isInitialDataLoad &&
-                                    (enq?.actionType !== "edit" ||
-                                      enq?.customer_code_read !== value)
-                                  ) {
-                                    handleCustomerSelection(value);
-                                  }
-
-                                  // Check salesperson data if service and trade are already selected
-                                  // Check all service details
-                                  serviceForm.values.service_details.forEach(
-                                    (_, idx) => {
-                                      const serviceDetail =
-                                        serviceForm.values.service_details[idx];
-                                      if (
-                                        serviceDetail?.service &&
-                                        serviceDetail?.trade
-                                      ) {
-                                        setTimeout(() => {
-                                          checkSalespersonData(idx);
-                                        }, 200);
-                                      }
-                                    }
-                                  );
-                                } else {
-                                  setCustomerDisplayName(null);
-                                  setSelectedCustomerName(null);
-                                  // Clear customer_address and network when customer is cleared
-                                  customerForm.setFieldValue(
-                                    "customer_address",
-                                    ""
-                                  );
-                                  customerForm.setFieldValue("network_id", "");
-                                  customerForm.setFieldValue("network_name", "");
-                                  // Reset salespersons to initial state (empty customer_id)
-                                  if (
-                                    !isInitialDataLoad &&
-                                    enq?.actionType !== "edit" &&
-                                    !salespersonsApiCalled
-                                  ) {
-                                    console.log(
-                                      "🔄 Customer cleared - refetching salespersons"
-                                    );
-                                    refetchSalespersons();
-                                    setSalespersonsApiCalled(true);
-                                  }
-                                }
-                              }}
+                              allowFreeText
+                              selectionType={customerSelection.selectionType}
+                              onCustomerChange={handleEnquiryCustomerChange}
                               error={
                                 customerForm.errors.customer_code as string
                               }
@@ -3731,7 +3756,8 @@ function EnquiryCreate() {
                             />
                           </div>
 
-                          {customerForm.values.customer_code && (
+                          {customerForm.values.customer_code &&
+                            customerSelection.selectionType === "master" && (
                             <div style={{ flex: 0.25 }}>
                               <Group gap={6}>
                                 <Button

@@ -34,6 +34,13 @@ interface SearchableSelectProps {
   classNames?: Record<string, string>;
   /** When true, focuses the underlying Mantine `Select` input as soon as it mounts. */
   autoFocus?: boolean;
+  /** Called after a search API request completes (optional). */
+  onSearchComplete?: (payload: {
+    searchTerm: string;
+    hasResults: boolean;
+  }) => void;
+  /** When true, hides the "No results found" dropdown message. */
+  hideEmptyResultsMessage?: boolean;
 }
 
 export default function SearchableSelect({
@@ -59,6 +66,8 @@ export default function SearchableSelect({
   styles,
   classNames,
   autoFocus = false,
+  onSearchComplete,
+  hideEmptyResultsMessage = false,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -195,15 +204,21 @@ export default function SearchableSelect({
         setLastSearchTerm(debounced);
         // Reset active index to first item on fresh data
         setActiveIndex(transformedData.length > 0 ? 0 : -1);
+        onSearchComplete?.({
+          searchTerm: debounced,
+          hasResults: transformedData.length > 0,
+        });
       } else {
         setData([]);
         setOriginalData([]);
         setActiveIndex(-1);
+        onSearchComplete?.({ searchTerm: debounced, hasResults: false });
       }
     } catch (e) {
       console.error("Search error:", e);
       setData([]);
       setActiveIndex(-1);
+      onSearchComplete?.({ searchTerm: debounced, hasResults: false });
       // Do not cache if error
     }
     setLoading(false);
@@ -214,6 +229,7 @@ export default function SearchableSelect({
     formatData,
     minSearchLength,
     additionalParams,
+    onSearchComplete,
   ]);
 
   useEffect(() => {
@@ -444,7 +460,11 @@ export default function SearchableSelect({
           ) : isSearchMode &&
             search.length >= minSearchLength &&
             data.length === 0 ? (
-            "No results found"
+            hideEmptyResultsMessage ? (
+              ""
+            ) : (
+              "No results found"
+            )
           ) : label ? (
             "Search your " + label + ""
           ) : (

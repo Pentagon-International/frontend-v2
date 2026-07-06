@@ -15,6 +15,7 @@ export const URL = {
   profiling: "customer-profiling/",
   participants: "participants/",
   customer: "customer_master/customer-master/",
+  tempCustomer: "temp-customer/",
   allCustomers: "customer_master/conditional-list/",
   customerFilter: "filter/customer_master/customer-master/",
   customerVerification: "customer-verification/",

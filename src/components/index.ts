@@ -1,6 +1,7 @@
 import ToastNotification from "./ToastNotification";
 import Navbar from "./Navbar/Navbar";
 import SearchableSelect from "./SearchableSelect";
+import CustomerNameSelect from "./CustomerNameSelect";
 import Dropdown from "./Dropdown";
 import ServiceDetailsSlider from "./ServiceDetailsSlider";
 import DownloadComponent from "./DownloadComponent";
@@ -96,6 +97,7 @@ export {
   ToastNotification,
   Navbar,
   SearchableSelect,
+  CustomerNameSelect,
   Dropdown,
   ServiceDetailsSlider,
   DownloadComponent,

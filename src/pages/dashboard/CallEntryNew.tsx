@@ -51,6 +51,7 @@ import {
   Dropdown,
   DateRangeInput,
   SingleDateInput,
+  CustomerNameSelect,
 } from "../../components";
 import useAuthStore from "../../store/authStore";
 import { toTitleCase } from "../../utils/textFormatter";
@@ -62,6 +63,19 @@ import {
 } from "mantine-react-table";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CustomerDataDrawer from "../../components/CustomerDataDrawer/CustomerDataDrawer";
+import {
+  buildCustomerCreatePayloadFields,
+  INITIAL_CUSTOMER_SELECTION,
+  isNewCustomerDetailsPending,
+  isNewCustomerSelection,
+  NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+  type CustomerSelectionState,
+} from "../../utils/customerSelection";
+import {
+  getApiResponseMessage,
+  getServerErrorMessage,
+  isApiFailureResponse,
+} from "../../utils/apiErrorMessage";
 
 // Removed fetchCustomerNames - using SearchableSelect for dynamic loading
 
@@ -382,18 +396,23 @@ function CallEntryNew() {
   const [callEntryData, setCallEntryData] = useState<CallEntryData[]>([]);
   const [selectedCustomerName, setSelectedCustomerName] = useState<string>("");
   const [selectedCustomerData, setSelectedCustomerData] = useState<any>(null);
+  const [customerSelection, setCustomerSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
+  const customerMasterFeaturesDisabled = isNewCustomerSelection(
+    customerSelection,
+  );
   const [shipmentData, setShipmentData] = useState<ShipmentData[]>([]);
   const [potentialProfilingData, setPotentialProfilingData] = useState<
     PotentialProfilingData[]
   >([]);
   const [customerCreditDay, setCustomerCreditDay] = useState<number | null>(
-    null
+    null,
   );
   const [customerSalesperson, setCustomerSalesperson] = useState<string | null>(
-    null
+    null,
   );
   const [customerLastVisited, setCustomerLastVisited] = useState<string | null>(
-    null
+    null,
   );
   const [customerTotalCreditAmount, setCustomerTotalCreditAmount] = useState<
     number | null
@@ -408,7 +427,7 @@ function CallEntryNew() {
     const lastDayOfPreviousMonth = new Date(
       now.getFullYear(),
       now.getMonth(),
-      0
+      0,
     );
     return {
       from: previousMonth,
@@ -417,10 +436,10 @@ function CallEntryNew() {
   };
   const previousMonthRange = getPreviousMonthRange();
   const [customerDataFromDate, setCustomerDataFromDate] = useState<Date | null>(
-    previousMonthRange.from
+    previousMonthRange.from,
   );
   const [customerDataToDate, setCustomerDataToDate] = useState<Date | null>(
-    previousMonthRange.to
+    previousMonthRange.to,
   );
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
@@ -450,7 +469,7 @@ function CallEntryNew() {
       try {
         const response = (await getAPICall(
           URL.user,
-          API_HEADER
+          API_HEADER,
         )) as UserMasterData[];
         return Array.isArray(response) ? response : [];
       } catch (err: unknown) {
@@ -483,7 +502,7 @@ function CallEntryNew() {
 
   const fetchProfiling = async (
     pageIndex: number = profilingPageIndex,
-    pageSize: number = profilingPageSize
+    pageSize: number = profilingPageSize,
   ) => {
     const customerVal = callEntryForm.getValues().customer;
     getDropdownData();
@@ -495,7 +514,7 @@ function CallEntryNew() {
         const index = pageIndex * pageSize;
         const data = await getAPICall(
           `${URL.profiling}?customer_code=${customerVal}&index=${index}&limit=${pageSize}`,
-          API_HEADER
+          API_HEADER,
         );
 
         // Handle paginated response
@@ -531,7 +550,7 @@ function CallEntryNew() {
   };
   const fetchParticipants = async (
     pageIndex: number = participantsPageIndex,
-    pageSize: number = participantsPageSize
+    pageSize: number = participantsPageSize,
   ) => {
     try {
       setIsLoadingParticipants(true);
@@ -539,7 +558,7 @@ function CallEntryNew() {
       const index = pageIndex * pageSize;
       const data = await getAPICall(
         `${URL.participants}?index=${index}&limit=${pageSize}`,
-        API_HEADER
+        API_HEADER,
       );
 
       // Handle paginated response
@@ -584,7 +603,7 @@ function CallEntryNew() {
       const response = (await postAPICall(
         URL.nearbyCustomers,
         payload,
-        API_HEADER
+        API_HEADER,
       )) as NearbyCustomersResponse;
 
       if (response && response.success && Array.isArray(response.data)) {
@@ -684,7 +703,7 @@ function CallEntryNew() {
         });
       }
     },
-    [user, usersData, location.pincode]
+    [user, usersData, location.pincode],
   );
   // Remove the fetchCustomerNames function since we're using React Query
   const fetchfollowUpAction = async () => {
@@ -718,7 +737,7 @@ function CallEntryNew() {
   const fetchCustomerData = async (
     customerCode: string,
     fromDate?: Date | null,
-    toDate?: Date | null
+    toDate?: Date | null,
   ) => {
     try {
       setIsLoadingData(true);
@@ -749,7 +768,7 @@ function CallEntryNew() {
 
       const customerData = (await postAPICall(
         `${URL.customerData}`,
-        payload as any
+        payload as any,
       )) as CustomerDataResponse;
       // console.log("customerData-----", customerData);
 
@@ -769,15 +788,15 @@ function CallEntryNew() {
           setCustomerSalesperson(customerData.customer_info.salesperson);
           setCustomerLastVisited(customerData.customer_info.last_visited);
           setCustomerTotalCreditAmount(
-            customerData.customer_info.total_credit_amount
+            customerData.customer_info.total_credit_amount,
           );
           setTotalRevenue(
-            customerData.customer_info.overall_total_revenue ?? null
+            customerData.customer_info.overall_total_revenue ?? null,
           );
           setTotalProfit(customerData.customer_info.overall_total_gp ?? null);
           if (customerData.customer_info.total_net_balance !== undefined) {
             setTotalOutstandingAmount(
-              customerData.customer_info.total_net_balance
+              customerData.customer_info.total_net_balance,
             );
           }
           setCustomerCurrency(customerData.customer_info.currency || "");
@@ -853,16 +872,39 @@ function CallEntryNew() {
     }
   };
 
-  const handleCustomerChange = (value: string, customerData?: any) => {
+  const handleCustomerChange = (
+    value: string,
+    customerData?: any,
+    selectionType: CustomerSelectionState["selectionType"] = "master",
+    tempCode: string | null = null,
+  ) => {
     if (value) {
-      // Store the full customer data for later use
-      setSelectedCustomerData(customerData);
-      // Extract customer name from selectedData if available
-      // SearchableSelect passes {value, label} format
+      if (selectionType === "master") {
+        setSelectedCustomerData(customerData);
+      } else {
+        setSelectedCustomerData(null);
+      }
+
+      setCustomerSelection({
+        selectionType,
+        customerName:
+          customerData?.label || customerData?.customer_name || value,
+        tempCode,
+      });
+
+      if (selectionType !== "freeText") {
+        callEntryForm.clearFieldError("customer");
+      }
+
+      if (selectionType !== "master") {
+        close();
+        closeParticipant();
+        closeQuotationDrawer();
+      }
+
       if (customerData && customerData.label) {
         setSelectedCustomerName(customerData.label);
       } else if (customerData && customerData.customer_name) {
-        // Fallback for full customer data object
         setSelectedCustomerName(customerData.customer_name);
       } else {
         setSelectedCustomerName(`${value}`);
@@ -871,6 +913,8 @@ function CallEntryNew() {
     } else {
       setSelectedCustomerName("");
       setSelectedCustomerData(null);
+      setCustomerSelection(INITIAL_CUSTOMER_SELECTION);
+      callEntryForm.clearFieldError("customer");
       setQuotationData([]);
       setJobData([]);
       // Commented out - local_outstanding key will be removed from response
@@ -926,8 +970,7 @@ function CallEntryNew() {
               ? String(response.expected_profit)
               : "0",
             status: ((response.status as string) || "ACTIVE") as
-              | "ACTIVE"
-              | "CLOSE",
+              "ACTIVE" | "CLOSE",
             remark: (response as any).remark || "",
           };
 
@@ -1010,16 +1053,10 @@ function CallEntryNew() {
 
   const schema = yup.object().shape({
     customer: yup.string().required("Company Name is required"),
-    call_date: yup
-      .string()
-      .trim()
-      .required("Date is required"),
+    call_date: yup.string().trim().required("Date is required"),
     call_mode: yup.string().required("Call Mode is required"),
     call_summary: yup.string().required("Call Summary is required"),
-    followup_date: yup
-      .string()
-      .trim()
-      .required("Follow Up Date is required"),
+    followup_date: yup.string().trim().required("Follow Up Date is required"),
     followup_action: yup.string().required("Follow Up Action is required"),
   });
 
@@ -1080,7 +1117,7 @@ function CallEntryNew() {
   useEffect(() => {
     if (callEntryId) {
       const selectedFollowUpAction = followUpAction.find(
-        (option) => option.value === callEntryForm.values.followup_action
+        (option) => option.value === callEntryForm.values.followup_action,
       );
       const isFollowUpActionClose = selectedFollowUpAction?.label === "Close";
 
@@ -1105,7 +1142,7 @@ function CallEntryNew() {
             headers: {
               "User-Agent": "PentagonPrime/1.0", // Required by Nominatim
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -1124,7 +1161,7 @@ function CallEntryNew() {
         return null;
       }
     },
-    []
+    [],
   );
 
   // Function to get user's current location
@@ -1188,7 +1225,7 @@ function CallEntryNew() {
           enableHighAccuracy: true,
           timeout: 20000, // give GPS time to lock
           maximumAge: 0, // no cached location
-        }
+        },
       );
     });
   }, [getPincodeFromCoordinates]);
@@ -1262,7 +1299,7 @@ function CallEntryNew() {
   };
 
   const handleParticipantSubmit = async (
-    values: typeof participantForm.values
+    values: typeof participantForm.values,
   ) => {
     const participants = values.participants;
 
@@ -1302,6 +1339,14 @@ function CallEntryNew() {
     handleProfilingSubmit(payload as any);
     // }
 
+    if (isNewCustomerDetailsPending(customerSelection)) {
+      callEntryForm.setFieldError(
+        "customer",
+        NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+      );
+      return;
+    }
+
     try {
       setIsSubmittingCallEntry(true);
       let response;
@@ -1319,7 +1364,7 @@ function CallEntryNew() {
         if (finalStatus === "CLOSE" && !values.remark?.trim()) {
           callEntryForm.setFieldError(
             "remark",
-            "Remark is required when closing call entry"
+            "Remark is required when closing call entry",
           );
           ToastNotification({
             type: "error",
@@ -1329,7 +1374,11 @@ function CallEntryNew() {
         }
 
         const editPayload: any = {
-          customer: values.customer,
+          ...buildCustomerCreatePayloadFields({
+            selection: customerSelection,
+            customerFieldValue: values.customer,
+            fieldKey: "customer",
+          }),
           call_date: values.call_date,
           call_mode: values.call_mode,
           call_summary: values.call_summary,
@@ -1353,9 +1402,20 @@ function CallEntryNew() {
         response = await putAPICall(
           URL.callEntry,
           editPayload as any,
-          API_HEADER
+          API_HEADER,
         );
         console.log("Updated call entry response:", response);
+
+        if (isApiFailureResponse(response)) {
+          ToastNotification({
+            type: "error",
+            message: getApiResponseMessage(
+              response,
+              "Failed to update call entry",
+            ),
+          });
+          return;
+        }
 
         ToastNotification({
           type: "success",
@@ -1367,6 +1427,11 @@ function CallEntryNew() {
           ...values,
           latitude: formatCoordinateForPayload(values.latitude),
           longitude: formatCoordinateForPayload(values.longitude),
+          ...buildCustomerCreatePayloadFields({
+            selection: customerSelection,
+            customerFieldValue: values.customer,
+            fieldKey: "customer",
+          }),
         };
         response = await postAPICall(
           URL.callEntry,
@@ -1375,6 +1440,17 @@ function CallEntryNew() {
         );
         console.log("callentry response---", response);
 
+        if (isApiFailureResponse(response)) {
+          ToastNotification({
+            type: "error",
+            message: getApiResponseMessage(
+              response,
+              "Failed to create call entry",
+            ),
+          });
+          return;
+        }
+
         if (response && typeof response === "object" && "id" in response) {
           const callEntryID = (response as any).id;
 
@@ -1382,7 +1458,7 @@ function CallEntryNew() {
             (participant) => ({
               ...participant,
               call: callEntryID,
-            })
+            }),
           );
 
           const participantPayload = {
@@ -1392,8 +1468,8 @@ function CallEntryNew() {
           const participantsCheck = participantPayload.participants.every(
             (item) =>
               Object.values(item).every(
-                (value) => value !== null && value !== ""
-              )
+                (value) => value !== null && value !== "",
+              ),
           );
           if (participantsCheck) {
             handleParticipantSubmit(participantPayload as any);
@@ -1451,10 +1527,13 @@ function CallEntryNew() {
           });
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       ToastNotification({
         type: "error",
-        message: `Error while ${callEntryId ? "updating" : "creating"} call entry: ${err.message}`,
+        message: getServerErrorMessage(
+          err,
+          `Error while ${callEntryId ? "updating" : "creating"} call entry`,
+        ),
       });
     } finally {
       setIsSubmittingCallEntry(false);
@@ -1489,7 +1568,7 @@ function CallEntryNew() {
           const response = await postAPICall(
             URL.profiling,
             profile as any,
-            API_HEADER
+            API_HEADER,
           );
           if (response) {
             profilingForm.reset();
@@ -1553,7 +1632,7 @@ function CallEntryNew() {
         size: 100,
       },
     ],
-    []
+    [],
   );
   const participantColumns = useMemo<MRT_ColumnDef<any>[]>(
     () => [
@@ -1588,7 +1667,7 @@ function CallEntryNew() {
         size: 100,
       },
     ],
-    []
+    [],
   );
   const nearbyCustomerColumns = useMemo<MRT_ColumnDef<NearbyCustomerData>[]>(
     () => [
@@ -1657,7 +1736,7 @@ function CallEntryNew() {
         enableColumnFilter: false,
       },
     ],
-    [handleAssignToMe]
+    [handleAssignToMe],
   );
 
   const nearbyCustomerTable = useMantineReactTable({
@@ -2220,7 +2299,7 @@ function CallEntryNew() {
                                   const end = Math.min(
                                     (profilingPageIndex + 1) *
                                       profilingPageSize,
-                                    profilingTotalCount
+                                    profilingTotalCount,
                                   );
                                   return `${start}–${end} of ${profilingTotalCount}`;
                                 })()}
@@ -2240,7 +2319,7 @@ function CallEntryNew() {
                                 onClick={() => {
                                   const newPage = Math.max(
                                     0,
-                                    profilingPageIndex - 1
+                                    profilingPageIndex - 1,
                                   );
                                   setProfilingPageIndex(newPage);
                                   fetchProfiling(newPage, profilingPageSize);
@@ -2268,8 +2347,8 @@ function CallEntryNew() {
                                 {Math.max(
                                   1,
                                   Math.ceil(
-                                    profilingTotalCount / profilingPageSize
-                                  )
+                                    profilingTotalCount / profilingPageSize,
+                                  ),
                                 )}
                               </Text>
                               <ActionIcon
@@ -2279,12 +2358,12 @@ function CallEntryNew() {
                                   const totalPages = Math.max(
                                     1,
                                     Math.ceil(
-                                      profilingTotalCount / profilingPageSize
-                                    )
+                                      profilingTotalCount / profilingPageSize,
+                                    ),
                                   );
                                   const newPage = Math.min(
                                     totalPages - 1,
-                                    profilingPageIndex + 1
+                                    profilingPageIndex + 1,
                                   );
                                   setProfilingPageIndex(newPage);
                                   fetchProfiling(newPage, profilingPageSize);
@@ -2292,7 +2371,7 @@ function CallEntryNew() {
                                 disabled={
                                   profilingPageIndex >=
                                   Math.ceil(
-                                    profilingTotalCount / profilingPageSize
+                                    profilingTotalCount / profilingPageSize,
                                   ) -
                                     1
                                 }
@@ -2332,7 +2411,7 @@ function CallEntryNew() {
                               data={["AIR", "FCL", "LCL"]}
                               rightSection={<IconChevronDown />}
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.service`
+                                `profiles.${index}.service`,
                               )}
                               styles={{
                                 input: {
@@ -2369,7 +2448,7 @@ function CallEntryNew() {
                               onChange={(value) =>
                                 profilingForm.setFieldValue(
                                   `profiles.${index}.origin`,
-                                  value || ""
+                                  value || "",
                                 )
                               }
                               minSearchLength={2}
@@ -2394,7 +2473,7 @@ function CallEntryNew() {
                               onChange={(value) =>
                                 profilingForm.setFieldValue(
                                   `profiles.${index}.destination`,
-                                  value || ""
+                                  value || "",
                                 )
                               }
                               minSearchLength={2}
@@ -2407,7 +2486,7 @@ function CallEntryNew() {
                               label="No. of Shipments"
                               withAsterisk
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.no_of_shipments`
+                                `profiles.${index}.no_of_shipments`,
                               )}
                               styles={{
                                 input: {
@@ -2439,7 +2518,7 @@ function CallEntryNew() {
                               maxDropdownHeight={400}
                               rightSection={<IconChevronDown />}
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.frequency`
+                                `profiles.${index}.frequency`,
                               )}
                               styles={{
                                 input: {
@@ -2463,7 +2542,7 @@ function CallEntryNew() {
                               label="Volume/Containers"
                               withAsterisk
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.volume`
+                                `profiles.${index}.volume`,
                               )}
                               styles={{
                                 input: {
@@ -2489,7 +2568,7 @@ function CallEntryNew() {
                               placeholder="Enter Tier"
                               withAsterisk
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.tier`
+                                `profiles.${index}.tier`,
                               )}
                               styles={{
                                 input: {
@@ -2513,7 +2592,7 @@ function CallEntryNew() {
                               label="Competitors"
                               placeholder="Enter Competitors value"
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.competitors`
+                                `profiles.${index}.competitors`,
                               )}
                               styles={{
                                 input: {
@@ -2539,7 +2618,7 @@ function CallEntryNew() {
                               placeholder="Enter potential profit"
                               hideControls
                               {...profilingForm.getInputProps(
-                                `profiles.${index}.potential_profit`
+                                `profiles.${index}.potential_profit`,
                               )}
                               styles={{
                                 input: {
@@ -2688,7 +2767,7 @@ function CallEntryNew() {
                                   const end = Math.min(
                                     (participantsPageIndex + 1) *
                                       participantsPageSize,
-                                    participantsTotalCount
+                                    participantsTotalCount,
                                   );
                                   return `${start}–${end} of ${participantsTotalCount}`;
                                 })()}
@@ -2708,12 +2787,12 @@ function CallEntryNew() {
                                 onClick={() => {
                                   const newPage = Math.max(
                                     0,
-                                    participantsPageIndex - 1
+                                    participantsPageIndex - 1,
                                   );
                                   setParticipantsPageIndex(newPage);
                                   fetchParticipants(
                                     newPage,
-                                    participantsPageSize
+                                    participantsPageSize,
                                   );
                                 }}
                                 disabled={participantsPageIndex === 0}
@@ -2729,8 +2808,8 @@ function CallEntryNew() {
                                   1,
                                   Math.ceil(
                                     participantsTotalCount /
-                                      participantsPageSize
-                                  )
+                                      participantsPageSize,
+                                  ),
                                 )}
                               </Text>
                               <ActionIcon
@@ -2741,24 +2820,24 @@ function CallEntryNew() {
                                     1,
                                     Math.ceil(
                                       participantsTotalCount /
-                                        participantsPageSize
-                                    )
+                                        participantsPageSize,
+                                    ),
                                   );
                                   const newPage = Math.min(
                                     totalPages - 1,
-                                    participantsPageIndex + 1
+                                    participantsPageIndex + 1,
                                   );
                                   setParticipantsPageIndex(newPage);
                                   fetchParticipants(
                                     newPage,
-                                    participantsPageSize
+                                    participantsPageSize,
                                   );
                                 }}
                                 disabled={
                                   participantsPageIndex >=
                                   Math.ceil(
                                     participantsTotalCount /
-                                      participantsPageSize
+                                      participantsPageSize,
                                   ) -
                                     1
                                 }
@@ -2794,11 +2873,11 @@ function CallEntryNew() {
                               }
                               onChange={(e) => {
                                 const formattedValue = toTitleCase(
-                                  e.target.value
+                                  e.target.value,
                                 );
                                 participantForm.setFieldValue(
                                   `participants.${index}.first_name`,
-                                  formattedValue
+                                  formattedValue,
                                 );
                               }}
                               error={
@@ -2833,11 +2912,11 @@ function CallEntryNew() {
                               }
                               onChange={(e) => {
                                 const formattedValue = toTitleCase(
-                                  e.target.value
+                                  e.target.value,
                                 );
                                 participantForm.setFieldValue(
                                   `participants.${index}.last_name`,
-                                  formattedValue
+                                  formattedValue,
                                 );
                               }}
                               error={
@@ -2872,11 +2951,11 @@ function CallEntryNew() {
                               }
                               onChange={(e) => {
                                 const formattedValue = toTitleCase(
-                                  e.target.value
+                                  e.target.value,
                                 );
                                 participantForm.setFieldValue(
                                   `participants.${index}.designation`,
-                                  formattedValue
+                                  formattedValue,
                                 );
                               }}
                               error={
@@ -2906,7 +2985,7 @@ function CallEntryNew() {
                               label="Mobile Number"
                               placeholder="Enter Mobile Number"
                               {...participantForm.getInputProps(
-                                `participants.${index}.mobile_no`
+                                `participants.${index}.mobile_no`,
                               )}
                               styles={{
                                 input: {
@@ -2930,7 +3009,7 @@ function CallEntryNew() {
                               label="Email"
                               placeholder="Enter Email ID"
                               {...participantForm.getInputProps(
-                                `participants.${index}.email`
+                                `participants.${index}.email`,
                               )}
                               styles={{
                                 input: {
@@ -2954,7 +3033,7 @@ function CallEntryNew() {
                               label="Department"
                               placeholder="Enter Department"
                               {...participantForm.getInputProps(
-                                `participants.${index}.department`
+                                `participants.${index}.department`,
                               )}
                               styles={{
                                 input: {
@@ -3125,33 +3204,19 @@ function CallEntryNew() {
                   toDate={customerDataToDate}
                   onFromDateChange={(date) => {
                     setCustomerDataFromDate(date);
-                    const customerVal =
-                      callEntryForm.getValues().customer;
-                    if (
-                      customerVal &&
-                      date &&
-                      customerDataToDate
-                    ) {
-                      fetchCustomerData(
-                        customerVal,
-                        date,
-                        customerDataToDate
-                      );
+                    const customerVal = callEntryForm.getValues().customer;
+                    if (customerVal && date && customerDataToDate) {
+                      fetchCustomerData(customerVal, date, customerDataToDate);
                     }
                   }}
                   onToDateChange={(date) => {
                     setCustomerDataToDate(date);
-                    const customerVal =
-                      callEntryForm.getValues().customer;
-                    if (
-                      customerVal &&
-                      customerDataFromDate &&
-                      date
-                    ) {
+                    const customerVal = callEntryForm.getValues().customer;
+                    if (customerVal && customerDataFromDate && date) {
                       fetchCustomerData(
                         customerVal,
                         customerDataFromDate,
-                        date
+                        date,
                       );
                     }
                   }}
@@ -3163,8 +3228,7 @@ function CallEntryNew() {
                   potentialProfilingData={potentialProfilingData}
 
                   onQuotationClick={(q) => {
-                    const customerVal =
-                      callEntryForm.getValues().customer;
+                    const customerVal = callEntryForm.getValues().customer;
 
                     navigate("/quotation-create", {
                       state: {
@@ -3174,17 +3238,13 @@ function CallEntryNew() {
                         customerData: {
                           customer_code: customerVal,
                           customer_name:
-                            q.customer_name ||
-                            selectedCustomerName,
-                          total_net_balance:
-                            totalOutstandingAmount,
+                            q.customer_name || selectedCustomerName,
+                          total_net_balance: totalOutstandingAmount,
                         },
                         returnTo: "call-entry",
                         returnToState: {
                           customer: customerVal,
-                          customerName:
-                            q.customer_name ||
-                            selectedCustomerName,
+                          customerName: q.customer_name || selectedCustomerName,
                           openDrawer: true,
                         },
                       },
@@ -3341,7 +3401,10 @@ function CallEntryNew() {
                               color: "#424242",
                             },
                           }}
+                          disabled={customerMasterFeaturesDisabled}
                           onClick={() => {
+                            if (customerMasterFeaturesDisabled) return;
+
                             open();
                             // Reset pagination when opening modal
                             setProfilingPageIndex(0);
@@ -3358,13 +3421,13 @@ function CallEntryNew() {
                                   profile.frequency ||
                                   profile.volume ||
                                   profile.tier ||
-                                  profile.competitors
+                                  profile.competitors,
                               )
                             ) {
                               // Show existing form data
                               console.log(
                                 "Showing existing profiling data:",
-                                profilingForm.values.profiles
+                                profilingForm.values.profiles,
                               );
                             }
                           }}
@@ -3405,7 +3468,10 @@ function CallEntryNew() {
                               color: "#424242",
                             },
                           }}
+                          disabled={customerMasterFeaturesDisabled}
                           onClick={() => {
+                            if (customerMasterFeaturesDisabled) return;
+
                             openParticipant();
                             // Reset pagination when opening modal
                             setParticipantsPageIndex(0);
@@ -3420,13 +3486,13 @@ function CallEntryNew() {
                                   participant.designation ||
                                   participant.mobile_no ||
                                   participant.email ||
-                                  participant.department
+                                  participant.department,
                               )
                             ) {
                               // Show existing form data
                               console.log(
                                 "Showing existing participant data:",
-                                participantForm.values.participants
+                                participantForm.values.participants,
                               );
                             }
                           }}
@@ -3467,17 +3533,23 @@ function CallEntryNew() {
                               color: "#424242",
                             },
                           }}
+                          disabled={customerMasterFeaturesDisabled}
                           onClick={() => {
+                            if (customerMasterFeaturesDisabled) return;
+
                             const customerVal =
                               callEntryForm.getValues().customer;
-                            if (customerVal) {
+                            if (
+                              customerVal &&
+                              customerSelection.selectionType === "master"
+                            ) {
                               // Set customer name from stored customer data if available
                               if (
                                 selectedCustomerData &&
                                 selectedCustomerData.customer_name
                               ) {
                                 setSelectedCustomerName(
-                                  selectedCustomerData.customer_name
+                                  selectedCustomerData.customer_name,
                                 );
                               } else if (!selectedCustomerName) {
                                 // Fallback to placeholder only if no data available
@@ -3486,7 +3558,7 @@ function CallEntryNew() {
                               fetchCustomerData(
                                 customerVal,
                                 customerDataFromDate,
-                                customerDataToDate
+                                customerDataToDate,
                               );
                               openQuotationDrawer();
                             } else {
@@ -3505,7 +3577,7 @@ function CallEntryNew() {
                 </Grid.Col>
                 <Grid gutter="md">
                   <Grid.Col span={4}>
-                    <SearchableSelect
+                    <CustomerNameSelect
                       label="Customer Name"
                       placeholder="Type customer name"
                       apiEndpoint={URL.customer}
@@ -3521,13 +3593,28 @@ function CallEntryNew() {
                           ? selectedCustomerName || null
                           : null
                       }
-                      onChange={(value, selectedData) => {
+                      allowFreeText
+                      selectionType={customerSelection.selectionType}
+                      onCustomerChange={({
+                        value,
+                        customerName,
+                        selectionType,
+                        tempCode,
+                        originalData,
+                      }) => {
                         callEntryForm.setFieldValue("customer", value || "");
-                        // Always call handleCustomerChange to handle both selection and clearing
-                        handleCustomerChange(value || "", selectedData || null);
+                        handleCustomerChange(
+                          value || "",
+                          originalData
+                            ? { ...originalData, label: customerName }
+                            : { label: customerName },
+                          selectionType,
+                          tempCode,
+                        );
                       }}
                       minSearchLength={2}
                       required
+                      error={callEntryForm.errors.customer as string}
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
@@ -3598,7 +3685,7 @@ function CallEntryNew() {
                         const formattedValue = toTitleCase(e.target.value);
                         callEntryForm.setFieldValue(
                           "call_summary",
-                          formattedValue
+                          formattedValue,
                         );
                       }}
                       error={callEntryForm.errors.call_summary}
@@ -3703,7 +3790,7 @@ function CallEntryNew() {
                       // Find the selected follow-up action option
                       const selectedFollowUpAction = followUpAction.find(
                         (option) =>
-                          option.value === callEntryForm.values.followup_action
+                          option.value === callEntryForm.values.followup_action,
                       );
                       const isFollowUpActionClose =
                         selectedFollowUpAction?.label === "Close";
@@ -3719,7 +3806,7 @@ function CallEntryNew() {
                                 // Only allow change if follow-up action is not "Close"
                                 if (!isFollowUpActionClose) {
                                   setCloseCallEntry(
-                                    event.currentTarget.checked
+                                    event.currentTarget.checked,
                                   );
                                 }
                               }}
@@ -3873,10 +3960,14 @@ function CallEntryNew() {
                             },
                           });
                         } else {
-                          console.log("return to =------------",returnTo, routerLocation.state)
+                          console.log(
+                            "return to =------------",
+                            returnTo,
+                            routerLocation.state,
+                          );
                           navigate(returnTo, {
                             state: {
-                              statusFilter:routerLocation.state?.statusFilter
+                              statusFilter: routerLocation.state?.statusFilter,
                             },
                           });
                         }

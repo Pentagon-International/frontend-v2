@@ -139,6 +139,8 @@ type QuotationData = {
   customer_address: string;
   /** From filter quotation response; used when creating booking (shipper/consignee) */
   customer_address_id?: number;
+  /** When true, enquiry uses a temporary customer — booking must be blocked until customer is in master */
+  temp_customer?: boolean;
   service: string;
   cargo_type: string;
   charges: any[];
@@ -2184,6 +2186,15 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       ToastNotification({
         type: "warning",
         message: "Create booking is available only for gained quotations.",
+      });
+      return;
+    }
+
+    if (rowData.temp_customer === true) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Temporary customer detected. Please create the customer in Customer Master before proceeding with the booking.",
       });
       return;
     }
