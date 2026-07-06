@@ -82,7 +82,7 @@ const fetchDaybookCRN = async () => {
 
 const fetchUnitMaster = async () => {
   try {
-    const payload = { filters: { service_type: "AIR" } };
+    const payload = { filters: {} };
     const response = await postAPICall(
       URL.unitMasterFilter,
       payload,
@@ -793,7 +793,7 @@ function InvoiceReverse() {
     staleTime: Infinity,
   });
   const { data: unitData = [] } = useQuery({
-    queryKey: ["unitMaster", "AIR"],
+    queryKey: ["unitMaster", "invoice-reverse"],
     queryFn: fetchUnitMaster,
     staleTime: Infinity,
   });
