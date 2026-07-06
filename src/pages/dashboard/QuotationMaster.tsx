@@ -2194,7 +2194,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       ToastNotification({
         type: "error",
         message:
-          "Temporary customer detected. Please create the customer in Customer Master before proceeding with the booking.",
+          "You are trying to create booking for a Temporary Customer. Please create the customer in Customer Master before proceeding with the booking.",
       });
       return;
     }
