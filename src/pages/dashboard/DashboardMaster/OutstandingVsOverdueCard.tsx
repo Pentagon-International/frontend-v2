@@ -12,8 +12,10 @@ import {
 } from "@tabler/icons-react";
 import {
   getCustomerOutstandingVsOverdueData,
+  getFilteredOutstandingData,
   type CustomerOutstandingVsOverdueResponse,
   type CustomerOutstandingVsOverdueSummary,
+  type FilteredOutstandingResponse,
 } from "../../../service/dashboard.service";
 import useAuthStore from "../../../store/authStore";
 import {
@@ -58,9 +60,96 @@ function readSummaryDays90Plus(
   return typeof v === "string" || typeof v === "number" ? v : undefined;
 }
 
+type CardSummary = {
+  total_outstanding: string | number;
+  total_overdue: string | number;
+  total_overdue_percentage?: string | number;
+  open_invoices?: string | number;
+  customer_count?: string | number;
+  currency?: string;
+  days_1_30?: string | number;
+  days_31_60?: string | number;
+  days_61_90?: string | number;
+  days_90_plus?: string | number;
+};
+
+function aggregateAgingFromFilteredResponse(
+  response: FilteredOutstandingResponse
+): Pick<CardSummary, "days_1_30" | "days_31_60" | "days_61_90" | "days_90_plus"> {
+  let days1_30 = 0;
+  let days31_60 = 0;
+  let days61_90 = 0;
+  let days90Plus = 0;
+
+  response.data?.forEach((location) => {
+    const rows =
+      location.outstanding_data ||
+      (location as { Salesman_outstanding_data?: unknown[] })
+        .Salesman_outstanding_data ||
+      [];
+
+    if (!Array.isArray(rows)) return;
+
+    rows.forEach((row) => {
+      const item = row as Record<string, string | number | undefined>;
+      days1_30 +=
+        toNumber(item.days_0_15) +
+        toNumber(item.days_16_30);
+      days31_60 +=
+        toNumber(item.days_31_45) +
+        toNumber(item.days_46_60);
+      days61_90 += toNumber(item.days_61_90);
+      days90Plus +=
+        toNumber(item.days_91_120) +
+        toNumber(item.days_121_180) +
+        toNumber(item.days_181_365) +
+        toNumber(item.days_366_730) +
+        toNumber(item.days_730);
+    });
+  });
+
+  return {
+    days_1_30: String(days1_30),
+    days_31_60: String(days31_60),
+    days_61_90: String(days61_90),
+    days_90_plus: String(days90Plus),
+  };
+}
+
+function mapFilteredResponseToCardSummary(
+  response: FilteredOutstandingResponse
+): CardSummary {
+  const summary = response.summary;
+  const totalOutstanding =
+    summary?.total_outstanding ?? summary?.local_outstanding ?? "0";
+  const totalOverdue = summary?.total_overdue ?? "0";
+  const outstandingNum = toNumber(totalOutstanding);
+  const overdueNum = toNumber(totalOverdue);
+  const overduePct =
+    outstandingNum > 0 ? (overdueNum / outstandingNum) * 100 : 0;
+
+  let customerCount = 0;
+  response.data?.forEach((location) => {
+    const rows = location.outstanding_data || [];
+    if (Array.isArray(rows)) {
+      customerCount += rows.length;
+    }
+  });
+
+  return {
+    total_outstanding: totalOutstanding,
+    total_overdue: totalOverdue,
+    total_overdue_percentage: overduePct,
+    open_invoices: summary?.total ?? customerCount,
+    customer_count: customerCount,
+    ...aggregateAgingFromFilteredResponse(response),
+  };
+}
+
 const OutstandingVsOverdueCard = ({
   company,
   onViewAll,
+  globalSearch,
 }: OutstandingVsOverdueCardProps) => {
   const user = useAuthStore((state) => state.user);
   const userCountryCode = user?.country?.country_code;
@@ -71,10 +160,11 @@ const OutstandingVsOverdueCard = ({
     formatUserInteger(value, userCountryCode);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [response, setResponse] =
-    useState<CustomerOutstandingVsOverdueResponse | null>(null);
+  const [summary, setSummary] = useState<CardSummary | null>(null);
+  const [asOf, setAsOf] = useState<string>("");
 
-  const summary = response?.summary;
+  const trimmedSearch = globalSearch?.trim() || "";
+
   const displayCurrencyCode = resolveOutstandingDisplayCurrency(
     summary?.currency,
     branchCurrencyCode,
@@ -98,18 +188,32 @@ const OutstandingVsOverdueCard = ({
     if (!company?.trim()) return;
     try {
       setIsLoading(true);
-      const data = await getCustomerOutstandingVsOverdueData({
-        company,
-        summaryCard: true,
-      });
-      setResponse(data);
+
+      if (trimmedSearch) {
+        const filtered = await getFilteredOutstandingData({
+          company,
+          search: trimmedSearch,
+        });
+        setSummary(mapFilteredResponseToCardSummary(filtered));
+        setAsOf("");
+        return;
+      }
+
+      const data: CustomerOutstandingVsOverdueResponse =
+        await getCustomerOutstandingVsOverdueData({
+          company,
+          summaryCard: true,
+        });
+      setSummary(data.summary ?? null);
+      setAsOf(data.as_of || "");
     } catch (error) {
       console.error("Error loading outstanding vs overdue section:", error);
-      setResponse(null);
+      setSummary(null);
+      setAsOf("");
     } finally {
       setIsLoading(false);
     }
-  }, [company]);
+  }, [company, trimmedSearch]);
 
   useEffect(() => {
     void fetchCardData();
@@ -129,7 +233,10 @@ const OutstandingVsOverdueCard = ({
     const overdue = toNumber(summary.total_overdue);
     const currentAmount = Math.max(0, totalOutstanding - overdue);
     const overduePct = toNumber(summary.total_overdue_percentage);
-    const currentPct = Math.max(0, 100 - overduePct);
+    const currentPct =
+      overduePct > 0 ? Math.max(0, 100 - overduePct) : totalOutstanding > 0
+        ? (currentAmount / totalOutstanding) * 100
+        : 0;
 
     return {
       currentAmount,
@@ -305,7 +412,7 @@ const OutstandingVsOverdueCard = ({
 
             <Group justify="space-between" mt="auto" pt={14}>
               <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
-                As of {response?.as_of || "-"}
+                As of {asOf || "-"}
               </Text>
               <Text fz={11} fw={600} c={enquiryConversionColors.subHeading}>
                 {formatCount(summary?.customer_count)} customers

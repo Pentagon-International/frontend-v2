@@ -63,7 +63,18 @@ export const SubNavLink = ({
         </div> : null}
       styles={style}
       onClick={() => {
-        if (
+        const isDashboardOverview =
+          parent === "Dashboard" && label === "Overview" && path === "/";
+
+        if (isDashboardOverview) {
+          setActiveNav(parent);
+          setActiveSubNav(label);
+          setTitle(parent);
+          navigate("/", {
+            state: { resetDashboard: true },
+            replace: pathname === "/",
+          });
+        } else if (
           title !== parent ||
           activeNav !== parent ||
           activeSubNav !== label ||

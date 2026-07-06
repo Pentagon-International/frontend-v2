@@ -23,6 +23,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import {
@@ -270,10 +271,16 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const company =
     routeState.company?.trim() || user?.company?.company_name?.trim() || "PENTAGON INDIA";
 
+  const initialChartSearch =
+    useListFilterStore.getState().registry["dashboard:chart-search"]?.search?.trim() ||
+    "";
+
   const [filters, setFilters] = useState({
     location: routeState.location?.trim() || "",
     salesman: routeState.salesman?.trim() || "",
-    customer_name: routeState.customer_name?.trim() || "",
+    // Dashboard chart search uses `search` only — do not mirror it into `customer_name`.
+    customer_name:
+      initialChartSearch ? "" : routeState.customer_name?.trim() || "",
     risk: routeState.risk?.trim() || "",
   });
 
@@ -343,7 +350,8 @@ export default function CustomerOutstandingVsOverdueDashboard() {
         }),
         ...(filters.location && { location: filters.location }),
         ...(filters.salesman && { salesman: filters.salesman }),
-        ...(filters.customer_name && { customer_name: filters.customer_name }),
+        ...(!committedSearch?.trim() &&
+          filters.customer_name && { customer_name: filters.customer_name }),
         ...(filters.risk && { risk: filters.risk }),
         ...(committedSearch?.trim() && { search: committedSearch.trim() }),
         ...(activeBucketFilter && { [activeBucketFilter]: true }),

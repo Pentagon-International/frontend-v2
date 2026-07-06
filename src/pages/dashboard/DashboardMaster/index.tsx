@@ -683,6 +683,8 @@ const Dashboard = () => {
   const locationStateProcessedRef = useRef<string | null>(null);
   const lastCompanyNameRef = useRef<string | null>(null);
   const lastGlobalSearchRef = useRef<string | undefined>(undefined);
+  const skipDateChangeOnMountRef = useRef(true);
+  const suppressDateChangeEffectRef = useRef(false);
 
   // Email modal states
   const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
@@ -1151,69 +1153,63 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // Handle dashboard reset when logo or dashboard navlink is clicked
-  useEffect(() => {
-    if (location.state?.resetDashboard) {
-      // Check if we're at any drill level or have detailed view open
-      const isAtDrillLevel =
-        drillLevel > 0 ||
-        budgetDrillLevel > 1 ||
-        customerNotVisitedDrillLevel > 0 ||
-        lostCustomerDrillLevel > 0 ||
-        newCustomerDrillLevel > 0 ||
-        detailedViewDrillLevel > 0 ||
-        showDetailedView ||
-        activeTab !== "overall";
-
-      if (isAtDrillLevel) {
-        // Reset to base level
-        resetToInitialState();
-        setShowDetailedView(false);
-        setDetailedViewDrillLevel(0);
-        setActiveTab("overall");
-        setBudgetDrillLevel(1);
-        setCustomerNotVisitedDrillLevel(0);
-        setLostCustomerDrillLevel(0);
-        setNewCustomerDrillLevel(0);
-        setPipelineReportState(null);
+  const resetDashboardDateRangeToDefault = useCallback(() => {
+    const defaultFrom = getDefaultFromDate();
+    const defaultTo = getDefaultToDate();
+    setCustomerInteractionFromDate(defaultFrom);
+    setCustomerInteractionToDate(defaultTo);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          DASHBOARD_DATE_FILTER_STORAGE_KEY,
+          JSON.stringify({
+            fromDate: defaultFrom.toISOString(),
+            toDate: defaultTo.toISOString(),
+          })
+        );
+      } catch {
+        // Ignore storage failures and continue with in-memory state.
       }
-
-      // Clear the location state to prevent re-triggering on re-render
-      window.history.replaceState({}, document.title);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+    return { defaultFrom, defaultTo };
+  }, []);
 
-  // Handle dashboard reset when logo or dashboard navlink is clicked
+  const clearDashboardAppliedFilters = useCallback(() => {
+    lastGlobalSearchRef.current = "";
+    setSearchInputValue("");
+    setGlobalSearch("");
+    useListFilterStore.getState().setSearch("dashboard:chart-search", "");
+    setSearchSalesman("");
+    setSelectedLocation(null);
+    setDropdownOptions([]);
+    return resetDashboardDateRangeToDefault();
+  }, [resetDashboardDateRangeToDefault]);
+
+  // Handle dashboard reset when logo, Dashboard navlink, or Overview sub-nav is clicked
   useEffect(() => {
-    if (location.state?.resetDashboard) {
-      // Check if we're at any drill level or have detailed view open
-      const isAtDrillLevel =
-        drillLevel > 0 ||
-        budgetDrillLevel > 1 ||
-        customerNotVisitedDrillLevel > 0 ||
-        lostCustomerDrillLevel > 0 ||
-        newCustomerDrillLevel > 0 ||
-        detailedViewDrillLevel > 0 ||
-        showDetailedView ||
-        activeTab !== "overall";
+    if (!location.state?.resetDashboard) return;
 
-      if (isAtDrillLevel) {
-        // Reset to base level
-        resetToInitialState();
-        setShowDetailedView(false);
-        setDetailedViewDrillLevel(0);
-        setActiveTab("overall");
-        setBudgetDrillLevel(1);
-        setCustomerNotVisitedDrillLevel(0);
-        setLostCustomerDrillLevel(0);
-        setNewCustomerDrillLevel(0);
-        setPipelineReportState(null);
-      }
+    suppressDateChangeEffectRef.current = true;
+    const { defaultFrom, defaultTo } = clearDashboardAppliedFilters();
 
-      // Clear the location state to prevent re-triggering on re-render
-      window.history.replaceState({}, document.title);
-    }
+    setShowDetailedView(false);
+    setDetailedViewDrillLevel(0);
+    setActiveTab("overall");
+    setBudgetDrillLevel(1);
+    setCustomerNotVisitedDrillLevel(0);
+    setLostCustomerDrillLevel(0);
+    setNewCustomerDrillLevel(0);
+    setPipelineReportState(null);
+
+    void loadInitialData({
+      searchOverride: "",
+      dateFrom: defaultFrom,
+      dateTo: defaultTo,
+    }).finally(() => {
+      suppressDateChangeEffectRef.current = false;
+    });
+
+    window.history.replaceState({}, document.title);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
@@ -1637,11 +1633,16 @@ const Dashboard = () => {
 
   // Effect to trigger API call when date range changes (common for all three sections)
   useEffect(() => {
-    if (customerInteractionFromDate && customerInteractionToDate) {
-      handleCustomerInteractionDateChange();
-      handleEnquiryDateChange();
-      handleCallEntryDateChange();
+    if (!customerInteractionFromDate || !customerInteractionToDate) return;
+    if (suppressDateChangeEffectRef.current) return;
+    // Initial mount is handled by loadInitialData — avoid duplicate API calls.
+    if (skipDateChangeOnMountRef.current) {
+      skipDateChangeOnMountRef.current = false;
+      return;
     }
+    handleCustomerInteractionDateChange();
+    handleEnquiryDateChange();
+    handleCallEntryDateChange();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerInteractionFromDate, customerInteractionToDate]);
 
@@ -1915,10 +1916,14 @@ const Dashboard = () => {
     (
       filters: Omit<CallEntryStatisticsFilters, "date_from" | "date_to" | "search"> & {
         search?: string;
-      }
+      },
+      options?: { searchOverride?: string }
     ): CallEntryStatisticsFilters => ({
       ...filters,
-      search: globalSearch?.trim() || filters.search || "",
+      search:
+        options?.searchOverride !== undefined
+          ? options.searchOverride
+          : globalSearch?.trim() || filters.search || "",
       date_from:
         customerInteractionFromDate != null
           ? dayjs(customerInteractionFromDate).format("DD-MM-YYYY")
@@ -1951,7 +1956,66 @@ const Dashboard = () => {
     [globalSearch, customerInteractionFromDate, customerInteractionToDate]
   );
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (options?: {
+    searchOverride?: string;
+    dateFrom?: Date | null;
+    dateTo?: Date | null;
+  }) => {
+    const effectiveSearch =
+      options?.searchOverride !== undefined
+        ? options.searchOverride
+        : globalSearch?.trim() || "";
+
+    const effectiveFromDate =
+      options?.dateFrom !== undefined
+        ? options.dateFrom
+        : customerInteractionFromDate;
+    const effectiveToDate =
+      options?.dateTo !== undefined
+        ? options.dateTo
+        : customerInteractionToDate;
+
+    const withDashboardSearch = <T extends DashboardFilters>(filters: T): T => {
+      let updatedFilters = { ...filters };
+      if (effectiveSearch) {
+        updatedFilters = { ...updatedFilters, search: effectiveSearch };
+      }
+      if (
+        effectiveFromDate &&
+        effectiveToDate &&
+        !filters.date_from &&
+        !filters.date_to
+      ) {
+        updatedFilters = {
+          ...updatedFilters,
+          date_from: dayjs(effectiveFromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(effectiveToDate).format("YYYY-MM-DD"),
+        };
+      }
+      return updatedFilters as T;
+    };
+
+    const buildCallEntryFilters = (
+      filters: Omit<
+        CallEntryStatisticsFilters,
+        "date_from" | "date_to" | "search"
+      > & { search?: string }
+    ): CallEntryStatisticsFilters => ({
+      ...filters,
+      search:
+        options?.searchOverride !== undefined
+          ? options.searchOverride
+          : globalSearch?.trim() || filters.search || "",
+      date_from:
+        effectiveFromDate != null
+          ? dayjs(effectiveFromDate).format("DD-MM-YYYY")
+          : "",
+      date_to:
+        effectiveToDate != null
+          ? dayjs(effectiveToDate).format("DD-MM-YYYY")
+          : "",
+    });
+
     // Prevent duplicate concurrent calls
     if (isLoadingRef.current) {
       console.log(
@@ -1996,12 +2060,11 @@ const Dashboard = () => {
       // If one fails, others can still succeed and display their data
       const results = await Promise.allSettled([
         // Use filtered API call with company name to get location data directly
-        // Outstanding should NOT be impacted by the dashboard search bar.
-        getFilteredOutstandingData({ company: companyName }),
+        getFilteredOutstandingData(withDashboardSearch({ company: companyName })),
         // Use filtered API call with company name for budget data
         companyName
           ? getFilteredBudgetData(
-              addSearchToFilters({
+              withDashboardSearch({
                 ...budgetPayload,
                 company: companyName,
               } as any)
@@ -2009,41 +2072,37 @@ const Dashboard = () => {
           : "",
         // Customer Interaction Status Summary (replaces individual customer data calls)
         // Updated to use date range instead of period
-        customerInteractionFromDate && customerInteractionToDate
+        effectiveFromDate && effectiveToDate
           ? getCustomerInteractionStatusSummary({
               company: companyName,
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-              search: globalSearch?.trim() || "",
+              date_from: dayjs(effectiveFromDate).format("DD-MM-YYYY"),
+              date_to: dayjs(effectiveToDate).format("DD-MM-YYYY"),
+              search: effectiveSearch,
             })
           : getCustomerInteractionStatusSummary({
               company: companyName,
               period: customerInteractionPeriod,
-              search: globalSearch?.trim() || "",
+              search: effectiveSearch,
             }),
         // Enquiry conversion overview — POST enquiry/enquiryconversion/ only (needs date range)
         (async () => {
-          if (customerInteractionFromDate && customerInteractionToDate) {
+          if (effectiveFromDate && effectiveToDate) {
             return await getEnquiryConversionDashboardData({
               company: companyName,
-              date_from: dayjs(customerInteractionFromDate).format(
-                "DD-MM-YYYY"
-              ),
-              date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-              search: globalSearch?.trim() || null,
+              date_from: dayjs(effectiveFromDate).format("DD-MM-YYYY"),
+              date_to: dayjs(effectiveToDate).format("DD-MM-YYYY"),
+              search: effectiveSearch || null,
             });
           }
           return null;
         })(),
         // Call entry overview — POST call-entry/data/
         (async () => {
-          if (!customerInteractionFromDate || !customerInteractionToDate) {
+          if (!effectiveFromDate || !effectiveToDate) {
             return null;
           }
           return await getCallEntryDashboardData(
-            addSearchToCallEntryFilters({
+            buildCallEntryFilters({
               company: companyName,
             }) as CallEntryDashboardFilters
           );
@@ -2273,7 +2332,7 @@ const Dashboard = () => {
           company: companyNameForEnquiry,
           date_from: dayjs(customerInteractionFromDate).format("DD-MM-YYYY"),
           date_to: dayjs(customerInteractionToDate).format("DD-MM-YYYY"),
-          search: globalSearch?.trim() || null,
+          search: null,
         });
         setEnquiryConversionAggregatedData(
           resolveEnquiryConversionAggregatedFromResponse(enquiryResponse)
@@ -2287,7 +2346,6 @@ const Dashboard = () => {
         );
         setEnquiryConversionOverviewMeta({});
       }
-      // Don't reset period here - preserve user's selected period
 
       if (callEntryData.length > 0) {
         const aggregatedCallEntry =
@@ -2341,7 +2399,6 @@ const Dashboard = () => {
         company: companyName,
         location: selectedLocation || null,
         salesman: searchSalesman || null,
-        customer_name: globalSearch?.trim() || null,
       },
     });
   };
