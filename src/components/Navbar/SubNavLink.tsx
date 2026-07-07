@@ -70,6 +70,13 @@ export const SubNavLink = ({
           setActiveNav(parent);
           setActiveSubNav(label);
           setTitle(parent);
+          setOpenCollapsible("Dashboard", false);
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
+          setOpenCollapsible("Accounts", false);
+          setOpenCollapsible("Finance Dashboard", false);
           navigate("/", {
             state: { resetDashboard: true },
             replace: pathname === "/",

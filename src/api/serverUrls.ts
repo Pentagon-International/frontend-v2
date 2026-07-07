@@ -151,6 +151,10 @@ export const URL = {
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMaster: "gst-sac-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
+  vatMaster: "vat-master/",
+  vatMasterFilter: "filter/vat-master/",
+  vatChargeMapping: "vat-charge-mapping/",
+  vatChargeMappingFilter: "filter/vat-charge-mapping/",
   invoice: "invoice/",
   invoiceFilter: "filter/invoice/",
   /** Unified unposted / finance document list (POST body: `{ filters: { status, ... } }`). */

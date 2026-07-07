@@ -103,6 +103,8 @@ export const SimpleNavLink = ({
     setOpenCollapsible("Customer Service", false);
     setOpenCollapsible("Tariff", false);
     setOpenCollapsible("Accounts", false);
+    setOpenCollapsible("Dashboard", false);
+    setOpenCollapsible("Finance Dashboard", false);
   };
   const iconColor = sectionIconColors[label] || "white";
   const iconBackground = sectionIconBackground[label] || "#105476";

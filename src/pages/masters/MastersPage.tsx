@@ -214,6 +214,18 @@ export default function MastersPage() {
             icon: <IconLink size={28} color="#105476" />,
             label: "GST Charge Mapping",
           },
+          ...(!isIndiaUser
+            ? [
+                {
+                  icon: <IconPercentage size={28} color="#105476" />,
+                  label: "VAT Master",
+                },
+                {
+                  icon: <IconLink size={28} color="#105476" />,
+                  label: "VAT-Charge Mapping",
+                },
+              ]
+            : []),
         ],
       },
     ],

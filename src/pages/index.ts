@@ -176,6 +176,10 @@ import GSTSACCreate from "./masters/gst-sac/GSTSACCreate";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
 import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
 import GSTChargeMappingCreate from "./masters/gst-charge-mapping/GSTChargeMappingCreate";
+import VatChargeMappingMaster from "./masters/vat-charge-mapping/VatChargeMappingMaster";
+import VatChargeMappingCreate from "./masters/vat-charge-mapping/VatChargeMappingCreate";
+import VatMasterMaster from "./masters/vat-master/VatMasterMaster";
+import VatMasterCreate from "./masters/vat-master/VatMasterCreate";
 import CFSMaster from "./masters/cfs/CFSMaster";
 import CFSCreate from "./masters/cfs/CFSCreate";
 
@@ -279,6 +283,10 @@ export {
   GSTRateMaster,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
+  VatChargeMappingMaster,
+  VatChargeMappingCreate,
+  VatMasterMaster,
+  VatMasterCreate,
   CFSMaster,
   CFSCreate,
   QuotationCreate,

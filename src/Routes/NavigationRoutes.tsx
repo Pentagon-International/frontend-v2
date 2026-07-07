@@ -94,6 +94,10 @@ import {
   GSTRateMaster,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
+  VatChargeMappingMaster,
+  VatChargeMappingCreate,
+  VatMasterMaster,
+  VatMasterCreate,
   CFSMaster,
   CFSCreate,
   ExportShipmentMaster,
@@ -1194,6 +1198,18 @@ const NavigationRoutes = () => {
             <Route index element={<GSTChargeMappingMaster />} />
             <Route path="create" element={<GSTChargeMappingCreate />} />
             <Route path="edit" element={<GSTChargeMappingCreate />} />
+          </Route>
+
+          <Route path="vat-charge-mapping">
+            <Route index element={<VatChargeMappingMaster />} />
+            <Route path="create" element={<VatChargeMappingCreate />} />
+            <Route path="edit" element={<VatChargeMappingCreate />} />
+          </Route>
+
+          <Route path="vat-master">
+            <Route index element={<VatMasterMaster />} />
+            <Route path="create" element={<VatMasterCreate />} />
+            <Route path="edit" element={<VatMasterCreate />} />
           </Route>
         </Route>
       </Route>

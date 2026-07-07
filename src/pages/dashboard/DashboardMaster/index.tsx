@@ -444,7 +444,7 @@ const Dashboard = () => {
   const [originalCompanies, setOriginalCompanies] = useState<string[]>([]);
   const [originalLocations, setOriginalLocations] = useState<string[]>([]);
 
-  const [filterOpened, setFilterOpened] = useState(false);
+  const [dateRangeInputKey, setDateRangeInputKey] = useState(0);
 
   // Filter states
   const [searchSalesman, setSearchSalesman] = useState("");
@@ -1191,6 +1191,15 @@ const Dashboard = () => {
 
     suppressDateChangeEffectRef.current = true;
     const { defaultFrom, defaultTo } = clearDashboardAppliedFilters();
+
+    setDateRangeInputKey((key) => key + 1);
+    setOpenCollapsible("Dashboard", false);
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
+    }
 
     setShowDetailedView(false);
     setDetailedViewDrillLevel(0);
@@ -7882,6 +7891,7 @@ const Dashboard = () => {
                   }}
                 >
                   <DateRangeInput
+                    key={dateRangeInputKey}
                     fromDate={customerInteractionFromDate}
                     toDate={customerInteractionToDate}
                     onFromDateChange={setCustomerInteractionFromDate}
