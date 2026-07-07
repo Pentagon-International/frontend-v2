@@ -82,6 +82,9 @@ import {
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
+import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import {
@@ -2064,7 +2067,11 @@ function AirExportJobCreate() {
 
   // Helper function to navigate to HAWBCreate
   const navigateToHawbCreate = useCallback(
-    (editIndex?: number, editData?: HAWBDetail) => {
+    (
+      editIndex?: number,
+      editData?: HAWBDetail,
+      options?: { openEventsModal?: boolean },
+    ) => {
       // Prevent multiple navigations
       if (navigationInProgressRef.current) {
         console.log("⚠️ Navigation already in progress, skipping...");
@@ -2141,6 +2148,7 @@ function AirExportJobCreate() {
           estimates: estimatesForm.values.estimates,
           cargoDetails: cargoDetailsForm.values,
           ...jobDocuments.getNavigationState(),
+          ...(options?.openEventsModal && { openEventsModal: true }),
         },
       });
 
@@ -2167,6 +2175,10 @@ function AirExportJobCreate() {
   const handleEditHawbDetail = (index: number) => {
     const hawbToEdit = hawbDetails[index];
     navigateToHawbCreate(index, hawbToEdit);
+  };
+
+  const handleOpenHouseEvents = (index: number) => {
+    navigateToHawbCreate(index, hawbDetails[index], { openEventsModal: true });
   };
 
   // Cargo manifest PDF preview handlers
@@ -5567,6 +5579,20 @@ function AirExportJobCreate() {
                             )}
                           </>
                         )}
+                        <HouseEventsMenuItem
+                          onClick={() => handleOpenHouseEvents(index)}
+                        />
+                        <HouseCreateAgentInvoiceMenuItem
+                          invoicePath="/air/export-job/invoice"
+                          serviceType="AIR"
+                          getCurrentHousingDetail={() => hawb}
+                          jobId={jobData?.id}
+                        />
+                        <HouseJobLedgerMenuItem
+                          serviceName="Air Export"
+                          getHouseDetail={() => hawb}
+                          jobId={jobData?.job_id}
+                        />
                       </Menu.Dropdown>
                     </Menu>
                   </Group>

@@ -89,6 +89,9 @@ import {
   ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
 } from "../../../utils/branchOdexCredentials";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
+import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import {
@@ -2208,7 +2211,11 @@ function ImportJobCreate() {
 
   // Helper function to navigate to HouseCreate with container numbers
   const navigateToHouseCreate = useCallback(
-    (editIndex?: number, editData?: HousingDetail) => {
+    (
+      editIndex?: number,
+      editData?: HousingDetail,
+      options?: { openEventsModal?: boolean },
+    ) => {
       // Validate MBL mandatory fields before navigating
       const missingFields: string[] = [];
 
@@ -2294,6 +2301,7 @@ function ImportJobCreate() {
           // NEW: preserve master-level estimates when going to HouseCreate
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
+          ...(options?.openEventsModal && { openEventsModal: true }),
         },
       });
     },
@@ -2314,6 +2322,12 @@ function ImportJobCreate() {
   const handleEditHousingDetail = (index: number) => {
     const houseToEdit = housingDetails[index];
     navigateToHouseCreate(index, houseToEdit);
+  };
+
+  const handleOpenHouseEvents = (index: number) => {
+    navigateToHouseCreate(index, housingDetails[index], {
+      openEventsModal: true,
+    });
   };
 
   // Check if all requirements are met for Create button
@@ -3258,106 +3272,6 @@ function ImportJobCreate() {
                     },
                   }}
                 >
-                  <Menu.Label
-                    styles={{
-                      label: {
-                        fontFamily: "Inter",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        color: "#6B7280",
-                        marginBottom: "6px",
-                      },
-                    }}
-                  >
-                    Preview PDF
-                  </Menu.Label>
-
-                  {housingDetails.map((housing, idx) => (
-                    <Menu.Item
-                      key={idx}
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
-                            borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconEye size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
-                          },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() =>
-                        generateCargoArrivalNoticePDFPreview(housing)
-                      }
-                    >
-                      Cargo Arrival Notice -{" "}
-                      {housing.hbl_number || `HBL ${idx + 1}`}
-                    </Menu.Item>
-                  ))}
-                  <Menu.Divider />
-                  {housingDetails.map((housing, idx) => (
-                    <Menu.Item
-                      key={`do-${idx}`}
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
-                            borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconEye size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
-                          },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() => openDoConfigModal(housing)}
-                    >
-                      Delivery Order - {housing.hbl_number || `HBL ${idx + 1}`}
-                    </Menu.Item>
-                  ))}
                   <Menu.Item
                     leftSection={
                       <Box
@@ -6412,6 +6326,20 @@ function ImportJobCreate() {
                           >
                             Delivery Order
                           </Menu.Item>
+                          <HouseEventsMenuItem
+                            onClick={() => handleOpenHouseEvents(index)}
+                          />
+                          <HouseCreateAgentInvoiceMenuItem
+                            invoicePath="/SeaExport/import-job/invoice"
+                            serviceType={mblDetailsForm.values.service || "FCL"}
+                            getCurrentHousingDetail={() => house}
+                            jobId={jobData?.id}
+                          />
+                          <HouseJobLedgerMenuItem
+                            serviceName="Ocean Import"
+                            getHouseDetail={() => house}
+                            jobId={jobData?.job_id}
+                          />
                         </Menu.Dropdown>
                       </Menu>
                     </Group>

@@ -94,6 +94,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -965,6 +966,40 @@ function HouseCreate() {
       setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
     }
   }, [isEditMode, editData, form]);
+
+  const openEventsModalFromMenu = useCallback(() => {
+    const existing =
+      form.values.events.length > 0
+        ? form.values.events
+        : resolveHousingEventsForHouseForm(
+            location.state?.job,
+            editData,
+            editIndex,
+          );
+    if (existing.length > 0) {
+      form.setFieldValue("events", existing);
+      form.setFieldValue("event_modal_rows", [
+        ...existing.map((e) => ({
+          id: e.id,
+          eventType: e.type,
+          eventDate: e.date ? new Date(String(e.date)) : null,
+        })),
+        { id: undefined, eventType: null, eventDate: null },
+      ]);
+    } else {
+      form.setFieldValue("event_modal_rows", [
+        { id: undefined, eventType: null, eventDate: null },
+      ]);
+    }
+    setEventsModalOpen(true);
+  }, [editData, editIndex, form, location.state?.job]);
+
+  useEffect(() => {
+    if (location.state?.openEventsModal) {
+      openEventsModalFromMenu();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addEventRow = () => {
     form.insertListItem("event_modal_rows", {
@@ -3060,77 +3095,6 @@ function HouseCreate() {
                       justifyContent: "center",
                     }}
                   >
-                    <IconCalendar size={16} color="#105476" />
-                  </Box>
-                }
-                styles={{
-                  item: {
-                    fontFamily: "Inter",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    borderRadius: "6px",
-                    padding: "10px 12px",
-                    marginBottom: "4px",
-                    "&:hover": {
-                      backgroundColor: "#F8F9FA",
-                    },
-                  },
-                  itemLabel: {
-                    fontFamily: "Inter",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                  },
-                }}
-                onClick={() => {
-                  const existing =
-                    form.values.events.length > 0
-                      ? form.values.events
-                      : resolveHousingEventsForHouseForm(
-                          location.state?.job,
-                          editData,
-                          editIndex,
-                        );
-                  if (existing.length > 0) {
-                    form.setFieldValue("events", existing);
-                    form.setFieldValue("event_modal_rows", [
-                      ...existing.map((e) => ({
-                        id: e.id,
-                        eventType: e.type,
-                        eventDate: e.date ? new Date(String(e.date)) : null,
-                      })),
-                      { id: undefined, eventType: null, eventDate: null },
-                    ]);
-                  } else {
-                    form.setFieldValue("event_modal_rows", [
-                      { id: undefined, eventType: null, eventDate: null },
-                    ]);
-                  }
-                  setEventsModalOpen(true);
-                }}
-              >
-                Events
-              </Menu.Item>
-
-              <HouseCreateAgentInvoiceMenuItem
-                invoicePath="/SeaExport/import-job/invoice"
-                serviceType={location.state?.mblDetails?.service || "FCL"}
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-              />
-
-              <Menu.Item
-                leftSection={
-                  <Box
-                    style={{
-                      backgroundColor: "#E7F5FF",
-                      borderRadius: "6px",
-                      padding: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
                     <IconEye size={16} color="#105476" />
                   </Box>
                 }
@@ -3195,6 +3159,56 @@ function HouseCreate() {
               >
                 Delivery Order
               </Menu.Item>
+              <Menu.Item
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconCalendar size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
+                onClick={openEventsModalFromMenu}
+              >
+                Events
+              </Menu.Item>
+
+              <HouseCreateAgentInvoiceMenuItem
+                invoicePath="/SeaExport/import-job/invoice"
+                serviceType={location.state?.mblDetails?.service || "FCL"}
+                getCurrentHousingDetail={getCurrentHousingDetail}
+                jobId={location.state?.job?.id}
+              />
+
+              <HouseJobLedgerMenuItem
+                serviceName="Ocean Import"
+                getHouseDetail={getCurrentHousingDetail}
+              />
             </Menu.Dropdown>
           </Menu>
         </Group>

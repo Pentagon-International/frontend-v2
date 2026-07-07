@@ -81,6 +81,9 @@ import {
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
+import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import {
@@ -2169,7 +2172,11 @@ function AirImportJobCreate() {
 
   // Helper function to navigate to HAWBCreate
   const navigateToHawbCreate = useCallback(
-    (editIndex?: number, editData?: HAWBDetail) => {
+    (
+      editIndex?: number,
+      editData?: HAWBDetail,
+      options?: { openEventsModal?: boolean },
+    ) => {
       // Prevent multiple navigations
       if (navigationInProgressRef.current) {
         console.log("⚠️ Navigation already in progress, skipping...");
@@ -2288,6 +2295,7 @@ function AirImportJobCreate() {
           // Preserve current Estimates so they can be restored after saving house
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
+          ...(options?.openEventsModal && { openEventsModal: true }),
         },
       });
 
@@ -2313,6 +2321,10 @@ function AirImportJobCreate() {
   const handleEditHawbDetail = (index: number) => {
     const hawbToEdit = hawbDetails[index];
     navigateToHawbCreate(index, hawbToEdit);
+  };
+
+  const handleOpenHouseEvents = (index: number) => {
+    navigateToHawbCreate(index, hawbDetails[index], { openEventsModal: true });
   };
 
   // Check if all requirements are met for Create button
@@ -3233,102 +3245,6 @@ function AirImportJobCreate() {
                     },
                   }}
                 >
-                  {hawbDetails.map((hawb, idx) => (
-                    <Menu.Item
-                      key={idx}
-                      leftSection={
-                        <Box
-                          style={{
-                            backgroundColor: "#E7F5FF",
-                            borderRadius: "6px",
-                            padding: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <IconEye size={16} color="#105476" />
-                        </Box>
-                      }
-                      styles={{
-                        item: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          borderRadius: "6px",
-                          padding: "10px 12px",
-                          marginBottom: "4px",
-                          "&:hover": {
-                            backgroundColor: "#F8F9FA",
-                          },
-                        },
-                        itemLabel: {
-                          fontFamily: "Inter",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#424242",
-                        },
-                      }}
-                      onClick={() => generateCargoArrivalNoticePDFPreview(hawb)}
-                    >
-                      Cargo Arrival Notice -{" "}
-                      {hawb.hawb_number || `HAWB ${idx + 1}`}
-                    </Menu.Item>
-                  ))}
-
-                  <Menu.Divider
-                    styles={{
-                      divider: {
-                        margin: "6px 0",
-                        borderColor: "#E9ECEF",
-                      },
-                    }}
-                  />
-
-                  <Menu.Item
-                    leftSection={
-                      <Box
-                        style={{
-                          backgroundColor: "#E7F5FF",
-                          borderRadius: "6px",
-                          padding: "6px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <IconEye size={16} color="#105476" />
-                      </Box>
-                    }
-                    styles={{
-                      item: {
-                        fontFamily: "Inter",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        borderRadius: "6px",
-                        padding: "10px 12px",
-                        marginBottom: "4px",
-                        "&:hover": {
-                          backgroundColor: "#F8F9FA",
-                        },
-                      },
-                      itemLabel: {
-                        fontFamily: "Inter",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#424242",
-                      },
-                    }}
-                    onClick={() => {
-                      ToastNotification({
-                        type: "info",
-                        message: "Delivery Order preview coming soon",
-                      });
-                    }}
-                  >
-                    Deliver Order
-                  </Menu.Item>
-
                   {jobData?.id != null && (
                     <>
                       <Menu.Item
@@ -6049,6 +5965,20 @@ function AirImportJobCreate() {
                           >
                             Deliver Order
                           </Menu.Item>
+                          <HouseEventsMenuItem
+                            onClick={() => handleOpenHouseEvents(index)}
+                          />
+                          <HouseCreateAgentInvoiceMenuItem
+                            invoicePath="/air/import-job/invoice"
+                            serviceType="AIR"
+                            getCurrentHousingDetail={() => hawb}
+                            jobId={jobData?.id}
+                          />
+                          <HouseJobLedgerMenuItem
+                            serviceName="Air Import"
+                            getHouseDetail={() => hawb}
+                            jobId={jobData?.job_id}
+                          />
                         </Menu.Dropdown>
                       </Menu>
                     </Group>

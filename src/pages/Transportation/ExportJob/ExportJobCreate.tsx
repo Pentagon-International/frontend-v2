@@ -90,6 +90,9 @@ import {
   type PartyAddressOption,
 } from "../JobMasterPartyDetailsPanel";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
+import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
+import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import {
@@ -2424,7 +2427,11 @@ function ExportJobCreate() {
 
   // Helper function to navigate to HouseCreate with container numbers
   const navigateToHouseCreate = useCallback(
-    (editIndex?: number, editData?: HousingDetail) => {
+    (
+      editIndex?: number,
+      editData?: HousingDetail,
+      options?: { openEventsModal?: boolean },
+    ) => {
       // Validate MBL mandatory fields before navigating
       const missingFields: string[] = [];
 
@@ -2514,6 +2521,7 @@ function ExportJobCreate() {
           // NEW: preserve master-level estimates when going to HouseCreate
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
+          ...(options?.openEventsModal && { openEventsModal: true }),
         },
       });
     },
@@ -2533,6 +2541,12 @@ function ExportJobCreate() {
   const handleEditHousingDetail = (index: number) => {
     const houseToEdit = housingDetails[index];
     navigateToHouseCreate(index, houseToEdit);
+  };
+
+  const handleOpenHouseEvents = (index: number) => {
+    navigateToHouseCreate(index, housingDetails[index], {
+      openEventsModal: true,
+    });
   };
 
   // Check if all requirements are met for Create button
@@ -5822,6 +5836,20 @@ function ExportJobCreate() {
                             >
                               Proforma
                             </Menu.Item>
+                            <HouseEventsMenuItem
+                              onClick={() => handleOpenHouseEvents(index)}
+                            />
+                            <HouseCreateAgentInvoiceMenuItem
+                              invoicePath="/SeaExport/export-job/invoice"
+                              serviceType={mblDetailsForm.values.service || "FCL"}
+                              getCurrentHousingDetail={() => house}
+                              jobId={jobData?.id}
+                            />
+                            <HouseJobLedgerMenuItem
+                              serviceName="Ocean Export"
+                              getHouseDetail={() => house}
+                              jobId={jobData?.job_id}
+                            />
                           </Menu.Dropdown>
                         </Menu>
                       )}
