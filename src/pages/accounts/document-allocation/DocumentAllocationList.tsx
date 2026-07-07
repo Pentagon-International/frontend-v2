@@ -44,6 +44,7 @@ import {
   ERPListTableLoading,
   SingleDateInput,
   ToastNotification,
+  SearchableSelect,
   erpListFilterFieldCellStyle,
   erpListFilterUnifiedMantineStyles,
   erpListGeistMantineTheme,
@@ -101,14 +102,18 @@ type DocumentAllocationListResponse = {
 };
 
 type FilterState = {
+  account_id: string | null;
   account_code: string | null;
+  account_name: string | null;
   subledger_code: string | null;
   allocation_date: Date | null;
   document_status: string | null;
 };
 
 const EMPTY_FILTERS: FilterState = {
+  account_id: null,
   account_code: null,
+  account_name: null,
   subledger_code: null,
   allocation_date: null,
   document_status: null,
@@ -177,7 +182,9 @@ const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions(
   const goToDocumentAllocation = (mode: "view" | "edit") => {
     setMenuOpened(false);
     setStoreFilters(LIST_KEY, {
+      account_id: appliedFilters.account_id,
       account_code: appliedFilters.account_code,
+      account_name: appliedFilters.account_name,
       subledger_code: appliedFilters.subledger_code,
       allocation_date: appliedFilters.allocation_date,
       document_status: appliedFilters.document_status,
@@ -250,7 +257,7 @@ export default function DocumentAllocationList() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [draftFilters, setDraftFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
@@ -286,7 +293,9 @@ export default function DocumentAllocationList() {
     if (stored?.filters && typeof stored.filters === "object") {
       const raw = stored.filters as Record<string, unknown>;
       const next: FilterState = {
+        account_id: raw.account_id != null ? String(raw.account_id) : null,
         account_code: raw.account_code != null ? String(raw.account_code) : null,
+        account_name: raw.account_name != null ? String(raw.account_name) : null,
         subledger_code: raw.subledger_code != null ? String(raw.subledger_code) : null,
         allocation_date: raw.allocation_date
           ? new Date(String(raw.allocation_date))
@@ -787,17 +796,46 @@ export default function DocumentAllocationList() {
               <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
-                    <FormTextInput
-                      label="Account Code"
-                      placeholder="Enter account code"
-                      size="xs"
-                      value={draftFilters.account_code || ""}
-                      onChange={(e) =>
+                    <SearchableSelect
+                      label="Account"
+                      placeholder="Search account..."
+                      apiEndpoint={URL.chartOfAccounts}
+                      value={draftFilters.account_id}
+                      displayValue={
+                        draftFilters.account_name
+                          ? draftFilters.account_code
+                            ? `${draftFilters.account_name} (${draftFilters.account_code})`
+                            : draftFilters.account_name
+                          : undefined
+                      }
+                      onChange={(val, _option, originalData) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          account_code: e.currentTarget.value || null,
+                          account_id: val || null,
+                          account_code:
+                            originalData?.gl_account_code != null
+                              ? String(originalData.gl_account_code)
+                              : null,
+                          account_name:
+                            originalData?.account_name != null
+                              ? String(originalData.account_name)
+                              : null,
                         }))
                       }
+                      dropdownZIndex={1100}
+                      minSearchLength={1}
+                      size="xs"
+                      searchFields={["gl_account_code", "account_name", "id"]}
+                      displayFormat={(item: Record<string, unknown>) => {
+                        const id = String(item.id ?? "").trim();
+                        const code = String(item.gl_account_code ?? "").trim();
+                        const name = String(item.account_name ?? "").trim();
+                        return {
+                          value: id,
+                          label: name ? `${name} (${code})` : code || id,
+                        };
+                      }}
+                      returnOriginalData
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
                     />

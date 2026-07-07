@@ -99,11 +99,25 @@ type VatRates = {
   vat_percent: number | null;
 };
 
-const fetchGstRatesByStateSac = async (payload: {
-  state_id: number;
-  sac_code: string;
-}) => {
+const fetchGstRatesByStateSac = async (
+  payload:
+    | { state_id: number; sac_code: string }
+    | { vat: true; charge_id: number; service_id: number },
+) => {
   return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
+};
+
+const parseVatRatesPayload = (res: unknown): VatRates | null => {
+  const resObj = res as {
+    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as GstRatesBySacResponse | null | undefined;
+  const vatRaw = data?.vat_percent;
+  if (vatRaw == null || vatRaw === "") return { vat_percent: null };
+  const parsed = Number(vatRaw);
+  return { vat_percent: Number.isFinite(parsed) ? parsed : null };
 };
 
 const parseGstRatesPayload = (res: unknown): GstRates | null => {
@@ -2147,6 +2161,41 @@ function InvoiceCreate({
                     form.setFieldValue(
                       `charges.${originalIdx}.tax_code`,
                       item.sac_code,
+                    );
+                  }
+                });
+              });
+            }
+
+            if (
+              isVatInvoiceUser &&
+              jobServiceIdForSac &&
+              mappedCharges.some((c: ChargeItem) => c.charge_id != null)
+            ) {
+              const chargesWithIds = mappedCharges
+                .map((c, idx) => ({ charge: c, originalIdx: idx }))
+                .filter(({ charge }) => charge.charge_id != null);
+
+              Promise.all(
+                chargesWithIds.map(({ charge }) =>
+                  fetchGstRatesByStateSac({
+                    vat: true,
+                    charge_id: charge.charge_id!,
+                    service_id: jobServiceIdForSac,
+                  }).then((res) => ({
+                    rates: parseVatRatesPayload(res),
+                  })),
+                ),
+              ).then((results) => {
+                results.forEach(({ rates }, responseIdx) => {
+                  const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+                  if (
+                    originalIdx !== undefined &&
+                    rates?.vat_percent != null
+                  ) {
+                    form.setFieldValue(
+                      `charges.${originalIdx}.tax_rate`,
+                      rates.vat_percent,
                     );
                   }
                 });
@@ -4830,6 +4879,9 @@ function InvoiceCreate({
                             chargeName,
                           );
                           form.setFieldValue(`charges.${index}.tax_code`, "");
+                          if (isVatInvoiceUser) {
+                            form.setFieldValue(`charges.${index}.tax_rate`, null);
+                          }
                           if (chargeErrors[index]?.charge_name) {
                             const newErrors = { ...chargeErrors };
                             if (newErrors[index]) {
@@ -4862,6 +4914,29 @@ function InvoiceCreate({
                                 );
                               }
                             });
+                          }
+                          if (
+                            chargeId != null &&
+                            jobServiceId != null &&
+                            isVatInvoiceUser
+                          ) {
+                            fetchGstRatesByStateSac({
+                              vat: true,
+                              charge_id: chargeId,
+                              service_id: jobServiceId,
+                            })
+                              .then((res) => {
+                                const rates = parseVatRatesPayload(res);
+                                if (rates?.vat_percent != null) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_rate`,
+                                    rates.vat_percent,
+                                  );
+                                }
+                              })
+                              .catch(() => {
+                                /* ignore fetch errors on charge select */
+                              });
                           }
                         }}
                         withAsterisk
