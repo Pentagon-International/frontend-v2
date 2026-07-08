@@ -11,7 +11,6 @@ import {
   Box,
   Button,
   Card,
-  Flex,
   Group,
   Menu,
   Text,
@@ -34,14 +33,72 @@ import { useQuery } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 
-type GSTRateMaster = {
-  id?: string;
-  rate_code?: string;
-  rate_percentage?: number;
-  effective_from?: string;
-  effective_to?: string;
-  status?: "ACTIVE" | "INACTIVE";
+type GSTRateStateItem = {
+  id?: number;
+  state_id?: number;
+  state_name?: string;
+  state_code?: string;
+  cgst?: string;
+  sgst?: string;
+  igst?: string;
 };
+
+type GSTRateApiItem = {
+  sno?: number;
+  id?: number;
+  sac_id?: number;
+  sac_code?: string;
+  sac_name?: string;
+  status?: "ACTIVE" | "INACTIVE" | string;
+  rate?: GSTRateStateItem[];
+};
+
+/** One table row per nested rate; SAC fields repeated for each state rate */
+type GSTRateMasterRow = {
+  sno: number;
+  id?: number;
+  rate_id?: number;
+  sac_id?: number;
+  sac_code?: string;
+  sac_name?: string;
+  state_name?: string;
+  cgst?: string;
+  sgst?: string;
+  igst?: string;
+  status?: "ACTIVE" | "INACTIVE" | string;
+  /** Parent SAC/rate master record for edit navigation */
+  _parent: GSTRateApiItem;
+};
+
+function flattenGSTRateRows(
+  items: GSTRateApiItem[],
+  pageStartIndex: number,
+): GSTRateMasterRow[] {
+  let rowIndex = 0;
+  return items.flatMap((item) => {
+    const rates =
+      Array.isArray(item.rate) && item.rate.length > 0
+        ? item.rate
+        : [undefined];
+    return rates.map((rate) => {
+      rowIndex += 1;
+      return {
+        sno: pageStartIndex + rowIndex,
+        id: item.id,
+        rate_id: rate?.id,
+        sac_id: item.sac_id,
+        sac_code: item.sac_code ?? "",
+        sac_name: item.sac_name ?? "",
+        state_name: rate?.state_name ?? "-",
+        cgst: rate?.cgst ?? "-",
+        sgst: rate?.sgst ?? "-",
+        igst: rate?.igst ?? "-",
+        status: item.status,
+        _parent: item,
+      };
+    });
+  });
+}
 
 export default function GSTRateMasterList() {
   const isAdmin = useIsAdminUser();
@@ -76,7 +133,7 @@ export default function GSTRateMasterList() {
     refetch: refetchGSTRate,
   } = useQuery({
     queryKey: ["gst-rate", pagination.pageIndex, pagination.pageSize],
-    queryFn: async () => {
+    queryFn: async (): Promise<GSTRateMasterRow[]> => {
       try {
         const index = pagination.pageIndex * pagination.pageSize;
         const response = await apiCallProtected.post(
@@ -84,10 +141,13 @@ export default function GSTRateMasterList() {
           {}
         );
 
-        const data = response as any;
+        const data = response as {
+          total?: number;
+          data?: GSTRateApiItem[];
+        };
         if (data && Array.isArray(data.data)) {
           setTotalRecords(data.total || data.data.length);
-          return data.data;
+          return flattenGSTRateRows(data.data, index);
         }
         setTotalRecords(0);
         return [];
@@ -111,7 +171,7 @@ export default function GSTRateMasterList() {
     }
   }, [location.state?.refreshData, refetchGSTRate, navigate, location.pathname]);
 
-  const columns = useMemo<MRT_ColumnDef<GSTRateMaster>[]>(
+  const columns = useMemo<MRT_ColumnDef<GSTRateMasterRow>[]>(
     () => [
       {
         accessorKey: "sno",
@@ -122,65 +182,67 @@ export default function GSTRateMasterList() {
         enableColumnFilter: false,
         enableSorting: false,
       },
-      { accessorKey: "rate_code", header: "Rate Code", size: 120 },
-      {
-        accessorKey: "rate_percentage",
-        header: "Rate (%)",
-        size: 100,
-        Cell: ({ cell }) => {
-          const value = cell.getValue<number>();
-          return value ? `${value}%` : "-";
-        },
-      },
-      { accessorKey: "effective_from", header: "Effective From", size: 130 },
-      { accessorKey: "effective_to", header: "Effective To", size: 130 },
+      { accessorKey: "sac_code", header: "SAC Code", size: 120 },
+      { accessorKey: "sac_name", header: "SAC Name", size: 260 },
+      { accessorKey: "state_name", header: "State", size: 140 },
+      { accessorKey: "cgst", header: "CGST", size: 90 },
+      { accessorKey: "igst", header: "IGST", size: 90 },
+      { accessorKey: "sgst", header: "SGST", size: 90 },
       {
         accessorKey: "status",
         header: "Status",
         size: 80,
-        Cell: ({ row, cell }) => {
-          const value = cell.getValue<"ACTIVE" | "INACTIVE">();
+        Cell: ({ cell }) => {
+          const value = String(cell.getValue<string>() ?? "").toUpperCase() as
+            | "ACTIVE"
+            | "INACTIVE";
 
           return (
-            <Flex justify="space-between" align="center">
-              <Badge
-                color={value === "ACTIVE" ? "green" : "red"}
-                variant="light"
-                size="sm"
-                radius="sm"
-                px={8}
-              >
-                {value}
-              </Badge>
-              <Menu
-                withinPortal
-                position="bottom-end"
-                shadow="sm"
-                radius={"md"}
-              >
-                <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray">
-                    <IconDotsVertical size={16} />
-                  </ActionIcon>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() =>
-                        navigate("/master/gst-rate/edit", { state: row.original })
-                      }
-                    >
-                      <Group gap={"sm"}>
-                        <IconEdit size={16} style={{ color: "#105476" }} />
-                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>Edit</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                </Menu.Dropdown>
-              </Menu>
-            </Flex>
+            <Badge
+              color={value === "ACTIVE" ? "green" : "red"}
+              variant="light"
+              size="sm"
+              radius="sm"
+              px={8}
+            >
+              {value || "-"}
+            </Badge>
           );
         },
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        size: 80,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray">
+                <IconDotsVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() =>
+                    navigate("/master/gst-rate/edit", {
+                      state: row.original._parent,
+                    })
+                  }
+                >
+                  <Group gap={"sm"}>
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </Menu.Dropdown>
+          </Menu>
+        ),
       },
     ],
     [navigate]
@@ -199,7 +261,7 @@ export default function GSTRateMasterList() {
     enableStickyHeader: true,
     initialState: {
       pagination: { pageSize: 25, pageIndex: 0 },
-      columnPinning: { right: ["status"] },
+      columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
     manualPagination: true,
@@ -230,11 +292,11 @@ export default function GSTRateMasterList() {
     },
     mantineTableBodyCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
-          minWidth: "30px",
+          minWidth: "80px",
           zIndex: 2,
           borderLeft: "1px solid #F3F3F3",
           boxShadow: "1px -2px 4px 0px #00000040",
@@ -255,7 +317,7 @@ export default function GSTRateMasterList() {
     },
     mantineTableHeadCellProps: ({ column }) => {
       let extraStyles = {};
-      if (column.id === "status") {
+      if (column.id === "actions") {
         extraStyles = {
           position: "sticky",
           right: 0,
