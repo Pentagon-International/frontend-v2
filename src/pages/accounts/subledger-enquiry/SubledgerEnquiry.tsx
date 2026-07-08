@@ -77,6 +77,7 @@ type SubledgerEntryRow = {
   debit_local_amount?: number | null;
   credit_local_amount?: number | null;
   narration?: string | null;
+  note?: string | null;
   amount?: number | null;
   closing_balance?: number | null;
   outstanding_amount?: number | null;
@@ -113,6 +114,7 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "debit_local_amount", label: "Debit", span: 0.95 },
   { key: "credit_local_amount", label: "Credit", span: 0.95 },
   { key: "narration", label: "Narration", span: 1 },
+  { key: "note", label: "Note", span: 1 },
   { key: "amount", label: "Amount", span: 0.95 },
   { key: "outstanding_amount", label: "Outstanding Amt", span: 1.0 },
   { key: "outstanding_days", label: "Outstanding Days", span: 0.95 },
@@ -156,6 +158,7 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
     case "outstanding_days":
       return 110;
     case "narration":
+    case "note":
       return 120;
     default:
       return 140;
@@ -1244,7 +1247,7 @@ function SubledgerTable(props: {
         header: c.label,
         size: subledgerMrtColumnSize(c.key),
         minSize: Math.min(subledgerMrtColumnSize(c.key), 120),
-        maxSize: c.key === "narration" ? 520 : undefined,
+        maxSize: c.key === "narration" || c.key === "note" ? 520 : undefined,
         grow: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<unknown>();
