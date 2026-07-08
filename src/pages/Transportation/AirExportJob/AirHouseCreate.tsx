@@ -83,7 +83,13 @@ import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
+import {
+  JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
+  JOB_HOUSE_ACTION_MENU_WIDTH,
+} from "../../../utils/jobHouseActionMenuStyles";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -720,6 +726,20 @@ function HouseCreate() {
   }, [eventMasterData]);
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
+  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
+    useState<string | null>(null);
+
+  const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for vendor invoice automation.",
+      });
+      return;
+    }
+    setVendorInvoiceAutomationShipmentNo(normalized);
+  }, []);
 
   const openEventsModalFromMenu = useCallback(() => {
     const existing = form.values.events;
@@ -2637,7 +2657,7 @@ function HouseCreate() {
           >
             Save HAWB
           </Button>
-          <Menu shadow="md" width={220} position="bottom-end">
+          <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
             <Menu.Target>
               <ActionIcon
                 variant="subtle"
@@ -2659,16 +2679,7 @@ function HouseCreate() {
               </ActionIcon>
             </Menu.Target>
 
-            <Menu.Dropdown
-              styles={{
-                dropdown: {
-                  border: "1px solid #E9ECEF",
-                  borderRadius: "8px",
-                  padding: "8px",
-                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                },
-              }}
-            >
+            <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
               <Menu.Item
                 leftSection={
                   <Box
@@ -2713,6 +2724,12 @@ function HouseCreate() {
                 serviceType="AIR"
                 getCurrentHousingDetail={getCurrentHousingDetail}
                 jobId={location.state?.job?.id}
+              />
+
+              <HouseAutomateVendorInvoiceMenuItem
+                getCurrentHousingDetail={getCurrentHousingDetail}
+                jobId={location.state?.job?.id}
+                onOpen={openVendorInvoiceAutomation}
               />
 
               <HouseJobLedgerMenuItem
@@ -5832,6 +5849,12 @@ function HouseCreate() {
           )}
         </Stack>
       </Modal>
+
+      <VendorInvoiceAutomationModal
+        opened={vendorInvoiceAutomationShipmentNo != null}
+        shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
+        onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
     </Box>
   );
 }

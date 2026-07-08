@@ -87,8 +87,16 @@ import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
+import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
+import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
+import {
+  JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
+  JOB_HOUSE_ACTION_MENU_WIDTH,
+} from "../../../utils/jobHouseActionMenuStyles";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -470,6 +478,20 @@ function InlandImportJobCreate() {
   const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
     string | null
   >(null);
+  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
+    useState<string | null>(null);
+
+  const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for vendor invoice automation.",
+      });
+      return;
+    }
+    setVendorInvoiceAutomationShipmentNo(normalized);
+  }, []);
   const jobDocuments = useJobDocuments();
 
   // Detect mode from URL pathname and location state
@@ -2830,7 +2852,7 @@ function InlandImportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {jobData?.id != null && hawbDetails.length > 0 && (
-              <Menu shadow="md" width={220} position="bottom-end">
+              <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
@@ -2986,6 +3008,14 @@ function InlandImportJobCreate() {
                   >
                     Create Agent Invoice
                   </Menu.Item>
+
+                  {jobData?.id != null && (
+                    <AutomateVendorInvoiceTrigger
+                      variant="menu"
+                      shipmentNo={getMasterShipmentNo(jobData)}
+                      onOpen={openVendorInvoiceAutomation}
+                    />
+                  )}
 
                   <Menu.Item
                     leftSection={
@@ -4176,6 +4206,14 @@ function InlandImportJobCreate() {
                   </Button>
                 )}
 
+                {mode === "edit" && !isReadOnly && (
+                  <AutomateVendorInvoiceTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openVendorInvoiceAutomation}
+                  />
+                )}
+
                 <Button
                   variant="light"
                   color="#105476"
@@ -5233,7 +5271,7 @@ function InlandImportJobCreate() {
                         </Button>
                       </>
                     )}
-                    <Menu shadow="md" width={160} position="bottom-end">
+                    <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
                       <Menu.Target>
                         <ActionIcon
                           variant="light"
@@ -5249,16 +5287,7 @@ function InlandImportJobCreate() {
                           <IconDotsVertical size={14} />
                         </ActionIcon>
                       </Menu.Target>
-                      <Menu.Dropdown
-                        styles={{
-                          dropdown: {
-                            border: "1px solid #E9ECEF",
-                            borderRadius: "8px",
-                            padding: "8px",
-                            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                          },
-                        }}
-                      >
+                      <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
                         <Menu.Item
                           leftSection={
                             <Box
@@ -5306,6 +5335,11 @@ function InlandImportJobCreate() {
                           serviceType="AIR"
                           getCurrentHousingDetail={() => hawb}
                           jobId={jobData?.id}
+                        />
+                        <HouseAutomateVendorInvoiceMenuItem
+                          getCurrentHousingDetail={() => hawb}
+                          jobId={jobData?.id}
+                          onOpen={openVendorInvoiceAutomation}
                         />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Import"
@@ -5368,6 +5402,11 @@ function InlandImportJobCreate() {
           </Stack>
         </Box>
       )}
+      <VendorInvoiceAutomationModal
+        opened={vendorInvoiceAutomationShipmentNo != null}
+        shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
+        onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
     </Box>
   );
 }
