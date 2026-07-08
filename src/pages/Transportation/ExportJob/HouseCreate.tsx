@@ -489,7 +489,7 @@ function HouseCreate() {
         {
           charge_id: null,
           charge_name: "",
-          pp_cc: "",
+          pp_cc: "Prepaid",
           unit_id: "",
           unit_code: "",
           no_of_unit: null,
@@ -5166,7 +5166,7 @@ function HouseCreate() {
                           chargesForm.insertListItem("charges", {
                             charge_id: null,
                             charge_name: "",
-                            pp_cc: "Collect",
+                            pp_cc: "Prepaid",
                             unit_id: "",
                             unit_code: "",
                             ...branchCurrencyDefaults,

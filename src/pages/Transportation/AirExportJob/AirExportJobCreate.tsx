@@ -799,6 +799,7 @@ function AirExportJobCreate() {
     location.state?.estimates && Array.isArray(location.state.estimates)
       ? { estimates: location.state.estimates }
       : undefined,
+    { defaultPpCc: "Prepaid" },
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
@@ -4447,6 +4448,7 @@ function AirExportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              defaultPpCc="Prepaid"
               roeSubmitValidateRef={estimatesRoeValidateRef}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"

@@ -847,7 +847,7 @@ function ExportJobCreate() {
     validate: yupResolver(containerDetailsFormSchema),
   });
 
-  const estimatesForm = useEstimatesForm();
+  const estimatesForm = useEstimatesForm(undefined, { defaultPpCc: "Prepaid" });
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   // Load job data if in edit or view mode
@@ -4860,6 +4860,7 @@ function ExportJobCreate() {
               serviceType={["FCL", "LCL"]}
               form={estimatesForm}
               readOnly={isReadOnly}
+              defaultPpCc="Prepaid"
               roeSubmitValidateRef={estimatesRoeValidateRef}
               jobUnitDefaults={estimatesJobUnitDefaults}
               summaryEstimatesTotalCost={

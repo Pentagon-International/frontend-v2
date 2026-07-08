@@ -394,7 +394,7 @@ function HouseCreate() {
         {
           charge_id: null,
           charge_name: "",
-          pp_cc: "",
+          pp_cc: "Collect",
           unit_id: "",
           no_of_unit: null,
           ...branchCurrencyDefaults,

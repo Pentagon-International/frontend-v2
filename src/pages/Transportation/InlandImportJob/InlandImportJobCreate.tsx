@@ -883,6 +883,7 @@ function InlandImportJobCreate() {
     location.state?.estimates && Array.isArray(location.state.estimates)
       ? { estimates: location.state.estimates }
       : undefined,
+    { defaultPpCc: "Collect" },
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
@@ -4300,6 +4301,7 @@ function InlandImportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              defaultPpCc="Collect"
               roeSubmitValidateRef={estimatesRoeValidateRef}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"

@@ -763,7 +763,7 @@ function ImportJobCreate() {
     validate: yupResolver(containerDetailsFormSchema),
   });
 
-  const estimatesForm = useEstimatesForm();
+  const estimatesForm = useEstimatesForm(undefined, { defaultPpCc: "Collect" });
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
 
   // Load job data if in edit or view mode
@@ -5436,6 +5436,7 @@ function ImportJobCreate() {
               serviceType="SEA"
               form={estimatesForm}
               readOnly={isReadOnly}
+              defaultPpCc="Collect"
               roeSubmitValidateRef={estimatesRoeValidateRef}
               jobUnitDefaults={estimatesJobUnitDefaults}
               summaryEstimatesTotalCost={

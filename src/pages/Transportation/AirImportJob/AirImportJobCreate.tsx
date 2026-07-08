@@ -755,6 +755,7 @@ function AirImportJobCreate() {
     location.state?.estimates && Array.isArray(location.state.estimates)
       ? { estimates: location.state.estimates }
       : undefined,
+    { defaultPpCc: "Collect" },
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
   console.log("🧾 [AIR_IMPORT_JOB] estimatesForm initialized", {
@@ -5095,6 +5096,7 @@ function AirImportJobCreate() {
               key={`estimates-${formInitializedKey}`}
               form={estimatesForm}
               readOnly={isReadOnly}
+              defaultPpCc="Collect"
               roeSubmitValidateRef={estimatesRoeValidateRef}
               debugTag="AIR_IMPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
