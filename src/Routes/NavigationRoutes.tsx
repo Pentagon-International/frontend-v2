@@ -223,6 +223,8 @@ import DebitCreditNoteTradeMaster from "../pages/accounts/debit-credit-note-trad
 import DebitCreditNoteTradeCreate from "../pages/accounts/debit-credit-note-trade/DebitCreditNoteTradeCreate";
 import JobClosure from "../pages/accounts/job-closure/JobClosure";
 import JobOpen from "../pages/accounts/job-reopen/JobOpen";
+import BankReconciliationMaster from "../pages/accounts/bank-reconciliation/BankReconciliationMaster";
+import BankReconciliationCreate from "../pages/accounts/bank-reconciliation/BankReconciliationCreate";
 import ServiceJobMaster from "../pages/accounts/service-job/ServiceJobMaster";
 import ServiceJobCreate from "../pages/accounts/service-job/ServiceJobCreate";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
@@ -827,8 +829,14 @@ const NavigationRoutes = () => {
           element={<JournalVoucherReversal />}
         />
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
-        <Route path="/document-allocation" element={<DocumentAllocationList />} />
-        <Route path="/document-allocation/create" element={<DocumentAllocation />} />
+        <Route
+          path="/document-allocation"
+          element={<DocumentAllocationList />}
+        />
+        <Route
+          path="/document-allocation/create"
+          element={<DocumentAllocation />}
+        />
         <Route path="/checker" element={<Checker />} />
         <Route path="/debit-credit-note-non-trade" element={<Outlet />}>
           <Route index element={<DebitCreditNoteNonTradeMaster />} />
@@ -853,6 +861,10 @@ const NavigationRoutes = () => {
         </Route>
         <Route path="/job-closure" element={<JobClosure />} />
         <Route path="/job-reopen" element={<JobOpen />} />
+        <Route path="/bank-reconciliation" element={<Outlet />}>
+          <Route index element={<BankReconciliationMaster />} />
+          <Route path="create" element={<BankReconciliationCreate />} />
+        </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route
           path="/payment-request/create"

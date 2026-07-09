@@ -12,7 +12,7 @@ export const LayoutSync = () => {
     if (path.startsWith("/tariff")) {
       setActiveNav("Sales");
       setActiveSubNav("Tariff");
-      if (path.includes("freight")){
+      if (path.includes("freight")) {
         setActiveTariffSubNav("Freight");
       } else if (path.includes("contracts/create")) {
         setActiveTariffSubNav("Contracts");
@@ -37,13 +37,19 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/rfq")) {
       setActiveNav("Sales");
       setActiveSubNav("RFQ");
-    } else if (path === "/quotation-approval" || path.startsWith("/quotation-approval/")) {
+    } else if (
+      path === "/quotation-approval" ||
+      path.startsWith("/quotation-approval/")
+    ) {
       setActiveNav("Sales");
       setActiveSubNav("Quotation Approval");
     } else if (path === "/quotation" || path.startsWith("/quotation/")) {
       setActiveNav("Sales");
       setActiveSubNav("Quotation");
-    } else if (path === "/quotation-create" || path.startsWith("/quotation-create/")) {
+    } else if (
+      path === "/quotation-create" ||
+      path.startsWith("/quotation-create/")
+    ) {
       // Set active tab for quotation when navigated via create/edit quote flow
       setActiveNav("Sales");
       setActiveSubNav("Quotation");
@@ -215,13 +221,25 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/job-reopen")) {
       setActiveNav("Desk");
       setActiveSubNav("Reopen Job");
-    } else if (path.startsWith("/automation/import-job") || path.startsWith("/automation/job-creation")) {
+    } else if (path.startsWith("/bank-reconciliation")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Bank Reconciliation");
+    } else if (
+      path.startsWith("/automation/import-job") ||
+      path.startsWith("/automation/job-creation")
+    ) {
       setActiveNav("Automation");
       setActiveSubNav("Import Job");
-    } else if (path.startsWith("/automation/vendor-invoice") || path.startsWith("/automation/invoice-manager")) {
+    } else if (
+      path.startsWith("/automation/vendor-invoice") ||
+      path.startsWith("/automation/invoice-manager")
+    ) {
       setActiveNav("Automation");
       setActiveSubNav("Vendor Invoice");
-    } else if (path.startsWith("/automation/odex-jobs") || path.startsWith("/odex-jobs")) {
+    } else if (
+      path.startsWith("/automation/odex-jobs") ||
+      path.startsWith("/odex-jobs")
+    ) {
       setActiveNav("Automation");
       setActiveSubNav("ODEX Jobs");
     } else if (path.startsWith("/workflow/hbl-document-manager")) {
@@ -230,7 +248,10 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/workflow/invoice-manager")) {
       setActiveNav("Automation");
       setActiveSubNav("Vendor Invoice");
-    } else if (path.startsWith("/workflow/chatbot") || path.startsWith("/workflow/analytics")) {
+    } else if (
+      path.startsWith("/workflow/chatbot") ||
+      path.startsWith("/workflow/analytics")
+    ) {
       setActiveNav("Chatbot");
       setActiveSubNav("");
     } else if (path === "/invoice" || path.startsWith("/invoice/")) {
@@ -260,7 +281,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/finance-dashboard/branch-budget-vs-actual")) {
       setActiveNav("Finance Dashboard");
       setActiveSubNav("Branch Budget vs Actual");
-    } else if (path.startsWith("/finance-dashboard/collection-target-vs-performance")) {
+    } else if (
+      path.startsWith("/finance-dashboard/collection-target-vs-performance")
+    ) {
       setActiveNav("Finance Dashboard");
       setActiveSubNav("Collection Target vs Performance");
     } else if (path.startsWith("/finance-dashboard/outstanding-ageing")) {

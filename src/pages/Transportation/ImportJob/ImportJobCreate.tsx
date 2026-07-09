@@ -67,6 +67,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -3230,7 +3231,7 @@ function ImportJobCreate() {
           </Text>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
-              {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
+              {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
         </Group>

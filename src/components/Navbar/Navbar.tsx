@@ -62,6 +62,7 @@ import {
   IconLockOpen,
   IconCloudComputing,
   IconUserCheck,
+  IconBuildingBank,
 } from "@tabler/icons-react";
 import {
   CHATBOT_PATH,
@@ -135,6 +136,7 @@ const Navbar = ({
       location.pathname.startsWith("/service-job") ||
       location.pathname.startsWith("/job-closure") ||
       location.pathname.startsWith("/job-reopen") ||
+      location.pathname.startsWith("/bank-reconciliation") ||
       location.pathname.startsWith("/checker")
     ) {
       setIsAccountsOpen(true);
@@ -1250,7 +1252,7 @@ const Navbar = ({
                       setIsSeaExportOpen,
                     }}
                   />
-                  <SubNavLink
+                    <SubNavLink
                       parent="Accounts"
                       label="Job Closure"
                       icon={IconCircleCheck}
@@ -1268,6 +1270,19 @@ const Navbar = ({
                       label="Reopen Job"
                       icon={IconLockOpen}
                       path="/job-reopen"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Bank Reconciliation"
+                      icon={IconBuildingBank}
+                      path="/bank-reconciliation"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

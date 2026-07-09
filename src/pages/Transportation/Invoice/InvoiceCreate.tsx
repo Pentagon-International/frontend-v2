@@ -157,7 +157,9 @@ const getVatRateFromBreakup = (
   chargeId: number | null | undefined,
 ): number | null => {
   if (chargeId == null) return null;
-  const match = getVatBreakupRows(breakup).find((r) => r.charge_id === chargeId);
+  const match = getVatBreakupRows(breakup).find(
+    (r) => r.charge_id === chargeId,
+  );
   if (!match) return null;
   const rate = match.tax_rate ?? match.rate;
   if (rate == null) return null;
@@ -252,12 +254,18 @@ const resolveChargeCurrencyCode = (
   const fromField = charge.currency?.trim().toUpperCase() ?? "";
   if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
     const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "").toString().trim().toUpperCase();
+    return (row?.code || row?.currency_code || "")
+      .toString()
+      .trim()
+      .toUpperCase();
   }
   if (fromField) return fromField;
   if (currencyId) {
     const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "").toString().trim().toUpperCase();
+    return (row?.code || row?.currency_code || "")
+      .toString()
+      .trim()
+      .toUpperCase();
   }
   return "";
 };
@@ -738,15 +746,8 @@ function collectAgentChargesFromHousings(
       .map((c) => ({
         ...c,
         shipment_id:
-          c.shipment_id ??
-          hawb.shipment_id ??
-          hawb.shipment_no ??
-          "",
-        shipper_id:
-          c.shipper_id ??
-          hawb.shipper_code ??
-          hawb.shipper_id ??
-          "",
+          c.shipment_id ?? hawb.shipment_id ?? hawb.shipment_no ?? "",
+        shipper_id: c.shipper_id ?? hawb.shipper_code ?? hawb.shipper_id ?? "",
       })),
   );
 }
@@ -920,8 +921,8 @@ function InvoiceCreate({
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
     invoiceId &&
-      (location.pathname.includes("/edit/") ||
-        location.pathname.includes("/view/")),
+    (location.pathname.includes("/edit/") ||
+      location.pathname.includes("/view/")),
   );
 
   // Default branch currency (active branch: is_default === true) for Billing Currency
@@ -1081,8 +1082,8 @@ function InvoiceCreate({
 
   const isFromHouseLevel = useMemo(
     () =>
-      (location.state as { fromHouseLevel?: boolean } | null)?.fromHouseLevel ===
-      true,
+      (location.state as { fromHouseLevel?: boolean } | null)
+        ?.fromHouseLevel === true,
     [location.state],
   );
 
@@ -1097,12 +1098,7 @@ function InvoiceCreate({
       location.pathname.includes("/SeaExport/export-job") ||
       location.pathname.includes("/SeaExport/import-job")
     );
-  }, [
-    isFromAirExportJob,
-    isFromHouseLevel,
-    isAgentInvoice,
-    location.pathname,
-  ]);
+  }, [isFromAirExportJob, isFromHouseLevel, isAgentInvoice, location.pathname]);
 
   // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
   const invoiceUsesConsigneeParty = useMemo(() => {
@@ -1163,10 +1159,7 @@ function InvoiceCreate({
   ]);
 
   // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
-  const isUsInvoiceUser = useMemo(
-    () => isUnitedStatesBranchUser(user),
-    [user],
-  );
+  const isUsInvoiceUser = useMemo(() => isUnitedStatesBranchUser(user), [user]);
 
   const isVatInvoiceUser = useMemo(
     () => !isAgentInvoice && !isIndiaUser && !isUsInvoiceUser,
@@ -1176,10 +1169,7 @@ function InvoiceCreate({
   // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).
   const isGstInvoiceUser = useMemo(
     () =>
-      isIndiaUser &&
-      !isAgentInvoice &&
-      !isVatInvoiceUser &&
-      !isUsInvoiceUser,
+      isIndiaUser && !isAgentInvoice && !isVatInvoiceUser && !isUsInvoiceUser,
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
@@ -1240,11 +1230,7 @@ function InvoiceCreate({
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
       state: (value) =>
-        !isGstInvoiceRef.current
-          ? null
-          : !value
-            ? "State is required"
-            : null,
+        !isGstInvoiceRef.current ? null : !value ? "State is required" : null,
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
@@ -1282,7 +1268,8 @@ function InvoiceCreate({
       const currencyUpper = currency?.trim().toUpperCase();
       if (!currencyUpper) return null;
 
-      const branchCurrencyUpper = defaultBranchCurrency?.trim().toUpperCase() ?? "";
+      const branchCurrencyUpper =
+        defaultBranchCurrency?.trim().toUpperCase() ?? "";
       if (branchCurrencyUpper && currencyUpper === branchCurrencyUpper) {
         roeCacheRef.current.set(currencyUpper, 1);
         return 1;
@@ -1291,7 +1278,9 @@ function InvoiceCreate({
       const cached = roeCacheRef.current.get(currencyUpper);
       if (cached !== undefined) return cached;
 
-      const billingCurrencyUpper = billingCurrencyRef.current?.trim().toUpperCase();
+      const billingCurrencyUpper = billingCurrencyRef.current
+        ?.trim()
+        .toUpperCase();
       const headerRoe = billingRoeRef.current;
       const isForeignToBranch =
         branchCurrencyUpper !== "" && currencyUpper !== branchCurrencyUpper;
@@ -1441,8 +1430,7 @@ function InvoiceCreate({
     const hawbDetails =
       location.state?.hawbDetails || location.state?.housingDetails || [];
     const job = location.state?.job as
-      | { housing_details?: Array<Record<string, unknown>> }
-      | undefined;
+      { housing_details?: Array<Record<string, unknown>> } | undefined;
     const jobHousingArr = Array.isArray(job?.housing_details)
       ? (job?.housing_details as Array<Record<string, unknown>>)
       : [];
@@ -1488,8 +1476,7 @@ function InvoiceCreate({
   const daybookOptions = useMemo(() => {
     const invoiceData = (invoiceDataFromApi ??
       getInvoiceDataFromLocationState(location.state)) as
-      | InvoiceDataFromApi
-      | undefined;
+      InvoiceDataFromApi | undefined;
     const savedDaybookId =
       invoiceData?.day_book_id != null
         ? String(invoiceData.day_book_id)
@@ -1628,7 +1615,12 @@ function InvoiceCreate({
     });
     if (changed) form.setFieldValue("charges", updated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrenciesKey, defaultBranchCurrency, defaultBranchCurrencyId, currencyData]);
+  }, [
+    chargeCurrenciesKey,
+    defaultBranchCurrency,
+    defaultBranchCurrencyId,
+    currencyData,
+  ]);
 
   // When Bill To is cleared, clear address only. Do not clear state here: it runs before
   // house→invoice prefill and would wipe shipper/consignee state before bill_to is set.
@@ -1891,8 +1883,7 @@ function InvoiceCreate({
           if (isAgent) {
             const navHouses = hawbDetails as Array<Record<string, unknown>>;
             const jobHouses = jobHousingArr;
-            const housesToScan =
-              jobHouses.length > 0 ? jobHouses : navHouses;
+            const housesToScan = jobHouses.length > 0 ? jobHouses : navHouses;
             let merged = collectAgentChargesFromHousings(housesToScan);
             if (merged.length === 0 && navHouses.length > 0) {
               merged = collectAgentChargesFromHousings(navHouses);
@@ -1928,202 +1919,212 @@ function InvoiceCreate({
 
             const mappedCharges = await Promise.all(
               (chargesSource as any[]).map(async (charge: any) => {
-            const unitDetails = charge.unit_details as
-              | { unit_code?: string; unit_id?: number }
-              | undefined;
-            const unitCode = String(
-              charge.unit_code ??
-                charge.unit_input ??
-                unitDetails?.unit_code ??
-                "",
-            ).trim();
-            const currencyDetails = charge.currency_details as
-              | { currency_id?: number; currency_code?: string }
-              | undefined;
-            const rawCurrencyId =
-              charge.currency_id ??
-              currencyDetails?.currency_id ??
-              (typeof charge.currency === "number" ? charge.currency : null);
-            let currency = String(
-              charge.currency_code ??
-                currencyDetails?.currency_code ??
-                (typeof charge.currency === "string" ? charge.currency : "") ??
-                "",
-            )
-              .trim()
-              .toUpperCase();
-            if (
-              !currency &&
-              rawCurrencyId != null &&
-              Array.isArray(currencyData)
-            ) {
-              const row = (
-                currencyData as {
-                  id?: number;
-                  code?: string;
-                  currency_code?: string;
-                }[]
-              ).find((c) => String(c.id) === String(rawCurrencyId));
-              currency = (row?.code || row?.currency_code || "")
-                .toString()
-                .trim()
-                .toUpperCase();
-            }
-            const unit_id =
-              charge.unit_id != null && String(charge.unit_id).trim() !== ""
-                ? String(charge.unit_id)
-                : charge.unit != null && String(charge.unit).trim() !== ""
-                  ? String(charge.unit)
-                  : unitDetails?.unit_id != null
-                    ? String(unitDetails.unit_id)
-                    : "";
-            const currency_id =
-              rawCurrencyId != null ? String(rawCurrencyId) : "";
+                const unitDetails = charge.unit_details as
+                  { unit_code?: string; unit_id?: number } | undefined;
+                const unitCode = String(
+                  charge.unit_code ??
+                    charge.unit_input ??
+                    unitDetails?.unit_code ??
+                    "",
+                ).trim();
+                const currencyDetails = charge.currency_details as
+                  { currency_id?: number; currency_code?: string } | undefined;
+                const rawCurrencyId =
+                  charge.currency_id ??
+                  currencyDetails?.currency_id ??
+                  (typeof charge.currency === "number"
+                    ? charge.currency
+                    : null);
+                let currency = String(
+                  charge.currency_code ??
+                    currencyDetails?.currency_code ??
+                    (typeof charge.currency === "string"
+                      ? charge.currency
+                      : "") ??
+                    "",
+                )
+                  .trim()
+                  .toUpperCase();
+                if (
+                  !currency &&
+                  rawCurrencyId != null &&
+                  Array.isArray(currencyData)
+                ) {
+                  const row = (
+                    currencyData as {
+                      id?: number;
+                      code?: string;
+                      currency_code?: string;
+                    }[]
+                  ).find((c) => String(c.id) === String(rawCurrencyId));
+                  currency = (row?.code || row?.currency_code || "")
+                    .toString()
+                    .trim()
+                    .toUpperCase();
+                }
+                const unit_id =
+                  charge.unit_id != null && String(charge.unit_id).trim() !== ""
+                    ? String(charge.unit_id)
+                    : charge.unit != null && String(charge.unit).trim() !== ""
+                      ? String(charge.unit)
+                      : unitDetails?.unit_id != null
+                        ? String(unitDetails.unit_id)
+                        : "";
+                const currency_id =
+                  rawCurrencyId != null ? String(rawCurrencyId) : "";
 
-            const noOfUnit = parseNoOfUnitForPayload(charge.no_of_unit);
-            const amountPerUnit =
-              charge.amount_per_unit != null
-                ? typeof charge.amount_per_unit === "number"
-                  ? charge.amount_per_unit
-                  : parseFloat(charge.amount_per_unit)
-                : null;
-            const branchBase = defaultBranchCurrency?.trim().toUpperCase() ?? "";
-            const chargeIsBranchCurrency = isChargeBranchCurrency(
-              currency,
-              currency_id,
-              defaultBranchCurrency,
-              defaultBranchCurrencyId,
-            );
-            if (!currency && chargeIsBranchCurrency && branchBase) {
-              currency = branchBase;
-            }
-            const roeVal = await (async (): Promise<number | null> => {
-              if (chargeIsBranchCurrency) return 1;
-              if (!currency) return null;
-
-              const fromJob =
-                charge.roe != null && String(charge.roe).trim() !== ""
-                  ? typeof charge.roe === "number"
-                    ? charge.roe
-                    : parseFloat(String(charge.roe))
-                  : null;
-              if (
-                fromJob != null &&
-                Number.isFinite(fromJob) &&
-                fromJob !== 1
-              ) {
-                return fromJob;
-              }
-              if (
-                currency === headerCode &&
-                headerRoe != null &&
-                headerRoe !== 1
-              ) {
-                return headerRoe;
-              }
-              return ensureRoeForCurrency(currency);
-            })();
-
-            let amount: number | null =
-              charge.amount != null
-                ? typeof charge.amount === "number"
-                  ? charge.amount
-                  : parseFloat(String(charge.amount))
-                : null;
-            let amountInLocal: number | null =
-              charge.amount_in_local != null
-                ? typeof charge.amount_in_local === "number"
-                  ? charge.amount_in_local
-                  : parseFloat(String(charge.amount_in_local))
-                : charge.sell_local_amount != null
-                  ? typeof charge.sell_local_amount === "number"
-                    ? charge.sell_local_amount
-                    : parseFloat(String(charge.sell_local_amount))
-                  : null;
-            let headerAmt: number | null =
-              (charge.amount_in_header ?? charge.header_amount) != null
-                ? typeof (charge.amount_in_header ?? charge.header_amount) ===
-                  "number"
-                  ? (charge.amount_in_header ?? charge.header_amount)
-                  : parseFloat(
-                      String(charge.amount_in_header ?? charge.header_amount),
-                    )
-                : null;
-
-            if (
-              noOfUnit != null &&
-              noOfUnit > 0 &&
-              amountPerUnit != null &&
-              amountPerUnit > 0
-            ) {
-              const calcAmount = clampAmount(noOfUnit * amountPerUnit);
-              if (calcAmount != null) amount = calcAmount;
-              if (
-                amount != null &&
-                amount > 0 &&
-                roeVal != null &&
-                roeVal > 0
-              ) {
-                const calcLocal = clampAmount(amount * roeVal);
-                if (calcLocal != null) amountInLocal = calcLocal;
-              }
-            }
-            {
-              const billCurr =
-                billingCurrency || (form.values.currency ?? "").trim();
-              const fromHeader = calcChargeHeaderAmount(
-                {
-                  amount,
-                  amount_in_local: amountInLocal,
+                const noOfUnit = parseNoOfUnitForPayload(charge.no_of_unit);
+                const amountPerUnit =
+                  charge.amount_per_unit != null
+                    ? typeof charge.amount_per_unit === "number"
+                      ? charge.amount_per_unit
+                      : parseFloat(charge.amount_per_unit)
+                    : null;
+                const branchBase =
+                  defaultBranchCurrency?.trim().toUpperCase() ?? "";
+                const chargeIsBranchCurrency = isChargeBranchCurrency(
                   currency,
-                },
-                billCurr,
-                headerRoe,
-              );
-              if (fromHeader != null) headerAmt = fromHeader;
-            }
+                  currency_id,
+                  defaultBranchCurrency,
+                  defaultBranchCurrencyId,
+                );
+                if (!currency && chargeIsBranchCurrency && branchBase) {
+                  currency = branchBase;
+                }
+                const roeVal = await (async (): Promise<number | null> => {
+                  if (chargeIsBranchCurrency) return 1;
+                  if (!currency) return null;
 
-            return {
-              charge_id:
-                (charge.charge_id ?? charge.id) != null
-                  ? Number(charge.charge_id ?? charge.id)
-                  : null,
-              charge_name: charge.charge_name ? String(charge.charge_name) : "",
-              shipment_id:
-                charge.shipment_id != null &&
-                String(charge.shipment_id).trim() !== ""
-                  ? String(charge.shipment_id)
-                  : charge.shipment_no != null &&
-                      String(charge.shipment_no).trim() !== ""
-                    ? String(charge.shipment_no)
-                    : firstHawb.shipment_id
-                      ? String(firstHawb.shipment_id)
-                      : null,
-              shipper_id:
-                charge.shipper_id != null
-                  ? String(charge.shipper_id)
-                  : charge.shipper_code != null
-                    ? String(charge.shipper_code)
-                    : (firstHawb as { shipper_code?: string }).shipper_code
-                      ? String(
-                          (firstHawb as { shipper_code: string }).shipper_code,
+                  const fromJob =
+                    charge.roe != null && String(charge.roe).trim() !== ""
+                      ? typeof charge.roe === "number"
+                        ? charge.roe
+                        : parseFloat(String(charge.roe))
+                      : null;
+                  if (
+                    fromJob != null &&
+                    Number.isFinite(fromJob) &&
+                    fromJob !== 1
+                  ) {
+                    return fromJob;
+                  }
+                  if (
+                    currency === headerCode &&
+                    headerRoe != null &&
+                    headerRoe !== 1
+                  ) {
+                    return headerRoe;
+                  }
+                  return ensureRoeForCurrency(currency);
+                })();
+
+                let amount: number | null =
+                  charge.amount != null
+                    ? typeof charge.amount === "number"
+                      ? charge.amount
+                      : parseFloat(String(charge.amount))
+                    : null;
+                let amountInLocal: number | null =
+                  charge.amount_in_local != null
+                    ? typeof charge.amount_in_local === "number"
+                      ? charge.amount_in_local
+                      : parseFloat(String(charge.amount_in_local))
+                    : charge.sell_local_amount != null
+                      ? typeof charge.sell_local_amount === "number"
+                        ? charge.sell_local_amount
+                        : parseFloat(String(charge.sell_local_amount))
+                      : null;
+                let headerAmt: number | null =
+                  (charge.amount_in_header ?? charge.header_amount) != null
+                    ? typeof (
+                        charge.amount_in_header ?? charge.header_amount
+                      ) === "number"
+                      ? (charge.amount_in_header ?? charge.header_amount)
+                      : parseFloat(
+                          String(
+                            charge.amount_in_header ?? charge.header_amount,
+                          ),
                         )
-                      : "",
-              unit_code: unitCode,
-              unit_id,
-              no_of_unit: noOfUnit,
-              currency,
-              currency_id,
-              roe: roeVal,
-              amount_per_unit: amountPerUnit,
-              amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmt) ? headerAmt : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
-              tax_code: charge.tax_code ? String(charge.tax_code) : "",
-              dr_cr: (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
-            };
+                    : null;
+
+                if (
+                  noOfUnit != null &&
+                  noOfUnit > 0 &&
+                  amountPerUnit != null &&
+                  amountPerUnit > 0
+                ) {
+                  const calcAmount = clampAmount(noOfUnit * amountPerUnit);
+                  if (calcAmount != null) amount = calcAmount;
+                  if (
+                    amount != null &&
+                    amount > 0 &&
+                    roeVal != null &&
+                    roeVal > 0
+                  ) {
+                    const calcLocal = clampAmount(amount * roeVal);
+                    if (calcLocal != null) amountInLocal = calcLocal;
+                  }
+                }
+                {
+                  const billCurr =
+                    billingCurrency || (form.values.currency ?? "").trim();
+                  const fromHeader = calcChargeHeaderAmount(
+                    {
+                      amount,
+                      amount_in_local: amountInLocal,
+                      currency,
+                    },
+                    billCurr,
+                    headerRoe,
+                  );
+                  if (fromHeader != null) headerAmt = fromHeader;
+                }
+
+                return {
+                  charge_id:
+                    (charge.charge_id ?? charge.id) != null
+                      ? Number(charge.charge_id ?? charge.id)
+                      : null,
+                  charge_name: charge.charge_name
+                    ? String(charge.charge_name)
+                    : "",
+                  shipment_id:
+                    charge.shipment_id != null &&
+                    String(charge.shipment_id).trim() !== ""
+                      ? String(charge.shipment_id)
+                      : charge.shipment_no != null &&
+                          String(charge.shipment_no).trim() !== ""
+                        ? String(charge.shipment_no)
+                        : firstHawb.shipment_id
+                          ? String(firstHawb.shipment_id)
+                          : null,
+                  shipper_id:
+                    charge.shipper_id != null
+                      ? String(charge.shipper_id)
+                      : charge.shipper_code != null
+                        ? String(charge.shipper_code)
+                        : (firstHawb as { shipper_code?: string }).shipper_code
+                          ? String(
+                              (firstHawb as { shipper_code: string })
+                                .shipper_code,
+                            )
+                          : "",
+                  unit_code: unitCode,
+                  unit_id,
+                  no_of_unit: noOfUnit,
+                  currency,
+                  currency_id,
+                  roe: roeVal,
+                  amount_per_unit: amountPerUnit,
+                  amount: Number.isFinite(amount) ? amount : null,
+                  header_amount: Number.isFinite(headerAmt) ? headerAmt : null,
+                  amount_in_local: Number.isFinite(amountInLocal)
+                    ? amountInLocal
+                    : null,
+                  tax_code: charge.tax_code ? String(charge.tax_code) : "",
+                  dr_cr:
+                    (charge as any).dr_cr === "Dr" ? "Dr" : chargeDefaultDrCr,
+                };
               }),
             );
             form.setFieldValue("charges", mappedCharges);
@@ -2189,10 +2190,7 @@ function InvoiceCreate({
               ).then((results) => {
                 results.forEach(({ rates }, responseIdx) => {
                   const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
-                  if (
-                    originalIdx !== undefined &&
-                    rates?.vat_percent != null
-                  ) {
+                  if (originalIdx !== undefined && rates?.vat_percent != null) {
                     form.setFieldValue(
                       `charges.${originalIdx}.tax_rate`,
                       rates.vat_percent,
@@ -2277,9 +2275,9 @@ function InvoiceCreate({
       ],
       enabled: Boolean(
         isEditOrViewMode &&
-          invoiceId &&
-          location.key &&
-          !skipInvoiceDetailFetch,
+        invoiceId &&
+        location.key &&
+        !skipInvoiceDetailFetch,
       ),
       queryFn: async () => getAPICall(`${URL.invoice}${invoiceId}`, API_HEADER),
       staleTime: 5 * 60 * 1000,
@@ -2335,8 +2333,7 @@ function InvoiceCreate({
   useEffect(() => {
     const invoiceData = (invoiceDataFromApi ??
       getInvoiceDataFromLocationState(location.state)) as
-      | InvoiceDataFromApi
-      | undefined;
+      InvoiceDataFromApi | undefined;
     if (!invoiceData || !isEditOrViewMode) return;
 
     const documentDate = parseInvoiceDate(invoiceData.document_date ?? null);
@@ -2485,9 +2482,7 @@ function InvoiceCreate({
                 sgst_rate: parseNullableNumber(c.sgst_rate),
                 tax_rate: isTaxRow
                   ? null
-                  : parseNullableNumber(
-                      (c as { tax_rate?: unknown }).tax_rate,
-                    ),
+                  : parseNullableNumber((c as { tax_rate?: unknown }).tax_rate),
                 tax_amount: isTaxRow
                   ? null
                   : parseNullableNumber(
@@ -2533,18 +2528,22 @@ function InvoiceCreate({
       roeCacheRef.current.set(headerCurrencyCode, parsedHeaderRoe);
     }
     if (invoiceData.charges && Array.isArray(invoiceData.charges)) {
-      invoiceData.charges.forEach((c: { currency_code?: string; roe?: string | number }) => {
-        const code = String(c.currency_code ?? "").trim().toUpperCase();
-        const roe =
-          c.roe != null
-            ? typeof c.roe === "string"
-              ? parseFloat(c.roe)
-              : c.roe
-            : null;
-        if (code && roe != null && Number.isFinite(roe)) {
-          roeCacheRef.current.set(code, roe);
-        }
-      });
+      invoiceData.charges.forEach(
+        (c: { currency_code?: string; roe?: string | number }) => {
+          const code = String(c.currency_code ?? "")
+            .trim()
+            .toUpperCase();
+          const roe =
+            c.roe != null
+              ? typeof c.roe === "string"
+                ? parseFloat(c.roe)
+                : c.roe
+              : null;
+          if (code && roe != null && Number.isFinite(roe)) {
+            roeCacheRef.current.set(code, roe);
+          }
+        },
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
@@ -3056,11 +3055,12 @@ function InvoiceCreate({
         return;
       }
 
-      const currencyRows = (currencyData as {
-        id?: number;
-        code?: string;
-        currency_code?: string;
-      }[]) ?? [];
+      const currencyRows =
+        (currencyData as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[]) ?? [];
       const nextChargeErrors: Record<number, Record<string, string>> = {};
       let chargeRoeErrorMessage: string | null = null;
 
@@ -3364,11 +3364,7 @@ function InvoiceCreate({
       console.log("payload---", payload);
 
       if (isUpdate) {
-        const rawResponse = await putAPICall(
-          URL.invoice,
-          payload,
-          API_HEADER,
-        );
+        const rawResponse = await putAPICall(URL.invoice, payload, API_HEADER);
         const parsed = parseInvoiceMutationResponse(
           rawResponse,
           "Failed to update invoice",
@@ -3413,11 +3409,7 @@ function InvoiceCreate({
           type: "success",
         });
       } else {
-        const rawResponse = await postAPICall(
-          URL.invoice,
-          payload,
-          API_HEADER,
-        );
+        const rawResponse = await postAPICall(URL.invoice, payload, API_HEADER);
         const parsed = parseInvoiceMutationResponse(
           rawResponse,
           "Failed to create invoice",
@@ -3849,183 +3841,176 @@ function InvoiceCreate({
       if (response.charges && Array.isArray(response.charges)) {
         const mappedCharges: ChargeItem[] = response.charges.map((c) => {
           const noOfUnit = parseNoOfUnitForPayload(c.no_of_unit);
-            const roe =
-              c.roe != null
-                ? typeof c.roe === "string"
-                  ? parseFloat(c.roe)
-                  : c.roe
-                : null;
-            const amountPerUnit =
-              c.amount_per_unit != null
-                ? typeof c.amount_per_unit === "string"
-                  ? parseFloat(c.amount_per_unit)
-                  : c.amount_per_unit
-                : null;
-            const amount =
-              c.amount != null
-                ? typeof c.amount === "string"
-                  ? parseFloat(c.amount)
-                  : c.amount
-                : null;
-            const amountInLocal =
-              c.amount_in_local != null
-                ? typeof c.amount_in_local === "string"
-                  ? parseFloat(c.amount_in_local)
-                  : c.amount_in_local
-                : null;
-            const headerAmount =
-              c.amount_in_header != null
-                ? typeof c.amount_in_header === "string"
-                  ? parseFloat(c.amount_in_header)
-                  : c.amount_in_header
-                : null;
+          const roe =
+            c.roe != null
+              ? typeof c.roe === "string"
+                ? parseFloat(c.roe)
+                : c.roe
+              : null;
+          const amountPerUnit =
+            c.amount_per_unit != null
+              ? typeof c.amount_per_unit === "string"
+                ? parseFloat(c.amount_per_unit)
+                : c.amount_per_unit
+              : null;
+          const amount =
+            c.amount != null
+              ? typeof c.amount === "string"
+                ? parseFloat(c.amount)
+                : c.amount
+              : null;
+          const amountInLocal =
+            c.amount_in_local != null
+              ? typeof c.amount_in_local === "string"
+                ? parseFloat(c.amount_in_local)
+                : c.amount_in_local
+              : null;
+          const headerAmount =
+            c.amount_in_header != null
+              ? typeof c.amount_in_header === "string"
+                ? parseFloat(c.amount_in_header)
+                : c.amount_in_header
+              : null;
 
-            const chargeCodeUpper = String(
-              (c as { charge_code?: string | null }).charge_code ?? "",
-            )
-              .trim()
-              .toUpperCase();
-            const isTaxRow =
-              (c as { is_tax_row?: boolean | null }).is_tax_row === true ||
-              chargeCodeUpper === "IGST" ||
-              chargeCodeUpper === "CGST" ||
-              chargeCodeUpper === "SGST" ||
-              chargeCodeUpper === "VAT" ||
-              (!isVatInvoiceUser &&
-                (c.unit_id == null || String(c.unit_id).trim() === "") &&
-                (noOfUnit == null || noOfUnit === 0) &&
-                (amountPerUnit == null || amountPerUnit === 0) &&
-                ((c as any).igst_rate == null ||
-                  (c as any).cgst_rate == null ||
-                  (c as any).sgst_rate == null));
+          const chargeCodeUpper = String(
+            (c as { charge_code?: string | null }).charge_code ?? "",
+          )
+            .trim()
+            .toUpperCase();
+          const isTaxRow =
+            (c as { is_tax_row?: boolean | null }).is_tax_row === true ||
+            chargeCodeUpper === "IGST" ||
+            chargeCodeUpper === "CGST" ||
+            chargeCodeUpper === "SGST" ||
+            chargeCodeUpper === "VAT" ||
+            (!isVatInvoiceUser &&
+              (c.unit_id == null || String(c.unit_id).trim() === "") &&
+              (noOfUnit == null || noOfUnit === 0) &&
+              (amountPerUnit == null || amountPerUnit === 0) &&
+              ((c as any).igst_rate == null ||
+                (c as any).cgst_rate == null ||
+                (c as any).sgst_rate == null));
 
+          return {
+            id: c.id ?? undefined,
+            charge_id: c.charge_id ?? null,
+            charge_code: (c as { charge_code?: string }).charge_code ?? "",
+            charge_name: c.charge_name ?? "",
+            shipment_id: (c as { shipment_id?: string }).shipment_id
+              ? String((c as { shipment_id: string }).shipment_id)
+              : (c as { shipment_no?: string }).shipment_no
+                ? String((c as { shipment_no: string }).shipment_no)
+                : "",
+            shipper_id: (c as { shipper_id?: string }).shipper_id ?? "",
+            unit_code: c.unit_code ?? "",
+            unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
+            no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
+            currency: c.currency_code ?? "",
+            currency_id:
+              c.currency_id != null ? String(c.currency_id) : undefined,
+            roe: Number.isFinite(roe) ? roe : null,
+            amount_per_unit: Number.isFinite(amountPerUnit)
+              ? amountPerUnit
+              : null,
+            amount: Number.isFinite(amount) ? amount : null,
+            header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
+            amount_in_local: Number.isFinite(amountInLocal)
+              ? amountInLocal
+              : null,
+            tax_code: c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
+            dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
+            is_tax_row: isTaxRow,
+            igst_rate: (() => {
+              const raw = (c as any).igst_rate;
+              if (raw == null || raw === "") return null;
+              const parsed =
+                typeof raw === "number" ? raw : parseFloat(String(raw));
+              return Number.isFinite(parsed) ? parsed : null;
+            })(),
+            cgst_rate: (() => {
+              const raw = (c as any).cgst_rate;
+              if (raw == null || raw === "") return null;
+              const parsed =
+                typeof raw === "number" ? raw : parseFloat(String(raw));
+              return Number.isFinite(parsed) ? parsed : null;
+            })(),
+            sgst_rate: (() => {
+              const raw = (c as any).sgst_rate;
+              if (raw == null || raw === "") return null;
+              const parsed =
+                typeof raw === "number" ? raw : parseFloat(String(raw));
+              return Number.isFinite(parsed) ? parsed : null;
+            })(),
+            tax_rate: isTaxRow
+              ? null
+              : (() => {
+                  const raw = (c as any).tax_rate;
+                  if (raw == null || raw === "") return null;
+                  const parsed =
+                    typeof raw === "number" ? raw : parseFloat(String(raw));
+                  return Number.isFinite(parsed) ? parsed : null;
+                })(),
+            tax_amount: isTaxRow
+              ? null
+              : (() => {
+                  const raw = (c as any).tax_amount;
+                  if (raw == null || raw === "") return null;
+                  const parsed =
+                    typeof raw === "number" ? raw : parseFloat(String(raw));
+                  return Number.isFinite(parsed) ? parsed : null;
+                })(),
+          };
+        });
+
+        form.setFieldValue("charges", mappedCharges);
+        setVatRatesByChargeIndex((prev) => {
+          const next = { ...prev };
+          mappedCharges.forEach((charge, idx) => {
+            if (charge.is_tax_row === true) next[idx] = null;
+          });
+          return next;
+        });
+      } else if (isVatPost && taxCharges.length > 0) {
+        const baseCharges = form.values.charges.filter(
+          (c) => c.is_tax_row !== true,
+        );
+        const vatTaxRows: ChargeItem[] = percentageWiseTotals
+          .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
+          .map((row) => {
+            const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+            const { amountInLocal, amountInHeader, currencyAmount } =
+              calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
             return {
-              id: c.id ?? undefined,
-              charge_id: c.charge_id ?? null,
-              charge_code: (c as { charge_code?: string }).charge_code ?? "",
-              charge_name: c.charge_name ?? "",
-              shipment_id: (c as { shipment_id?: string }).shipment_id
-                ? String((c as { shipment_id: string }).shipment_id)
-                : (c as { shipment_no?: string }).shipment_no
-                  ? String((c as { shipment_no: string }).shipment_no)
-                  : "",
-              shipper_id: (c as { shipper_id?: string }).shipper_id ?? "",
-              unit_code: c.unit_code ?? "",
-              unit_id: c.unit_id != null ? String(c.unit_id) : undefined,
-              no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
-              currency: c.currency_code ?? "",
+              charge_id: row.vat_charge_id ?? null,
+              charge_code: row.vat_charge_code ?? "VAT",
+              charge_name:
+                row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
+              unit_code: "",
+              no_of_unit: 0,
+              currency: localCurrencyCode || form.values.currency || "",
               currency_id:
-                c.currency_id != null ? String(c.currency_id) : undefined,
-              roe: Number.isFinite(roe) ? roe : null,
-              amount_per_unit: Number.isFinite(amountPerUnit)
-                ? amountPerUnit
-                : null,
-              amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount)
-                ? headerAmount
-                : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
-              tax_code:
-                c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
-              dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
-              is_tax_row: isTaxRow,
-              igst_rate: (() => {
-                const raw = (c as any).igst_rate;
-                if (raw == null || raw === "") return null;
-                const parsed =
-                  typeof raw === "number" ? raw : parseFloat(String(raw));
-                return Number.isFinite(parsed) ? parsed : null;
-              })(),
-              cgst_rate: (() => {
-                const raw = (c as any).cgst_rate;
-                if (raw == null || raw === "") return null;
-                const parsed =
-                  typeof raw === "number" ? raw : parseFloat(String(raw));
-                return Number.isFinite(parsed) ? parsed : null;
-              })(),
-              sgst_rate: (() => {
-                const raw = (c as any).sgst_rate;
-                if (raw == null || raw === "") return null;
-                const parsed =
-                  typeof raw === "number" ? raw : parseFloat(String(raw));
-                return Number.isFinite(parsed) ? parsed : null;
-              })(),
-              tax_rate: isTaxRow
-                ? null
-                : (() => {
-                    const raw = (c as any).tax_rate;
-                    if (raw == null || raw === "") return null;
-                    const parsed =
-                      typeof raw === "number"
-                        ? raw
-                        : parseFloat(String(raw));
-                    return Number.isFinite(parsed) ? parsed : null;
-                  })(),
-              tax_amount: isTaxRow
-                ? null
-                : (() => {
-                    const raw = (c as any).tax_amount;
-                    if (raw == null || raw === "") return null;
-                    const parsed =
-                      typeof raw === "number"
-                        ? raw
-                        : parseFloat(String(raw));
-                    return Number.isFinite(parsed) ? parsed : null;
-                  })(),
+                taxRowCurrencyId != null ? String(taxRowCurrencyId) : "",
+              roe: 1,
+              amount_per_unit: 0,
+              amount: currencyAmount,
+              header_amount: amountInHeader,
+              amount_in_local: amountInLocal,
+              tax_code: "",
+              dr_cr: "Cr",
+              is_tax_row: true,
+              tax_rate: null,
+              tax_amount: null,
             };
           });
-
-          form.setFieldValue("charges", mappedCharges);
-          setVatRatesByChargeIndex((prev) => {
-            const next = { ...prev };
-            mappedCharges.forEach((charge, idx) => {
-              if (charge.is_tax_row === true) next[idx] = null;
-            });
-            return next;
+        form.setFieldValue("charges", [...baseCharges, ...vatTaxRows]);
+        setVatRatesByChargeIndex((prev) => {
+          const next = { ...prev };
+          [...baseCharges, ...vatTaxRows].forEach((charge, idx) => {
+            if (charge.is_tax_row === true) next[idx] = null;
           });
-        } else if (isVatPost && taxCharges.length > 0) {
-          const baseCharges = form.values.charges.filter(
-            (c) => c.is_tax_row !== true,
-          );
-          const vatTaxRows: ChargeItem[] = percentageWiseTotals
-            .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
-            .map((row) => {
-              const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
-              const { amountInLocal, amountInHeader, currencyAmount } =
-                calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
-              return {
-                charge_id: row.vat_charge_id ?? null,
-                charge_code: row.vat_charge_code ?? "VAT",
-                charge_name:
-                  row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
-                unit_code: "",
-                no_of_unit: 0,
-                currency: localCurrencyCode || form.values.currency || "",
-                currency_id:
-                  taxRowCurrencyId != null ? String(taxRowCurrencyId) : "",
-                roe: 1,
-                amount_per_unit: 0,
-                amount: currencyAmount,
-                header_amount: amountInHeader,
-                amount_in_local: amountInLocal,
-                tax_code: "",
-                dr_cr: "Cr",
-                is_tax_row: true,
-                tax_rate: null,
-                tax_amount: null,
-              };
-            });
-          form.setFieldValue("charges", [...baseCharges, ...vatTaxRows]);
-          setVatRatesByChargeIndex((prev) => {
-            const next = { ...prev };
-            [...baseCharges, ...vatTaxRows].forEach((charge, idx) => {
-              if (charge.is_tax_row === true) next[idx] = null;
-            });
-            return next;
-          });
-        }
+          return next;
+        });
+      }
       ToastNotification({
         message: parsed.message,
         type: "success",
@@ -4048,8 +4033,7 @@ function InvoiceCreate({
       resolveInvoiceRecordId(
         (invoiceDataFromApi ??
           getInvoiceDataFromLocationState(location.state)) as
-          | Record<string, unknown>
-          | undefined,
+          Record<string, unknown> | undefined,
         invoiceId,
       );
     if (!pdfInvoiceId) return;
@@ -4479,7 +4463,9 @@ function InvoiceCreate({
                     );
                     const billingUpper = newCurrency.trim().toUpperCase();
                     form.values.charges.forEach((charge, idx) => {
-                      if (charge.currency?.trim().toUpperCase() === billingUpper) {
+                      if (
+                        charge.currency?.trim().toUpperCase() === billingUpper
+                      ) {
                         form.setFieldValue(`charges.${idx}.roe`, 1);
                       }
                     });
@@ -4529,8 +4515,14 @@ function InvoiceCreate({
                         ? parseFloat(value) || null
                         : null;
                   form.setFieldValue("roe", numValue);
-                  const billingCode = form.values.currency?.trim().toUpperCase();
-                  if (billingCode && numValue != null && Number.isFinite(numValue)) {
+                  const billingCode = form.values.currency
+                    ?.trim()
+                    .toUpperCase();
+                  if (
+                    billingCode &&
+                    numValue != null &&
+                    Number.isFinite(numValue)
+                  ) {
                     roeCacheRef.current.set(billingCode, numValue);
                   }
                   const headerRoeError = validateRoeForCurrency(
@@ -4575,9 +4567,7 @@ function InvoiceCreate({
                   placeholder="Enter IRN number"
                   format="normal"
                   value={form.values.irn_no}
-                  onChange={(e) =>
-                    form.setFieldValue("irn_no", e.target.value)
-                  }
+                  onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
                   error={form.errors.irn_no}
                   readOnly={isReadOnly}
                 />
@@ -4880,7 +4870,10 @@ function InvoiceCreate({
                           );
                           form.setFieldValue(`charges.${index}.tax_code`, "");
                           if (isVatInvoiceUser) {
-                            form.setFieldValue(`charges.${index}.tax_rate`, null);
+                            form.setFieldValue(
+                              `charges.${index}.tax_rate`,
+                              null,
+                            );
                           }
                           if (chargeErrors[index]?.charge_name) {
                             const newErrors = { ...chargeErrors };
@@ -4987,7 +4980,10 @@ function InvoiceCreate({
                           form.setFieldValue(`charges.${index}.currency`, code);
                           if (isBaseCurrency(code)) {
                             form.setFieldValue(`charges.${index}.roe`, 1);
-                            roeCacheRef.current.set(code.trim().toUpperCase(), 1);
+                            roeCacheRef.current.set(
+                              code.trim().toUpperCase(),
+                              1,
+                            );
                             const currentCharge = form.values.charges[index];
                             const amt = currentCharge.amount;
                             if (amt != null && amt > 0) {
@@ -5165,9 +5161,7 @@ function InvoiceCreate({
                         decimalScale={ROE_DECIMAL_PLACES}
                         withAsterisk
                         // disabled={isReadOnly}
-                        readOnly={
-                          isReadOnly || isChargeBaseCurrency(charge)
-                        }
+                        readOnly={isReadOnly || isChargeBaseCurrency(charge)}
                         value={charge.roe || undefined}
                         onChange={(value) => {
                           if (isChargeBaseCurrency(charge)) {
@@ -5225,11 +5219,12 @@ function InvoiceCreate({
                           );
                           form.setFieldValue("charges", updatedCharges);
 
-                          const currencyRows = (currencyData as {
-                            id?: number;
-                            code?: string;
-                            currency_code?: string;
-                          }[]) ?? [];
+                          const currencyRows =
+                            (currencyData as {
+                              id?: number;
+                              code?: string;
+                              currency_code?: string;
+                            }[]) ?? [];
                           const roeError = validateRoeForCurrency(
                             resolveChargeCurrencyCode(
                               {
@@ -5249,7 +5244,10 @@ function InvoiceCreate({
                           if (roeError) {
                             setChargeErrors((prev) => ({
                               ...prev,
-                              [index]: { ...(prev[index] ?? {}), roe: roeError },
+                              [index]: {
+                                ...(prev[index] ?? {}),
+                                roe: roeError,
+                              },
                             }));
                           } else {
                             setChargeErrors((prev) => {
@@ -5278,7 +5276,7 @@ function InvoiceCreate({
                         value={charge.no_of_unit ?? undefined}
                         onChange={(value) => {
                           const noOfUnit = parseNoOfUnitForPayload(
-                            value as number | null
+                            value as number | null,
                           );
                           const currentCharge = form.values.charges[index];
                           let amount = currentCharge.amount;
@@ -5839,13 +5837,15 @@ function InvoiceCreate({
                                   return next;
                                 });
                                 const nextUnits: Record<number, string> = {};
-                                Object.entries(chargeUnitsByIndexRef.current).forEach(
-                                  ([key, value]) => {
-                                    const idx = Number(key);
-                                    if (Number.isNaN(idx) || idx === index) return;
-                                    nextUnits[idx > index ? idx - 1 : idx] = value;
-                                  },
-                                );
+                                Object.entries(
+                                  chargeUnitsByIndexRef.current,
+                                ).forEach(([key, value]) => {
+                                  const idx = Number(key);
+                                  if (Number.isNaN(idx) || idx === index)
+                                    return;
+                                  nextUnits[idx > index ? idx - 1 : idx] =
+                                    value;
+                                });
                                 chargeUnitsByIndexRef.current = nextUnits;
                                 lastVatRatesFetchKeyRef.current = "";
                                 form.removeListItem("charges", index);
@@ -5874,8 +5874,7 @@ function InvoiceCreate({
                                   )?.value ??
                                     "");
                                 const newIndex = form.values.charges.length;
-                                chargeUnitsByIndexRef.current[newIndex] =
-                                  "|";
+                                chargeUnitsByIndexRef.current[newIndex] = "|";
                                 const defaultShipmentId = (() => {
                                   if (!isAgentInvoice) return undefined;
                                   const fromExisting = form.values.charges.find(

@@ -117,17 +117,53 @@ function buildJobContainerDetailRow(
   };
 }
 
-/** FCL: one container_details row per booking cargo row (same line count), type copied from cargo. */
+/**
+ * Ocean FCL booking cargo is grouped by container type:
+ *   cargo_details[].container_type_code + cargo_details[].containers[]
+ * Job container_details needs one row per physical container (type + container_no).
+ */
 function mapFclContainerDetailsFromBooking(
   cargoList: unknown[],
 ): Array<Record<string, unknown>> {
   if (!cargoList.length) return [];
 
-  return cargoList.map((cargo) => {
+  const containers: Array<Record<string, unknown>> = [];
+
+  for (const cargo of cargoList) {
     const row = cargo as Record<string, unknown>;
     const containerType = resolveContainerTypeCode(row);
-    return buildJobContainerDetailRow(containerType);
-  });
+    const nested = Array.isArray(row.containers) ? row.containers : [];
+
+    if (nested.length > 0) {
+      for (const nestedRow of nested) {
+        const container = nestedRow as Record<string, unknown>;
+        const containerNo = String(container.container_no ?? "").trim();
+        if (!containerNo && !containerType) continue;
+        containers.push(buildJobContainerDetailRow(containerType, containerNo));
+      }
+      continue;
+    }
+
+    // Fallback: no nested list — use parent row (type + optional single container_no).
+    // Prefer creating `no_of_containers` blank-number rows of the same type when count > 1.
+    const declaredCount = toNumberOrNull(row.no_of_containers);
+    const containerNo = String(row.container_no ?? "").trim();
+    if (!containerNo && !containerType) continue;
+    if (declaredCount != null && declaredCount > 1 && !nested.length) {
+      for (let i = 0; i < Math.floor(declaredCount); i += 1) {
+        containers.push(
+          buildJobContainerDetailRow(
+            containerType,
+            i === 0 ? containerNo || null : null,
+          ),
+        );
+      }
+      continue;
+    }
+    containers.push(buildJobContainerDetailRow(containerType, containerNo));
+  }
+
+  return containers;
 }
 
 function mapContainerDetailsFromBooking(booking: Record<string, unknown>) {
@@ -245,13 +281,49 @@ function mapCargoDetails(
     String(booking.service ?? "")
       .trim()
       .toUpperCase() === "FCL";
+  const haz = booking.is_hazardous ?? "";
+
+  // Ocean FCL: expand nested `containers[]` into house cargo rows (one per container_no).
+  if (isFclOcean) {
+    const expanded: Array<Record<string, unknown>> = [];
+    for (const c of cargo) {
+      const row = c as Record<string, unknown>;
+      const nested = Array.isArray(row.containers) ? row.containers : [];
+      if (nested.length > 0) {
+        for (const nestedRow of nested) {
+          const container = nestedRow as Record<string, unknown>;
+          const containerNo = String(container.container_no ?? "").trim();
+          expanded.push({
+            container_no: containerNo || null,
+            no_of_packages: toNumberOrNull(container.no_of_packages),
+            gross_weight:
+              container.gross_weight ?? row.gross_weight ?? "",
+            volume: container.volume ?? row.volume ?? "",
+            chargeable_weight:
+              container.chargeable_weight ??
+              row.chargeable_weight ??
+              "",
+            haz,
+          });
+        }
+        continue;
+      }
+      expanded.push({
+        container_no: String(row.container_no ?? "").trim() || null,
+        no_of_packages: toNumberOrNull(row.no_of_packages),
+        gross_weight: row.gross_weight || "",
+        volume: row.volume ?? "",
+        chargeable_weight: row.chargeable_weight || "",
+        haz,
+      });
+    }
+    return expanded;
+  }
 
   return cargo.map((c) => {
     const row = c as Record<string, unknown>;
-    const noOfPackages = isFclOcean
-      ? toNumberOrNull(row.no_of_packages)
-      : toNumberOrNull(row.no_of_packages) ??
-        toNumberOrNull(row.no_of_containers);
+    const noOfPackages =
+      toNumberOrNull(row.no_of_packages) ?? toNumberOrNull(row.no_of_containers);
 
     return {
       no_of_packages: noOfPackages,
@@ -261,7 +333,7 @@ function mapCargoDetails(
           ? row.volume_weight ?? row.volume ?? ""
           : row.volume ?? "",
       chargeable_weight: row.chargeable_weight || "",
-      haz: booking.is_hazardous ?? "",
+      haz,
     };
   });
 }

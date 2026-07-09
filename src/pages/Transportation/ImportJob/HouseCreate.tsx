@@ -2717,6 +2717,8 @@ function HouseCreate() {
         notify1_customer_name: form.values.notify1_customer_name,
         notify1_customer_address: form.values.notify1_customer_address,
         notify1_customer_email: form.values.notify1_customer_email,
+        item_no: form.values.item_no,
+        sub_item_no: form.values.sub_item_no,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         cargo_details: cargoDetails.map((cargo) => ({
@@ -2759,6 +2761,7 @@ function HouseCreate() {
       const jobData = {
         service: location.state?.mblDetails?.service || "FCL",
         service_type: "Import",
+        ...(location.state?.job ?? {}),
         ...location.state?.mblDetails,
         ...location.state?.carrierDetails,
         notes: location.state?.job?.notes || [],
