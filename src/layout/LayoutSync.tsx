@@ -218,6 +218,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/job-closure")) {
       setActiveNav("Desk");
       setActiveSubNav("Job Closure");
+    } else if (path.startsWith("/job-profit-verification")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Job Profit Verification");
     } else if (path.startsWith("/job-reopen")) {
       setActiveNav("Desk");
       setActiveSubNav("Reopen Job");

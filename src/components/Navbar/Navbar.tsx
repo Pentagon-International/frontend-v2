@@ -135,6 +135,7 @@ const Navbar = ({
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
       location.pathname.startsWith("/service-job") ||
       location.pathname.startsWith("/job-closure") ||
+      location.pathname.startsWith("/job-profit-verification") ||
       location.pathname.startsWith("/job-reopen") ||
       location.pathname.startsWith("/bank-reconciliation") ||
       location.pathname.startsWith("/checker")
@@ -1257,6 +1258,19 @@ const Navbar = ({
                       label="Job Closure"
                       icon={IconCircleCheck}
                       path="/job-closure"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Job Profit Verification"
+                      icon={IconFileAnalytics}
+                      path="/job-profit-verification"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

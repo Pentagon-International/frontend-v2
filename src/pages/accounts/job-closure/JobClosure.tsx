@@ -88,6 +88,7 @@ type VisibleColumnsState = {
   etd: boolean;
   eta: boolean;
   status: boolean;
+  profit_verified: boolean;
 };
 
 const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
@@ -101,6 +102,7 @@ const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   etd: "ETD",
   eta: "ETA",
   status: "Status",
+  profit_verified: "Profit Verified",
 };
 
 type ImportJobData = {
@@ -133,10 +135,45 @@ type ImportJobData = {
   status: string;
   job_id?: string;
   service_code?: string;
+  has_verified_profit?: boolean;
   housing_details?: Array<{
     hbl_number: string;
   }>;
 };
+
+function ProfitVerifiedPill({ verified }: { verified?: boolean }) {
+  const label = verified ? "Verified" : "Not Verified";
+  const cfg = verified
+    ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
+    : { dot: "#d97706", bg: "#fef3c7", color: "#b45309" };
+  return (
+    <Box
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "2px 10px",
+        borderRadius: 9999,
+        backgroundColor: cfg.bg,
+        color: cfg.color,
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Box
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: cfg.dot,
+          flexShrink: 0,
+        }}
+      />
+      {label}
+    </Box>
+  );
+}
 
 /** `summary` on `filterJobCreate` list (filter-scoped). */
 type ImportJobListSummary = {
@@ -255,6 +292,7 @@ function JobClosure() {
     etd: true,
     eta: true,
     status: true,
+    profit_verified: true,
   });
 
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
@@ -1094,6 +1132,9 @@ function JobClosure() {
                       {visibleColumns.status && (
                         <th style={mergeTh(130, 130)}>Status</th>
                       )}
+                      {visibleColumns.profit_verified && (
+                        <th style={mergeTh(140, 140)}>Profit Verified</th>
+                      )}
                       <th
                         style={{
                           ...erpListStickyActionThStyle(theme, 96),
@@ -1269,6 +1310,11 @@ function JobClosure() {
                             {visibleColumns.status && (
                               <td style={tdPad}>
                                 <ERPListJobStatusPill status={row.status} />
+                              </td>
+                            )}
+                            {visibleColumns.profit_verified && (
+                              <td style={tdPad}>
+                                <ProfitVerifiedPill verified={row.has_verified_profit} />
                               </td>
                             )}
                             <td style={erpListStickyActionTdStyle(theme)}>
