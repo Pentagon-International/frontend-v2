@@ -68,6 +68,10 @@ import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
+import {
+  hasMeaningfulHouseChargeData,
+  type HouseChargeLike,
+} from "../../../utils/houseChargesPayload";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   formatHouseCargoChargeableForPayload,
@@ -2876,7 +2880,11 @@ function ExportJobCreate() {
               (house as { charges?: unknown }).charges ??
               [];
             const arr = Array.isArray(src) ? src : [];
-            return arr.map((charge: Record<string, unknown>) => ({
+            const meaningful = arr.filter((charge) =>
+              hasMeaningfulHouseChargeData(charge as HouseChargeLike),
+            );
+            if (meaningful.length === 0) return [];
+            return meaningful.map((charge: Record<string, unknown>) => ({
               ...(mode === "edit" &&
                 charge.id != null && {
                   id:

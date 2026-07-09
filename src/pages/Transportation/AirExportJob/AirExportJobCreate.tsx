@@ -77,6 +77,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
+import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -462,8 +463,10 @@ function AirExportJobCreate() {
   const [pendingProformaShipmentId, setPendingProformaShipmentId] = useState<
     string | null
   >(null);
-  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
-    useState<string | null>(null);
+  const [
+    vendorInvoiceAutomationShipmentNo,
+    setVendorInvoiceAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -1132,8 +1135,7 @@ function AirExportJobCreate() {
                   : [],
               charges: (() => {
                 const chargesArray = (house.charges || house.mawb_charges) as
-                  | Record<string, unknown>[]
-                  | undefined;
+                  Record<string, unknown>[] | undefined;
                 if (chargesArray && Array.isArray(chargesArray)) {
                   const toNum = (v: unknown): number | null => {
                     if (v == null) return null;
@@ -1143,8 +1145,7 @@ function AirExportJobCreate() {
                   };
                   return chargesArray.map((charge: Record<string, unknown>) => {
                     const unitDetails = charge.unit_details as
-                      | { unit_code?: string; unit_id?: number }
-                      | undefined;
+                      { unit_code?: string; unit_id?: number } | undefined;
                     const currencyDetails = charge.currency_details as
                       | { currency_code?: string; currency_id?: number }
                       | undefined;
@@ -1223,15 +1224,9 @@ function AirExportJobCreate() {
                 const s = raw as Record<string, unknown>;
                 return {
                   total_local_sell: s.total_local_sell as
-                    | number
-                    | string
-                    | null
-                    | undefined,
+                    number | string | null | undefined,
                   total_local_cost: s.total_local_cost as
-                    | number
-                    | string
-                    | null
-                    | undefined,
+                    number | string | null | undefined,
                 };
               })(),
               ...extractHouseDocumentFields(house),
@@ -1909,8 +1904,7 @@ function AirExportJobCreate() {
             consignee_address_id:
               (
                 savedMawbDetails as
-                  | { consignee_address_id?: string }
-                  | undefined
+                  { consignee_address_id?: string } | undefined
               )?.consignee_address_id || "",
             consignee_address:
               (savedMawbDetails as { consignee_address?: string } | undefined)
@@ -1927,14 +1921,12 @@ function AirExportJobCreate() {
             carrier_agent_address_id:
               (
                 savedMawbDetails as
-                  | { carrier_agent_address_id?: string }
-                  | undefined
+                  { carrier_agent_address_id?: string } | undefined
               )?.carrier_agent_address_id || "",
             carrier_agent_address:
               (
                 savedMawbDetails as
-                  | { carrier_agent_address?: string }
-                  | undefined
+                  { carrier_agent_address?: string } | undefined
               )?.carrier_agent_address || "",
           });
 
@@ -2716,38 +2708,37 @@ function AirExportJobCreate() {
               ) ?? "",
             haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
           })),
-          mawb_charges: hawb.charges
-            ? hawb.charges.map((charge) => ({
-                ...(charge.id != null &&
-                  charge.id !== undefined && { id: Number(charge.id) }),
-                charge_id: charge.charge_id ?? null,
-                supplier_code:
-                  charge.supplier_code != null
-                    ? String(charge.supplier_code)
-                    : null,
-                pp_cc: charge.pp_cc || "",
-                unit_id: charge.unit_id ? String(charge.unit_id) : "",
-                no_of_unit: roundToDecimals(charge.no_of_unit) || null,
-                currency_id: charge.currency_id
-                  ? String(charge.currency_id)
-                  : "",
-                roe: roundRoeForPayload(charge.roe) ?? null,
-                amount_per_unit:
-                  roundToDecimals(charge.amount_per_unit) || null,
-                amount: roundToDecimals(charge.amount) || null,
-                sell_local_amount:
-                  roundToDecimals(charge.sell_local_amount) ??
-                  roundToDecimals(charge.local_amount) ??
-                  null,
-                unit_cost:
-                  roundToDecimals(charge.unit_cost) ??
-                  roundToDecimals(charge.cost_per_unit) ??
-                  null,
-                total_cost: roundToDecimals(charge.total_cost) ?? null,
-                cost_local_amount:
-                  roundToDecimals(charge.cost_local_amount) ?? null,
-              }))
-            : [],
+          mawb_charges: (() => {
+            const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
+            if (meaningful.length === 0) return [];
+            return meaningful.map((charge) => ({
+              ...(charge.id != null &&
+                charge.id !== undefined && { id: Number(charge.id) }),
+              charge_id: charge.charge_id ?? null,
+              supplier_code:
+                charge.supplier_code != null
+                  ? String(charge.supplier_code)
+                  : null,
+              pp_cc: charge.pp_cc || "",
+              unit_id: charge.unit_id ? String(charge.unit_id) : "",
+              no_of_unit: roundToDecimals(charge.no_of_unit) || null,
+              currency_id: charge.currency_id ? String(charge.currency_id) : "",
+              roe: roundRoeForPayload(charge.roe) ?? null,
+              amount_per_unit: roundToDecimals(charge.amount_per_unit) || null,
+              amount: roundToDecimals(charge.amount) || null,
+              sell_local_amount:
+                roundToDecimals(charge.sell_local_amount) ??
+                roundToDecimals(charge.local_amount) ??
+                null,
+              unit_cost:
+                roundToDecimals(charge.unit_cost) ??
+                roundToDecimals(charge.cost_per_unit) ??
+                null,
+              total_cost: roundToDecimals(charge.total_cost) ?? null,
+              cost_local_amount:
+                roundToDecimals(charge.cost_local_amount) ?? null,
+            }));
+          })(),
         })),
         estimates: (() => {
           const raw = estimatesForm.values.estimates ?? [];
@@ -2861,7 +2852,11 @@ function AirExportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {jobData?.id != null && hawbDetails.length > 0 && (
-              <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+              <Menu
+                shadow="md"
+                width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                position="bottom-end"
+              >
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
@@ -3650,17 +3645,17 @@ function AirExportJobCreate() {
                 ).toUpperCase();
                 const requireRouting = Boolean(
                   String(routing.transport_type ?? "").trim() ||
-                    String(routing.from_code ?? "").trim() ||
-                    String(routing.to_code ?? "").trim() ||
-                    String(routing.carrier_code ?? "").trim() ||
-                    String(routing.carrier_name ?? "").trim() ||
-                    String(routing.vessel ?? "").trim() ||
-                    String(routing.flight ?? "").trim() ||
-                    String(routing.voyage_number ?? "").trim() ||
-                    String(routing.truck_no ?? "").trim() ||
-                    String(routing.rail_no ?? "").trim() ||
-                    routing.etd != null ||
-                    routing.eta != null,
+                  String(routing.from_code ?? "").trim() ||
+                  String(routing.to_code ?? "").trim() ||
+                  String(routing.carrier_code ?? "").trim() ||
+                  String(routing.carrier_name ?? "").trim() ||
+                  String(routing.vessel ?? "").trim() ||
+                  String(routing.flight ?? "").trim() ||
+                  String(routing.voyage_number ?? "").trim() ||
+                  String(routing.truck_no ?? "").trim() ||
+                  String(routing.rail_no ?? "").trim() ||
+                  routing.etd != null ||
+                  routing.eta != null,
                 );
                 return (
                   <Box key={`${index}-${formInitializedKey}`}>
@@ -4883,7 +4878,7 @@ function AirExportJobCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                                                                        >
+                                            >
                                               Document Number
                                             </Table.Th>
                                             <Table.Th
@@ -5495,7 +5490,11 @@ function AirExportJobCreate() {
                         </Button>
                       </>
                     )}
-                    <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+                    <Menu
+                      shadow="md"
+                      width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                      position="bottom-end"
+                    >
                       <Menu.Target>
                         <ActionIcon
                           variant="light"
@@ -5511,7 +5510,9 @@ function AirExportJobCreate() {
                           <IconDotsVertical size={14} />
                         </ActionIcon>
                       </Menu.Target>
-                      <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
+                      <Menu.Dropdown
+                        styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}
+                      >
                         <Menu.Item
                           leftSection={
                             <Box

@@ -84,6 +84,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
+import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
@@ -2707,8 +2708,10 @@ function InlandImportJobCreate() {
               ) ?? "",
             haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
           })),
-          mawb_charges: hawb.charges
-            ? hawb.charges.map((charge) => ({
+          mawb_charges: (() => {
+            const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
+            if (meaningful.length === 0) return [];
+            return meaningful.map((charge) => ({
                 ...(charge.id != null &&
                   charge.id !== undefined && { id: Number(charge.id) }),
                 charge_id: charge.charge_id ?? null,
@@ -2737,8 +2740,8 @@ function InlandImportJobCreate() {
                 total_cost: roundToDecimals(charge.total_cost) ?? null,
                 cost_local_amount:
                   roundToDecimals(charge.cost_local_amount) ?? null,
-              }))
-            : [],
+              }));
+          })(),
         })),
         estimates: (() => {
           const raw = estimatesForm.values.estimates ?? [];

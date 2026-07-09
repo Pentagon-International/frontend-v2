@@ -56,6 +56,20 @@ const pickCanField = (...values: unknown[]): string => {
   return "";
 };
 
+/** Job list API returns `actual_booking_no` as a string array at job level. */
+const formatCanBookingNo = (jobInfo: Record<string, unknown>): string => {
+  const actualBookingNos = jobInfo?.actual_booking_no;
+  if (Array.isArray(actualBookingNos)) {
+    const values = actualBookingNos
+      .map((entry) => (entry == null ? "" : String(entry).trim()))
+      .filter((entry) => entry.length > 0);
+    if (values.length > 0) {
+      return values.join(", ");
+    }
+  }
+  return pickCanField(jobInfo?.booking_no);
+};
+
 const isNumericId = (value: unknown): boolean => {
   if (value == null || value === "") return false;
   return /^\d+$/.test(String(value).trim());
@@ -257,6 +271,8 @@ const CAN_TABLE_ROW_H = 6;
 const CAN_TABLE_CELL_Y_OFFSET = 4;
 const CAN_TABLE_HEADER_TEXT_Y_OFFSET = 4.8;
 const CAN_LINE_SPACING = 5.5;
+const CAN_TO_FOOTER_FONT_SIZE = 7;
+const CAN_TO_FOOTER_LINE_SPACING = 4;
 const CAN_COMMODITY_LINE_HEIGHT = 4.5;
 const CAN_NOTES_LINE_SPACING = 5;
 const CAN_SECTION_TITLE_TO_CONTENT_GAP = 4;
@@ -847,6 +863,18 @@ export const generateCargoArrivalNoticePDF = (
     // Consignee details - from housing_details
     const consigneeName = pickCanField(hawbData?.consignee_name);
     const consigneeAddress = pickCanField(hawbData?.consignee_address);
+    const consigneePan = pickCanField(
+      hawbData?.consignee_pan_no,
+      hawbData?.consignee_pan,
+    );
+    const consigneeGst = pickCanField(hawbData?.consignee_gst_id);
+    const consigneeStateDetails = hawbData?.consignee_state_details as
+      | { state_code?: string }
+      | undefined;
+    const consigneeStateCode = pickCanField(
+      hawbData?.consignee_state_code,
+      consigneeStateDetails?.state_code,
+    );
     
     // Notify Party details - API uses notify1_customer_* keys
     const notifyName = pickCanField(
@@ -916,7 +944,7 @@ export const generateCargoArrivalNoticePDF = (
       jobInfo?.mawb_date,
     );
     const mawbCreatedAt = mawbDateSource ? formatDateForDisplay(mawbDateSource) : "";
-    const bookingNo = pickCanField(jobInfo?.booking_no, jobInfo?.carrier_booking_no);
+    const bookingNo = formatCanBookingNo(jobInfo);
     const cargoLocation = pickCanField(jobInfo?.cargo_location);
 
     // Set document properties
@@ -972,7 +1000,6 @@ export const generateCargoArrivalNoticePDF = (
     const leftColumnTopOffset = boxPadding + 3;
 
     const houseBillLabel = isOceanImport ? "HBL:" : "HAWB:";
-    const houseBillDateLabel = isOceanImport ? "HBL Date:" : "HAWB Date:";
     const masterBillLabel = isOceanImport ? "MBL:" : "MAWB:";
     const invoiceKeyLabels = [
       "Job Ref No:",
@@ -982,7 +1009,6 @@ export const generateCargoArrivalNoticePDF = (
     ];
     const shipmentKeyLabels = [
       houseBillLabel,
-      houseBillDateLabel,
       masterBillLabel,
       "Booking No:",
       "Carrier:",
@@ -1014,7 +1040,10 @@ export const generateCargoArrivalNoticePDF = (
     const { valueMaxWidth: invoiceValueMaxWidth } = invoiceColumnLayout;
     const { valueMaxWidth: shipmentValueMaxWidth } = shipmentColumnLayout;
 
-    const hawbInfo = hawbNumber || "";
+    const hawbInfo =
+      hawbNumber && houseDate
+        ? `${hawbNumber}/${houseDate}`
+        : hawbNumber || houseDate || "";
     const mawbInfo = mawbNumber && mawbCreatedAt ? `${mawbNumber}/${mawbCreatedAt}` : (mawbNumber || mawbCreatedAt || "");
 
     // Calculate heights for right column sections (wrap within right margin)
@@ -1024,7 +1053,6 @@ export const generateCargoArrivalNoticePDF = (
     const fromLines = doc.splitTextToSize(createdBy || "", invoiceValueMaxWidth);
     const igmNoLines = doc.splitTextToSize(igmNo || "", shipmentValueMaxWidth);
     const hawbInfoLines = doc.splitTextToSize(hawbInfo, shipmentValueMaxWidth);
-    const houseDateLines = doc.splitTextToSize(houseDate || "", shipmentValueMaxWidth);
     const mawbInfoLines = doc.splitTextToSize(mawbInfo, shipmentValueMaxWidth);
     const bookingNoLines = doc.splitTextToSize(bookingNo || "", shipmentValueMaxWidth);
     const carrierNameLines = doc.splitTextToSize(carrierName || "", shipmentValueMaxWidth);
@@ -1046,7 +1074,6 @@ export const generateCargoArrivalNoticePDF = (
     // Shipment Details section
     rightColumnHeight += 4 + CAN_SECTION_TITLE_TO_CONTENT_GAP; // Title + gap before key-values
     rightColumnHeight += Math.max(1, hawbInfoLines.length) * lineSpacing;
-    rightColumnHeight += Math.max(1, houseDateLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, mawbInfoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, bookingNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, carrierNameLines.length) * lineSpacing;
@@ -1120,6 +1147,7 @@ export const generateCargoArrivalNoticePDF = (
       addressLines: string[],
       drawBottomLine = true,
       afterDivider = false,
+      consigneeFooter?: { pan: string; gst: string; stateCode: string },
     ) => {
       const textX = margin + boxPadding;
       const sectionBottomY = sectionTopY + leftSectionHeight;
@@ -1154,6 +1182,48 @@ export const generateCargoArrivalNoticePDF = (
       drawFieldLines(nameLines);
       drawFieldLines(addressLines);
 
+      if (consigneeFooter) {
+        const drawFooterPart = (
+          label: string,
+          value: string,
+          x: number,
+          y: number,
+        ) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(CAN_TO_FOOTER_FONT_SIZE);
+          doc.text(label, x, y);
+          const labelWidth = doc.getTextWidth(label);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(CAN_TO_FOOTER_FONT_SIZE);
+          doc.text(value || "", x + labelWidth, y);
+          return x + labelWidth + doc.getTextWidth(value || "");
+        };
+
+        if (contentY <= maxContentY) {
+          let footerX = textX;
+          footerX =
+            drawFooterPart("PAN: ", consigneeFooter.pan, footerX, contentY) +
+            6;
+          drawFooterPart(
+            "GST No: ",
+            consigneeFooter.gst,
+            footerX,
+            contentY,
+          );
+          contentY += CAN_TO_FOOTER_LINE_SPACING;
+        }
+        if (contentY <= maxContentY) {
+          drawFooterPart(
+            "State Code: ",
+            consigneeFooter.stateCode,
+            textX,
+            contentY,
+          );
+        }
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(CAN_BODY_FONT_SIZE);
+      }
+
       if (drawBottomLine) {
         doc.line(margin, sectionBottomY, midLine, sectionBottomY);
       }
@@ -1172,6 +1242,12 @@ export const generateCargoArrivalNoticePDF = (
       consigneeNameLines,
       consigneeAddressLines,
       true,
+      false,
+      {
+        pan: consigneePan,
+        gst: consigneeGst,
+        stateCode: consigneeStateCode,
+      },
     );
     drawLeftPartySection(
       "Notify:",
@@ -1237,13 +1313,6 @@ export const generateCargoArrivalNoticePDF = (
       doc,
       houseBillLabel,
       hawbInfoLines,
-      shipmentColumnLayout,
-      rightYPos
-    );
-    rightYPos += drawCanKeyValueRow(
-      doc,
-      houseBillDateLabel,
-      houseDateLines,
       shipmentColumnLayout,
       rightYPos
     );

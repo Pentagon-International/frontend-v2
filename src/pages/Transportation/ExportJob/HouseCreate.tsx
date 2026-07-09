@@ -57,8 +57,18 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
-import { ROE_DECIMAL_PLACES, roundRoeForPayload } from "../../../utils/exchangeRateRoe";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  ROE_DECIMAL_PLACES,
+  roundRoeForPayload,
+} from "../../../utils/exchangeRateRoe";
+import {
+  getMeaningfulHouseCharges,
+  validateMeaningfulHouseCharges,
+} from "../../../utils/houseChargesPayload";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -113,7 +123,10 @@ import {
   HousePageDocumentsButton,
   HousePageDocumentsModal,
 } from "../../../components/HousePageDocumentsAttach";
-import { pickHouseDocumentFields, spreadMasterDocumentsNavState } from "../../../utils/jobDocuments";
+import {
+  pickHouseDocumentFields,
+  spreadMasterDocumentsNavState,
+} from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -346,10 +359,8 @@ function HouseCreate() {
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
 
   const calculateChargeableWeight = useCallback(
-    (
-      grossWeight: HouseCargoWeightValue,
-      volume: HouseCargoWeightValue,
-    ) => calculateHouseChargeableWeight(grossWeight, volume, "ocean"),
+    (grossWeight: HouseCargoWeightValue, volume: HouseCargoWeightValue) =>
+      calculateHouseChargeableWeight(grossWeight, volume, "ocean"),
     [],
   );
 
@@ -436,8 +447,10 @@ function HouseCreate() {
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
-  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
-    useState<string | null>(null);
+  const [
+    vendorInvoiceAutomationShipmentNo,
+    setVendorInvoiceAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -467,10 +480,12 @@ function HouseCreate() {
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
-    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
-      value: item.tos_code ? String(item.tos_code) : "",
-      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
-    }));
+    return termsOfShipment.map(
+      (item: { tos_code?: string; tos_name?: string }) => ({
+        value: item.tos_code ? String(item.tos_code) : "",
+        label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+      }),
+    );
   }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
@@ -771,8 +786,7 @@ function HouseCreate() {
   };
   const isLclShipment = useMemo(
     () =>
-      String(location.state?.mblDetails?.service ?? "").toUpperCase() ===
-      "LCL",
+      String(location.state?.mblDetails?.service ?? "").toUpperCase() === "LCL",
     [location.state?.mblDetails?.service],
   );
 
@@ -881,11 +895,9 @@ function HouseCreate() {
         const mappedCharges = chargesArray.map(
           (charge: Record<string, unknown>) => {
             const unitDetails = charge.unit_details as
-              | { unit_id?: number; unit_code?: string }
-              | undefined;
+              { unit_id?: number; unit_code?: string } | undefined;
             const currencyDetails = charge.currency_details as
-              | { currency_id?: number; currency_code?: string }
-              | undefined;
+              { currency_id?: number; currency_code?: string } | undefined;
             const unitCode = String(
               charge.unit_code ??
                 charge.unit ??
@@ -988,7 +1000,12 @@ function HouseCreate() {
                 );
                 const existing = toNum(charge.sell_local_amount);
                 if (existing != null && existing > 0) return existing;
-                return calcSellLocalAmount(amount, roe, noOfUnit, amountPerUnit);
+                return calcSellLocalAmount(
+                  amount,
+                  roe,
+                  noOfUnit,
+                  amountPerUnit,
+                );
               })(),
               unit_cost: toNum(charge.unit_cost),
               total_cost: toNum(charge.total_cost),
@@ -1158,8 +1175,11 @@ function HouseCreate() {
   const form = useForm<HouseDetailsForm>({
     initialValues: {
       hbl_number: editData?.hbl_number || "",
-      house_date: (editData as { house_date?: string | Date } | undefined)?.house_date
-        ? new Date(String((editData as { house_date?: string | Date }).house_date))
+      house_date: (editData as { house_date?: string | Date } | undefined)
+        ?.house_date
+        ? new Date(
+            String((editData as { house_date?: string | Date }).house_date),
+          )
         : null,
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
@@ -1352,7 +1372,9 @@ function HouseCreate() {
         cargo.volume,
       );
       // Only update if chargeable_weight changed
-      if (houseCargoWeightValuesEqual(cargo.chargeable_weight, chargeableWeight)) {
+      if (
+        houseCargoWeightValuesEqual(cargo.chargeable_weight, chargeableWeight)
+      ) {
         return cargo;
       }
       return {
@@ -1500,7 +1522,6 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCalculationKeys, chargeAmounts]);
 
-
   // Salespersons data query
   const { data: rawSalespersonsData = [] } = useQuery({
     queryKey: ["salespersons", ""],
@@ -1557,10 +1578,10 @@ function HouseCreate() {
   );
 
   const jobChargeNoOfUnitContext = useMemo((): JobChargeNoOfUnitContext => {
-    const containerDetails = (
-      (location.state?.containerDetails as JobChargeNoOfUnitContext["containerDetails"]) ??
-      []
-    );
+    const containerDetails =
+      (location.state
+        ?.containerDetails as JobChargeNoOfUnitContext["containerDetails"]) ??
+      [];
     return {
       containerDetails,
       jobCargoDetails: cargoDetails.map((cargo) => ({
@@ -1608,7 +1629,12 @@ function HouseCreate() {
       chargesForm.setValues({ charges: updated });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unitOptions, jobService, bookingCargoForCharges, jobChargeNoOfUnitContext]);
+  }, [
+    unitOptions,
+    jobService,
+    bookingCargoForCharges,
+    jobChargeNoOfUnitContext,
+  ]);
 
   // Format container numbers from location state into dropdown options
   const containerNumberOptions = useMemo(() => {
@@ -1751,9 +1777,7 @@ function HouseCreate() {
     const mblOriginAgent = mblDetails.origin_agent || ""; // This is the customer_code
     const mblOriginAgentName = mblDetails.origin_agent_name || ""; // This is the customer_name
     const mblOriginAgentData = mblDetails.origin_agent_data as
-      | Record<string, unknown>
-      | null
-      | undefined;
+      Record<string, unknown> | null | undefined;
 
     console.log("🔍 MBL Origin Agent Auto-fill:", {
       mblOriginAgent,
@@ -1793,8 +1817,7 @@ function HouseCreate() {
       // Auto-set HBL origin agent address from MBL
       // Priority: 1. mblDetails.origin_agent_address (direct field), 2. addresses_data from origin_agent_data
       const mblOriginAgentAddress = mblDetails.origin_agent_address as
-        | string
-        | undefined;
+        string | undefined;
 
       if (mblOriginAgentAddress && mblOriginAgentAddress.trim() !== "") {
         // Use direct origin_agent_address field from mblDetails if available
@@ -2009,83 +2032,34 @@ function HouseCreate() {
     return true;
   };
 
-  // Validate step 4 - Charges
-  // Mandatory validations apply to both create and edit modes
+  // Validate step 4 - Charges (optional; only rows with user-entered data are validated/sent)
   const validateStep4 = () => {
-    const newErrors: Record<number, Record<string, string>> = {};
-    let hasErrors = false;
-    let roeToastMessage: string | null = null;
-
-    chargesForm.values.charges.forEach((charge, index) => {
-      const chargeError: Record<string, string> = {};
-
-      // Mandatory fields: charge_name (or charge_id), pp_cc, currency, roe, amount
-      if (
-        (!charge.charge_name || charge.charge_name.trim() === "") &&
-        (charge.charge_id == null || charge.charge_id === 0)
-      ) {
-        chargeError.charge_name = "Charge Name is required";
-        hasErrors = true;
-      }
-      if (!charge.pp_cc || charge.pp_cc.trim() === "") {
-        chargeError.pp_cc = "Prepaid/Collect is required";
-        hasErrors = true;
-      }
-      if (!charge.currency_id || charge.currency_id.trim() === "") {
-        chargeError.currency_id = "Currency is required";
-        hasErrors = true;
-      }
-      if (charge.roe === null || charge.roe === undefined) {
-        chargeError.roe = "ROE is required";
-        hasErrors = true;
-      } else {
-        const currencyArr = (currencyData ?? []) as {
-          id?: number;
-          code?: string;
-          currency_code?: string;
-        }[];
-        const roeRuleError = validateRoeField(
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    const result = validateMeaningfulHouseCharges(
+      chargesForm.values.charges,
+      (charge) =>
+        validateRoeField(
           resolveCurrencyCode(charge, currencyArr),
           charge.roe,
           charge.currency_id,
-        );
-        if (roeRuleError) {
-          chargeError.roe = roeRuleError;
-          hasErrors = true;
-          if (
-            roeRuleError === ROE_CANNOT_BE_ONE_FIELD &&
-            !roeToastMessage
-          ) {
-            roeToastMessage = ROE_CANNOT_BE_ONE_TOAST;
-          }
-        }
-      }
-      if (charge.amount === null || charge.amount === undefined) {
-        chargeError.amount = "Amount is required";
-        hasErrors = true;
-      }
-      // If amount_per_unit or no_of_unit is set, both should be set
-      if (
-        (charge.amount_per_unit && !charge.no_of_unit) ||
-        (charge.no_of_unit && !charge.amount_per_unit)
-      ) {
-        chargeError.amount_per_unit =
-          "Both Amount Per Unit and No of Unit must be set together";
-        hasErrors = true;
-      }
+        ),
+      {
+        roeCannotBeOneField: ROE_CANNOT_BE_ONE_FIELD,
+        roeCannotBeOneToast: ROE_CANNOT_BE_ONE_TOAST,
+      },
+    );
 
-      if (Object.keys(chargeError).length > 0) {
-        newErrors[index] = chargeError;
-      }
-    });
+    setChargeErrors(result.errors);
 
-    setChargeErrors(newErrors);
-
-    if (hasErrors) {
-      if (roeToastMessage) {
+    if (!result.valid) {
+      if (result.roeToastMessage) {
         ToastNotification({
           type: "error",
-          message: roeToastMessage,
+          message: result.roeToastMessage,
         });
       }
       return false;
@@ -2202,30 +2176,39 @@ function HouseCreate() {
       return basePayload;
     });
 
-    // Prepare charges payload - include id, charge_id, supplier_code, unit_id, currency_id
-    const chargesForPayload = chargesForm.values.charges.map((charge) => ({
-      ...(isEditMode &&
-        charge.id && {
-          id: typeof charge.id === "number" ? charge.id : Number(charge.id),
-        }),
-      ...(charge.charge_id != null && { charge_id: charge.charge_id }),
-      charge_name: charge.charge_name,
-      pp_cc: charge.pp_cc,
-      unit_id: charge.unit_id || undefined,
-      unit_code: charge.unit_code,
-      currency_id: charge.currency_id || undefined,
-      currency: charge.currency,
-      no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
-      roe: roundRoeForPayload(charge.roe) ?? null,
-      amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
-      amount: roundToDecimals(charge.amount) ?? null,
-      sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
-      unit_cost: roundToDecimals(charge.unit_cost) ?? null,
-      total_cost: roundToDecimals(charge.total_cost) ?? null,
-      cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
-      supplier_code: charge.supplier_code || null,
-      supplier_name: charge.supplier_name ?? null,
-    }));
+    // Prepare charges payload - include id only in edit mode, charge_id, supplier_code for API
+    const meaningfulCharges = getMeaningfulHouseCharges(
+      chargesForm.values.charges,
+    );
+    const chargesForPayload =
+      meaningfulCharges.length === 0
+        ? []
+        : meaningfulCharges.map((charge) => ({
+            ...(isEditMode &&
+              charge.id && {
+                id:
+                  typeof charge.id === "number" ? charge.id : Number(charge.id),
+              }),
+            ...(charge.charge_id != null && { charge_id: charge.charge_id }),
+            charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc,
+            unit_id: charge.unit_id || undefined,
+            unit_code: charge.unit_code,
+            currency_id: charge.currency_id || undefined,
+            currency: charge.currency,
+            no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
+            roe: roundRoeForPayload(charge.roe) ?? null,
+            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundToDecimals(charge.amount) ?? null,
+            sell_local_amount:
+              roundToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundToDecimals(charge.total_cost) ?? null,
+            cost_local_amount:
+              roundToDecimals(charge.cost_local_amount) ?? null,
+            supplier_code: charge.supplier_code || null,
+            supplier_name: charge.supplier_name ?? null,
+          }));
 
     // Prepare housing detail object
     const housingDetail = {
@@ -2264,8 +2247,7 @@ function HouseCreate() {
         ? Number(form.values.shipper_state_id)
         : ((
             editData as
-              | { shipment_id?: string; shipper_state_id?: number }
-              | undefined
+              { shipment_id?: string; shipper_state_id?: number } | undefined
           )?.shipper_state_id ?? null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
@@ -2373,7 +2355,9 @@ function HouseCreate() {
     const v = form.values;
     return {
       hbl_number: v.hbl_number,
-      house_date: v.house_date ? dayjs(v.house_date).format("YYYY-MM-DD") : null,
+      house_date: v.house_date
+        ? dayjs(v.house_date).format("YYYY-MM-DD")
+        : null,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       freight: resolveHouseFreight(),
@@ -2437,7 +2421,7 @@ function HouseCreate() {
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
       cargo_details: cargoDetails,
-      charges: chargesForm.values.charges,
+      charges: getMeaningfulHouseCharges(chargesForm.values.charges),
     };
   };
 
@@ -2446,9 +2430,7 @@ function HouseCreate() {
     eventType: string,
   ): boolean =>
     Array.isArray(events) &&
-    events.some(
-      (e: { type?: string }) => String(e?.type ?? "") === eventType,
-    );
+    events.some((e: { type?: string }) => String(e?.type ?? "") === eventType);
 
   const patchHousingPdfReleasedEvent = async () => {
     const jobId = location.state?.job?.id;
@@ -2469,7 +2451,9 @@ function HouseCreate() {
         housing_details: [
           {
             id: housingId,
-            house_date: form.values.house_date ? dayjs(form.values.house_date).format("YYYY-MM-DD") : null,
+            house_date: form.values.house_date
+              ? dayjs(form.values.house_date).format("YYYY-MM-DD")
+              : null,
             events: [{ type: "BL Released", date }],
           },
         ],
@@ -2480,7 +2464,10 @@ function HouseCreate() {
     const nextEvents = housingEventsFromJobPatchData(jobPayload, housingId);
     if (nextEvents) {
       form.setFieldValue("events", nextEvents);
-      form.setFieldValue("event_modal_rows", eventsToEventModalRows(nextEvents));
+      form.setFieldValue(
+        "event_modal_rows",
+        eventsToEventModalRows(nextEvents),
+      );
     }
   };
 
@@ -2496,7 +2483,9 @@ function HouseCreate() {
       const housingData = {
         id: (editData as { id?: number | string } | undefined)?.id,
         hbl_number: form.values.hbl_number,
-        house_date: form.values.house_date ? dayjs(form.values.house_date).format("YYYY-MM-DD") : null,
+        house_date: form.values.house_date
+          ? dayjs(form.values.house_date).format("YYYY-MM-DD")
+          : null,
         routed: form.values.routed,
         routed_by: form.values.routed_by,
         origin_code: form.values.origin_code,
@@ -2515,8 +2504,7 @@ function HouseCreate() {
           ? Number(form.values.shipper_state_id)
           : ((
               editData as
-                | { shipment_id?: string; shipper_state_id?: number }
-                | undefined
+                { shipment_id?: string; shipper_state_id?: number } | undefined
             )?.shipper_state_id ?? null),
         shipment_id:
           (editData as { shipment_id?: string } | undefined)?.shipment_id ??
@@ -2544,9 +2532,12 @@ function HouseCreate() {
           ),
           haz: c.haz === true || String(c.haz) === "Yes",
         })),
-        mbl_charges: chargesForm.values.charges
-          .filter((charge) => charge.charge_name || charge.charge_id != null)
-          .map((charge) => ({
+        mbl_charges: (() => {
+          const meaningfulCharges = getMeaningfulHouseCharges(
+            chargesForm.values.charges,
+          );
+          if (meaningfulCharges.length === 0) return [];
+          return meaningfulCharges.map((charge) => ({
             ...(charge.id != null &&
               charge.id !== undefined && { id: Number(charge.id) }),
             charge_id: charge.charge_id ?? null,
@@ -2560,13 +2551,16 @@ function HouseCreate() {
             roe: roundRoeForPayload(charge.roe) ?? null,
             amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
             amount: roundToDecimals(charge.amount) ?? null,
-            sell_local_amount: roundToDecimals(charge.sell_local_amount) ?? null,
+            sell_local_amount:
+              roundToDecimals(charge.sell_local_amount) ?? null,
             unit_cost: roundToDecimals(charge.unit_cost) ?? null,
             total_cost: roundToDecimals(charge.total_cost) ?? null,
-            cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
+            cost_local_amount:
+              roundToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
-          })),
+          }));
+        })(),
       };
       // Build job data in the same shape as ExportJobCreate BL generator
       const jobData = {
@@ -2723,7 +2717,11 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
-          <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+          <Menu
+            shadow="md"
+            width={JOB_HOUSE_ACTION_MENU_WIDTH}
+            position="bottom-end"
+          >
             <Menu.Target>
               <ActionIcon
                 variant="subtle"
@@ -3466,7 +3464,10 @@ function HouseCreate() {
                     radius="sm"
                     value={form.values.shipper_address || ""}
                     onChange={(e) => {
-                      form.setFieldValue("shipper_address", e.currentTarget.value);
+                      form.setFieldValue(
+                        "shipper_address",
+                        e.currentTarget.value,
+                      );
                     }}
                     error={form.errors.shipper_address}
                   />
@@ -3605,7 +3606,10 @@ function HouseCreate() {
                     radius="sm"
                     value={form.values.consignee_address || ""}
                     onChange={(e) => {
-                      form.setFieldValue("consignee_address", e.currentTarget.value);
+                      form.setFieldValue(
+                        "consignee_address",
+                        e.currentTarget.value,
+                      );
                     }}
                     error={form.errors.consignee_address}
                   />
@@ -4005,7 +4009,10 @@ function HouseCreate() {
                     radius="sm"
                     value={form.values.agent_address}
                     onChange={(e) => {
-                      form.setFieldValue("agent_address", e.currentTarget.value);
+                      form.setFieldValue(
+                        "agent_address",
+                        e.currentTarget.value,
+                      );
                     }}
                     error={form.errors.agent_address}
                   />
@@ -4032,7 +4039,8 @@ function HouseCreate() {
                       (originalData as Record<string, unknown> | undefined)
                         ?.customer_name != null
                         ? String(
-                            (originalData as Record<string, unknown>).customer_name,
+                            (originalData as Record<string, unknown>)
+                              .customer_name,
                           )
                         : "";
                     form.setFieldValue("cha_code", chaCode);
@@ -4104,7 +4112,10 @@ function HouseCreate() {
                   radius="sm"
                   value={form.values.commodity_description}
                   onChange={(e) => {
-                    form.setFieldValue("commodity_description", e.currentTarget.value);
+                    form.setFieldValue(
+                      "commodity_description",
+                      e.currentTarget.value,
+                    );
                   }}
                   error={form.errors.commodity_description}
                 />
@@ -4269,7 +4280,9 @@ function HouseCreate() {
                         }
                       }}
                       onBlur={(e) => {
-                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4320,7 +4333,9 @@ function HouseCreate() {
                         }
                       }}
                       onBlur={(e) => {
-                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4448,7 +4463,8 @@ function HouseCreate() {
                         .filter(
                           (e: any) =>
                             e?.charge_id != null ||
-                            (e?.charge_name && String(e.charge_name).trim() !== ""),
+                            (e?.charge_name &&
+                              String(e.charge_name).trim() !== ""),
                         )
                         .map((e: any) => ({
                           charge_id: e?.charge_id ?? null,
@@ -4456,9 +4472,13 @@ function HouseCreate() {
                           segment: "",
                           // NOTE: PRQ "Job Id" should receive shipment_id from house context
                           job_no: String(
-                            (fullDetail as { shipment_id?: unknown })?.shipment_id ??
-                              (location.state?.job as { shipment_id?: unknown } | null)
-                                ?.shipment_id ??
+                            (fullDetail as { shipment_id?: unknown })
+                              ?.shipment_id ??
+                              (
+                                location.state?.job as {
+                                  shipment_id?: unknown;
+                                } | null
+                              )?.shipment_id ??
                               location.state?.job?.job_id ??
                               location.state?.job?.id ??
                               "",
@@ -4483,9 +4503,10 @@ function HouseCreate() {
                             e?.cost_local_amount ??
                             e?.local_amount ??
                             (e?.total_cost != null && e?.roe != null
-                              ? Math.round(Number(e.total_cost) * Number(e.roe) * 100) /
-                                100
-                              : e?.total_cost ?? null),
+                              ? Math.round(
+                                  Number(e.total_cost) * Number(e.roe) * 100,
+                                ) / 100
+                              : (e?.total_cost ?? null)),
                           tax_code: "",
                           tax: "false",
                         }));
@@ -4499,7 +4520,8 @@ function HouseCreate() {
 
                       navigate("/payment-request/create", {
                         state: {
-                          serviceType: location.state?.mblDetails?.service || "FCL",
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
                           voucherType: "OCEAN EXPORTS",
                           chargesFromEstimates:
                             chargesFromHouse.length > 0
@@ -4521,7 +4543,9 @@ function HouseCreate() {
                               location.state?.job?.id ??
                               "",
                           ),
-                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
                         },
                       });
                     }}
@@ -4548,7 +4572,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
-                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
                           ...(location.state?.mblDetails && {
                             mblDetails: location.state.mblDetails,
                           }),
@@ -4584,7 +4610,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
-                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
                           ...(location.state?.mblDetails && {
                             mblDetails: location.state.mblDetails,
                           }),
@@ -5203,7 +5231,9 @@ function HouseCreate() {
               <ChargesLocalAmountTotalsRow
                 offsetBeforeSellCol={7.1}
                 house={{
-                  charges: chargesForm.values.charges,
+                  charges: getMeaningfulHouseCharges(
+                    chargesForm.values.charges,
+                  ),
                   mawb_charges: (editData as { mawb_charges?: unknown })
                     ?.mawb_charges as
                     | Array<{
@@ -5218,12 +5248,14 @@ function HouseCreate() {
                         cost_local_amount?: unknown;
                       }>
                     | undefined,
-                  summary: (editData as {
-                    summary?: {
-                      total_local_sell?: number | string | null;
-                      total_local_cost?: number | string | null;
-                    };
-                  })?.summary,
+                  summary: (
+                    editData as {
+                      summary?: {
+                        total_local_sell?: number | string | null;
+                        total_local_cost?: number | string | null;
+                      };
+                    }
+                  )?.summary,
                 }}
                 branches={user?.branches}
               />
@@ -5309,7 +5341,9 @@ function HouseCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5725,7 +5759,9 @@ function HouseCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{

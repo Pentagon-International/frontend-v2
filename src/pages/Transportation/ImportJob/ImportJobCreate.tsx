@@ -35,7 +35,14 @@ import {
   IconRefresh,
   IconPaperclip,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  Fragment,
+  useRef,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -66,8 +73,16 @@ import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  getMeaningfulHouseCharges,
+  hasMeaningfulHouseChargeData,
+  type HouseChargeLike,
+} from "../../../utils/houseChargesPayload";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -379,6 +394,9 @@ type HousingDetail = HouseDocumentFields & {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  consignee_gst_id?: string;
+  consignee_pan_no?: string;
+  consignee_state_code?: string;
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
@@ -466,7 +484,12 @@ const getAddressOptions = (
     }))
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
-    .map(({ value, label, email, address }) => ({ value, label, email, address }));
+    .map(({ value, label, email, address }) => ({
+      value,
+      label,
+      email,
+      address,
+    }));
 };
 
 function ImportJobCreate() {
@@ -533,8 +556,10 @@ function ImportJobCreate() {
   });
 
   const [odexTriggerOpen, setOdexTriggerOpen] = useState(false);
-  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
-    useState<string | null>(null);
+  const [
+    vendorInvoiceAutomationShipmentNo,
+    setVendorInvoiceAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -548,8 +573,7 @@ function ImportJobCreate() {
     setVendorInvoiceAutomationShipmentNo(normalized);
   }, []);
 
-  const consolJobId =
-    jobData?.id != null ? Number(jobData.id) : null;
+  const consolJobId = jobData?.id != null ? Number(jobData.id) : null;
   const {
     odexJobId: backgroundOdexJobId,
     isActive: isOdexRunningInBackground,
@@ -711,7 +735,8 @@ function ImportJobCreate() {
   >([]);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
-  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
+    useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
   const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
@@ -860,10 +885,7 @@ function ImportJobCreate() {
               ? dayjs(mblData.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
           shipper_id: String(
-            mblFlat.shipper_id ??
-              shipperNest?.id ??
-              stateMbl.shipper_id ??
-              "",
+            mblFlat.shipper_id ?? shipperNest?.id ?? stateMbl.shipper_id ?? "",
           ),
           shipper_name: String(
             mblFlat.shipper_name ??
@@ -889,46 +911,34 @@ function ImportJobCreate() {
           ),
           consignee_id: String(
             (mblData as { consignee_id?: unknown }).consignee_id ??
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.id as string | number | undefined
-              ) ??
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.id as string | number | undefined) ??
               stateMbl.consignee_id ??
               "",
           ),
           consignee_name: String(
             mblData.consignee_name ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.customer_name as string | undefined
-              ) ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.name as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.customer_name as string | undefined) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.name as string | undefined) ||
               stateMbl.consignee_name ||
               "",
           ),
           consignee_email: String(
             mblData.consignee_email ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.email as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.email as string | undefined) ||
               stateMbl.consignee_email ||
               "",
           ),
           consignee_address_id: String(
-            mblFlat.consignee_address_id ??
-              stateMbl.consignee_address_id ??
-              "",
+            mblFlat.consignee_address_id ?? stateMbl.consignee_address_id ?? "",
           ),
           consignee_address: String(
             mblData.consignee_address ||
-              (
-                (mblFlat.consignee as Record<string, unknown> | undefined)
-                  ?.address as string | undefined
-              ) ||
+              ((mblFlat.consignee as Record<string, unknown> | undefined)
+                ?.address as string | undefined) ||
               stateMbl.consignee_address ||
               "",
           ),
@@ -938,14 +948,10 @@ function ImportJobCreate() {
               "",
           ),
           carrier_agent_name: String(
-            mblData.carrier_agent_name ||
-              stateMbl.carrier_agent_name ||
-              "",
+            mblData.carrier_agent_name || stateMbl.carrier_agent_name || "",
           ),
           carrier_agent_email: String(
-            mblData.carrier_agent_email ||
-              stateMbl.carrier_agent_email ||
-              "",
+            mblData.carrier_agent_email || stateMbl.carrier_agent_email || "",
           ),
           carrier_agent_address_id: String(
             (mblData as { carrier_agent_address_id?: unknown })
@@ -989,7 +995,9 @@ function ImportJobCreate() {
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
-              house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
+              house_date: house.house_date
+                ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
+                : null,
               routed: house.routed
                 ? String(house.routed).toLowerCase() === "self"
                   ? "self"
@@ -1011,7 +1019,9 @@ function ImportJobCreate() {
                 : "",
               trade: house.trade ? String(house.trade) : "",
               agent_name: house.agent_name ? String(house.agent_name) : "",
-              agent_address: house.agent_address ? String(house.agent_address) : "",
+              agent_address: house.agent_address
+                ? String(house.agent_address)
+                : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
@@ -1021,7 +1031,9 @@ function ImportJobCreate() {
                 house.agent_state_id !== undefined
                   ? String(house.agent_state_id)
                   : "",
-              shipper_code: house.shipper_code ? String(house.shipper_code) : "",
+              shipper_code: house.shipper_code
+                ? String(house.shipper_code)
+                : "",
               shipper_id:
                 house.shipper_id !== null && house.shipper_id !== undefined
                   ? String(house.shipper_id)
@@ -1071,44 +1083,76 @@ function ImportJobCreate() {
                 house.consignee_gst_id !== undefined
                   ? String(house.consignee_gst_id)
                   : "",
-              notify1_customer_name: (house.notify1_customer_name)
+              consignee_pan_no:
+                house.consignee_pan_no != null &&
+                house.consignee_pan_no !== undefined
+                  ? String(house.consignee_pan_no)
+                  : "",
+              consignee_state_code:
+                house.consignee_state_code != null &&
+                house.consignee_state_code !== undefined
+                  ? String(house.consignee_state_code)
+                  : (
+                      house.consignee_state_details as
+                        | { state_code?: string }
+                        | undefined
+                    )?.state_code != null
+                    ? String(
+                        (
+                          house.consignee_state_details as {
+                            state_code?: string;
+                          }
+                        ).state_code,
+                      )
+                    : "",
+              notify1_customer_name: house.notify1_customer_name
                 ? String(house.notify1_customer_name)
                 : "",
-              notify1_customer_address: (house.notify1_customer_address)
-                ? String(
-                    house.notify1_customer_address
-                  )
+              notify1_customer_address: house.notify1_customer_address
+                ? String(house.notify1_customer_address)
                 : "",
-              notify1_customer_email: (house.notify1_customer_email)
+              notify1_customer_email: house.notify1_customer_email
                 ? String(house.notify1_customer_email)
                 : "",
-          commodity_description: house.commodity_description
-            ? String(house.commodity_description)
-            : "",
-          marks_no: house.marks_no ? String(house.marks_no) : "",
-          item_no: house.item_no ? String(house.item_no) : "",
-          sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
-          ref_no: house.ref_no ? String(house.ref_no) : "",
-          shipment_terms_code: house.shipment_terms_code
-            ? String(house.shipment_terms_code)
-            : house.shipment_terms_name
-              ? String(house.shipment_terms_name)
-              : "",
-          events: Array.isArray(
-            (house as {
-              events?: Array<{ id?: number; type?: string; date?: string }>;
-            }).events,
-          )
-            ? (
-                (house as {
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }).events ?? []
-              ).map((e) => ({
-                id: e.id != null ? Number(e.id) : undefined,
-                type: String(e.type ?? ""),
-                date: String(e.date ?? ""),
-              }))
-            : [],
+              commodity_description: house.commodity_description
+                ? String(house.commodity_description)
+                : "",
+              marks_no: house.marks_no ? String(house.marks_no) : "",
+              item_no: house.item_no ? String(house.item_no) : "",
+              sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
+              ref_no: house.ref_no ? String(house.ref_no) : "",
+              shipment_terms_code: house.shipment_terms_code
+                ? String(house.shipment_terms_code)
+                : house.shipment_terms_name
+                  ? String(house.shipment_terms_name)
+                  : "",
+              events: Array.isArray(
+                (
+                  house as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events,
+              )
+                ? (
+                    (
+                      house as {
+                        events?: Array<{
+                          id?: number;
+                          type?: string;
+                          date?: string;
+                        }>;
+                      }
+                    ).events ?? []
+                  ).map((e) => ({
+                    id: e.id != null ? Number(e.id) : undefined,
+                    type: String(e.type ?? ""),
+                    date: String(e.date ?? ""),
+                  }))
+                : [],
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -1175,10 +1219,8 @@ function ImportJobCreate() {
                           : "",
                       currency: (() => {
                         const cd = charge.currency_details as
-                          | { currency_code?: string }
-                          | undefined;
-                        const code =
-                          cd?.currency_code ?? charge.currency_code;
+                          { currency_code?: string } | undefined;
+                        const code = cd?.currency_code ?? charge.currency_code;
                         if (code) return String(code);
                         if (
                           charge.currency != null &&
@@ -1249,9 +1291,9 @@ function ImportJobCreate() {
                                 : "";
 
                           // Prefer currency code from details (charge.currency may be numeric ID)
-                          const currencyDetailsForCode = charge.currency_details as
-                            | { currency_code?: string }
-                            | undefined;
+                          const currencyDetailsForCode =
+                            charge.currency_details as
+                              { currency_code?: string } | undefined;
                           const currencyCode = String(
                             currencyDetailsForCode?.currency_code ??
                               charge.currency_code ??
@@ -1261,7 +1303,8 @@ function ImportJobCreate() {
                                 : ""),
                           ).trim();
 
-                          const roeValue = roundRoeForPayload(charge.roe) ?? null;
+                          const roeValue =
+                            roundRoeForPayload(charge.roe) ?? null;
 
                           // Handle amount_per_unit: can be string or number
                           const amountPerUnit =
@@ -1282,32 +1325,32 @@ function ImportJobCreate() {
                               : null;
 
                           const sellLocal =
-                            (charge.sell_local_amount !== null &&
-                              charge.sell_local_amount !== undefined)
+                            charge.sell_local_amount !== null &&
+                            charge.sell_local_amount !== undefined
                               ? typeof charge.sell_local_amount === "string"
                                 ? parseFloat(charge.sell_local_amount) || null
                                 : (charge.sell_local_amount as number)
                               : null;
 
                           const unitCost =
-                            (charge.unit_cost !== null &&
-                              charge.unit_cost !== undefined)
+                            charge.unit_cost !== null &&
+                            charge.unit_cost !== undefined
                               ? typeof charge.unit_cost === "string"
                                 ? parseFloat(charge.unit_cost) || null
                                 : (charge.unit_cost as number)
                               : null;
 
                           const totalCost =
-                            (charge.total_cost !== null &&
-                              charge.total_cost !== undefined)
+                            charge.total_cost !== null &&
+                            charge.total_cost !== undefined
                               ? typeof charge.total_cost === "string"
                                 ? parseFloat(charge.total_cost) || null
                                 : (charge.total_cost as number)
                               : null;
 
                           const costLocal =
-                            (charge.cost_local_amount !== null &&
-                              charge.cost_local_amount !== undefined)
+                            charge.cost_local_amount !== null &&
+                            charge.cost_local_amount !== undefined
                               ? typeof charge.cost_local_amount === "string"
                                 ? parseFloat(charge.cost_local_amount) || null
                                 : (charge.cost_local_amount as number)
@@ -1386,15 +1429,9 @@ function ImportJobCreate() {
                 const s = raw as Record<string, unknown>;
                 return {
                   total_local_sell: s.total_local_sell as
-                    | number
-                    | string
-                    | null
-                    | undefined,
+                    number | string | null | undefined,
                   total_local_cost: s.total_local_cost as
-                    | number
-                    | string
-                    | null
-                    | undefined,
+                    number | string | null | undefined,
                 };
               })(),
               ...extractHouseDocumentFields(house),
@@ -1543,8 +1580,7 @@ function ImportJobCreate() {
             (container: Record<string, unknown>) => {
               // Get container_type_code from container_type_details if available
               const containerTypeDetails = container.container_type_details as
-                | Record<string, unknown>
-                | undefined;
+                Record<string, unknown> | undefined;
               const containerTypeCode =
                 containerTypeDetails?.container_type_code
                   ? String(containerTypeDetails.container_type_code)
@@ -1620,7 +1656,9 @@ function ImportJobCreate() {
             return Number.isNaN(n) ? null : n;
           };
           const normalizePpCc = (value: unknown): string => {
-            const raw = String(value ?? "").trim().toUpperCase();
+            const raw = String(value ?? "")
+              .trim()
+              .toUpperCase();
             if (raw === "PP" || raw === "PREPAID") return "Prepaid";
             if (raw === "CC" || raw === "COLLECT") return "Collect";
             return "";
@@ -1643,11 +1681,8 @@ function ImportJobCreate() {
               charge_name: String(e.charge_name ?? e.charge_code ?? ""),
               pp_cc: normalizePpCc(e.pp_cc),
               unit_id: e.unit_id != null ? String(e.unit_id) : "",
-              unit_code: String(
-                e.unit_code ?? e.unit_name ?? e.unit ?? "",
-              ),
-              no_of_unit:
-                toNum(e.no_of_unit) ?? toNum(e.no_of_units),
+              unit_code: String(e.unit_code ?? e.unit_name ?? e.unit ?? ""),
+              no_of_unit: toNum(e.no_of_unit) ?? toNum(e.no_of_units),
               currency_id:
                 e.currency_id != null
                   ? String(e.currency_id)
@@ -1710,14 +1745,13 @@ function ImportJobCreate() {
     // const isNavigatingBackFromHouseCreate = location.state?.housingDetails && Array.isArray(location.state.housingDetails) && location.state.housingDetails.length > 0;
     const isNavigatingBackFromHouseCreate =
       location.state?.fromHouseCreate === true;
-    const hasStateToRestore =
-      !!(
-        location.state?.mblDetails ||
-        location.state?.carrierDetails ||
-        location.state?.routings ||
-        location.state?.containerDetails ||
-        location.state?.estimates
-      );
+    const hasStateToRestore = !!(
+      location.state?.mblDetails ||
+      location.state?.carrierDetails ||
+      location.state?.routings ||
+      location.state?.containerDetails ||
+      location.state?.estimates
+    );
 
     // Restore when coming back from HouseCreate in any mode.
     // For create mode, also allow restoration when state exists.
@@ -1732,7 +1766,8 @@ function ImportJobCreate() {
     // 2. We're in create mode and have form data in location.state
     // But skip if we're in initial edit load (has jobData but no housingDetails)
     const shouldRestore =
-      isNavigatingBackFromHouseCreate || (mode === "create" && hasStateToRestore);
+      isNavigatingBackFromHouseCreate ||
+      (mode === "create" && hasStateToRestore);
 
     if (shouldRestore) {
       // Restore MBL Details
@@ -1742,10 +1777,11 @@ function ImportJobCreate() {
           service: mblDetails.service || "",
           origin_agent: mblDetails.origin_agent || "",
           agent_name:
-            (mblDetails as { agent_name?: string } | undefined)?.agent_name || "",
-          agent_address:
-            (mblDetails as { agent_address?: string } | undefined)?.agent_address ||
+            (mblDetails as { agent_name?: string } | undefined)?.agent_name ||
             "",
+          agent_address:
+            (mblDetails as { agent_address?: string } | undefined)
+              ?.agent_address || "",
           origin_code: mblDetails.origin_code || "",
           origin_name: mblDetails.origin_name || "",
           destination_code: mblDetails.destination_code || "",
@@ -1763,13 +1799,14 @@ function ImportJobCreate() {
               ? dayjs(mblDetails.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
           shipper_id:
-            (mblDetails as { shipper_id?: string } | undefined)?.shipper_id || "",
+            (mblDetails as { shipper_id?: string } | undefined)?.shipper_id ||
+            "",
           shipper_name:
-            (mblDetails as { shipper_name?: string } | undefined)?.shipper_name ||
-            "",
+            (mblDetails as { shipper_name?: string } | undefined)
+              ?.shipper_name || "",
           shipper_email:
-            (mblDetails as { shipper_email?: string } | undefined)?.shipper_email ||
-            "",
+            (mblDetails as { shipper_email?: string } | undefined)
+              ?.shipper_email || "",
           shipper_address_id:
             (mblDetails as { shipper_address_id?: string } | undefined)
               ?.shipper_address_id || "",
@@ -1777,8 +1814,8 @@ function ImportJobCreate() {
             (mblDetails as { shipper_address?: string } | undefined)
               ?.shipper_address || "",
           consignee_id:
-            (mblDetails as { consignee_id?: string } | undefined)?.consignee_id ||
-            "",
+            (mblDetails as { consignee_id?: string } | undefined)
+              ?.consignee_id || "",
           consignee_name:
             (mblDetails as { consignee_name?: string } | undefined)
               ?.consignee_name || "",
@@ -2307,11 +2344,13 @@ function ImportJobCreate() {
             consignee_id: mblDetailsForm.values.consignee_id || "",
             consignee_name: mblDetailsForm.values.consignee_name || "",
             consignee_email: mblDetailsForm.values.consignee_email || "",
-            consignee_address_id: mblDetailsForm.values.consignee_address_id || "",
+            consignee_address_id:
+              mblDetailsForm.values.consignee_address_id || "",
             consignee_address: mblDetailsForm.values.consignee_address || "",
             carrier_agent_id: mblDetailsForm.values.carrier_agent_id || "",
             carrier_agent_name: mblDetailsForm.values.carrier_agent_name || "",
-            carrier_agent_email: mblDetailsForm.values.carrier_agent_email || "",
+            carrier_agent_email:
+              mblDetailsForm.values.carrier_agent_email || "",
             carrier_agent_address_id:
               mblDetailsForm.values.carrier_agent_address_id || "",
             carrier_agent_address:
@@ -2391,9 +2430,7 @@ function ImportJobCreate() {
     eventType: string,
   ): boolean =>
     Array.isArray(events) &&
-    events.some(
-      (e: { type?: string }) => String(e?.type ?? "") === eventType,
-    );
+    events.some((e: { type?: string }) => String(e?.type ?? "") === eventType);
 
   const patchHousingPdfReleasedEvent = async (
     housingId: number | undefined,
@@ -2422,7 +2459,8 @@ function ImportJobCreate() {
           ? ({
               ...h,
               events: [
-                ...((h as { events?: typeof optimisticEvent[] }).events ?? []),
+                ...((h as { events?: (typeof optimisticEvent)[] }).events ??
+                  []),
                 optimisticEvent,
               ],
             } as HousingDetail)
@@ -2434,9 +2472,8 @@ function ImportJobCreate() {
         ? ({
             ...prev,
             events: [
-              ...(
-                prev as { events?: typeof optimisticEvent[] }
-              ).events ?? [],
+              ...((prev as { events?: (typeof optimisticEvent)[] }).events ??
+                []),
               optimisticEvent,
             ],
           } as HousingDetail)
@@ -2447,9 +2484,8 @@ function ImportJobCreate() {
         ? ({
             ...prev,
             events: [
-              ...(
-                prev as { events?: typeof optimisticEvent[] }
-              ).events ?? [],
+              ...((prev as { events?: (typeof optimisticEvent)[] }).events ??
+                []),
               optimisticEvent,
             ],
           } as HousingDetail)
@@ -2509,9 +2545,11 @@ function ImportJobCreate() {
       const country = user?.country || null;
 
       // Combine job data and housing data for PDF generation
+      const jobForCan = jobWithMergedHousingDetails ?? jobData;
       const combinedData = {
-        ...(jobWithMergedHousingDetails ?? jobData),
+        ...jobForCan,
         ...housing,
+        actual_booking_no: jobForCan?.actual_booking_no,
         mawbDetails: {
           service: mblDetailsForm.values.service,
           origin_agent: mblDetailsForm.values.origin_agent,
@@ -2596,8 +2634,10 @@ function ImportJobCreate() {
         ?.containerDetails || []),
       ...((jobData as { container_details?: unknown[] } | undefined)
         ?.container_details || []),
-      ...((jobWithMergedHousingDetails as { container_details?: unknown[] } | undefined)
-        ?.container_details || []),
+      ...((
+        jobWithMergedHousingDetails as
+          { container_details?: unknown[] } | undefined
+      )?.container_details || []),
     ] as Array<
       | (ContainerDetail & {
           cfs_address?: string;
@@ -2671,7 +2711,8 @@ function ImportJobCreate() {
       return (
         (housing as HousingDetail & { notify1_customer_name?: string })
           .notify1_customer_name ||
-        housing.notify1_customer_name || housing.notify_customer1_name ||
+        housing.notify1_customer_name ||
+        housing.notify_customer1_name ||
         ""
       );
     }
@@ -2742,7 +2783,8 @@ function ImportJobCreate() {
         ...housing,
         attention_to: resolveDoAttentionTo(type, housing),
         please_deliver_to: resolveDoDeliverTo(housing, deliverTo),
-        do_heading: type === "carrier_agent" ? "DELIVERY ADVICE" : "DELIVERY ORDER",
+        do_heading:
+          type === "carrier_agent" ? "DELIVERY ADVICE" : "DELIVERY ORDER",
       };
       const blobUrl = generateDeliveryOrderPDF(combinedData, housingDataForDo);
       setDoPdfBlob(blobUrl);
@@ -2847,7 +2889,9 @@ function ImportJobCreate() {
           (housingDetails ?? [])
             .map((h) => (h as { booking_id?: unknown }).booking_id)
             .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter((n): n is number => typeof n === "number" && !Number.isNaN(n)),
+            .filter(
+              (n): n is number => typeof n === "number" && !Number.isNaN(n),
+            ),
         ),
       );
 
@@ -2902,7 +2946,8 @@ function ImportJobCreate() {
         consignee_address: partyDetailsForm.values.consignee_address || "",
         carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address: partyDetailsForm.values.carrier_agent_address || "",
+        carrier_agent_address:
+          partyDetailsForm.values.carrier_agent_address || "",
         booking_ids: bookingIds,
         ocean_routings: routingsForm.values.routings.map((routing) => {
           // New format: all fields are nullable
@@ -2978,7 +3023,9 @@ function ImportJobCreate() {
           ...(house.id && { id: house.id }),
           ...(house.shipment_id && { shipment_id: house.shipment_id }),
           hbl_number: house.hbl_number,
-          house_date: house.house_date ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD") : null,
+          house_date: house.house_date
+            ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
+            : null,
           routed: house.routed,
           routed_by: house.routed_by || null,
           origin_code: house.origin_code,
@@ -2999,16 +3046,13 @@ function ImportJobCreate() {
           consignee_email: house.consignee_email || "",
           notify1_customer_name:
             (house as HousingDetail & { notify1_customer_name?: string })
-              .notify1_customer_name ??
-            "",
+              .notify1_customer_name ?? "",
           notify1_customer_address:
             (house as HousingDetail & { notify1_customer_address?: string })
-              .notify1_customer_address ??
-            "",
+              .notify1_customer_address ?? "",
           notify1_customer_email:
             (house as HousingDetail & { notify1_customer_email?: string })
-              .notify1_customer_email ??
-            "",
+              .notify1_customer_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
           item_no: house.item_no || "",
@@ -3021,9 +3065,15 @@ function ImportJobCreate() {
           ...buildDocumentIdsPayloadField(house.document_ids),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
-                (house as {
-                  events?: Array<{ id?: number; type?: string; date?: string }>;
-                }).events ?? []
+                (
+                  house as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events ?? []
               ).map((e) => ({
                 ...(e.id != null && { id: Number(e.id) }),
                 type: String(e.type ?? ""),
@@ -3059,7 +3109,11 @@ function ImportJobCreate() {
               (house as { charges?: unknown }).charges ??
               [];
             const arr = Array.isArray(src) ? src : [];
-            return arr.map((charge: Record<string, unknown>) => ({
+            const meaningful = arr.filter((charge) =>
+              hasMeaningfulHouseChargeData(charge as HouseChargeLike),
+            );
+            if (meaningful.length === 0) return [];
+            return meaningful.map((charge: Record<string, unknown>) => ({
               ...(mode === "edit" &&
                 charge.id != null && {
                   id:
@@ -3092,22 +3146,22 @@ function ImportJobCreate() {
                 roundToDecimals(charge.amount_per_unit as number | string) ??
                 null,
               amount: roundToDecimals(charge.amount as number | string) ?? null,
-            sell_local_amount:
-              roundToDecimals(
-                (charge.sell_local_amount != null
-                  ? charge.sell_local_amount
-                  : (charge as { local_amount?: number | string }).local_amount) as
-                  | number
-                  | string,
-              ) ?? null,
-            unit_cost:
-              roundToDecimals(
-                (charge.unit_cost != null
-                  ? charge.unit_cost
-                  : (charge as { cost_per_unit?: number | string })
-                      .cost_per_unit) as number | string,
-              ) ?? null,
-              total_cost: roundToDecimals(charge.total_cost as number | string) ?? null,
+              sell_local_amount:
+                roundToDecimals(
+                  (charge.sell_local_amount != null
+                    ? charge.sell_local_amount
+                    : (charge as { local_amount?: number | string })
+                        .local_amount) as number | string,
+                ) ?? null,
+              unit_cost:
+                roundToDecimals(
+                  (charge.unit_cost != null
+                    ? charge.unit_cost
+                    : (charge as { cost_per_unit?: number | string })
+                        .cost_per_unit) as number | string,
+                ) ?? null,
+              total_cost:
+                roundToDecimals(charge.total_cost as number | string) ?? null,
               cost_local_amount:
                 roundToDecimals(charge.cost_local_amount as number | string) ??
                 null,
@@ -3242,9 +3296,7 @@ function ImportJobCreate() {
                 variant="light"
                 color="#105476"
                 leftSection={<Loader size={14} color="#105476" />}
-                onClick={() =>
-                  navigate(odexJobDetailPath(backgroundOdexJobId))
-                }
+                onClick={() => navigate(odexJobDetailPath(backgroundOdexJobId))}
               >
                 View Odex Status
               </Button>
@@ -3263,7 +3315,11 @@ function ImportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {housingDetails.length > 0 && (
-              <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+              <Menu
+                shadow="md"
+                width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                position="bottom-end"
+              >
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
@@ -3375,8 +3431,7 @@ function ImportJobCreate() {
                             (house.charges ?? [])
                               .filter(
                                 (c) =>
-                                  String(c.pp_cc ?? "")
-                                    .trim() === "Collect",
+                                  String(c.pp_cc ?? "").trim() === "Collect",
                               )
                               .map((c) => ({
                                 ...c,
@@ -3474,9 +3529,8 @@ function ImportJobCreate() {
                       onClick={() =>
                         navigate("/job-ledger", {
                           state: {
-                            jobId:
-                              jobData?.job_id ,
-                              service_name: "Ocean Import",
+                            jobId: jobData?.job_id,
+                            service_name: "Ocean Import",
                             jobReturnTo: location.pathname,
                             jobReturnToState: location.state,
                           },
@@ -3669,10 +3723,7 @@ function ImportJobCreate() {
                           addressesData[0].address,
                         );
                       } else {
-                        mblDetailsForm.setFieldValue(
-                          "agent_address",
-                          "",
-                        );
+                        mblDetailsForm.setFieldValue("agent_address", "");
                       }
                     } else {
                       mblDetailsForm.setFieldValue("agent_address", "");
@@ -3847,7 +3898,10 @@ function ImportJobCreate() {
                   placeholder="Enter IGM Number"
                   value={mblDetailsForm.values.igm_no}
                   onChange={(e) =>
-                    mblDetailsForm.setFieldValue("igm_no", e.currentTarget.value)
+                    mblDetailsForm.setFieldValue(
+                      "igm_no",
+                      e.currentTarget.value,
+                    )
                   }
                   error={mblDetailsForm.errors.igm_no}
                 />
@@ -4047,18 +4101,25 @@ function ImportJobCreate() {
                   (!partyDetailsForm.values.shipper_address_id ||
                     !shipperAddressOptions.some(
                       (item) =>
-                        item.value === partyDetailsForm.values.shipper_address_id,
+                        item.value ===
+                        partyDetailsForm.values.shipper_address_id,
                     ))) ? (
                   <FormTextInput
                     label="Shipper Address"
                     value={partyDetailsForm.values.shipper_address}
                     onChange={(e) => {
                       const nextValue = e.currentTarget.value;
-                      partyDetailsForm.setFieldValue("shipper_address", nextValue);
+                      partyDetailsForm.setFieldValue(
+                        "shipper_address",
+                        nextValue,
+                      );
                       if (!nextValue.trim()) {
                         setShipperAddressCustom(false);
                         setShipperAddressSearch("");
-                        partyDetailsForm.setFieldValue("shipper_address_id", "");
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address_id",
+                          "",
+                        );
                       }
                     }}
                   />
@@ -4076,12 +4137,19 @@ function ImportJobCreate() {
                       setShipperAddressSearch(value);
                       const hasMatch = shipperAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setShipperAddressCustom(true);
-                        partyDetailsForm.setFieldValue("shipper_address_id", "");
-                        partyDetailsForm.setFieldValue("shipper_address", value);
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address_id",
+                          "",
+                        );
+                        partyDetailsForm.setFieldValue(
+                          "shipper_address",
+                          value,
+                        );
                       }
                     }}
                     onChange={(value) => {
@@ -4147,7 +4215,10 @@ function ImportJobCreate() {
                     if (!value) {
                       partyDetailsForm.setFieldValue("consignee_name", "");
                       partyDetailsForm.setFieldValue("consignee_email", "");
-                      partyDetailsForm.setFieldValue("consignee_address_id", "");
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address_id",
+                        "",
+                      );
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
@@ -4176,18 +4247,25 @@ function ImportJobCreate() {
                   (!partyDetailsForm.values.consignee_address_id ||
                     !consigneeAddressOptions.some(
                       (item) =>
-                        item.value === partyDetailsForm.values.consignee_address_id,
+                        item.value ===
+                        partyDetailsForm.values.consignee_address_id,
                     ))) ? (
                   <FormTextInput
                     label="Consignee Address"
                     value={partyDetailsForm.values.consignee_address}
                     onChange={(e) => {
                       const nextValue = e.currentTarget.value;
-                      partyDetailsForm.setFieldValue("consignee_address", nextValue);
+                      partyDetailsForm.setFieldValue(
+                        "consignee_address",
+                        nextValue,
+                      );
                       if (!nextValue.trim()) {
                         setConsigneeAddressCustom(false);
                         setConsigneeAddressSearch("");
-                        partyDetailsForm.setFieldValue("consignee_address_id", "");
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address_id",
+                          "",
+                        );
                       }
                     }}
                   />
@@ -4205,12 +4283,19 @@ function ImportJobCreate() {
                       setConsigneeAddressSearch(value);
                       const hasMatch = consigneeAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setConsigneeAddressCustom(true);
-                        partyDetailsForm.setFieldValue("consignee_address_id", "");
-                        partyDetailsForm.setFieldValue("consignee_address", value);
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address_id",
+                          "",
+                        );
+                        partyDetailsForm.setFieldValue(
+                          "consignee_address",
+                          value,
+                        );
                       }
                     }}
                     onChange={(value) => {
@@ -4253,7 +4338,9 @@ function ImportJobCreate() {
                     label: String(item.customer_name ?? ""),
                   })}
                   value={partyDetailsForm.values.carrier_agent_id || null}
-                  displayValue={partyDetailsForm.values.carrier_agent_name || null}
+                  displayValue={
+                    partyDetailsForm.values.carrier_agent_name || null
+                  }
                   onChange={(value, selectedData, originalData) => {
                     const options = getAddressOptions(originalData);
                     const primary = options[0];
@@ -4284,7 +4371,10 @@ function ImportJobCreate() {
                         "carrier_agent_address_id",
                         "",
                       );
-                      partyDetailsForm.setFieldValue("carrier_agent_address", "");
+                      partyDetailsForm.setFieldValue(
+                        "carrier_agent_address",
+                        "",
+                      );
                     }
                     setCarrierAgentAddressOptions(value ? options : []);
                     setCarrierAgentAddressSearch("");
@@ -4342,13 +4432,16 @@ function ImportJobCreate() {
                       value: item.value,
                       label: item.label,
                     }))}
-                    value={partyDetailsForm.values.carrier_agent_address_id || null}
+                    value={
+                      partyDetailsForm.values.carrier_agent_address_id || null
+                    }
                     searchValue={carrierAgentAddressSearch}
                     onSearchChange={(value) => {
                       setCarrierAgentAddressSearch(value);
                       const hasMatch = carrierAgentAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() === value.trim().toLowerCase(),
+                          item.label.toLowerCase() ===
+                          value.trim().toLowerCase(),
                       );
                       if (value.trim() && !hasMatch) {
                         setCarrierAgentAddressCustom(true);
@@ -4414,499 +4507,504 @@ function ImportJobCreate() {
                 return (
                   <Box key={index}>
                     <Grid>
-                    <Grid.Col span={2.4}>
-                      <Dropdown
-                        size="sm"
-                        label="Transport Type"
-                        required={requireRouting}
-                        placeholder="Select Transport Type"
-                        searchable
-                        clearable
-                        data={["AIR", "SEA", "ROAD", "RAIL"]}
-                        value={
-                          routingsForm.values.routings[index]?.transport_type ||
-                          null
-                        }
-                        onChange={(value) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.transport_type`,
-                            value || "",
-                          );
-                        }}
-                        error={
-                          routingsForm.errors[
-                            `routings.${index}.transport_type`
-                          ] as string
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SearchableSelect
-                        size="sm"
-                        label="From"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        dropdownZIndex={10}
-                        placeholder="Type from location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.from_code || null}
-                        displayValue={
-                          routing.from_name && routing.from_code
-                            ? `${routing.from_name} (${routing.from_code})`
-                            : routing.from_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.from_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
-                            routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              portName,
-                            );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.from_name`,
-                              "",
-                            );
+                      <Grid.Col span={2.4}>
+                        <Dropdown
+                          size="sm"
+                          label="Transport Type"
+                          required={requireRouting}
+                          placeholder="Select Transport Type"
+                          searchable
+                          clearable
+                          data={["AIR", "SEA", "ROAD", "RAIL"]}
+                          value={
+                            routingsForm.values.routings[index]
+                              ?.transport_type || null
                           }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routing.transport_type)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routing.transport_type,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SearchableSelect
-                        size="sm"
-                        label="To"
-                        required={requireRouting}
-                        apiEndpoint={URL.portMaster}
-                        dropdownZIndex={10}
-                        placeholder="Type to location"
-                        searchFields={["port_code", "port_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.port_code),
-                          label: `${item.port_name} (${item.port_code})`,
-                        })}
-                        value={routing.to_code || null}
-                        displayValue={
-                          routing.to_name && routing.to_code
-                            ? `${routing.to_name} (${routing.to_code})`
-                            : routing.to_code || null
-                        }
-                        onChange={(value, selectedData) => {
-                          routingsForm.setFieldValue(
-                            `routings.${index}.to_code`,
-                            value || "",
-                          );
-                          if (selectedData) {
-                            const portName =
-                              selectedData.label.split(" (")[0] || "";
+                          onChange={(value) => {
                             routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              portName,
+                              `routings.${index}.transport_type`,
+                              value || "",
                             );
-                          } else if (!value) {
-                            routingsForm.setFieldValue(
-                              `routings.${index}.to_name`,
-                              "",
-                            );
+                          }}
+                          error={
+                            routingsForm.errors[
+                              `routings.${index}.transport_type`
+                            ] as string
                           }
-                        }}
-                        minSearchLength={2}
-                        additionalParams={
-                          getTransportMode(routing.transport_type)
-                            ? {
-                                transport_mode: getTransportMode(
-                                  routing.transport_type,
-                                )!,
-                              }
-                            : undefined
-                        }
-                      />
-                    </Grid.Col>
-
-                    {/* Dynamic field labels based on transport type */}
-                    {routing.transport_type === "SEA" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Vessel"
-                            required
-                            placeholder="Enter vessel name"
-                            value={routing.vessel || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.vessel`,
-                                formattedValue,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.vessel`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Voyage Number"
-                            required
-                            placeholder="Enter voyage number"
-                            value={routing.voyage_number || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.voyage_number`,
-                                value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.voyage_number`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "AIR" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <SearchableSelect
-                            size="sm"
-                            label="Carrier"
-                            required
-                            apiEndpoint={URL.carrier}
-                            dropdownZIndex={10}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routing.transport_type)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routing.transport_type,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Flight Number"
-                            required
-                            placeholder="Enter flight number"
-                            value={routing.flight || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight`,
-                                value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.flight`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "ROAD" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <SearchableSelect
-                            size="sm"
-                            label="Carrier"
-                            required
-                            apiEndpoint={URL.carrier}
-                            dropdownZIndex={10}
-                            placeholder="Type carrier name"
-                            searchFields={["carrier_code", "carrier_name"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.carrier_code),
-                              label: String(item.carrier_name),
-                            })}
-                            value={routing.carrier_code || null}
-                            displayValue={routing.carrier_name || null}
-                            onChange={(value, selectedData) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                value || "",
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                selectedData?.label || "",
-                              );
-                            }}
-                            minSearchLength={2}
-                            additionalParams={
-                              getTransportMode(routing.transport_type)
-                                ? {
-                                    transport_mode: getTransportMode(
-                                      routing.transport_type,
-                                    )!,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Truck Number"
-                            required
-                            placeholder="Enter truck number"
-                            value={routing.truck_no || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.truck_no`,
-                                value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.truck_no`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    {routing.transport_type === "RAIL" && (
-                      <>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Carrier"
-                            required
-                            placeholder="Enter carrier name"
-                            value={routing.carrier_name || ""}
-                            onChange={(e) => {
-                              const formattedValue = toTitleCase(
-                                e.target.value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_name`,
-                                formattedValue,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.carrier_code`,
-                                formattedValue,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.carrier_name`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={2.4}>
-                          <FormTextInput
-                            label="Rail Number"
-                            required
-                            placeholder="Enter rail number"
-                            value={routing.rail_no || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              routingsForm.setFieldValue(
-                                `routings.${index}.rail_no`,
-                                value,
-                              );
-                              routingsForm.setFieldValue(
-                                `routings.${index}.flight_voyage_number`,
-                                value,
-                              );
-                            }}
-                            error={
-                              routingsForm.errors[
-                                `routings.${index}.rail_no`
-                              ] as string
-                            }
-                          />
-                        </Grid.Col>
-                      </>
-                    )}
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ETD"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.etd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.etd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ETA"
-                        withAsterisk={requireRouting}
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.eta`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.eta`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ATD"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.atd`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.atd`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    <Grid.Col span={2.4}>
-                      <SingleDateInput
-                        label="ATA"
-                        placeholder="YYYY-MM-DD"
-                        {...(() => {
-                          const inputProps = routingsForm.getInputProps(
-                            `routings.${index}.ata`,
-                          );
-                          return {
-                            value: inputProps.value as Date | null,
-                            error: inputProps.error as string | undefined,
-                            onChange: (value: Date | null) => {
-                              routingsForm.setFieldValue(
-                                `routings.${index}.ata`,
-                                value,
-                              );
-                            },
-                          };
-                        })()}
-                        size="sm"
-                      />
-                    </Grid.Col>
-
-                    {/* Remove button - IconTrash only */}
-                    {!isReadOnly && routingsForm.values.routings.length > 1 && (
-                      <Grid.Col span={0.5}>
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size="lg"
-                          onClick={() => removeRouting(index)}
-                          style={{ marginTop: "1.75rem" }}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
+                        />
                       </Grid.Col>
-                    )}
 
-                    {/* Add Routing button - Only at last routing row */}
-                    {!isReadOnly &&
-                      index === routingsForm.values.routings.length - 1 && (
-                        <Grid.Col span={0.5}>
-                          <ActionIcon
-                            // leftSection={<IconPlus size={16} />}
-                            size="lg"
-                            variant="light"
-                            color="#105476"
-                            onClick={addRouting}
-                            style={{ marginTop: "1.75rem" }}
-                          >
-                            <IconPlus size={16}></IconPlus>
-                            {/* Add Routing */}
-                          </ActionIcon>
-                          {/* <ActionIcon
+                      <Grid.Col span={2.4}>
+                        <SearchableSelect
+                          size="sm"
+                          label="From"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          dropdownZIndex={10}
+                          placeholder="Type from location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.from_code || null}
+                          displayValue={
+                            routing.from_name && routing.from_code
+                              ? `${routing.from_name} (${routing.from_code})`
+                              : routing.from_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.from_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.from_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routing.transport_type)
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    routing.transport_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SearchableSelect
+                          size="sm"
+                          label="To"
+                          required={requireRouting}
+                          apiEndpoint={URL.portMaster}
+                          dropdownZIndex={10}
+                          placeholder="Type to location"
+                          searchFields={["port_code", "port_name"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.port_code),
+                            label: `${item.port_name} (${item.port_code})`,
+                          })}
+                          value={routing.to_code || null}
+                          displayValue={
+                            routing.to_name && routing.to_code
+                              ? `${routing.to_name} (${routing.to_code})`
+                              : routing.to_code || null
+                          }
+                          onChange={(value, selectedData) => {
+                            routingsForm.setFieldValue(
+                              `routings.${index}.to_code`,
+                              value || "",
+                            );
+                            if (selectedData) {
+                              const portName =
+                                selectedData.label.split(" (")[0] || "";
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                portName,
+                              );
+                            } else if (!value) {
+                              routingsForm.setFieldValue(
+                                `routings.${index}.to_name`,
+                                "",
+                              );
+                            }
+                          }}
+                          minSearchLength={2}
+                          additionalParams={
+                            getTransportMode(routing.transport_type)
+                              ? {
+                                  transport_mode: getTransportMode(
+                                    routing.transport_type,
+                                  )!,
+                                }
+                              : undefined
+                          }
+                        />
+                      </Grid.Col>
+
+                      {/* Dynamic field labels based on transport type */}
+                      {routing.transport_type === "SEA" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Vessel"
+                              required
+                              placeholder="Enter vessel name"
+                              value={routing.vessel || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.vessel`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.vessel`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Voyage Number"
+                              required
+                              placeholder="Enter voyage number"
+                              value={routing.voyage_number || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.voyage_number`,
+                                  value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.voyage_number`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "AIR" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <SearchableSelect
+                              size="sm"
+                              label="Carrier"
+                              required
+                              apiEndpoint={URL.carrier}
+                              dropdownZIndex={10}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routing.transport_type)
+                                  ? {
+                                      transport_mode: getTransportMode(
+                                        routing.transport_type,
+                                      )!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Flight Number"
+                              required
+                              placeholder="Enter flight number"
+                              value={routing.flight || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight`,
+                                  value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.flight`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "ROAD" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <SearchableSelect
+                              size="sm"
+                              label="Carrier"
+                              required
+                              apiEndpoint={URL.carrier}
+                              dropdownZIndex={10}
+                              placeholder="Type carrier name"
+                              searchFields={["carrier_code", "carrier_name"]}
+                              displayFormat={(
+                                item: Record<string, unknown>,
+                              ) => ({
+                                value: String(item.carrier_code),
+                                label: String(item.carrier_name),
+                              })}
+                              value={routing.carrier_code || null}
+                              displayValue={routing.carrier_name || null}
+                              onChange={(value, selectedData) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  value || "",
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  selectedData?.label || "",
+                                );
+                              }}
+                              minSearchLength={2}
+                              additionalParams={
+                                getTransportMode(routing.transport_type)
+                                  ? {
+                                      transport_mode: getTransportMode(
+                                        routing.transport_type,
+                                      )!,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Truck Number"
+                              required
+                              placeholder="Enter truck number"
+                              value={routing.truck_no || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.truck_no`,
+                                  value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.truck_no`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      {routing.transport_type === "RAIL" && (
+                        <>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Carrier"
+                              required
+                              placeholder="Enter carrier name"
+                              value={routing.carrier_name || ""}
+                              onChange={(e) => {
+                                const formattedValue = toTitleCase(
+                                  e.target.value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_name`,
+                                  formattedValue,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.carrier_code`,
+                                  formattedValue,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.carrier_name`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={2.4}>
+                            <FormTextInput
+                              label="Rail Number"
+                              required
+                              placeholder="Enter rail number"
+                              value={routing.rail_no || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.rail_no`,
+                                  value,
+                                );
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.flight_voyage_number`,
+                                  value,
+                                );
+                              }}
+                              error={
+                                routingsForm.errors[
+                                  `routings.${index}.rail_no`
+                                ] as string
+                              }
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ETD"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.etd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.etd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ETA"
+                          withAsterisk={requireRouting}
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.eta`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.eta`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ATD"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.atd`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.atd`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      <Grid.Col span={2.4}>
+                        <SingleDateInput
+                          label="ATA"
+                          placeholder="YYYY-MM-DD"
+                          {...(() => {
+                            const inputProps = routingsForm.getInputProps(
+                              `routings.${index}.ata`,
+                            );
+                            return {
+                              value: inputProps.value as Date | null,
+                              error: inputProps.error as string | undefined,
+                              onChange: (value: Date | null) => {
+                                routingsForm.setFieldValue(
+                                  `routings.${index}.ata`,
+                                  value,
+                                );
+                              },
+                            };
+                          })()}
+                          size="sm"
+                        />
+                      </Grid.Col>
+
+                      {/* Remove button - IconTrash only */}
+                      {!isReadOnly &&
+                        routingsForm.values.routings.length > 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              color="red"
+                              variant="light"
+                              size="lg"
+                              onClick={() => removeRouting(index)}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Grid.Col>
+                        )}
+
+                      {/* Add Routing button - Only at last routing row */}
+                      {!isReadOnly &&
+                        index === routingsForm.values.routings.length - 1 && (
+                          <Grid.Col span={0.5}>
+                            <ActionIcon
+                              // leftSection={<IconPlus size={16} />}
+                              size="lg"
+                              variant="light"
+                              color="#105476"
+                              onClick={addRouting}
+                              style={{ marginTop: "1.75rem" }}
+                            >
+                              <IconPlus size={16}></IconPlus>
+                              {/* Add Routing */}
+                            </ActionIcon>
+                            {/* <ActionIcon
                             color="red"
                             variant="light"
                             size="lg"
@@ -4915,14 +5013,14 @@ function ImportJobCreate() {
                           >
                             <IconTrash size={16} />
                           </ActionIcon> */}
-                        </Grid.Col>
-                      )}
-                  </Grid>
+                          </Grid.Col>
+                        )}
+                    </Grid>
 
-                  {index < routingsForm.values.routings.length - 1 && (
-                    <Divider my="xl" />
-                  )}
-                </Box>
+                    {index < routingsForm.values.routings.length - 1 && (
+                      <Divider my="xl" />
+                    )}
+                  </Box>
                 );
               })}
             </Stack>
@@ -4940,7 +5038,7 @@ function ImportJobCreate() {
               </Text>
               {/* {!isReadOnly && (
                 <Group gap="sm"> */}
-                  {/* <Button
+              {/* <Button
                     variant="light"
                     color="#105476"
                     leftSection={<IconPlus size={16} />}
@@ -4948,7 +5046,7 @@ function ImportJobCreate() {
                   >
                     Add Container
                   </Button> */}
-                  {/* <Button
+              {/* <Button
                     variant={canSaveContainerDetails ? "filled" : "outline"}
                     color="#105476"
                     onClick={handleSaveContainerDetails}
@@ -4961,7 +5059,7 @@ function ImportJobCreate() {
                   >
                     Save Container
                   </Button> */}
-                {/* </Group>
+              {/* </Group>
               )} */}
             </Group>
 
@@ -5035,7 +5133,8 @@ function ImportJobCreate() {
                         `containers.${index}.container_no`,
                       )}
                       value={
-                        containerDetailsForm.values.containers[index]?.container_no || ""
+                        containerDetailsForm.values.containers[index]
+                          ?.container_no || ""
                       }
                       onChange={(e) => {
                         const raw = e.currentTarget.value.toUpperCase();
@@ -5201,8 +5300,10 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.9} style={{display: 'flex', justifyContent: 'space-between'}}>
-
+                  <Grid.Col
+                    span={0.9}
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
                     {containerDetailsForm.values.containers.length > 1 &&
                       !isReadOnly && (
                         <Button
@@ -5215,15 +5316,18 @@ function ImportJobCreate() {
                           <IconTrash size={16} />
                         </Button>
                       )}
-                                      {index === containerDetailsForm.values.containers.length - 1 && (
-                                                          <Button
-                                                          size="sm"
-                                                          px={12}
-                                                            variant="light"
-                                                            color="#105476"
-                                                            onClick={addContainer}
-                                                          ><IconPlus size={16} /></Button>
-      )}
+                    {index ===
+                      containerDetailsForm.values.containers.length - 1 && (
+                      <Button
+                        size="sm"
+                        px={12}
+                        variant="light"
+                        color="#105476"
+                        onClick={addContainer}
+                      >
+                        <IconPlus size={16} />
+                      </Button>
+                    )}
                   </Grid.Col>
                 </Grid>
               </Box>
@@ -5240,196 +5344,199 @@ function ImportJobCreate() {
               </Text>
               {mode === "edit" && !isReadOnly && (
                 <Group gap="sm">
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  size="sm"
-                  onClick={() => {
-                  const toStr = (v: unknown) => String(v ?? "").trim();
-                  const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                  if (!jobId) {
-                    ToastNotification({
-                      type: "error",
-                      message: "Job ID not found for Supplier Invoice prefill.",
-                    });
-                    return;
-                  }
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    size="sm"
+                    onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                      if (!jobId) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Job ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
 
-                  const estimates = estimatesForm.values.estimates ?? [];
-                  const estimateCharges = estimates
-                    .map((e) => ({
-                      shipment_no: jobId,
-                      charge_id: e.charge_id ?? null,
-                      charge_name: e.charge_name ?? "",
-                      currency_id: e.currency_id ?? null,
-                      roe: e.roe ?? null,
-                      amount: e.total_cost ?? null,
-                      supplier_code: toStr((e as any).supplier_code),
-                      supplier_name: toStr((e as any).supplier_name),
-                    }))
-                    .filter(
-                      (c) =>
-                        toStr((c as any).shipment_no) &&
-                        (c as any).charge_id != null &&
-                        (c as any).amount != null &&
-                        (c as any).amount !== "" &&
-                        (toStr((c as any).supplier_code) ||
-                          toStr((c as any).supplier_name)),
-                    );
-
-                  const houseCharges = (housingDetails ?? [])
-                    .flatMap((h) => {
-                      const rec = h as unknown as Record<string, unknown>;
-                      const shipmentNo = toStr((rec as any).shipment_id);
-                      const chargesArr = Array.isArray((rec as any).charges)
-                        ? ((rec as any).charges as unknown[])
-                        : Array.isArray((rec as any).mbl_charges)
-                          ? ((rec as any).mbl_charges as unknown[])
-                          : [];
-                      return chargesArr
-                        .map((c) => {
-                          const cr = c as Record<string, unknown>;
-                          return {
-                            shipment_no: shipmentNo,
-                            charge_id:
-                              cr.charge_id != null ? Number(cr.charge_id) : null,
-                            charge_name: toStr(cr.charge_name),
-                            currency_id:
-                              (cr as any).currency_id ??
-                              (cr as any).currency ??
-                              null,
-                            roe: (cr as any).roe ?? null,
-                            amount:
-                              (cr as any).total_cost ??
-                              (cr as any).cost_local_amount ??
-                              (cr as any).amount ??
-                              null,
-                            supplier_code: toStr((cr as any).supplier_code),
-                            supplier_name: toStr((cr as any).supplier_name),
-                          };
-                        })
+                      const estimates = estimatesForm.values.estimates ?? [];
+                      const estimateCharges = estimates
+                        .map((e) => ({
+                          shipment_no: jobId,
+                          charge_id: e.charge_id ?? null,
+                          charge_name: e.charge_name ?? "",
+                          currency_id: e.currency_id ?? null,
+                          roe: e.roe ?? null,
+                          amount: e.total_cost ?? null,
+                          supplier_code: toStr((e as any).supplier_code),
+                          supplier_name: toStr((e as any).supplier_name),
+                        }))
                         .filter(
-                          (x) =>
-                            toStr((x as any).shipment_no) &&
-                            (x as any).charge_id != null &&
-                            (x as any).amount != null &&
-                            (x as any).amount !== "" &&
-                            (toStr((x as any).supplier_code) ||
-                              toStr((x as any).supplier_name)),
+                          (c) =>
+                            toStr((c as any).shipment_no) &&
+                            (c as any).charge_id != null &&
+                            (c as any).amount != null &&
+                            (c as any).amount !== "" &&
+                            (toStr((c as any).supplier_code) ||
+                              toStr((c as any).supplier_name)),
                         );
-                    })
-                    .filter(Boolean);
 
-                  const charges = [...estimateCharges, ...houseCharges];
-                  if (charges.length === 0) {
-                    ToastNotification({
-                      type: "error",
-                      message:
-                        "No charges found in Estimates/House charges to prefill.",
-                    });
-                    return;
-                  }
+                      const houseCharges = (housingDetails ?? [])
+                        .flatMap((h) => {
+                          const rec = h as unknown as Record<string, unknown>;
+                          const shipmentNo = toStr((rec as any).shipment_id);
+                          const chargesArr = Array.isArray((rec as any).charges)
+                            ? ((rec as any).charges as unknown[])
+                            : Array.isArray((rec as any).mbl_charges)
+                              ? ((rec as any).mbl_charges as unknown[])
+                              : [];
+                          return chargesArr
+                            .map((c) => {
+                              const cr = c as Record<string, unknown>;
+                              return {
+                                shipment_no: shipmentNo,
+                                charge_id:
+                                  cr.charge_id != null
+                                    ? Number(cr.charge_id)
+                                    : null,
+                                charge_name: toStr(cr.charge_name),
+                                currency_id:
+                                  (cr as any).currency_id ??
+                                  (cr as any).currency ??
+                                  null,
+                                roe: (cr as any).roe ?? null,
+                                amount:
+                                  (cr as any).total_cost ??
+                                  (cr as any).cost_local_amount ??
+                                  (cr as any).amount ??
+                                  null,
+                                supplier_code: toStr((cr as any).supplier_code),
+                                supplier_name: toStr((cr as any).supplier_name),
+                              };
+                            })
+                            .filter(
+                              (x) =>
+                                toStr((x as any).shipment_no) &&
+                                (x as any).charge_id != null &&
+                                (x as any).amount != null &&
+                                (x as any).amount !== "" &&
+                                (toStr((x as any).supplier_code) ||
+                                  toStr((x as any).supplier_name)),
+                            );
+                        })
+                        .filter(Boolean);
 
-                  navigate("/supplier-invoice/create", {
-                    state: {
-                      prefillSupplierInvoiceFromJob: {
-                        source: "air-import-job",
-                        job_id: jobId,
-                        charges,
+                      const charges = [...estimateCharges, ...houseCharges];
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "No charges found in Estimates/House charges to prefill.",
+                        });
+                        return;
+                      }
+
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: jobId,
+                            charges,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                  <AutomateVendorInvoiceTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openVendorInvoiceAutomation}
+                  />
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    size="sm"
+                    leftSection={<IconFileInvoice size={16} />}
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
                       },
-                    },
-                  });
-                  }}
-                >
-                  Create Supplier Invoice
-                </Button>
-                <AutomateVendorInvoiceTrigger
-                  variant="button"
-                  shipmentNo={getMasterShipmentNo(jobData)}
-                  onOpen={openVendorInvoiceAutomation}
-                />
-                <Button
-                  variant="light"
-                  color="#105476"
-                  size="sm"
-                  leftSection={<IconFileInvoice size={16} />}
-                  styles={{
-                    root: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                    },
-                  }}
-                  onClick={() => {
-                    const estimates = estimatesForm.values.estimates ?? [];
-                    const chargesFromEstimates = estimates
-                      .filter(
-                        (e) =>
-                          e.charge_id != null ||
-                          (e.charge_name && e.charge_name.trim() !== ""),
-                      )
-                      .map((e) => ({
-                        charge_id: e.charge_id,
-                        charge_name: e.charge_name ?? "",
-                        segment: "",
-                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                        sub_job: "",
-                        cn_r: "",
-                        currency: e.currency_code ?? "",
-                        currency_id: e.currency_id ?? "",
-                        roe: e.roe,
-                        unit_code: e.unit_code ?? "",
-                        unit_id: e.unit_id ?? "",
-                        no_of_unit: e.no_of_unit,
-                        amount_per_unit: e.cost_per_unit,
-                        amount: e.total_cost,
-                        amount_in_local:
-                          e.total_cost != null && e.roe != null
-                            ? Math.round(e.total_cost * e.roe * 100) / 100
-                            : e.total_cost,
-                        tax_code: "",
-                        tax: "false",
-                      }));
-                    const firstSupplier =
-                      estimates.find(
-                        (e) =>
-                          String(e.supplier_code ?? "").trim() !== "" ||
-                          String(e.supplier_name ?? "").trim() !== "",
-                      ) ?? null;
-                    navigate("/payment-request/create", {
-                      state: {
-                        serviceType: ["FCL", "LCL"],
-                        voucherType: "SEA IMPORTS",
-                        chargesFromEstimates:
-                          chargesFromEstimates.length > 0
-                            ? chargesFromEstimates
-                            : undefined,
-                        supplier:
-                          firstSupplier != null
-                            ? {
-                                supplier_code: String(
-                                  firstSupplier.supplier_code ?? "",
-                                ),
-                                supplier_name: String(
-                                  firstSupplier.supplier_name ?? "",
-                                ),
-                              }
-                            : null,
-                        job_reference_1:
-                          jobData?.job_id != null
-                            ? String(jobData.job_id)
-                            : jobData?.id != null
-                              ? String(jobData.id)
-                              : "",
-                        ...(jobWithMergedHousingDetails && {
-                          job: jobWithMergedHousingDetails,
-                        }),
-                      },
-                    });
-                  }}
-                >
-                  Create PRQ
-                </Button>
+                    }}
+                    onClick={() => {
+                      const estimates = estimatesForm.values.estimates ?? [];
+                      const chargesFromEstimates = estimates
+                        .filter(
+                          (e) =>
+                            e.charge_id != null ||
+                            (e.charge_name && e.charge_name.trim() !== ""),
+                        )
+                        .map((e) => ({
+                          charge_id: e.charge_id,
+                          charge_name: e.charge_name ?? "",
+                          segment: "",
+                          job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                          sub_job: "",
+                          cn_r: "",
+                          currency: e.currency_code ?? "",
+                          currency_id: e.currency_id ?? "",
+                          roe: e.roe,
+                          unit_code: e.unit_code ?? "",
+                          unit_id: e.unit_id ?? "",
+                          no_of_unit: e.no_of_unit,
+                          amount_per_unit: e.cost_per_unit,
+                          amount: e.total_cost,
+                          amount_in_local:
+                            e.total_cost != null && e.roe != null
+                              ? Math.round(e.total_cost * e.roe * 100) / 100
+                              : e.total_cost,
+                          tax_code: "",
+                          tax: "false",
+                        }));
+                      const firstSupplier =
+                        estimates.find(
+                          (e) =>
+                            String(e.supplier_code ?? "").trim() !== "" ||
+                            String(e.supplier_name ?? "").trim() !== "",
+                        ) ?? null;
+                      navigate("/payment-request/create", {
+                        state: {
+                          serviceType: ["FCL", "LCL"],
+                          voucherType: "SEA IMPORTS",
+                          chargesFromEstimates:
+                            chargesFromEstimates.length > 0
+                              ? chargesFromEstimates
+                              : undefined,
+                          supplier:
+                            firstSupplier != null
+                              ? {
+                                  supplier_code: String(
+                                    firstSupplier.supplier_code ?? "",
+                                  ),
+                                  supplier_name: String(
+                                    firstSupplier.supplier_name ?? "",
+                                  ),
+                                }
+                              : null,
+                          job_reference_1:
+                            jobData?.job_id != null
+                              ? String(jobData.job_id)
+                              : jobData?.id != null
+                                ? String(jobData.id)
+                                : "",
+                          ...(jobWithMergedHousingDetails && {
+                            job: jobWithMergedHousingDetails,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create PRQ
+                  </Button>
                 </Group>
               )}
             </Group>
@@ -5523,7 +5630,9 @@ function ImportJobCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5868,7 +5977,7 @@ function ImportJobCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                                                                        >
+                                            >
                                               Document Number
                                             </Table.Th>
                                             <Table.Th
@@ -5939,7 +6048,9 @@ function ImportJobCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{
@@ -6181,7 +6292,10 @@ function ImportJobCreate() {
           Do you want to close it since the job is not saved
         </Text>
         <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirmBackToListOpen(false)}>
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
             Cancel
           </Button>
           <Button
@@ -6254,7 +6368,11 @@ function ImportJobCreate() {
                       >
                         Remove
                       </Button>
-                      <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+                      <Menu
+                        shadow="md"
+                        width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                        position="bottom-end"
+                      >
                         <Menu.Target>
                           <ActionIcon
                             variant="subtle"
@@ -6275,7 +6393,9 @@ function ImportJobCreate() {
                             <IconDotsVertical size={18} />
                           </ActionIcon>
                         </Menu.Target>
-                        <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
+                        <Menu.Dropdown
+                          styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}
+                        >
                           <Menu.Item
                             leftSection={
                               <Box
@@ -6623,7 +6743,10 @@ function ImportJobCreate() {
             <Button variant="outline" onClick={handleCloseDoConfig}>
               Cancel
             </Button>
-            <Button color="#105476" onClick={handleGenerateDeliveryOrderFromConfig}>
+            <Button
+              color="#105476"
+              onClick={handleGenerateDeliveryOrderFromConfig}
+            >
               Generate PDF
             </Button>
           </Group>

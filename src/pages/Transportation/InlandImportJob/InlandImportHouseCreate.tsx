@@ -56,6 +56,11 @@ import {
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { ROE_DECIMAL_PLACES, roundRoeForPayload } from "../../../utils/exchangeRateRoe";
+import {
+  getMeaningfulHouseCharges,
+  validateMeaningfulHouseCharges,
+  type HouseChargeLike,
+} from "../../../utils/houseChargesPayload";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
@@ -2015,74 +2020,34 @@ function HouseCreate() {
     return true;
   };
 
-  // Validate step 4 - Charges
-  // Mandatory validations apply to both create and edit modes
+  // Validate step 4 - Charges (optional; only rows with user-entered data are validated/sent)
   const validateStep4 = () => {
-    const newErrors: Record<number, Record<string, string>> = {};
-    let hasErrors = false;
-    let roeToastMessage: string | null = null;
-
-    chargesForm.values.charges.forEach((charge, index) => {
-      const chargeError: Record<string, string> = {};
-
-      // Mandatory fields: charge_name (or charge_id), pp_cc, currency_id, roe, amount
-      if (
-        (!charge.charge_name || charge.charge_name.trim() === "") &&
-        (charge.charge_id == null || charge.charge_id === 0)
-      ) {
-        chargeError.charge_name = "Charge Name is required";
-        hasErrors = true;
-      }
-      if (!charge.pp_cc || charge.pp_cc.trim() === "") {
-        chargeError.pp_cc = "Prepaid/Collect is required";
-        hasErrors = true;
-      }
-      if (!charge.currency_id || charge.currency_id.trim() === "") {
-        chargeError.currency_id = "Currency is required";
-        hasErrors = true;
-      }
-      if (charge.roe === null || charge.roe === undefined) {
-        chargeError.roe = "ROE is required";
-        hasErrors = true;
-      } else {
-        const currencyArr = (currencyData ?? []) as {
-          id?: number;
-          code?: string;
-          currency_code?: string;
-        }[];
-        const roeRuleError = validateRoeField(
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    const result = validateMeaningfulHouseCharges(
+      chargesForm.values.charges as HouseChargeLike[],
+      (charge) =>
+        validateRoeField(
           resolveCurrencyCode(charge, currencyArr),
           charge.roe,
           charge.currency_id,
-        );
-        if (roeRuleError) {
-          chargeError.roe = roeRuleError;
-          hasErrors = true;
-          if (
-            roeRuleError === ROE_CANNOT_BE_ONE_FIELD &&
-            !roeToastMessage
-          ) {
-            roeToastMessage = ROE_CANNOT_BE_ONE_TOAST;
-          }
-        }
-      }
-      if (charge.amount === null || charge.amount === undefined) {
-        chargeError.amount = "Amount is required";
-        hasErrors = true;
-      }
+        ),
+      {
+        roeCannotBeOneField: ROE_CANNOT_BE_ONE_FIELD,
+        roeCannotBeOneToast: ROE_CANNOT_BE_ONE_TOAST,
+      },
+    );
 
-      if (Object.keys(chargeError).length > 0) {
-        newErrors[index] = chargeError;
-      }
-    });
+    setChargeErrors(result.errors);
 
-    setChargeErrors(newErrors);
-
-    if (hasErrors) {
-      if (roeToastMessage) {
+    if (!result.valid) {
+      if (result.roeToastMessage) {
         ToastNotification({
           type: "error",
-          message: roeToastMessage,
+          message: result.roeToastMessage,
         });
       }
       return false;
@@ -2192,7 +2157,7 @@ function HouseCreate() {
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
       cargo_details: cargoDetails,
-      charges: chargesForm.values.charges,
+      charges: getMeaningfulHouseCharges(chargesForm.values.charges),
     };
   };
 
@@ -2273,7 +2238,7 @@ function HouseCreate() {
       ref_no: currentFormValues.ref_no,
       events: currentFormValues.events ?? [],
       cargo_details: cargoDetailsForPayload,
-      charges: chargesForm.values.charges,
+      charges: getMeaningfulHouseCharges(chargesForm.values.charges),
       ...pickHouseDocumentFields(housePageDocuments.getNavigationState()),
     };
 
@@ -2378,9 +2343,12 @@ function HouseCreate() {
           ),
           haz: cargo.haz === "Yes",
         })),
-        mawb_charges: chargesForm.values.charges
-          .filter((charge) => charge.charge_name || charge.charge_id != null)
-          .map((charge) => ({
+        mawb_charges: (() => {
+          const meaningfulCharges = getMeaningfulHouseCharges(
+            chargesForm.values.charges as HouseChargeLike[],
+          ) as ChargeDetail[];
+          if (meaningfulCharges.length === 0) return [];
+          return meaningfulCharges.map((charge) => ({
             ...(charge.id != null &&
               charge.id !== undefined && { id: Number(charge.id) }),
             charge_id: charge.charge_id ?? null,
@@ -2398,7 +2366,8 @@ function HouseCreate() {
               roundToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
-          })),
+          }));
+        })(),
       };
 
       const jobData = {
@@ -4828,7 +4797,7 @@ function HouseCreate() {
               <ChargesLocalAmountTotalsRow
                 offsetBeforeSellCol={7.1}
                 house={{
-                  charges: chargesForm.values.charges,
+                  charges: getMeaningfulHouseCharges(chargesForm.values.charges),
                   mawb_charges: (editData as { mawb_charges?: unknown })
                     ?.mawb_charges as
                     | Array<{

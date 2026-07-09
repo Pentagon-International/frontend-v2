@@ -77,6 +77,11 @@ import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
+  getMeaningfulHouseCharges,
+  hasMeaningfulHouseChargeData,
+  type HouseChargeLike,
+} from "../../../utils/houseChargesPayload";
+import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
@@ -393,8 +398,10 @@ function AirImportJobCreate() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
-  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
-    useState<string | null>(null);
+  const [
+    vendorInvoiceAutomationShipmentNo,
+    setVendorInvoiceAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -862,8 +869,7 @@ function AirImportJobCreate() {
             location.state.housingDetails.length > 0);
 
         const stateCarrierDetails = location.state?.carrierDetails as
-          | Partial<CarrierDetailsForm>
-          | undefined;
+          Partial<CarrierDetailsForm> | undefined;
         const carrierSource =
           hasHawbDetailsInState && stateCarrierDetails
             ? stateCarrierDetails
@@ -889,14 +895,12 @@ function AirImportJobCreate() {
             dayjs(
               ((carrierSource as Record<string, unknown>).mawb_date ||
                 (carrierSource as Record<string, unknown>).mbl_date) as
-                | string
-                | Date,
+                string | Date,
             ).isValid()
               ? dayjs(
                   ((carrierSource as Record<string, unknown>).mawb_date ||
                     (carrierSource as Record<string, unknown>).mbl_date) as
-                    | string
-                    | Date,
+                    string | Date,
                 ).toDate()
               : null,
         };
@@ -975,11 +979,9 @@ function AirImportJobCreate() {
                 : [];
               const mappedCharges = mawbChargesRaw.map((charge) => {
                 const unitDetails = charge.unit_details as
-                  | { unit_id?: number; unit_code?: string }
-                  | undefined;
+                  { unit_id?: number; unit_code?: string } | undefined;
                 const currencyDetails = charge.currency_details as
-                  | { currency_id?: number; currency_code?: string }
-                  | undefined;
+                  { currency_id?: number; currency_code?: string } | undefined;
                 const unitCode = String(
                   charge.unit_code ??
                     charge.unit_input ??
@@ -1219,15 +1221,9 @@ function AirImportJobCreate() {
                   const s = raw as Record<string, unknown>;
                   return {
                     total_local_sell: s.total_local_sell as
-                      | number
-                      | string
-                      | null
-                      | undefined,
+                      number | string | null | undefined,
                     total_local_cost: s.total_local_cost as
-                      | number
-                      | string
-                      | null
-                      | undefined,
+                      number | string | null | undefined,
                   };
                 })(),
                 events: Array.isArray(
@@ -2050,8 +2046,7 @@ function AirImportJobCreate() {
             consignee_address_id:
               (
                 savedMawbDetails as
-                  | { consignee_address_id?: string }
-                  | undefined
+                  { consignee_address_id?: string } | undefined
               )?.consignee_address_id || "",
             consignee_address:
               (savedMawbDetails as { consignee_address?: string } | undefined)
@@ -2068,14 +2063,12 @@ function AirImportJobCreate() {
             carrier_agent_address_id:
               (
                 savedMawbDetails as
-                  | { carrier_agent_address_id?: string }
-                  | undefined
+                  { carrier_agent_address_id?: string } | undefined
               )?.carrier_agent_address_id || "",
             carrier_agent_address:
               (
                 savedMawbDetails as
-                  | { carrier_agent_address?: string }
-                  | undefined
+                  { carrier_agent_address?: string } | undefined
               )?.carrier_agent_address || "",
           });
 
@@ -3004,7 +2997,11 @@ function AirImportJobCreate() {
               (hawb as { charges?: unknown }).charges ??
               [];
             const arr = Array.isArray(src) ? src : [];
-            return arr.map((charge: Record<string, unknown>) => ({
+            const meaningful = arr.filter((charge) =>
+              hasMeaningfulHouseChargeData(charge as HouseChargeLike),
+            );
+            if (meaningful.length === 0) return [];
+            return meaningful.map((charge: Record<string, unknown>) => ({
               ...(charge.id != null && { id: Number(charge.id) }),
               charge_id:
                 charge.charge_id != null ? Number(charge.charge_id) : null,
@@ -3029,96 +3026,66 @@ function AirImportJobCreate() {
                 charge.no_of_unit != null
                   ? roundToDecimals(
                       charge.no_of_unit as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
               roe:
                 charge.roe != null
                   ? roundRoeForPayload(
                       charge.roe as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
               amount_per_unit:
                 charge.amount_per_unit != null
                   ? roundToDecimals(
                       charge.amount_per_unit as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
               amount:
                 charge.amount != null
                   ? roundToDecimals(
                       charge.amount as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
               sell_local_amount:
                 charge.sell_local_amount != null
                   ? roundToDecimals(
                       charge.sell_local_amount as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : charge.local_amount != null
                     ? roundToDecimals(
                         charge.local_amount as unknown as
-                          | string
-                          | number
-                          | null
-                          | undefined,
+                          string | number | null | undefined,
                       )
                     : null,
               unit_cost:
                 charge.unit_cost != null
                   ? roundToDecimals(
                       charge.unit_cost as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : charge.cost_per_unit != null
                     ? roundToDecimals(
                         charge.cost_per_unit as unknown as
-                          | string
-                          | number
-                          | null
-                          | undefined,
+                          string | number | null | undefined,
                       )
                     : null,
               total_cost:
                 charge.total_cost != null
                   ? roundToDecimals(
                       charge.total_cost as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
               cost_local_amount:
                 charge.cost_local_amount != null
                   ? roundToDecimals(
                       charge.cost_local_amount as unknown as
-                        | string
-                        | number
-                        | null
-                        | undefined,
+                        string | number | null | undefined,
                     )
                   : null,
             }));
@@ -3237,7 +3204,11 @@ function AirImportJobCreate() {
               {mode === "edit" ? "Update" : "Create"}
             </Button>
             {hawbDetails.length > 0 && (
-              <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+              <Menu
+                shadow="md"
+                width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                position="bottom-end"
+              >
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
@@ -5533,7 +5504,7 @@ function AirImportJobCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                                                                        >
+                                            >
                                               Document Number
                                             </Table.Th>
                                             <Table.Th
@@ -5884,7 +5855,11 @@ function AirImportJobCreate() {
                       >
                         Remove
                       </Button>
-                      <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+                      <Menu
+                        shadow="md"
+                        width={JOB_HOUSE_ACTION_MENU_WIDTH}
+                        position="bottom-end"
+                      >
                         <Menu.Target>
                           <ActionIcon
                             variant="subtle"
@@ -5906,7 +5881,9 @@ function AirImportJobCreate() {
                           </ActionIcon>
                         </Menu.Target>
 
-                        <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
+                        <Menu.Dropdown
+                          styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}
+                        >
                           {/* Cargo Arrival Notice */}
                           <Menu.Item
                             leftSection={

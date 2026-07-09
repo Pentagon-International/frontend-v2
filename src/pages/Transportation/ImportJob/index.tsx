@@ -140,6 +140,8 @@ type ImportJobData = {
   status: string;
   job_id?: string;
   service_code?: string;
+  booking_no?: string | null;
+  actual_booking_no?: string[];
   summary?: {
     estimates_total_cost?: string | number | null;
     container_type?: string[] | null;
