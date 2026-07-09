@@ -2,14 +2,19 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Alert,
   ActionIcon,
+  Anchor,
   Box,
   Button,
   createTheme,
   Grid,
+  Loader,
   MantineProvider,
+  Modal,
   rem,
+  Stack,
   Text,
   TextInput,
+  UnstyledButton,
 } from "@mantine/core";
 import {
   IconBook2,
@@ -55,6 +60,14 @@ import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  type GlobalSearchItem,
+  globalSearchItemsFromResponse,
+  navigateFromGlobalSearchDocumentNo,
+  openGlobalSearchItem,
+  runGlobalSearchQuery,
+} from "../../../utils/globalSearchNavigation";
 
 type CoaItem = {
   id?: number;
@@ -337,9 +350,18 @@ type AppliedFilterSummary = {
   date_from: string;
   date_to: string;
   account_code: string;
+  account_id?: string;
   subledger_code?: string;
   location?: string;
   account_name?: string;
+};
+
+type SubledgerEnquiryReturnState = {
+  appliedFilters?: AppliedFilterSummary;
+  selectedAccount?: CoaItem | null;
+  showFilters?: boolean;
+  searchQuery?: string;
+  pagination?: MRT_PaginationState;
 };
 
 const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
@@ -372,6 +394,8 @@ function subledgerThTextAlign(key: keyof SubledgerEntryRow): "left" | "right" {
 }
 
 export default function SubledgerEnquiry() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
   const [rows, setRows] = useState<SubledgerEntryRow[]>([]);
   const [enquirySummary, setEnquirySummary] = useState<{
@@ -394,6 +418,11 @@ export default function SubledgerEnquiry() {
   const [visibleColumns, setVisibleColumns] = useState<
     Record<SubledgerColumnKey, boolean>
   >(() => buildDefaultSubledgerColumnVisibility());
+  const [documentNavLoading, setDocumentNavLoading] = useState(false);
+  const [documentSearchModalOpen, setDocumentSearchModalOpen] = useState(false);
+  const [documentSearchResults, setDocumentSearchResults] = useState<
+    GlobalSearchItem[]
+  >([]);
 
   const dateFormat = useDateFormat();
   const form = useForm<FilterFormValues>({
@@ -554,6 +583,49 @@ export default function SubledgerEnquiry() {
     [],
   );
 
+  const fetchWithAppliedFilters = useCallback(
+    async (
+      filters: AppliedFilterSummary,
+      options?: { resetPage?: boolean },
+    ) => {
+      setFetchError("");
+      setIsFetchingRows(true);
+
+      try {
+        const payload = {
+          filters: {
+            date_from: filters.date_from,
+            date_to: filters.date_to,
+            account_code: filters.account_code,
+            ...(filters.subledger_code
+              ? { subledger_code: filters.subledger_code }
+              : {}),
+            ...(filters.location ? { location: filters.location } : {}),
+          },
+        };
+
+        const response = (await postAPICall(
+          URL.subledgerEnquiry,
+          payload,
+          API_HEADER,
+        )) as SubledgerEnquiryResponse;
+
+        ingestSubledgerResponse(response);
+        if (options?.resetPage !== false) {
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }
+      } catch {
+        setRows([]);
+        setEnquirySummary(null);
+        setResultTotal(null);
+        setFetchError("Unable to fetch subledger data. Please try again.");
+      } finally {
+        setIsFetchingRows(false);
+      }
+    },
+    [ingestSubledgerResponse],
+  );
+
   const runSubledgerEnquiry = useCallback(
     async (values: FilterFormValues) => {
       setFetchError("");
@@ -585,6 +657,7 @@ export default function SubledgerEnquiry() {
           date_from,
           date_to,
           account_code,
+          ...(values.accountId ? { account_id: values.accountId } : {}),
           ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
           ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
@@ -604,40 +677,59 @@ export default function SubledgerEnquiry() {
 
   const refreshSubledgerEnquiry = useCallback(async () => {
     if (!appliedFilters) return;
-    setFetchError("");
-    setIsFetchingRows(true);
-    try {
-      const payload = {
-        filters: {
-          date_from: appliedFilters.date_from,
-          date_to: appliedFilters.date_to,
-          account_code: appliedFilters.account_code,
-          ...(appliedFilters.subledger_code
-            ? { subledger_code: appliedFilters.subledger_code }
-            : {}),
-          ...(appliedFilters.location
-            ? { location: appliedFilters.location }
-            : {}),
-        },
-      };
+    await fetchWithAppliedFilters(appliedFilters);
+  }, [appliedFilters, fetchWithAppliedFilters]);
 
-      const response = (await postAPICall(
-        URL.subledgerEnquiry,
-        payload,
-        API_HEADER,
-      )) as SubledgerEnquiryResponse;
-
-      ingestSubledgerResponse(response);
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    } catch {
-      setRows([]);
-      setEnquirySummary(null);
-      setResultTotal(null);
-      setFetchError("Unable to fetch subledger data. Please try again.");
-    } finally {
-      setIsFetchingRows(false);
+  useEffect(() => {
+    const state = (location.state ?? {}) as SubledgerEnquiryReturnState;
+    const filters = state.appliedFilters;
+    if (!filters?.date_from || !filters?.date_to || !filters?.account_code) {
+      return;
     }
-  }, [appliedFilters, ingestSubledgerResponse]);
+
+    const fromDate = dayjs(filters.date_from);
+    const toDate = dayjs(filters.date_to);
+
+    form.setValues({
+      fromDate: fromDate.isValid() ? fromDate.toDate() : null,
+      toDate: toDate.isValid() ? toDate.toDate() : null,
+      accountId: filters.account_id ?? null,
+      accountCode: filters.account_code ?? null,
+      location: filters.location ?? null,
+    });
+
+    if (state.selectedAccount) {
+      setSelectedAccount(state.selectedAccount);
+    } else {
+      setSelectedAccount({
+        gl_account_code: filters.account_code,
+        sl_code: filters.subledger_code,
+        account_name: filters.account_name,
+        id:
+          filters.account_id && !Number.isNaN(Number(filters.account_id))
+            ? Number(filters.account_id)
+            : undefined,
+      });
+    }
+
+    setAppliedFilters(filters);
+    if (state.showFilters === false) setShowFilters(false);
+    if (typeof state.searchQuery === "string") setSearchQuery(state.searchQuery);
+    if (state.pagination) setPagination(state.pagination);
+
+    void fetchWithAppliedFilters(filters, {
+      resetPage: !state.pagination,
+    });
+
+    navigate(location.pathname, { replace: true, state: null });
+  }, [
+    location.key,
+    location.pathname,
+    location.state,
+    fetchWithAppliedFilters,
+    form,
+    navigate,
+  ]);
 
   const downloadSubledgerCsv = useCallback(async () => {
     if (!appliedFilters) return;
@@ -744,6 +836,105 @@ export default function SubledgerEnquiry() {
     return formatAmount(enquirySummary.opening_balance);
   }, [enquirySummary]);
 
+  const getDocumentNavigationOptions = useCallback(
+    () => ({
+      returnTo: "/subledger-enquiry",
+      returnToState: appliedFilters
+        ? {
+            appliedFilters: {
+              ...appliedFilters,
+              ...(form.values.accountId
+                ? { account_id: form.values.accountId }
+                : {}),
+            },
+            selectedAccount,
+            showFilters,
+            searchQuery,
+            pagination,
+          }
+        : undefined,
+    }),
+    [
+      appliedFilters,
+      form.values.accountId,
+      pagination,
+      searchQuery,
+      selectedAccount,
+      showFilters,
+    ],
+  );
+
+  const handleDocumentNumberClick = useCallback(
+    async (documentNo: string) => {
+      const query = documentNo.trim();
+      if (!query || documentNavLoading) return;
+
+      setDocumentNavLoading(true);
+      try {
+        const result = await navigateFromGlobalSearchDocumentNo(
+          navigate,
+          query,
+          getDocumentNavigationOptions(),
+        );
+
+        if (result === "navigated") return;
+
+        if (result === "multiple") {
+          const normalized = await runGlobalSearchQuery(query);
+          const items = globalSearchItemsFromResponse(normalized);
+          setDocumentSearchResults(items);
+          setDocumentSearchModalOpen(true);
+          return;
+        }
+
+        if (result === "not_found") {
+          ToastNotification({
+            type: "warning",
+            message: "No document found for this document number.",
+          });
+          return;
+        }
+
+        ToastNotification({
+          type: "error",
+          message: "Failed to open document. Please try again.",
+        });
+      } finally {
+        setDocumentNavLoading(false);
+      }
+    },
+    [documentNavLoading, getDocumentNavigationOptions, navigate],
+  );
+
+  const handleDocumentSearchResultPick = useCallback(
+    async (item: GlobalSearchItem) => {
+      setDocumentSearchModalOpen(false);
+      setDocumentNavLoading(true);
+      try {
+        const ok = await openGlobalSearchItem(
+          navigate,
+          item,
+          getDocumentNavigationOptions(),
+        );
+        if (!ok) {
+          ToastNotification({
+            type: "warning",
+            message: "Navigation is not configured for this document type.",
+          });
+        }
+      } catch {
+        ToastNotification({
+          type: "error",
+          message: "Failed to open document. Please try again.",
+        });
+      } finally {
+        setDocumentNavLoading(false);
+        setDocumentSearchResults([]);
+      }
+    },
+    [getDocumentNavigationOptions, navigate],
+  );
+
   const appliedFilterItems = useMemo(() => {
     if (!appliedFilters) return [];
     const items: Array<{ key: string; value: string }> = [];
@@ -764,6 +955,67 @@ export default function SubledgerEnquiry() {
 
   return (
     <MantineProvider theme={subledgerV0MantineTheme}>
+      {documentNavLoading && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color="#105476" />
+            <Text size="sm" c="dimmed" style={{ fontFamily: V0_FONT_SANS }}>
+              Opening document...
+            </Text>
+          </Stack>
+        </Box>
+      )}
+
+      <Modal
+        opened={documentSearchModalOpen}
+        onClose={() => {
+          setDocumentSearchModalOpen(false);
+          setDocumentSearchResults([]);
+        }}
+        title="Select document"
+        centered
+      >
+        <Stack gap="xs">
+          {documentSearchResults.map((item) => {
+            const key = `${item.module}-${item.sub_module ?? ""}-${item.id}`;
+            const label =
+              item.display_id ??
+              item.primary_code ??
+              item.id ??
+              "Unknown document";
+            return (
+              <UnstyledButton
+                key={key}
+                onClick={() => void handleDocumentSearchResultPick(item)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #E2E8F0",
+                  textAlign: "left",
+                }}
+              >
+                <Text size="sm" fw={600} style={{ fontFamily: V0_FONT_SANS }}>
+                  {label}
+                </Text>
+                <Text size="xs" c="dimmed" style={{ fontFamily: V0_FONT_SANS }}>
+                  {[item.module, item.sub_module].filter(Boolean).join(" / ")}
+                </Text>
+              </UnstyledButton>
+            );
+          })}
+        </Stack>
+      </Modal>
+
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
         style={{
@@ -1196,6 +1448,7 @@ export default function SubledgerEnquiry() {
                     rowCount={filteredRows.length}
                     pagination={pagination}
                     onPaginationChange={setPagination}
+                    onDocumentNoClick={handleDocumentNumberClick}
                   />
                 )}
               </>
@@ -1224,6 +1477,7 @@ function SubledgerTable(props: {
       | MRT_PaginationState
       | ((prev: MRT_PaginationState) => MRT_PaginationState),
   ) => void;
+  onDocumentNoClick: (documentNo: string) => void;
 }) {
   const {
     theme,
@@ -1237,6 +1491,7 @@ function SubledgerTable(props: {
     rowCount,
     pagination,
     onPaginationChange,
+    onDocumentNoClick,
   } = props;
 
   const allColumns = useMemo<MRT_ColumnDef<SubledgerEntryRow>[]>(
@@ -1251,10 +1506,27 @@ function SubledgerTable(props: {
         grow: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<unknown>();
+          if (c.key === "document_no") {
+            const text = formatSubledgerCell(c.key, value, dateFormat);
+            if (!text) return "—";
+            return (
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                c="#105476"
+                td="underline"
+                style={{ fontFamily: theme.fontSans, cursor: "pointer" }}
+                onClick={() => void onDocumentNoClick(text)}
+              >
+                {text}
+              </Anchor>
+            );
+          }
           return formatSubledgerCell(c.key, value, dateFormat) || "—";
         },
       })),
-    [dateFormat],
+    [dateFormat, onDocumentNoClick, theme.fontSans],
   );
 
   const visibleColumns = useMemo(
