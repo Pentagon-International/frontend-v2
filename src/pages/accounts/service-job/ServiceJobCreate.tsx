@@ -87,6 +87,7 @@ type ServiceMasterRow = {
   service_code?: string;
   service_name: string;
   transport_mode: string;
+  import_export?: string;
   status?: string;
 };
 
@@ -177,6 +178,16 @@ function getPortTransportParams(
 
 function getInvoiceServiceType(transportMode: string): string {
   return isAirTransportMode(transportMode) ? "AIR" : "SEA";
+}
+
+/** Export services → Prepaid; Import services → Collect. */
+function getDefaultPpCcFromService(importExport?: string): "Prepaid" | "Collect" {
+  const raw = String(importExport ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw.includes("EXPORT")) return "Prepaid";
+  if (raw.includes("IMPORT")) return "Collect";
+  return "Collect";
 }
 
 function getMasterAwbField(
@@ -335,15 +346,18 @@ function mapChargeFromApi(
   };
 }
 
-function createEmptyCharge(defaults: {
-  currency_id: string;
-  currency: string;
-  roe: number | null;
-}): ServiceJobChargeDetail {
+function createEmptyCharge(
+  defaults: {
+    currency_id: string;
+    currency: string;
+    roe: number | null;
+  },
+  ppCc: "Prepaid" | "Collect" = "Collect",
+): ServiceJobChargeDetail {
   return {
     charge_id: null,
     charge_name: "",
-    pp_cc: "Collect",
+    pp_cc: ppCc,
     unit_id: "",
     no_of_unit: null,
     currency_id: defaults.currency_id,
@@ -481,12 +495,14 @@ const ServiceJobPortField = memo(function ServiceJobPortField({
 function ServiceJobChargesSection({
   form,
   transportMode,
+  defaultPpCc = "Collect",
   readOnly = false,
   showCreateInvoice = false,
   onCreateInvoice,
 }: {
   form: UseFormReturnType<{ charges: ServiceJobChargeDetail[] }>;
   transportMode: string;
+  defaultPpCc?: "Prepaid" | "Collect";
   readOnly?: boolean;
   showCreateInvoice?: boolean;
   onCreateInvoice?: () => void;
@@ -624,7 +640,7 @@ function ServiceJobChargesSection({
               onClick={() => {
                 form.insertListItem(
                   "charges",
-                  createEmptyCharge(branchCurrencyDefaults),
+                  createEmptyCharge(branchCurrencyDefaults, defaultPpCc),
                 );
               }}
             >
@@ -1264,6 +1280,7 @@ export default function ServiceJobCreate() {
   );
 
   const transportMode = selectedService?.transport_mode ?? "";
+  const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
   const isSeaJob =
     Boolean(transportMode) && !isAirTransportMode(transportMode);
   const awbFieldLabel = isSeaJob ? "BL Number" : "AWB Number";
@@ -1693,6 +1710,19 @@ export default function ServiceJobCreate() {
                     form.setFieldValue("origin_name", "");
                     form.setFieldValue("destination_code", "");
                     form.setFieldValue("destination_name", "");
+                    const svc =
+                      activeServices.find((s) => String(s.id) === (value || "")) ??
+                      null;
+                    const nextPpCc = getDefaultPpCcFromService(svc?.import_export);
+                    // Only retarget blank charge rows so user-edited values stay intact
+                    const nextCharges = chargesForm.values.charges.map((c) => {
+                      const isBlankRow =
+                        !c.charge_id &&
+                        !String(c.charge_name ?? "").trim() &&
+                        !String(c.supplier_code ?? "").trim();
+                      return isBlankRow ? { ...c, pp_cc: nextPpCc } : c;
+                    });
+                    chargesForm.setValues({ charges: nextCharges });
                   }}
                 />
               </Grid.Col>
@@ -1943,6 +1973,7 @@ export default function ServiceJobCreate() {
           <ServiceJobChargesSection
             form={chargesForm}
             transportMode={transportMode}
+            defaultPpCc={defaultPpCc}
             showCreateInvoice={isEditMode && jobData?.id != null}
             onCreateInvoice={handleCreateInvoice}
           />

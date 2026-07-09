@@ -60,6 +60,8 @@ export type EstimatesFormValues = {
 export function createEmptyEstimateRow(options?: {
   currencyId?: string;
   currencyCode?: string;
+  /** Export jobs: Prepaid; Import jobs: Collect */
+  ppCc?: string;
 }): EstimateRow {
   const branchDefaults = getBranchCurrencyDefaults(
     options?.currencyId ?? "",
@@ -70,7 +72,7 @@ export function createEmptyEstimateRow(options?: {
     supplier_name: "",
     charge_id: null,
     charge_name: "",
-    pp_cc: "",
+    pp_cc: options?.ppCc ?? "",
     unit_id: "",
     unit_code: "",
     no_of_unit: null,
@@ -170,6 +172,8 @@ export type EstimatesSectionProps = {
   } & JobChargeNoOfUnitContext;
   /** Parent calls this before submit to block API when ROE rules fail. */
   roeSubmitValidateRef?: MutableRefObject<(() => boolean) | null>;
+  /** Export: Prepaid; Import: Collect. Applied only to newly added blank rows. */
+  defaultPpCc?: "Prepaid" | "Collect";
 };
 
 export function EstimatesSection({
@@ -183,6 +187,7 @@ export function EstimatesSection({
   userBranches,
   jobUnitDefaults,
   roeSubmitValidateRef,
+  defaultPpCc,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
   const branches = userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
@@ -199,6 +204,7 @@ export function EstimatesSection({
     createEmptyEstimateRow({
       currencyId: defaultBranchCurrencyId,
       currencyCode: defaultBranchCurrency,
+      ppCc: defaultPpCc,
     });
   const [estimateErrors, setEstimateErrors] = useState<
     Record<number, Record<string, string>>
@@ -791,6 +797,7 @@ export function EstimatesSection({
 // Convenience helper for pages creating the form
 export function useEstimatesForm(
   initial?: Partial<EstimatesFormValues>,
+  options?: { defaultPpCc?: "Prepaid" | "Collect" },
 ): UseFormReturnType<EstimatesFormValues> {
   const user = useAuthStore((state) => state.user);
   const { branchCurrencyId, branchCurrencyCode } = getDefaultBranchCurrencyFromUser(
@@ -806,6 +813,7 @@ export function useEstimatesForm(
               createEmptyEstimateRow({
                 currencyId: branchCurrencyId,
                 currencyCode: branchCurrencyCode,
+                ppCc: options?.defaultPpCc,
               }),
             ],
     },

@@ -1,13 +1,11 @@
 import { Box, Menu } from "@mantine/core";
-import { IconFileInvoice } from "@tabler/icons-react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { buildHouseAgentInvoiceNavigationState } from "../utils/buildHouseAgentInvoiceNavigationState";
+import { IconTextScanAi } from "@tabler/icons-react";
+import { getHouseShipmentNo } from "../utils/vendorInvoiceAutomation";
 
-type HouseCreateAgentInvoiceMenuItemProps = {
-  invoicePath: string;
-  serviceType: string | string[];
+type HouseAutomateVendorInvoiceMenuItemProps = {
   getCurrentHousingDetail: () => Record<string, unknown>;
   jobId?: number | string | null;
+  onOpen: (shipmentNo: string) => void;
 };
 
 const menuItemStyles = {
@@ -31,15 +29,11 @@ const menuItemStyles = {
   },
 } as const;
 
-export function HouseCreateAgentInvoiceMenuItem({
-  invoicePath,
-  serviceType,
+export function HouseAutomateVendorInvoiceMenuItem({
   getCurrentHousingDetail,
   jobId,
-}: HouseCreateAgentInvoiceMenuItemProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
-
+  onOpen,
+}: HouseAutomateVendorInvoiceMenuItemProps) {
   if (jobId == null) return null;
 
   return (
@@ -55,21 +49,17 @@ export function HouseCreateAgentInvoiceMenuItem({
             justifyContent: "center",
           }}
         >
-          <IconFileInvoice size={16} color="#105476" />
+          <IconTextScanAi size={16} color="#105476" />
         </Box>
       }
       styles={menuItemStyles}
       onClick={() => {
-        navigate(invoicePath, {
-          state: buildHouseAgentInvoiceNavigationState(
-            getCurrentHousingDetail(),
-            location.state,
-            serviceType,
-          ),
-        });
+        const shipmentNo = getHouseShipmentNo(getCurrentHousingDetail());
+        if (!shipmentNo) return;
+        onOpen(shipmentNo);
       }}
     >
-      Create Agent Invoice
+      Automate Vendor Invoice
     </Menu.Item>
   );
 }
