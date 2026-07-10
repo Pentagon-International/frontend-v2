@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MRT_PaginationState } from "mantine-react-table";
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Center,
@@ -17,7 +18,6 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
-  IconArrowRight,
   IconChartBar,
   IconCircleCheck,
   IconDotsVertical,
@@ -65,6 +65,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
+import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe";
 
 const LIST_KEY = "JOB_PROFIT_VERIFICATION_MASTER";
 
@@ -79,6 +80,12 @@ type HouseRow = {
   subjob_no?: string;
   house_no?: string;
   party_name?: string;
+  quotation_id?: number;
+  quotation_no?: string;
+  quoted_revenue?: number;
+  quoted_cost?: number;
+  quoted_profit?: number;
+  our_gp_pct?: number;
   our_profit?: number;
   our_revenue?: number;
   our_cost?: number;
@@ -99,6 +106,12 @@ type JobProfitRow = {
   origin_name?: string;
   destination_code?: string;
   destination_name?: string;
+  quotation_id?: number;
+  quotation_no?: string;
+  quoted_revenue?: number;
+  quoted_cost?: number;
+  quoted_profit?: number;
+  our_gp_pct?: number;
   our_volume?: number;
   our_revenue?: number;
   our_profit?: number;
@@ -133,7 +146,6 @@ type StoredFilters = Omit<
 
 type JobProfitListResponse = {
   success?: boolean;
-  currency?: string;
   total?: number;
   index?: number;
   limit?: number;
@@ -194,23 +206,62 @@ function deserializeFiltersFromStore(
   };
 }
 
-function getCustomerNames(row: JobProfitRow): string {
+function getUniqueCustomerNames(row: JobProfitRow): string[] {
   const names = (row.houses ?? [])
     .map((house) => house.party_name?.trim())
     .filter((name): name is string => Boolean(name));
-  return [...new Set(names)].join(", ") || "—";
+  return [...new Set(names)];
 }
 
-function routeEndpointsFromRow(row: JobProfitRow) {
-  const oc =
-    String(row.origin_code || "").trim() ||
-    String(row.origin_name || "").trim() ||
-    "";
-  const dc =
-    String(row.destination_code || "").trim() ||
-    String(row.destination_name || "").trim() ||
-    "";
-  return { oc, dc };
+function CustomerNamesDisplay({
+  row,
+  color,
+  fontFamily,
+}: {
+  row: JobProfitRow;
+  color: string;
+  fontFamily: string;
+}) {
+  const names = getUniqueCustomerNames(row);
+  if (names.length === 0) {
+    return (
+      <Text size="sm" c={color}>
+        —
+      </Text>
+    );
+  }
+
+  const fullText = names.join(", ");
+  const displayText =
+    names.length <= 2 ? fullText : `${names.slice(0, 2).join(", ")}...`;
+
+  if (names.length <= 2) {
+    return (
+      <Text size="sm" c={color}>
+        {displayText}
+      </Text>
+    );
+  }
+
+  return (
+    <Tooltip
+      label={fullText}
+      multiline
+      maw={400}
+      withArrow
+      styles={{
+        tooltip: {
+          fontFamily,
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+        },
+      }}
+    >
+      <Text size="sm" c={color} style={{ cursor: "default" }}>
+        {displayText}
+      </Text>
+    </Tooltip>
+  );
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -219,6 +270,54 @@ function formatNumber(value: number | null | undefined): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatCurrencyAmount(
+  value: number | null | undefined,
+  currency?: string,
+): string {
+  const formatted = formatNumber(value);
+  if (formatted === "—") return "—";
+  return currency ? `${currency} ${formatted}` : formatted;
+}
+
+function formatGpPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return `${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
+function resolveSignedBadgeColor(
+  value: number | null | undefined,
+): "green" | "red" | "gray" | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  if (value > 0) return "green";
+  if (value < 0) return "red";
+  return "gray";
+}
+
+function SignedValueBadge({
+  value,
+  label,
+}: {
+  value: number | null | undefined;
+  label: string;
+}) {
+  const color = resolveSignedBadgeColor(value);
+  if (!color) {
+    return (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    );
+  }
+  return (
+    <Badge color={color} variant="light" size="sm">
+      {label}
+    </Badge>
+  );
 }
 
 function ProfitVerifiedPill({ verified }: { verified?: boolean }) {
@@ -323,7 +422,10 @@ export default function JobProfitVerificationMaster() {
     pageSize: 25,
   });
   const [totalRecords, setTotalRecords] = useState(0);
-  const [currency, setCurrency] = useState<string>("");
+  const currency = useMemo(
+    () => getDefaultBranchCurrencyFromUser(user?.branches).branchCurrencyCode,
+    [user?.branches],
+  );
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
@@ -542,6 +644,19 @@ export default function JobProfitVerificationMaster() {
     [persistListAndNavigate],
   );
 
+  const handleOpenQuotation = useCallback(
+    (quotationId?: number) => {
+      if (quotationId == null || !Number.isFinite(Number(quotationId))) return;
+      navigate(`/quotation-create/${quotationId}`, {
+        state: {
+          returnTo: location.pathname,
+          viewMode: true,
+        },
+      });
+    },
+    [navigate, location.pathname],
+  );
+
   const handleConfirmVerifyProfit = useCallback(async () => {
     if (!verifyProfitRow) return;
 
@@ -631,8 +746,7 @@ export default function JobProfitVerificationMaster() {
       const total =
         response?.total != null ? Number(response.total) : list.length;
       setTotalRecords(total);
-      if (response?.currency) setCurrency(response.currency);
-      return { data: list, total, currency: response?.currency ?? "" };
+      return { data: list, total };
     },
     enabled: !isRestoring && Boolean(countryCode),
     staleTime: 0,
@@ -684,12 +798,17 @@ export default function JobProfitVerificationMaster() {
     minWidth: minW,
     width: widthPx,
   });
-  const tooltipStyles = {
-    tooltip: {
-      fontFamily: theme.fontSans,
-      fontSize: 12,
-      whiteSpace: "pre-line" as const,
-    },
+  const modalCustomerColWidth = 240;
+  const modalCustomerThStyle = {
+    ...erpListThStyle(theme),
+    minWidth: modalCustomerColWidth,
+    width: modalCustomerColWidth,
+  };
+  const modalCustomerTdStyle = {
+    ...tdPad,
+    minWidth: modalCustomerColWidth,
+    width: modalCustomerColWidth,
+    whiteSpace: "normal" as const,
   };
 
   return (
@@ -1022,6 +1141,7 @@ export default function JobProfitVerificationMaster() {
                           }
                         />
                       </th>
+                      <th style={mergeTh(120, 120)}>Quotation No</th>
                       <th style={mergeTh(130, 130)}>Job Date</th>
                       <th style={mergeTh(200, 200)}>
                         <ERPListColumnHeaderFilter
@@ -1060,8 +1180,8 @@ export default function JobProfitVerificationMaster() {
                               dropdownZIndex={1000}
                               classNames={erpListGeistSelectClassNames}
                               styles={filterFieldStyles}
-                            />
-                          )}
+                              />
+                            )}
                         />
                       </th>
                       {!isSalesperson ? (
@@ -1100,114 +1220,13 @@ export default function JobProfitVerificationMaster() {
                       ) : (
                         <th style={mergeTh(150, 150)}>Salesperson</th>
                       )}
-                      <th style={mergeTh(100, 100)}>
-                        <ERPListColumnHeaderFilter
-                          label="Service"
-                          value={appliedFilters.service}
-                          displayValue={appliedFilters.service}
-                          theme={theme}
-                          placeholder="Service"
-                          isEditing={editingHeaderId === "service"}
-                          onStartEdit={() => openHeaderEditor("service")}
-                          onStopEdit={() => collapseHeaderEditor("service")}
-                          onChange={() => {}}
-                          renderEditor={({ autoFocus, onClose }) => (
-                            <Select
-                              autoFocus={autoFocus}
-                              placeholder="Service"
-                              searchable
-                              clearable
-                              size="xs"
-                              data={[...SERVICE_OPTIONS]}
-                              value={appliedFilters.service || null}
-                              onChange={(value) => {
-                                commitHeaderFilters({ service: value ?? "" });
-                                onClose();
-                              }}
-                              comboboxProps={{ zIndex: 1000 }}
-                              classNames={erpListGeistSelectClassNames}
-                              styles={filterFieldStyles}
-                            />
-                          )}
-                        />
-                      </th>
-                      <th style={mergeTh(120, 120)}>Status</th>
-                      <th style={mergeTh(220, 220)}>
-                        <ERPListColumnHeaderFilter
-                          label="Route"
-                          value={
-                            (appliedFilters.origin_code || "") +
-                            (appliedFilters.destination_code || "")
-                          }
-                          displayValue={
-                            appliedFilters.origin_code ||
-                            appliedFilters.destination_code
-                              ? `${appliedFilters.origin_code || "—"} → ${appliedFilters.destination_code || "—"}`
-                              : ""
-                          }
-                          theme={theme}
-                          isEditing={editingHeaderId === "route"}
-                          onStartEdit={() => openHeaderEditor("route")}
-                          onStopEdit={() => collapseHeaderEditor("route")}
-                          onChange={() => {}}
-                          renderEditor={({ autoFocus }) => (
-                            <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
-                              <Box style={{ flex: 1, minWidth: 0 }}>
-                                <SearchableSelect
-                                  autoFocus={autoFocus}
-                                  size="xs"
-                                  apiEndpoint={URL.portMaster}
-                                  searchFields={["port_code", "port_name"]}
-                                  placeholder="Origin"
-                                  displayFormat={(item: Record<string, unknown>) => ({
-                                    value: String(item.port_code),
-                                    label: `${item.port_name} (${item.port_code})`,
-                                  })}
-                                  value={appliedFilters.origin_code}
-                                  displayValue={appliedFilters.origin_port_label}
-                                  onChange={(value, selectedData) =>
-                                    commitHeaderFilters({
-                                      origin_code: value || "",
-                                      origin_port_label: selectedData?.label || "",
-                                    })
-                                  }
-                                  minSearchLength={1}
-                                  dropdownZIndex={1000}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={filterFieldStyles}
-                                />
-                              </Box>
-                              <Box style={{ flex: 1, minWidth: 0 }}>
-                                <SearchableSelect
-                                  size="xs"
-                                  apiEndpoint={URL.portMaster}
-                                  searchFields={["port_code", "port_name"]}
-                                  placeholder="Destination"
-                                  displayFormat={(item: Record<string, unknown>) => ({
-                                    value: String(item.port_code),
-                                    label: `${item.port_name} (${item.port_code})`,
-                                  })}
-                                  value={appliedFilters.destination_code}
-                                  displayValue={appliedFilters.destination_name}
-                                  onChange={(value, selectedData) =>
-                                    commitHeaderFilters({
-                                      destination_code: value || "",
-                                      destination_name: selectedData?.label || "",
-                                    })
-                                  }
-                                  minSearchLength={1}
-                                  dropdownZIndex={1000}
-                                  classNames={erpListGeistSelectClassNames}
-                                  styles={filterFieldStyles}
-                                />
-                              </Box>
-                            </Group>
-                          )}
-                        />
-                      </th>
+                      <th style={mergeTh(120, 120)}>Job Status</th>
+                      <th style={mergeTh(130, 130)}>Quoted Revenue</th>
+                      <th style={mergeTh(130, 130)}>Quoted Profit</th>
                       <th style={mergeTh(110, 110)}>Volume</th>
                       <th style={mergeTh(110, 110)}>Revenue</th>
                       <th style={mergeTh(130, 130)}>Profit</th>
+                      <th style={mergeTh(110, 110)}>GP %</th>
                       <th style={mergeTh(140, 140)}>Profit Verified</th>
                       <th style={mergeTh(130, 130)}>Verified By</th>
                       <th style={mergeTh(150, 150)}>Verified At</th>
@@ -1217,7 +1236,7 @@ export default function JobProfitVerificationMaster() {
                   <tbody>
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={14} style={tdPad}>
+                        <td colSpan={17} style={tdPad}>
                           <Center py="xl">
                             <Text c="dimmed">No job profit records found</Text>
                           </Center>
@@ -1250,11 +1269,30 @@ export default function JobProfitVerificationMaster() {
                               {row.job_no || "—"}
                             </Text>
                           </td>
+                          <td
+                            className={ERP_LIST_GEIST_MONO_CLASS}
+                            style={tdPad}
+                          >
+                            <Text
+                              size="sm"
+                              fw={600}
+                              c={row.quotation_id != null ? primary : fg}
+                              style={{
+                                cursor:
+                                  row.quotation_id != null ? "pointer" : "default",
+                              }}
+                              onClick={() => handleOpenQuotation(row.quotation_id)}
+                            >
+                              {row.quotation_no?.trim() || "—"}
+                            </Text>
+                          </td>
                           <td style={tdDate}>{fmtDate(row.job_date)}</td>
                           <td style={tdPad}>
-                            <Text size="sm" c={fg}>
-                              {getCustomerNames(row)}
-                            </Text>
+                            <CustomerNamesDisplay
+                              row={row}
+                              color={fg}
+                              fontFamily={theme.fontSans}
+                            />
                           </td>
                           <td style={tdPad}>
                             <Text size="sm" c={fg}>
@@ -1262,52 +1300,18 @@ export default function JobProfitVerificationMaster() {
                             </Text>
                           </td>
                           <td style={tdPad}>
-                            <Text size="sm" fw={600} c={fg}>
-                              {row.service || "—"}
-                            </Text>
-                          </td>
-                          <td style={tdPad}>
                             <ERPListJobStatusPill status={readJobStatus(row)} />
                           </td>
                           <td style={tdPad}>
-                            {(() => {
-                              const { oc, dc } = routeEndpointsFromRow(row);
-                              return (
-                                <Group gap={6} wrap="nowrap">
-                                  <Tooltip
-                                    label={row.origin_name?.trim() || oc}
-                                    withArrow
-                                    disabled={!row.origin_name?.trim()}
-                                    styles={tooltipStyles}
-                                  >
-                                    <Text
-                                      fw={600}
-                                      size="sm"
-                                      c={primary}
-                                      style={{ cursor: "default" }}
-                                    >
-                                      {oc || "—"}
-                                    </Text>
-                                  </Tooltip>
-                                  <IconArrowRight size={12} color={muted} />
-                                  <Tooltip
-                                    label={row.destination_name?.trim() || dc}
-                                    withArrow
-                                    disabled={!row.destination_name?.trim()}
-                                    styles={tooltipStyles}
-                                  >
-                                    <Text
-                                      fw={500}
-                                      size="sm"
-                                      c={fg}
-                                      style={{ cursor: "default" }}
-                                    >
-                                      {dc || "—"}
-                                    </Text>
-                                  </Tooltip>
-                                </Group>
-                              );
-                            })()}
+                            <Text size="sm" fw={600} c={fg}>
+                              {formatCurrencyAmount(row.quoted_revenue, currency)}
+                            </Text>
+                          </td>
+                          <td style={tdPad}>
+                            <SignedValueBadge
+                              value={row.quoted_profit}
+                              label={formatCurrencyAmount(row.quoted_profit, currency)}
+                            />
                           </td>
                           <td style={{ ...tdPad }}>
                             <Text size="sm" c={fg}>
@@ -1316,17 +1320,19 @@ export default function JobProfitVerificationMaster() {
                           </td>
                           <td style={{ ...tdPad }}>
                             <Text size="sm" fw={600} c={fg}>
-                              {currency
-                                ? `${currency} ${formatNumber(row.our_revenue)}`
-                                : formatNumber(row.our_revenue)}
+                              {formatCurrencyAmount(row.our_revenue, currency)}
                             </Text>
                           </td>
                           <td style={{ ...tdPad }}>
                             <Text size="sm" fw={600} c={fg}>
-                              {currency
-                                ? `${currency} ${formatNumber(row.our_profit)}`
-                                : formatNumber(row.our_profit)}
+                              {formatCurrencyAmount(row.our_profit, currency)}
                             </Text>
+                          </td>
+                          <td style={tdPad}>
+                            <SignedValueBadge
+                              value={row.our_gp_pct}
+                              label={formatGpPercent(row.our_gp_pct)}
+                            />
                           </td>
                           <td style={tdPad}>
                             <ProfitVerifiedPill verified={row.has_verified_profit} />
@@ -1404,8 +1410,26 @@ export default function JobProfitVerificationMaster() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["House No", "Subjob", "Customer","Volume", "Revenue", "Cost", "Profit"].map((h) => (
-                    <th key={h} style={erpListThStyle(theme)}>
+                  {[
+                    "House No",
+                    "Subjob",
+                    "Quotation No",
+                    "Customer",
+                    "Quoted Revenue",
+                    "Quoted Cost",
+                    "Quoted Profit",
+                    "Volume",
+                    "Revenue",
+                    "Cost",
+                    "Profit",
+                    "GP %",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={
+                        h === "Customer" ? modalCustomerThStyle : erpListThStyle(theme)
+                      }
+                    >
                       {h}
                     </th>
                   ))}
@@ -1414,7 +1438,7 @@ export default function JobProfitVerificationMaster() {
               <tbody>
                 {(verifyProfitRow?.houses ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={tdPad}>
+                    <td colSpan={12} style={tdPad}>
                       <Text size="sm" c="dimmed">
                         No house profit details available.
                       </Text>
@@ -1433,10 +1457,43 @@ export default function JobProfitVerificationMaster() {
                           {house.subjob_no || "—"}
                         </Text>
                       </td>
-                      <td style={tdPad}>
+                      <td
+                        className={ERP_LIST_GEIST_MONO_CLASS}
+                        style={tdPad}
+                      >
+                        <Text
+                          size="sm"
+                          fw={600}
+                          c={house.quotation_id != null ? primary : fg}
+                          style={{
+                            cursor:
+                              house.quotation_id != null ? "pointer" : "default",
+                          }}
+                          onClick={() => handleOpenQuotation(house.quotation_id)}
+                        >
+                          {house.quotation_no?.trim() || "—"}
+                        </Text>
+                      </td>
+                      <td style={modalCustomerTdStyle}>
                         <Text size="sm" c={fg}>
                           {house.party_name || "—"}
                         </Text>
+                      </td>
+                      <td style={tdPad}>
+                        <Text size="sm" c={fg}>
+                          {formatCurrencyAmount(house.quoted_revenue, currency)}
+                        </Text>
+                      </td>
+                      <td style={tdPad}>
+                        <Text size="sm" c={fg}>
+                          {formatCurrencyAmount(house.quoted_cost, currency)}
+                        </Text>
+                      </td>
+                      <td style={tdPad}>
+                        <SignedValueBadge
+                          value={house.quoted_profit}
+                          label={formatCurrencyAmount(house.quoted_profit, currency)}
+                        />
                       </td>
                       <td style={tdPad}>
                         <Text size="sm" c={fg}>
@@ -1445,45 +1502,41 @@ export default function JobProfitVerificationMaster() {
                       </td>
                       <td style={tdPad}>
                         <Text size="sm" c={fg}>
-                        {currency
-                            ? `${currency} ${formatNumber(house.our_revenue)}`
-                            : formatNumber(house.our_revenue)}
+                          {formatCurrencyAmount(house.our_revenue, currency)}
                         </Text>
                       </td>
                       <td style={tdPad}>
                         <Text size="sm" c={fg}>
-                        {currency
-                            ? `${currency} ${formatNumber(house.our_cost)}`
-                            : formatNumber(house.our_cost)}
+                          {formatCurrencyAmount(house.our_cost, currency)}
                         </Text>
                       </td>
-                      <td style={{ ...tdPad}}>
+                      <td style={{ ...tdPad }}>
                         <Text size="sm" fw={600} c={fg}>
-                          {currency
-                            ? `${currency} ${formatNumber(house.our_profit)}`
-                            : formatNumber(house.our_profit)}
+                          {formatCurrencyAmount(house.our_profit, currency)}
                         </Text>
+                      </td>
+                      <td style={tdPad}>
+                        <SignedValueBadge
+                          value={house.our_gp_pct}
+                          label={formatGpPercent(house.our_gp_pct)}
+                        />
                       </td>
                     </tr>
                   ))
                 )}
                 <tr>
-                  <td colSpan={6} style={{ ...tdPad, textAlign: "right" }}>
+                  <td colSpan={10} style={{ ...tdPad, textAlign: "right" }}>
                     <Text size="sm" fw={700} c={fg}>
                       Total Profit
                     </Text>
                   </td>
                   <td style={{ ...tdPad }}>
                     <Text size="sm" fw={700} c={primary}>
-                      {currency
-                        ? `${currency} ${formatNumber(
-                            verifyProfitRow?.our_profit ??
-                              sumHouseProfit(verifyProfitRow?.houses),
-                          )}`
-                        : formatNumber(
-                            verifyProfitRow?.our_profit ??
-                              sumHouseProfit(verifyProfitRow?.houses),
-                          )}
+                      {formatCurrencyAmount(
+                        verifyProfitRow?.our_profit ??
+                          sumHouseProfit(verifyProfitRow?.houses),
+                        currency,
+                      )}
                     </Text>
                   </td>
                 </tr>
