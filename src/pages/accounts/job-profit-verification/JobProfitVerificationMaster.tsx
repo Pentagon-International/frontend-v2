@@ -314,7 +314,23 @@ function SignedValueBadge({
     );
   }
   return (
-    <Badge color={color} variant="light" size="sm">
+    <Badge
+      color={color}
+      variant="light"
+      size="sm"
+      styles={{
+        root: {
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          width: "fit-content",
+          maxWidth: "none",
+        },
+        label: {
+          whiteSpace: "nowrap",
+          overflow: "visible",
+        },
+      }}
+    >
       {label}
     </Badge>
   );
@@ -798,6 +814,42 @@ export default function JobProfitVerificationMaster() {
     minWidth: minW,
     width: widthPx,
   });
+  const listAmountThStyle = {
+    ...erpListThStyle(theme),
+    width: "max-content" as const,
+    minWidth: 0,
+    whiteSpace: "nowrap" as const,
+  };
+  const listAmountTdStyle = {
+    ...tdPad,
+    width: "max-content" as const,
+    whiteSpace: "nowrap" as const,
+  };
+  const listAmountBadgeThStyle = {
+    ...erpListThStyle(theme),
+    width: "max-content" as const,
+    minWidth: "max-content" as const,
+    whiteSpace: "nowrap" as const,
+  };
+  const listAmountBadgeTdStyle = {
+    ...tdPad,
+    width: "max-content" as const,
+    minWidth: "max-content" as const,
+    whiteSpace: "nowrap" as const,
+  };
+  const listGpPctThStyle = {
+    ...listAmountBadgeThStyle,
+    textAlign: "center" as const,
+  };
+  const listGpPctTdStyle = {
+    ...listAmountBadgeTdStyle,
+    textAlign: "center" as const,
+  };
+  const modalGpPctThStyle = erpListThStyle(theme, { textAlign: "center" });
+  const modalGpPctTdStyle = {
+    ...tdPad,
+    textAlign: "center" as const,
+  };
   const modalCustomerColWidth = 240;
   const modalCustomerThStyle = {
     ...erpListThStyle(theme),
@@ -1221,12 +1273,12 @@ export default function JobProfitVerificationMaster() {
                         <th style={mergeTh(150, 150)}>Salesperson</th>
                       )}
                       <th style={mergeTh(120, 120)}>Job Status</th>
-                      <th style={mergeTh(130, 130)}>Quoted Revenue</th>
-                      <th style={mergeTh(130, 130)}>Quoted Profit</th>
-                      <th style={mergeTh(110, 110)}>Volume</th>
-                      <th style={mergeTh(110, 110)}>Revenue</th>
-                      <th style={mergeTh(130, 130)}>Profit</th>
-                      <th style={mergeTh(110, 110)}>GP %</th>
+                      <th style={listAmountThStyle}>Quoted Revenue</th>
+                      <th style={listAmountBadgeThStyle}>Quoted Profit</th>
+                      <th style={listAmountThStyle}>Volume</th>
+                      <th style={listAmountThStyle}>Revenue</th>
+                      <th style={listAmountThStyle}>Profit</th>
+                      <th style={listGpPctThStyle}>GP (%)</th>
                       <th style={mergeTh(140, 140)}>Profit Verified</th>
                       <th style={mergeTh(130, 130)}>Verified By</th>
                       <th style={mergeTh(150, 150)}>Verified At</th>
@@ -1302,33 +1354,33 @@ export default function JobProfitVerificationMaster() {
                           <td style={tdPad}>
                             <ERPListJobStatusPill status={readJobStatus(row)} />
                           </td>
-                          <td style={tdPad}>
+                          <td style={listAmountTdStyle}>
                             <Text size="sm" fw={600} c={fg}>
                               {formatCurrencyAmount(row.quoted_revenue, currency)}
                             </Text>
                           </td>
-                          <td style={tdPad}>
+                          <td style={listAmountBadgeTdStyle}>
                             <SignedValueBadge
                               value={row.quoted_profit}
                               label={formatCurrencyAmount(row.quoted_profit, currency)}
                             />
                           </td>
-                          <td style={{ ...tdPad }}>
+                          <td style={listAmountTdStyle}>
                             <Text size="sm" c={fg}>
                               {formatNumber(row.our_volume)}
                             </Text>
                           </td>
-                          <td style={{ ...tdPad }}>
+                          <td style={listAmountTdStyle}>
                             <Text size="sm" fw={600} c={fg}>
                               {formatCurrencyAmount(row.our_revenue, currency)}
                             </Text>
                           </td>
-                          <td style={{ ...tdPad }}>
+                          <td style={listAmountTdStyle}>
                             <Text size="sm" fw={600} c={fg}>
                               {formatCurrencyAmount(row.our_profit, currency)}
                             </Text>
                           </td>
-                          <td style={tdPad}>
+                          <td style={listGpPctTdStyle}>
                             <SignedValueBadge
                               value={row.our_gp_pct}
                               label={formatGpPercent(row.our_gp_pct)}
@@ -1422,12 +1474,16 @@ export default function JobProfitVerificationMaster() {
                     "Revenue",
                     "Cost",
                     "Profit",
-                    "GP %",
+                    "GP (%)",
                   ].map((h) => (
                     <th
                       key={h}
                       style={
-                        h === "Customer" ? modalCustomerThStyle : erpListThStyle(theme)
+                        h === "Customer"
+                          ? modalCustomerThStyle
+                          : h === "GP (%)"
+                            ? modalGpPctThStyle
+                            : erpListThStyle(theme)
                       }
                     >
                       {h}
@@ -1515,7 +1571,7 @@ export default function JobProfitVerificationMaster() {
                           {formatCurrencyAmount(house.our_profit, currency)}
                         </Text>
                       </td>
-                      <td style={tdPad}>
+                      <td style={modalGpPctTdStyle}>
                         <SignedValueBadge
                           value={house.our_gp_pct}
                           label={formatGpPercent(house.our_gp_pct)}
