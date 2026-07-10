@@ -6,9 +6,9 @@ const US_FORWARDING_AGENT_NAME = "PENTAGON PRIME AMERICAS INC";
 const US_FORWARDING_AGENT_ADDRESS =
   "8400 NW 33rd STREET, SUITE 310, MIAMI FL 33178";
 const US_FMC_NO = "034982N";
-const TOP_ROW1_HEIGHT = 32;
+const TOP_ROW1_HEIGHT = 20;
 const ROW1_EXPORT_REF_HEIGHT = 10;
-const TOP_ROW2_HEIGHT = 18;
+const TOP_ROW2_HEIGHT = 16;
 const RIGHT_SUB_SECTION_HEIGHT = 12;
 const RIGHT_SUB_TITLE_OFFSET = 4;
 const RIGHT_SUB_BODY_OFFSET = 9;
@@ -24,6 +24,7 @@ const FONT_SECTION_TITLE = 9;
 const FONT_SECTION_BODY = 9;
 const FONT_TABLE_HEAD = 8.5;
 const FONT_TABLE_BODY = 9;
+const FONT_CARGO_DESCRIPTION = 8;
 const FONT_LEGAL_BODY = 7;
 const FONT_FMC = 9;
 const US_LEGAL_TEXT =
@@ -128,13 +129,15 @@ const buildTextLines = (
 };
 
 const CARGO_BODY_LINE_HEIGHT = 3.8;
+const CARGO_DESCRIPTION_LINE_HEIGHT = 3.4;
 const SECTION_TITLE_LINE_HEIGHT = 4;
-const SECTION_BODY_LINE_HEIGHT = 3.7;
+const SECTION_BODY_LINE_HEIGHT = 3.2;
 const SECTION_TITLE_TOP_INSET = 3;
+const SECTION_BODY_BOTTOM_PAD = 1;
 const EXPORT_REF_TITLE_TOP_GAP = 2;
 const FORWARDING_AGENT_TITLE_TOP_GAP = 2;
 const CARGO_HEADER_TOP_PAD = 3;
-const CARGO_HEADER_BOTTOM_PAD = 2;
+const CARGO_HEADER_BOTTOM_PAD = 1;
 const CARGO_DATA_GAP = 4;
 const PAGE_MARGIN_LEFT = 10;
 const PAGE_MARGIN_RIGHT = 10;
@@ -144,8 +147,8 @@ const TERMS_TO_CARRIER_GAP = 5;
 const CARRIER_TO_SIGNED_GAP = 4;
 const SIGNED_BY_BOTTOM_PAD = 4;
 const SIGNED_BY_LINE_WIDTH = 50;
-/** Printers often clip the last 15–20mm — keep footer above this line */
-const PRINT_SAFE_BOTTOM_MARGIN = 22;
+/** Printers often clip the last few mm — keep footer above this line */
+const PRINT_SAFE_BOTTOM_MARGIN = 14;
 
 const getFontLineHeight = (doc: jsPDF, fontSize: number): number => {
   doc.setFontSize(fontSize);
@@ -156,7 +159,12 @@ type CargoColumnDef = {
   x: number;
   width: number;
   lines: string[];
+  lineHeight?: number;
+  fontSize?: number;
 };
+
+const getColumnLineHeight = (col: CargoColumnDef): number =>
+  col.lineHeight ?? CARGO_BODY_LINE_HEIGHT;
 
 type CargoHeaderLayout = {
   headerBottomY: number;
@@ -225,10 +233,11 @@ const countLinesThatFit = (
   startIndex: number,
   dataTopY: number,
   dataBottomY: number,
+  lineHeight = CARGO_BODY_LINE_HEIGHT,
 ): number => {
   const available = dataBottomY - dataTopY;
   if (available <= 0 || startIndex >= lineCount) return 0;
-  const maxLines = Math.floor(available / CARGO_BODY_LINE_HEIGHT);
+  const maxLines = Math.floor(available / lineHeight);
   return Math.min(maxLines, lineCount - startIndex);
 };
 
@@ -239,7 +248,7 @@ const remainingContentHeight = (
   const heights = columns.map((col, i) => {
     const remaining = col.lines.length - indices[i];
     if (remaining <= 0) return 0;
-    return remaining * CARGO_BODY_LINE_HEIGHT;
+    return remaining * getColumnLineHeight(col);
   });
   return Math.max(0, ...heights);
 };
@@ -247,30 +256,46 @@ const remainingContentHeight = (
 const simulateCargoPageBreaks = (
   columns: CargoColumnDef[],
   firstPageDataTopY: number,
-  firstPageDataBottomY: number,
+  firstPageIntermediateDataBottomY: number,
   continuationDataTopY: number,
-  continuationDataBottomY: number,
-  lastPageDataBottomY: number,
+  continuationIntermediateDataBottomY: number,
+  firstPageFinalDataBottomY: number,
+  continuationFinalDataBottomY: number,
 ): number[][] => {
   const indices = columns.map(() => 0);
   const segments: number[][] = [];
   let pageIndex = 0;
 
+  const initialRemainingHeight = remainingContentHeight(columns, indices);
+  const singlePageCargoLayout =
+    initialRemainingHeight <= firstPageFinalDataBottomY - firstPageDataTopY;
+
   while (indices.some((idx, i) => idx < columns[i].lines.length)) {
     const isFirstPage = pageIndex === 0;
     const dataTopY = isFirstPage ? firstPageDataTopY : continuationDataTopY;
     const startIndices = [...indices];
+    const finalPageDataBottomY = isFirstPage
+      ? firstPageFinalDataBottomY
+      : continuationFinalDataBottomY;
 
     const maxRemaining = remainingContentHeight(columns, indices);
-    const fitsOnLastPage = maxRemaining <= lastPageDataBottomY - dataTopY;
-    const dataBottomY = fitsOnLastPage
-      ? lastPageDataBottomY
-      : isFirstPage
-        ? firstPageDataBottomY
-        : continuationDataBottomY;
+    const fitsOnFinalPage = maxRemaining <= finalPageDataBottomY - dataTopY;
+    const dataBottomY = singlePageCargoLayout
+      ? firstPageFinalDataBottomY
+      : fitsOnFinalPage
+        ? finalPageDataBottomY
+        : isFirstPage
+          ? firstPageIntermediateDataBottomY
+          : continuationIntermediateDataBottomY;
 
     const linesFit = columns.map((col, i) =>
-      countLinesThatFit(col.lines.length, indices[i], dataTopY, dataBottomY),
+      countLinesThatFit(
+        col.lines.length,
+        indices[i],
+        dataTopY,
+        dataBottomY,
+        getColumnLineHeight(col),
+      ),
     );
     const batchLines = Math.max(0, ...linesFit);
 
@@ -294,12 +319,31 @@ const simulateCargoPageBreaks = (
   return segments;
 };
 
-const drawFixedLabeledSection = (
+const measureLabeledSectionHeight = (
+  doc: jsPDF,
+  width: number,
+  title: string,
+  contentLines: string[],
+  padding = 3,
+  titleTopInset = padding + SECTION_TITLE_TOP_INSET,
+): number => {
+  const contentWidth = width - 2 * padding;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(FONT_SECTION_TITLE);
+  const titleLines = doc.splitTextToSize(title, contentWidth);
+  const titleHeight = titleLines.length * SECTION_TITLE_LINE_HEIGHT;
+  const bodyHeight =
+    contentLines.length > 0
+      ? contentLines.length * SECTION_BODY_LINE_HEIGHT
+      : SECTION_BODY_LINE_HEIGHT;
+  return titleTopInset + titleHeight + bodyHeight + SECTION_BODY_BOTTOM_PAD;
+};
+
+const drawLabeledSection = (
   doc: jsPDF,
   x: number,
   y: number,
   width: number,
-  height: number,
   title: string,
   contentLines: string[],
   padding = 3,
@@ -316,13 +360,8 @@ const drawFixedLabeledSection = (
   doc.setFontSize(FONT_SECTION_BODY);
   const titleHeight = titleLines.length * SECTION_TITLE_LINE_HEIGHT;
   const bodyStartY = y + titleTopInset + titleHeight;
-  const maxBodyLines = Math.max(
-    1,
-    Math.floor((y + height - padding - bodyStartY) / SECTION_BODY_LINE_HEIGHT),
-  );
-  const visibleLines = contentLines.slice(0, maxBodyLines);
-  if (visibleLines.length > 0) {
-    doc.text(visibleLines, x + padding, bodyStartY);
+  if (contentLines.length > 0) {
+    doc.text(contentLines, x + padding, bodyStartY);
   }
 };
 
@@ -334,7 +373,7 @@ export const generateUsBillOfLadingPDF = (
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const boxPadding = 3;
+  const boxPadding = 1.5;
   const innerMargin = PAGE_MARGIN_LEFT;
   const innerWidth = pageWidth - PAGE_MARGIN_LEFT - PAGE_MARGIN_RIGHT;
   const contentRightX = innerMargin + innerWidth;
@@ -375,7 +414,9 @@ export const generateUsBillOfLadingPDF = (
     housingData?.consignee_name || "",
     housingData?.consignee_address || "",
     housingData?.consignee_email ? `EMAIL: ${housingData.consignee_email}` : "",
-    housingData?.consignee_pan ? `ID: ${housingData.consignee_pan}` : "",
+    housingData?.consignee_pan || housingData?.consignee_pan_no
+      ? `ID: ${housingData.consignee_pan || housingData.consignee_pan_no}`
+      : "",
   ];
 
   const notifyName =
@@ -390,6 +431,10 @@ export const generateUsBillOfLadingPDF = (
     housingData?.notify_customer1_email ||
     housingData?.notify1_customer_email ||
     "";
+  const notifyPan =
+    housingData?.notify_customer1_pan ||
+    housingData?.notify1_customer_pan ||
+    "";
 
   const hasNotifyCustomer =
     String(notifyName).trim() !== "" || String(notifyAddress).trim() !== "";
@@ -399,6 +444,7 @@ export const generateUsBillOfLadingPDF = (
         notifyName,
         notifyAddress,
         notifyEmail ? `EMAIL: ${notifyEmail}` : "",
+        notifyPan ? `ID: ${notifyPan}` : "",
       ].filter((part) => part && part.trim())
     : ["SAME AS CONSIGNEE"];
 
@@ -589,14 +635,11 @@ export const generateUsBillOfLadingPDF = (
   doc.text(blValue, blStartX + blLabelWidth, headerAboveTableY);
 
   // ===== TABLE 1: TOP INFORMATION GRID =====
-  const topTableHeight = TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT + TOP_ROW3_HEIGHT;
   const colWidth = innerWidth / 2;
   const rightSubWidth = colWidth / 2;
-  const row1ExportRefHeight = ROW1_EXPORT_REF_HEIGHT;
-  const row1ForwardingAgentHeight = TOP_ROW1_HEIGHT - ROW1_EXPORT_REF_HEIGHT;
   const leftX = innerMargin;
   const rightX = innerMargin + colWidth;
-  const sectionPad = boxPadding;
+  const sectionPad = 1.5;
   const exportRefTitleTopInset = sectionPad + EXPORT_REF_TITLE_TOP_GAP;
   const forwardingAgentTitleTopInset =
     sectionPad + FORWARDING_AGENT_TITLE_TOP_GAP;
@@ -613,71 +656,137 @@ export const generateUsBillOfLadingPDF = (
   const deliveryAgentLines = buildTextLines(doc, deliveryAgentParts, textWidth);
   const notifyLines = buildTextLines(doc, notifyParts, textWidth);
 
-  const row1Y = topTableStartY;
-  const row2Y = topTableStartY + TOP_ROW1_HEIGHT;
-  const row3Y = topTableStartY + TOP_ROW1_HEIGHT + TOP_ROW2_HEIGHT;
+  const consigneeTitle = "Consignee(if 'to Order' so indicate)";
+  const deliveryAgentTitle = "Delivery Agent";
+  const notifyTitle =
+    "Notify Party(No claim shall attach for failure to notify)";
+  const shipperTitle = "Shipper";
+  const exportRefTitle = "Export Reference";
+  const forwardingAgentTitle = "Forwarding Agent (Name and address)";
 
-  drawFixedLabeledSection(
+  const exportRefHeight = Math.max(
+    ROW1_EXPORT_REF_HEIGHT,
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      exportRefTitle,
+      exportRefLines,
+      sectionPad,
+      exportRefTitleTopInset,
+    ),
+  );
+  const forwardingAgentHeight = Math.max(
+    TOP_ROW1_HEIGHT - ROW1_EXPORT_REF_HEIGHT,
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      forwardingAgentTitle,
+      forwardingAgentLines,
+      sectionPad,
+      forwardingAgentTitleTopInset,
+    ),
+  );
+  const row1Height = Math.max(
+    TOP_ROW1_HEIGHT,
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      shipperTitle,
+      shipperLines,
+      sectionPad,
+    ),
+    exportRefHeight + forwardingAgentHeight,
+  );
+
+  const row2Height = Math.max(
+    TOP_ROW2_HEIGHT,
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      consigneeTitle,
+      consigneeLines,
+      sectionPad,
+    ),
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      deliveryAgentTitle,
+      deliveryAgentLines,
+      sectionPad,
+    ),
+  );
+  const row3Height = Math.max(
+    TOP_ROW3_HEIGHT,
+    measureLabeledSectionHeight(
+      doc,
+      colWidth,
+      notifyTitle,
+      notifyLines,
+      sectionPad,
+    ),
+    RIGHT_SUB_SECTION_HEIGHT * 3,
+  );
+  const topTableHeight = row1Height + row2Height + row3Height;
+
+  const row1Y = topTableStartY;
+  const row2Y = topTableStartY + row1Height;
+  const row3Y = row2Y + row2Height;
+
+  drawLabeledSection(
     doc,
     leftX,
     row1Y,
     colWidth,
-    TOP_ROW1_HEIGHT,
-    "Shipper",
+    shipperTitle,
     shipperLines,
     sectionPad,
   );
-  drawFixedLabeledSection(
+  drawLabeledSection(
     doc,
     rightX,
     row1Y,
     colWidth,
-    row1ExportRefHeight,
-    "Export Reference",
+    exportRefTitle,
     exportRefLines,
     sectionPad,
     exportRefTitleTopInset,
   );
-  drawFixedLabeledSection(
+  drawLabeledSection(
     doc,
     rightX,
-    row1Y + row1ExportRefHeight,
+    row1Y + exportRefHeight,
     colWidth,
-    row1ForwardingAgentHeight,
-    "Forwarding Agent (Name and address)",
+    forwardingAgentTitle,
     forwardingAgentLines,
     sectionPad,
     forwardingAgentTitleTopInset,
   );
 
-  drawFixedLabeledSection(
+  drawLabeledSection(
     doc,
     leftX,
     row2Y,
     colWidth,
-    TOP_ROW2_HEIGHT,
-    "Consignee(if 'to Order' so indicate)",
+    consigneeTitle,
     consigneeLines,
     sectionPad,
   );
-  drawFixedLabeledSection(
+  drawLabeledSection(
     doc,
     rightX,
     row2Y,
     colWidth,
-    TOP_ROW2_HEIGHT,
-    "Delivery Agent",
+    deliveryAgentTitle,
     deliveryAgentLines,
     sectionPad,
   );
 
-  drawFixedLabeledSection(
+  drawLabeledSection(
     doc,
     leftX,
     row3Y,
     colWidth,
-    TOP_ROW3_HEIGHT,
-    "Notify Party(No claim shall attach for failure to notify)",
+    notifyTitle,
     notifyLines,
     sectionPad,
   );
@@ -735,9 +844,9 @@ export const generateUsBillOfLadingPDF = (
   doc.line(rightX, topTableStartY, rightX, topTableStartY + topTableHeight);
   doc.line(
     rightX,
-    row1Y + row1ExportRefHeight,
+    row1Y + exportRefHeight,
     rightX + colWidth,
-    row1Y + row1ExportRefHeight,
+    row1Y + exportRefHeight,
   );
   doc.line(innerMargin, row2Y, innerMargin + innerWidth, row2Y);
   // Full-width line aligns Notify Party (left) with top of Vessel and Voyage (right)
@@ -856,7 +965,7 @@ export const generateUsBillOfLadingPDF = (
     doc,
     descriptionParts,
     col3W - 2 * boxPadding,
-    FONT_TABLE_BODY,
+    FONT_CARGO_DESCRIPTION,
   );
   const grossWeightLines = grossWeightText
     ? doc.splitTextToSize(grossWeightText, col4W - 2 * boxPadding)
@@ -868,7 +977,13 @@ export const generateUsBillOfLadingPDF = (
   const cargoColumns: CargoColumnDef[] = [
     { x: col1X, width: col1W, lines: marksLines },
     { x: col2X, width: col2W, lines: packagesLines },
-    { x: col3X, width: col3W, lines: descriptionLines },
+    {
+      x: col3X,
+      width: col3W,
+      lines: descriptionLines,
+      fontSize: FONT_CARGO_DESCRIPTION,
+      lineHeight: CARGO_DESCRIPTION_LINE_HEIGHT,
+    },
     { x: col4X, width: col4W, lines: grossWeightLines },
     { x: col5X, width: col5W, lines: volumeLines },
   ];
@@ -877,6 +992,32 @@ export const generateUsBillOfLadingPDF = (
   const continuationDataTopY = continuationHeaderLayout.dataTopY;
   const fullPageDataBottomY = pageHeight - PAGE_MARGIN_TOP - 5;
 
+  const resolveFinalCargoFooterLayout = (headerBottomY: number) => {
+    const footerTableStartYLocal =
+      pageHeight - PRINT_SAFE_BOTTOM_MARGIN - footerTableHeight;
+    const middleTableEndYLocal = footerTableStartYLocal - TABLE_SEPARATION_GAP;
+    const middleContentBelowHeaderLocal = middleTableEndYLocal - headerBottomY;
+    const freightSectionHeightLocal = Math.max(
+      middleContentBelowHeaderLocal / 2,
+      wordsRowHeight + 8,
+    );
+    const tempRowHeightLocal = Math.max(
+      8,
+      freightSectionHeightLocal - wordsRowHeight,
+    );
+    const tempRowYLocal = middleTableEndYLocal - tempRowHeightLocal;
+    const wordsRowYLocal = tempRowYLocal - wordsRowHeight;
+    return {
+      middleTableEndY: middleTableEndYLocal,
+      tempRowY: tempRowYLocal,
+      wordsRowY: wordsRowYLocal,
+    };
+  };
+
+  const continuationFinalPageDataBottomY = resolveFinalCargoFooterLayout(
+    continuationHeaderLayout.headerBottomY,
+  ).wordsRowY;
+
   const pageBreaks = simulateCargoPageBreaks(
     cargoColumns,
     firstPageDataTopY,
@@ -884,6 +1025,7 @@ export const generateUsBillOfLadingPDF = (
     continuationDataTopY,
     fullPageDataBottomY,
     wordsRowY,
+    continuationFinalPageDataBottomY,
   );
 
   const drawCargoTableBorders = (
@@ -892,17 +1034,29 @@ export const generateUsBillOfLadingPDF = (
     headerBottomY: number,
     dataBottomY: number,
     includeFooterRows: boolean,
+    segmentWordsRowY: number,
+    segmentTempRowY: number,
   ) => {
     drawBox(doc, innerMargin, tableTopY, innerWidth, tableBottomY - tableTopY);
     doc.line(innerMargin, headerBottomY, innerMargin + innerWidth, headerBottomY);
-    const columnBottomY = includeFooterRows ? wordsRowY : dataBottomY;
+    const columnBottomY = includeFooterRows ? segmentWordsRowY : dataBottomY;
     doc.line(col2X, tableTopY, col2X, columnBottomY);
     doc.line(col3X, tableTopY, col3X, columnBottomY);
     doc.line(col4X, tableTopY, col4X, columnBottomY);
     doc.line(col5X, tableTopY, col5X, columnBottomY);
     if (includeFooterRows) {
-      doc.line(innerMargin, wordsRowY, innerMargin + innerWidth, wordsRowY);
-      doc.line(innerMargin, tempRowY, innerMargin + innerWidth, tempRowY);
+      doc.line(
+        innerMargin,
+        segmentWordsRowY,
+        innerMargin + innerWidth,
+        segmentWordsRowY,
+      );
+      doc.line(
+        innerMargin,
+        segmentTempRowY,
+        innerMargin + innerWidth,
+        segmentTempRowY,
+      );
     }
   };
 
@@ -923,10 +1077,14 @@ export const generateUsBillOfLadingPDF = (
       cargoHeaders,
       boxPadding,
     );
-    const dataBottomY = isLastSegment
-      ? wordsRowY
-      : fullPageDataBottomY;
-    const tableBottomY = isLastSegment ? middleTableEndY : dataBottomY + 2;
+    const finalLayout = isLastSegment
+      ? resolveFinalCargoFooterLayout(headerBottomY)
+      : null;
+    const segmentWordsRowY = finalLayout?.wordsRowY ?? wordsRowY;
+    const segmentTempRowY = finalLayout?.tempRowY ?? tempRowY;
+    const segmentMiddleTableEndY = finalLayout?.middleTableEndY ?? middleTableEndY;
+    const dataBottomY = isLastSegment ? segmentWordsRowY : fullPageDataBottomY;
+    const tableBottomY = isLastSegment ? segmentMiddleTableEndY : dataBottomY + 2;
 
     drawCargoTableBorders(
       tableTopY,
@@ -934,6 +1092,8 @@ export const generateUsBillOfLadingPDF = (
       headerBottomY,
       dataBottomY,
       isLastSegment,
+      segmentWordsRowY,
+      segmentTempRowY,
     );
 
     doc.setFont("helvetica", "normal");
@@ -945,15 +1105,19 @@ export const generateUsBillOfLadingPDF = (
         startIndices[i],
         dataTopY,
         dataBottomY,
+        getColumnLineHeight(col),
       );
       return startIndices[i] + linesOnPage;
     });
 
     cargoColumns.forEach((col, colIndex) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(col.fontSize ?? FONT_TABLE_BODY);
+      const lineHeight = getColumnLineHeight(col);
       let lineY = dataTopY;
       for (let i = startIndices[colIndex]; i < endIndices[colIndex]; i += 1) {
         doc.text(col.lines[i], col.x + boxPadding, lineY);
-        lineY += CARGO_BODY_LINE_HEIGHT;
+        lineY += lineHeight;
       }
     });
 
@@ -963,11 +1127,11 @@ export const generateUsBillOfLadingPDF = (
       doc.text(
         "Total Number of Containers of Packages(in words)",
         col1X + boxPadding,
-        wordsRowY + 5,
+        segmentWordsRowY + 5,
       );
       doc.setFont("helvetica", "normal");
       doc.setFontSize(FONT_TABLE_BODY);
-      doc.text(packagesInWords, col1X + boxPadding, wordsRowY + 9, {
+      doc.text(packagesInWords, col1X + boxPadding, segmentWordsRowY + 9, {
         maxWidth: innerWidth - 2 * boxPadding,
       });
 
@@ -976,7 +1140,7 @@ export const generateUsBillOfLadingPDF = (
       doc.text(
         "Freight and Charges",
         col1X + boxPadding,
-        tempRowY + 4,
+        segmentTempRowY + 4,
       );
     }
   };
