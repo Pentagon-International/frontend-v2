@@ -96,17 +96,17 @@ export function ERPListStatPill({
             gap: 2,
           }}
         >
+          <Text
+            c={theme.muted}
+            lh={1.15}
+            style={{ fontFamily: theme.fontSans }}
+          >
           {labelWords.map((word, i) => (
-            <Text
-              key={i}
-              size={10}
-              c={theme.muted}
-              lh={1.15}
-              style={{ fontFamily: theme.fontSans }}
-            >
-              {word}
-            </Text>
+            <span key={i} style={{ display: "inline", fontSize: 10, lineHeight: 1.15 }}>
+              {word}{" "}
+            </span>
           ))}
+          </Text>
         </Box>
       </Stack>
     </Group>

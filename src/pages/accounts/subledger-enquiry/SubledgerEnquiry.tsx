@@ -14,6 +14,7 @@ import {
   Stack,
   Text,
   TextInput,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import {
@@ -116,9 +117,7 @@ type EntryColumn = {
 const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "sno", label: "S.No.", span: 0.4 },
   { key: "location", label: "Location", span: 0.65 },
-  { key: "day_book_code", label: "Day Book", span: 0.85 },
-  { key: "day_book_type", label: "Type", span: 0.65 },
-  { key: "document_no", label: "Doc No", span: 1.25 },
+  { key: "document_no", label: "Document No", span: 2.75 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
   { key: "service", label: "Service", span: 0.55 },
@@ -126,13 +125,53 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "shipment_no", label: "Shipment No", span: 1.0 },
   { key: "debit_local_amount", label: "Debit", span: 0.95 },
   { key: "credit_local_amount", label: "Credit", span: 0.95 },
-  { key: "narration", label: "Narration", span: 1 },
+  { key: "closing_balance", label: "Closing Bal", span: 0.8 },
   { key: "note", label: "Note", span: 1 },
   { key: "amount", label: "Amount", span: 0.95 },
   { key: "outstanding_amount", label: "Outstanding Amt", span: 1.0 },
   { key: "outstanding_days", label: "Outstanding Days", span: 0.95 },
-  { key: "closing_balance", label: "Closing Bal", span: 0.8 },
+  { key: "narration", label: "Narration", span: 1 },
 ];
+
+function formatCompositeDocumentNo(row: SubledgerEntryRow): string {
+  const parts = [
+    row.day_book_code?.trim(),
+    row.day_book_type?.trim(),
+    row.document_no?.trim(),
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(" - ");
+}
+
+function renderClampedTextWithTooltip(text: string, fontFamily: string) {
+  return (
+    <Tooltip
+      label={text}
+      multiline
+      maw={400}
+      withArrow
+      styles={{
+        tooltip: {
+          fontFamily,
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+        },
+      }}
+    >
+      <Text
+        size="sm"
+        lineClamp={2}
+        style={{
+          fontFamily,
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          cursor: "default",
+        }}
+      >
+        {text}
+      </Text>
+    </Tooltip>
+  );
+}
 
 function entryColumnId(col: MRT_ColumnDef<SubledgerEntryRow>): string {
   if (col.id) return col.id;
@@ -144,18 +183,14 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
   // Keep early identifier columns compact (Receipt list-like density).
   switch (key) {
     case "sno":
-      return 60;
+      return 40;
     case "location":
-      return 80;
-    case "day_book_code":
-      return 80;
-    case "day_book_type":
-      return 80;
+      return 60;
     case "document_no":
-      return 140;
+      return 250;
     case "date_document":
     case "due_date":
-      return 130;
+      return 100;
     case "service":
       return 80;
     case "job_id":
@@ -167,7 +202,7 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
     case "amount":
     case "closing_balance":
     case "outstanding_amount":
-      return 120;
+      return 100;
     case "outstanding_days":
       return 110;
     case "narration":
@@ -473,13 +508,18 @@ export default function SubledgerEnquiry() {
   const filteredRows = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((r) =>
-      ENTRY_COLUMNS.some((col) => {
-        const v = r[col.key];
-        if (v === null || v === undefined) return false;
-        return String(v).toLowerCase().includes(q);
-      }),
-    );
+    return rows.filter((r) => {
+      const searchable = [
+        formatCompositeDocumentNo(r),
+        ...ENTRY_COLUMNS.map((col) => r[col.key]),
+        r.day_book_code,
+        r.day_book_type,
+        r.document_no,
+      ]
+        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
+        .map((v) => String(v).toLowerCase());
+      return searchable.some((text) => text.includes(q));
+    });
   }, [rows, debouncedSearch]);
 
   const pagedRows = useMemo(() => {
@@ -938,10 +978,6 @@ export default function SubledgerEnquiry() {
   const appliedFilterItems = useMemo(() => {
     if (!appliedFilters) return [];
     const items: Array<{ key: string; value: string }> = [];
-    if (appliedFilters.date_from)
-      items.push({ key: "From", value: appliedFilters.date_from });
-    if (appliedFilters.date_to)
-      items.push({ key: "To", value: appliedFilters.date_to });
     if (appliedFilters.account_name)
       items.push({ key: "Account Name", value: appliedFilters.account_name });
     if (appliedFilters.account_code)
@@ -950,6 +986,10 @@ export default function SubledgerEnquiry() {
       items.push({ key: "SL Code", value: appliedFilters.subledger_code });
     if (appliedFilters.location)
       items.push({ key: "Location", value: appliedFilters.location });
+    if (appliedFilters.date_from)
+      items.push({ key: "From", value: appliedFilters.date_from });
+    if (appliedFilters.date_to)
+      items.push({ key: "To", value: appliedFilters.date_to });
     return items;
   }, [appliedFilters]);
 
@@ -1044,10 +1084,11 @@ export default function SubledgerEnquiry() {
                   <Text
                     size="xs"
                     c={muted}
+                    lh={1.6}
                     style={{
                       fontFamily: erpTheme.fontSans,
-                      maxWidth: 720,
-                      whiteSpace: "nowrap",
+                      maxWidth: 420,
+                      whiteSpace: "wrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                     }}
@@ -1085,6 +1126,7 @@ export default function SubledgerEnquiry() {
                     iconColor="#059669"
                     value={openingBalanceLabelDisplay}
                     label="Opening Balance"
+                    pillWidth={120}
                   />
                 ) : null}
               </>
@@ -1504,11 +1546,12 @@ function SubledgerTable(props: {
         minSize: Math.min(subledgerMrtColumnSize(c.key), 120),
         maxSize: c.key === "narration" || c.key === "note" ? 520 : undefined,
         grow: false,
-        Cell: ({ cell }) => {
+        Cell: ({ cell, row }) => {
           const value = cell.getValue<unknown>();
           if (c.key === "document_no") {
-            const text = formatSubledgerCell(c.key, value, dateFormat);
-            if (!text) return "—";
+            const display = formatCompositeDocumentNo(row.original);
+            const docNo = row.original.document_no?.trim() ?? "";
+            if (!display) return "—";
             return (
               <Anchor
                 component="button"
@@ -1517,11 +1560,16 @@ function SubledgerTable(props: {
                 c="#105476"
                 td="underline"
                 style={{ fontFamily: theme.fontSans, cursor: "pointer" }}
-                onClick={() => void onDocumentNoClick(text)}
+                onClick={() => void onDocumentNoClick(docNo || display)}
               >
-                {text}
+                {display}
               </Anchor>
             );
+          }
+          if (c.key === "narration" || c.key === "note") {
+            const text = formatSubledgerCell(c.key, value, dateFormat);
+            if (!text) return "—";
+            return renderClampedTextWithTooltip(text, theme.fontSans);
           }
           return formatSubledgerCell(c.key, value, dateFormat) || "—";
         },
@@ -1578,7 +1626,7 @@ function SubledgerTable(props: {
       return {
         style: {
           width: "fit-content",
-          padding: "8px 16px",
+          padding: "8px",
           fontSize: 14,
           fontFamily: theme.fontSans,
           color: tone === "muted" ? mutedColor : mutedColor,
@@ -1593,7 +1641,7 @@ function SubledgerTable(props: {
       return {
         style: {
           width: "fit-content",
-          padding: "8px 16px",
+          padding: "8px",
           fontSize: 14,
           fontFamily: theme.fontSans,
           color: mutedColor,
