@@ -616,7 +616,7 @@ export default function BankReconciliationCreate() {
     ? "View Bank Reconciliation"
     : isEditMode
       ? "Edit Bank Reconciliation"
-      : "Bank Reconciliation";
+      : "Create Bank Reconciliation";
 
   const displayStatus =
     saveResponse?.status ?? form.values.status ?? "UNPOSTED";
@@ -898,11 +898,6 @@ export default function BankReconciliationCreate() {
       } else if (!form.values.currency_code && localCurrency) {
         form.setFieldValue("currency_code", localCurrency);
       }
-
-      ToastNotification({
-        type: "success",
-        message: response.message ?? "Bank reconciliation detail loaded",
-      });
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -1695,7 +1690,7 @@ export default function BankReconciliationCreate() {
           canPostDocuments &&
           String(saveResponse.status ?? "").toUpperCase() === "UNPOSTED" && (
             <Button
-              color="teal"
+              color="black"
               loading={isPosting}
               onClick={() => void handlePost()}
             >
