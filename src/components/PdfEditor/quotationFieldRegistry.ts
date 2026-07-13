@@ -615,12 +615,14 @@ export function applyFieldEdit(
     const quoteCurrency = String(quotation.quote_currency ?? "");
     const userCurrency = String(ctx.userCurrency ?? quoteCurrency);
     const chargeList = Array.isArray(quotation.charges) ? quotation.charges : [];
+    const charge = chargeList[chargeIndex] as Record<string, unknown> | undefined;
     const roeForQuote = getRoeForQuoteCurrency(chargeList, quoteCurrency);
     const totalSell = parseChargeTotalDisplayInput(
       rawInput,
       quoteCurrency,
       userCurrency,
       roeForQuote,
+      charge,
     );
     return setByPath(workingData, field.path, totalSell);
   }

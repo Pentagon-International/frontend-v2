@@ -5,6 +5,9 @@ import pentagonPrimeAmericas from "../../assets/images/PentagonPrimeUSA.png";
 import pentagonPrimeChina from "../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../assets/images/CCIPL.png";
 import {
+  computePdfPreviewChargeTotalInQuoteCurrency,
+} from "../../components/PdfEditor/quotationTermsHelpers";
+import {
   CCT_BRANCH_INFO,
   getCctLogo,
   isCctCompany,
@@ -433,7 +436,7 @@ export const generateNewQuotationPDF = async (
   rowData: any,
   defaultBranch: any,
   country?: any,
-  userCurrency?: any
+  baseCurrency?: any,
 ): Promise<string> => {
   const hideUpcomingSchedule = hideUpcomingScheduleForDubaiUser(
     country,
@@ -1196,37 +1199,20 @@ export const generateNewQuotationPDF = async (
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
 
-            // Find ROE based on quoteCurrency
-            let roeForQuote = null;
-
-            for (const charge of validCharges) {
-              if (
-                charge.currency &&
-                charge.currency.toUpperCase() === quoteCurrency.toUpperCase()
-              ) {
-                roeForQuote = Number(charge.roe);
-                break;
-              }
-            }
-
-            // If not found, default = 1
-            if (!roeForQuote) roeForQuote = 1;
-
             let totalAmount = 0;
+            const branchBaseCurrency = String(baseCurrency ?? "");
 
             validCharges.forEach((charge: any) => {
               const description = String(charge.charge_name || "N/A");
               const currency = String(charge.currency || "N/A");
               const unit = `${String(charge.sell_per_unit || "N/A")} Per ${String(charge.unit || "N/A")}`;
-              const amount = Number(charge.total_sell || 0); // Amount column shows total_sell
               const minAmount = String(charge.min_sell || "N/A");
-              totalAmount += amount; // Calculate total from Amount column
-              let finalAmount = amount;
-
-              // Convert only if currencies differ
-              if (userCurrency !== quoteCurrency) {
-                finalAmount = amount / roeForQuote;
-              }
+              const finalAmount = computePdfPreviewChargeTotalInQuoteCurrency(
+                charge,
+                quoteCurrency,
+                branchBaseCurrency,
+              );
+              totalAmount += finalAmount;
 
               // Handle text wrapping for description
               const descLines = doc.splitTextToSize(
@@ -1285,12 +1271,7 @@ export const generateNewQuotationPDF = async (
             for (let i = 0; i < totalAmountColIndex; i++) {
               totalAmountX += chargeColWidths[i];
             }
-            let finalTotal = totalAmount;
-
-            // Apply ROE only if currencies differ
-            if (userCurrency !== quoteCurrency) {
-              finalTotal = totalAmount / roeForQuote;
-            }
+            const finalTotal = totalAmount;
 
             doc.text("Total Amount:", margin + 2, yPos + 4);
             doc.text(finalTotal.toFixed(2), totalAmountX, yPos + 4);

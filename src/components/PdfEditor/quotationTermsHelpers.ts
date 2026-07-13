@@ -128,32 +128,68 @@ export function getRoeForQuoteCurrency(
   return 1;
 }
 
+function normalizeCurrencyCode(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+export function shouldConvertPdfChargeTotalToQuoteCurrency(
+  quoteCurrency: string,
+  baseCurrency: string,
+): boolean {
+  const quote = normalizeCurrencyCode(quoteCurrency);
+  const base = normalizeCurrencyCode(baseCurrency);
+  return Boolean(quote && base && quote !== base);
+}
+
+/** PDF preview: amount in quote currency when branch base currency differs from quote currency. */
+export function computePdfPreviewChargeTotalInQuoteCurrency(
+  charge: Record<string, unknown>,
+  quoteCurrency: string,
+  baseCurrency: string,
+): number {
+  const amount = Number(charge.total_sell || 0);
+  if (!shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency)) {
+    return amount;
+  }
+
+  const roe = Number(charge.roe || 1);
+  const effectiveRoe = roe > 0 ? roe : 1;
+  const noOfUnits = Number(charge.no_of_units ?? 1) || 1;
+  return amount / effectiveRoe / noOfUnits;
+}
+
 /** Display value for the charge Total Amount column in the PDF. */
 export function getChargeTotalDisplayAmount(
   charge: Record<string, unknown>,
   quoteCurrency: string,
-  userCurrency: string,
-  roeForQuote: number,
+  baseCurrency: string,
+  _roeForQuote?: number,
 ): string {
-  const amount = Number(charge.total_sell || 0);
-  let finalAmount = amount;
-  if (userCurrency !== quoteCurrency) {
-    finalAmount = amount / roeForQuote;
-  }
-  return finalAmount.toFixed(2);
+  return computePdfPreviewChargeTotalInQuoteCurrency(
+    charge,
+    quoteCurrency,
+    baseCurrency,
+  ).toFixed(2);
 }
 
 /** Convert edited Total Amount display back to stored total_sell. */
 export function parseChargeTotalDisplayInput(
   rawInput: string,
   quoteCurrency: string,
-  userCurrency: string,
+  baseCurrency: string,
   roeForQuote: number,
+  charge?: Record<string, unknown>,
 ): number {
   const parsed = Number(String(rawInput).replace(/,/g, "").trim());
   if (Number.isNaN(parsed)) return 0;
-  if (userCurrency !== quoteCurrency) {
-    return parsed * roeForQuote;
+  if (!shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency)) {
+    return parsed;
   }
-  return parsed;
+
+  const roe = Number(charge?.roe ?? roeForQuote ?? 1);
+  const effectiveRoe = roe > 0 ? roe : 1;
+  const noOfUnits = Number(charge?.no_of_units ?? 1) || 1;
+  return parsed * effectiveRoe * noOfUnits;
 }

@@ -1695,35 +1695,6 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     }
   };
 
-  const fetchCurrencyMaster = async () => {
-    try {
-      const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
-      return response;
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    }
-  };
-
-  const getUserCurrencyCode = async (userCountryCode: string | undefined) => {
-    try {
-      if (!userCountryCode) return null;
-      const currencyList = await fetchCurrencyMaster();
-      if (!Array.isArray(currencyList)) return null;
-
-      const match = currencyList.find(
-        (item) =>
-          item.country_code &&
-          item.country_code.toUpperCase() === userCountryCode.toUpperCase(),
-      );
-      console.log("--------------------------", match);
-
-      return match ? match.code : null;
-    } catch (error) {
-      console.error("Error getting user currency:", error);
-      return null;
-    }
-  };
-
   // Helper function to format numbers preserving decimals when converting to string
   const formatNumberWithDecimals = (num: number): string => {
     // Check if number has decimal places
@@ -2446,15 +2417,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       // Logo/country: use default branch country (e.g. US) when set, else user country
       const country = defaultBranch?.country ?? user?.country ?? null;
       setPreviewOpen(true);
-      const userCurrency = await getUserCurrencyCode(
-        user?.country?.country_code,
-      );
-      setPreviewUserCurrency(userCurrency);
+      const branchBaseCurrency =
+        defaultBranch?.currency?.currency_code ?? null;
+      setPreviewUserCurrency(branchBaseCurrency);
       const blobUrl = await generateNewQuotationPDF(
         rowData,
         defaultBranch,
         country,
-        userCurrency,
+        branchBaseCurrency,
       );
       setPdfBlob(blobUrl);
     } catch (error) {

@@ -5,7 +5,6 @@ import {
   SegmentedControl,
   TextInput,
   Textarea,
-  NumberInput,
   Button,
   Text,
   Stack,
@@ -6004,7 +6003,6 @@ function QuotationCreate({
                                 `unit-${index}-roe`
                               }
                               min={1}
-                              // decimalScale={2}
                               styles={{
                                 input: {
                                   fontSize: "14px",
