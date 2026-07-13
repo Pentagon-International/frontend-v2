@@ -869,6 +869,8 @@ const NavigationRoutes = () => {
         <Route path="/bank-reconciliation" element={<Outlet />}>
           <Route index element={<BankReconciliationMaster />} />
           <Route path="create" element={<BankReconciliationCreate />} />
+          <Route path="edit/:id" element={<BankReconciliationCreate />} />
+          <Route path="view/:id" element={<BankReconciliationCreate />} />
         </Route>
         <Route path="/payment-request" element={<PaymentRequestCreate />} />
         <Route
