@@ -389,7 +389,6 @@ export const generateBillOfLadingPDF = (
         jobData,
         housingData,
         defaultBranch,
-        country,
       );
     }
 
@@ -1677,4 +1676,20 @@ export const generateBillOfLadingPDF = (
     throw error;
   }
 };
+
+// export { isUsBranchForBillOfLading };
+
+/** US BOL template download — uncomment to re-enable blank template PDF download. */
+// export const downloadUsBillOfLadingTemplate = (): void => {
+//   const blobUrl = generateUsBillOfLadingPDF({}, {}, null, {
+//     templateOnly: true,
+//   });
+//   const link = document.createElement("a");
+//   link.href = blobUrl;
+//   link.download = "Bill-of-Lading-Template-US.pdf";
+//   document.body.appendChild(link);
+//   link.click();
+//   document.body.removeChild(link);
+//   URL.revokeObjectURL(blobUrl);
+// };
 

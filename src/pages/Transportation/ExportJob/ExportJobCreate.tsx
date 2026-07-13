@@ -49,6 +49,11 @@ import {
   useEstimatesForm,
 } from "../../../components";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+// US BOL template download — uncomment import + button block below to re-enable:
+// import {
+//   downloadUsBillOfLadingTemplate,
+//   isUsBranchForBillOfLading,
+// } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
 import { postAPICall } from "../../../service/postApiCall";
@@ -3061,22 +3066,38 @@ function ExportJobCreate() {
             </Badge>
           )}
         </Group>
-        {!isReadOnly && (
-          <Group gap="xs">
+        <Group gap="xs">
+          {/* US BOL template download — uncomment to enable blank US BOL template download:
+          {isUsBranchForBillOfLading(user?.country) && (
             <Button
-              color="#105476"
-              variant={canCreateJob ? "filled" : "outline"}
-              onClick={handleSubmit}
-              loading={isSubmitting}
-              disabled={!canCreateJob}
-              leftSection={<IconPlus size={14} />}
-              style={{
-                cursor: canCreateJob ? "pointer" : "not-allowed",
+              variant="outline"
+              color="orange"
+              size="xs"
+              leftSection={<IconDownload size={14} />}
+              onClick={() => {
+                downloadUsBillOfLadingTemplate();
               }}
             >
-              {mode === "edit" ? "Update" : "Create"}
+              BOL Template (US) [Temp]
             </Button>
-            {housingDetails.length > 0 && (
+          )}
+          */}
+          {!isReadOnly && (
+            <>
+              <Button
+                color="#105476"
+                variant={canCreateJob ? "filled" : "outline"}
+                onClick={handleSubmit}
+                loading={isSubmitting}
+                disabled={!canCreateJob}
+                leftSection={<IconPlus size={14} />}
+                style={{
+                  cursor: canCreateJob ? "pointer" : "not-allowed",
+                }}
+              >
+                {mode === "edit" ? "Update" : "Create"}
+              </Button>
+              {housingDetails.length > 0 && (
               <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
                 <Menu.Target>
                   <ActionIcon
@@ -3361,9 +3382,10 @@ function ExportJobCreate() {
                   )}
                 </Menu.Dropdown>
               </Menu>
-            )}
-          </Group>
-        )}
+              )}
+            </>
+          )}
+        </Group>
       </Group>
 
       <Tabs

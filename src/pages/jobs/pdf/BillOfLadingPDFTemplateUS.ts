@@ -369,7 +369,9 @@ export const generateUsBillOfLadingPDF = (
   jobData: any,
   housingData: any,
   defaultBranch: any,
+  // options?: { templateOnly?: boolean }, // US BOL template download — uncomment with downloadUsBillOfLadingTemplate
 ): string => {
+  // const templateOnly = options?.templateOnly === true;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -581,6 +583,7 @@ export const generateUsBillOfLadingPDF = (
   });
 
   const logoY = PAGE_MARGIN_TOP;
+  const logoWidth = 38;
 
   if (logoImage) {
     try {
@@ -589,7 +592,7 @@ export const generateUsBillOfLadingPDF = (
         "PNG",
         innerMargin + boxPadding,
         logoY,
-        38,
+        logoWidth,
         LOGO_HEIGHT,
         undefined,
         "FAST",
@@ -600,7 +603,9 @@ export const generateUsBillOfLadingPDF = (
   }
 
   const topTableStartY = logoY + LOGO_HEIGHT + LOGO_TO_TABLE_GAP;
-  const headerAboveTableY = topTableStartY - 2;
+  // Vertically center company name, FMC, and B/L No. with the logo band
+  const headerRowLineHeight = getFontLineHeight(doc, FONT_HEADER);
+  const headerRowY = logoY + (LOGO_HEIGHT + headerRowLineHeight) / 2;
 
   const headerCenterWidth = innerWidth * 0.36;
   const headerCenterX = innerMargin + (innerWidth - headerCenterWidth) / 2;
@@ -615,10 +620,14 @@ export const generateUsBillOfLadingPDF = (
   const fmcLabelWidth = doc.getTextWidth(`${fmcGap}${fmcLabel}`);
   const headerTextStartX = centerTextX - (companyNameWidth + fmcLabelWidth) / 2;
   doc.setFontSize(FONT_HEADER);
-  doc.text(companyName, headerTextStartX, headerAboveTableY);
+  doc.text(companyName, headerTextStartX, headerRowY);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_FMC);
-  doc.text(`${fmcGap}${fmcLabel}`, headerTextStartX + companyNameWidth, headerAboveTableY);
+  doc.text(
+    `${fmcGap}${fmcLabel}`,
+    headerTextStartX + companyNameWidth,
+    headerRowY,
+  );
   doc.setFont("helvetica", "bold");
 
   const blLabel = "B/L No.";
@@ -630,9 +639,9 @@ export const generateUsBillOfLadingPDF = (
   const blValueWidth = doc.getTextWidth(blValue);
   const blStartX = contentRightX - boxPadding - blLabelWidth - blValueWidth;
   doc.setFont("helvetica", "bold");
-  doc.text(`${blLabel} `, blStartX, headerAboveTableY);
+  doc.text(`${blLabel} `, blStartX, headerRowY);
   doc.setFont("helvetica", "normal");
-  doc.text(blValue, blStartX + blLabelWidth, headerAboveTableY);
+  doc.text(blValue, blStartX + blLabelWidth, headerRowY);
 
   // ===== TABLE 1: TOP INFORMATION GRID =====
   const colWidth = innerWidth / 2;
@@ -969,10 +978,10 @@ export const generateUsBillOfLadingPDF = (
   );
   const grossWeightLines = grossWeightText
     ? doc.splitTextToSize(grossWeightText, col4W - 2 * boxPadding)
-    : ["-"];
+    : [];
   const volumeLines = volumeText
     ? doc.splitTextToSize(volumeText, col5W - 2 * boxPadding)
-    : ["-"];
+    : [];
 
   const cargoColumns: CargoColumnDef[] = [
     { x: col1X, width: col1W, lines: marksLines },
@@ -1131,9 +1140,11 @@ export const generateUsBillOfLadingPDF = (
       );
       doc.setFont("helvetica", "normal");
       doc.setFontSize(FONT_TABLE_BODY);
-      doc.text(packagesInWords, col1X + boxPadding, segmentWordsRowY + 9, {
-        maxWidth: innerWidth - 2 * boxPadding,
-      });
+      if (packagesInWords) {
+        doc.text(packagesInWords, col1X + boxPadding, segmentWordsRowY + 9, {
+          maxWidth: innerWidth - 2 * boxPadding,
+        });
+      }
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(FONT_TABLE_HEAD);

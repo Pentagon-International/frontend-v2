@@ -4282,13 +4282,35 @@ function InvoiceCreate({
               <SearchableSelect
                 key={`invoice-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
-                placeholder="Type customer name"
-                apiEndpoint={URL.allCustomers}
-                searchFields={["customer_name", "customer_code"]}
-                displayFormat={(item: Record<string, unknown>) => ({
-                  value: String(item.customer_code),
-                  label: String(item.customer_name),
-                })}
+                placeholder={
+                  isAgentInvoice ? "Type agent name" : "Type customer name"
+                }
+                apiEndpoint={
+                  isCreditNoteFlow
+                    ? URL.customer
+                    : isAgentInvoice
+                      ? URL.agent
+                      : URL.allCustomers
+                }
+                minSearchLength={isCreditNoteFlow ? 1 : undefined}
+                searchFields={
+                  isCreditNoteFlow
+                    ? ["customer_code", "customer_name", "name"]
+                    : ["customer_name", "customer_code"]
+                }
+                displayFormat={(item: Record<string, unknown>) =>
+                  isCreditNoteFlow
+                    ? {
+                        value: String(item.customer_code ?? item.id ?? ""),
+                        label: String(
+                          item.customer_name ?? item.name ?? "",
+                        ).trim(),
+                      }
+                    : {
+                        value: String(item.customer_code),
+                        label: String(item.customer_name),
+                      }
+                }
                 value={form.values.bill_to}
                 displayValue={billToDisplayName || undefined}
                 onChange={handleBillToChange}
