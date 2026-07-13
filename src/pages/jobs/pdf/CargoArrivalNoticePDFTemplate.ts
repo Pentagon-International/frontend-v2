@@ -70,6 +70,47 @@ const formatCanBookingNo = (jobInfo: Record<string, unknown>): string => {
   return pickCanField(jobInfo?.booking_no);
 };
 
+const resolveCanCfsNames = (
+  jobData: Record<string, unknown>,
+  hawbData: Record<string, unknown>,
+): string => {
+  const masterContainers = [
+    ...(Array.isArray(jobData?.container_details) ? jobData.container_details : []),
+    ...(Array.isArray(jobData?.containerDetails) ? jobData.containerDetails : []),
+  ] as Array<Record<string, unknown>>;
+
+  const houseCargo = Array.isArray(hawbData?.cargo_details)
+    ? hawbData.cargo_details
+    : [];
+
+  const cfsNames = houseCargo
+    .map((cargo) => {
+      const record = cargo as Record<string, unknown>;
+      const containerNo = String(record.container_no ?? "").trim();
+      const containerId = String(record.container_id ?? "").trim();
+      const match = masterContainers.find((container) => {
+        const masterNo = String(container.container_no ?? "").trim();
+        const masterId = String(container.id ?? container.container_id ?? "").trim();
+        return (
+          (containerNo && masterNo && containerNo === masterNo) ||
+          (containerId && masterId && containerId === masterId)
+        );
+      });
+      return String(match?.cfs_name ?? "").trim();
+    })
+    .filter(Boolean);
+
+  return [...new Set(cfsNames)].join(", ");
+};
+
+const formatCanVslVoy = (
+  vesselName: string,
+  voyageNumber: string,
+): string => {
+  if (vesselName && voyageNumber) return `${vesselName} - ${voyageNumber}`;
+  return vesselName || voyageNumber || "";
+};
+
 const isNumericId = (value: unknown): boolean => {
   if (value == null || value === "") return false;
   return /^\d+$/.test(String(value).trim());
@@ -922,6 +963,25 @@ export const generateCargoArrivalNoticePDF = (
       : "";
     const itemNo = pickCanField(hawbData?.item_no);
     const subItemNo = pickCanField(hawbData?.sub_item_no);
+    const serviceType = String(jobInfo?.service || jobData?.service || "")
+      .trim()
+      .toUpperCase();
+    const isFclOrLcl = serviceType === "FCL" || serviceType === "LCL";
+    const cfsNameDisplay = isFclOrLcl
+      ? resolveCanCfsNames(jobData, hawbData)
+      : "";
+    const vesselName = pickCanField(
+      carrierDetails?.vessel_name,
+      jobInfo?.vessel_name,
+    );
+    const voyageNumber = pickCanField(
+      carrierDetails?.voyage_number,
+      carrierDetails?.flight_voyage_number,
+      jobInfo?.voyage_number,
+    );
+    const vslVoyDisplay = isFclOrLcl
+      ? formatCanVslVoy(vesselName, voyageNumber)
+      : "";
     
     // Shipment Details
     const carrierName = pickCanField(carrierDetails?.carrier_name, jobInfo?.carrier_name);
@@ -1020,6 +1080,9 @@ export const generateCargoArrivalNoticePDF = (
       "IGM No:",
       "Item No:",
       "Sub Item No:",
+      "CFS Name:",
+      "Service:",
+      "Vsl/Voy:",
     ];
     const invoiceColumnLayout = getCanKeyValueColumnLayout(
       doc,
@@ -1061,6 +1124,9 @@ export const generateCargoArrivalNoticePDF = (
     const etaLines = doc.splitTextToSize(eta || "", shipmentValueMaxWidth);
     const itemNoLines = doc.splitTextToSize(itemNo || "", shipmentValueMaxWidth);
     const subItemNoLines = doc.splitTextToSize(subItemNo || "", shipmentValueMaxWidth);
+    const cfsNameLines = doc.splitTextToSize(cfsNameDisplay || "", shipmentValueMaxWidth);
+    const serviceLines = doc.splitTextToSize(serviceType || "", shipmentValueMaxWidth);
+    const vslVoyLines = doc.splitTextToSize(vslVoyDisplay || "", shipmentValueMaxWidth);
     const cargoLocationLines = doc.splitTextToSize(cargoLocation || "", shipmentValueMaxWidth);
     
     let rightColumnHeight = 4; // Top padding (matches drawing: sectionStartY + boxPadding ≈ +3)
@@ -1085,6 +1151,13 @@ export const generateCargoArrivalNoticePDF = (
     rightColumnHeight += Math.max(1, igmNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, itemNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, subItemNoLines.length) * lineSpacing;
+    if (isFclOrLcl && cfsNameDisplay) {
+      rightColumnHeight += Math.max(1, cfsNameLines.length) * lineSpacing;
+    }
+    rightColumnHeight += Math.max(1, serviceLines.length) * lineSpacing;
+    if (isFclOrLcl && vslVoyDisplay) {
+      rightColumnHeight += Math.max(1, vslVoyLines.length) * lineSpacing;
+    }
     rightColumnHeight += Math.max(1, cargoLocationLines.length) * lineSpacing;
     rightColumnHeight += 2; // Bottom padding
 
@@ -1381,6 +1454,31 @@ export const generateCargoArrivalNoticePDF = (
       shipmentColumnLayout,
       rightYPos
     );
+    if (isFclOrLcl && cfsNameDisplay) {
+      rightYPos += drawCanKeyValueRow(
+        doc,
+        "CFS Name:",
+        cfsNameLines,
+        shipmentColumnLayout,
+        rightYPos
+      );
+    }
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Service:",
+      serviceLines,
+      shipmentColumnLayout,
+      rightYPos
+    );
+    if (isFclOrLcl && vslVoyDisplay) {
+      rightYPos += drawCanKeyValueRow(
+        doc,
+        "Vsl/Voy:",
+        vslVoyLines,
+        shipmentColumnLayout,
+        rightYPos
+      );
+    }
 
     // Cargo Location:
     // doc.text("Cargo Location:", rightHalfStart + boxPadding, rightYPos);
