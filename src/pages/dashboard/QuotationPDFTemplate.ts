@@ -978,6 +978,13 @@ export const generateNewQuotationPDF = async (
           // Dynamically calculate column count based on actual headers
           const colCount = cargoHeaders.length;
           const colWidth = (pageWidth - 2 * margin) / colCount;
+          const getCargoColLeftX = (index: number) =>
+            margin + 2 + index * colWidth;
+          const getCargoColCenterX = (index: number) =>
+            margin + index * colWidth + colWidth / 2;
+          // FCL: only "Container Type" stays left-aligned; all other cargo columns center.
+          const isCargoCenterCol = (index: number) =>
+            !(serviceType === "FCL" && index === 0);
 
           // Table header
           doc.setFillColor(220, 220, 220);
@@ -986,7 +993,13 @@ export const generateNewQuotationPDF = async (
           doc.setFontSize(7);
 
           cargoHeaders.forEach((header, index) => {
-            doc.text(header, margin + 2 + index * colWidth, yPos + 4);
+            if (isCargoCenterCol(index)) {
+              doc.text(header, getCargoColCenterX(index), yPos + 4, {
+                align: "center",
+              });
+            } else {
+              doc.text(header, getCargoColLeftX(index), yPos + 4);
+            }
           });
           yPos += 6;
 
@@ -1041,7 +1054,13 @@ export const generateNewQuotationPDF = async (
             doc.rect(margin, yPos, pageWidth - 2 * margin, 5);
 
             values.forEach((value, index) => {
-              doc.text(value, margin + 2 + index * colWidth, yPos + 3.5);
+              if (isCargoCenterCol(index)) {
+                doc.text(value, getCargoColCenterX(index), yPos + 3.5, {
+                  align: "center",
+                });
+              } else {
+                doc.text(value, getCargoColLeftX(index), yPos + 3.5);
+              }
             });
             yPos += 5;
           });
@@ -1063,7 +1082,9 @@ export const generateNewQuotationPDF = async (
 
             totalValues.forEach((value, index) => {
               if (value) {
-                doc.text(value, margin + 2 + index * colWidth, yPos + 3.5);
+                doc.text(value, getCargoColCenterX(index), yPos + 3.5, {
+                  align: "center",
+                });
               }
             });
             yPos += 5;
