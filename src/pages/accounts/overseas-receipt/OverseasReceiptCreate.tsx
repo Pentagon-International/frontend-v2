@@ -230,6 +230,7 @@ import {
     bank?: string;
     branch?: string;
     cheque_no?: string;
+    cheque_date?: string | null;
     chq_clrd_date?: string | null;
     dr_cr?: string;
     /** Each party: subledger_name = UI label (Account Name), subledger_code = value for payload */
@@ -296,6 +297,7 @@ import {
     branch: string;
     cheque_no: string;
     cheque_date: Date | null;
+    chq_clrd_date: Date | null;
     details: DetailRow[];
     adjustments: AdjustmentRow[];
     supporting_documents: SupportingDocument[];
@@ -570,6 +572,7 @@ import {
         branch: "",
         cheque_no: "",
         cheque_date: null,
+        chq_clrd_date: null,
         details: [getDefaultDetailRow(localCurrency, _isReversal)],
         adjustments: [getDefaultAdjustmentRow(localCurrency)],
         supporting_documents: [] as SupportingDocument[],
@@ -710,7 +713,8 @@ import {
       };
   
       const dateVal = parseDocumentDate(receiptFromState.date);
-      const chqDateVal = parseDocumentDate(receiptFromState.chq_clrd_date);
+      const chqClrdDateVal = parseDocumentDate(receiptFromState.chq_clrd_date);
+      const chequeDateVal = parseDocumentDate(receiptFromState.cheque_date);
       const roeVal = parseNum(receiptFromState.roe);
       const amountVal = parseNum(receiptFromState.amount);
       const localAmountVal = parseNum(receiptFromState.local_amount);
@@ -786,7 +790,8 @@ import {
         bank: (receiptFromState.bank ?? "").toString(),
         branch: (receiptFromState.branch ?? "").toString(),
         cheque_no: (receiptFromState.cheque_no ?? "").toString(),
-        cheque_date: chqDateVal,
+        cheque_date: chequeDateVal,
+        chq_clrd_date: chqClrdDateVal,
         details,
         adjustments,
       });
@@ -977,7 +982,7 @@ import {
       });
     }, [detailsSnapshotForLocal, localCurrency]);
   
-    const showChequeSection = form.values.type === "CHEQUE";
+    const showChequeSection = form.values.type !== "CASH";
   
     const addDetailRow = () => {
       setLoadedDetails(null);
@@ -1205,7 +1210,8 @@ import {
         bank: values.bank ?? "",
         branch: values.branch ?? "",
         cheque_no: values.cheque_no ?? "",
-        chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+        cheque_date: formatDateDDMMYYYY(values.cheque_date),
+        chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
         dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
         parties: (values.details ?? []).map((d) => ({
           ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
@@ -1283,7 +1289,8 @@ import {
         bank: values.bank ?? "",
         branch: values.branch ?? "",
         cheque_no: values.cheque_no ?? "",
-        chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+        cheque_date: formatDateDDMMYYYY(values.cheque_date),
+        chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
         dr_cr: "Cr",
         parties: details.map((d) => ({
           subledger_code: d.customer_code ?? "",
@@ -2260,7 +2267,7 @@ import {
                 />
               </Grid.Col>
   
-              {/* CHEQUE section - only when Type is CHEQUE */}
+              {/* Cheque fields - shown for all types except CASH */}
               {showChequeSection && (
                 <>
                   <Grid.Col span={2}>
@@ -2297,13 +2304,6 @@ import {
                     />
                   </Grid.Col>
                   <Grid.Col span={2}>
-                    {/* <Box
-                      style={
-                        headerOtherDisabled
-                          ? reversalReadOnlyWrapperStyle
-                          : undefined
-                      }
-                    > */}
                     <SingleDateInput
                       label="Cheque Date"
                       placeholder="Select date"
@@ -2318,7 +2318,24 @@ import {
                           : undefined
                       }
                     />
-                    {/* </Box> */}
+                  </Grid.Col>
+                  <Grid.Col span={2}>
+                    <SingleDateInput
+                      label="Cheque Cleared Date"
+                      placeholder="Select date"
+                      value={normalizeDate(form.values.chq_clrd_date)}
+                      onChange={(date) =>
+                        form.setFieldValue("chq_clrd_date", date)
+                      }
+                      disabled={headerDateDisabled}
+                      styles={
+                        headerDateDisabled
+                          ? useNonEditableStyleOnly
+                            ? reversalNonEditableStyles
+                            : readOnlyFieldStyles
+                          : undefined
+                      }
+                    />
                   </Grid.Col>
                 </>
               )}

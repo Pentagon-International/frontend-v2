@@ -275,6 +275,7 @@ type PaymentListItem = {
   bank?: string;
   branch?: string;
   cheque_no?: string;
+  cheque_date?: string | null;
   chq_clrd_date?: string | null;
   dr_cr?: string;
   parties?: Array<{
@@ -339,6 +340,7 @@ type PaymentFormValues = {
   branch: string;
   cheque_no: string;
   cheque_date: Date | null;
+  chq_clrd_date: Date | null;
   details: DetailRow[];
   adjustments: AdjustmentRow[];
   supporting_documents: SupportingDocument[];
@@ -594,6 +596,7 @@ export default function OverseasPaymentCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
+      chq_clrd_date: null,
       details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
@@ -736,7 +739,8 @@ export default function OverseasPaymentCreate({
     };
 
     const dateVal = parseDocumentDate(paymentFromState.date);
-    const chqDateVal = parseDocumentDate(paymentFromState.chq_clrd_date);
+    const chqClrdDateVal = parseDocumentDate(paymentFromState.chq_clrd_date);
+    const chequeDateVal = parseDocumentDate(paymentFromState.cheque_date);
     const roeVal = parseNum(paymentFromState.roe);
     const amountVal = parseNum(paymentFromState.amount);
     const localAmountVal = parseNum(paymentFromState.local_amount);
@@ -858,7 +862,8 @@ export default function OverseasPaymentCreate({
       bank: (paymentFromState.bank ?? "").toString(),
       branch: (paymentFromState.branch ?? "").toString(),
       cheque_no: (paymentFromState.cheque_no ?? "").toString(),
-      cheque_date: chqDateVal,
+      cheque_date: chequeDateVal,
+      chq_clrd_date: chqClrdDateVal,
       details,
       adjustments,
     });
@@ -1179,7 +1184,7 @@ export default function OverseasPaymentCreate({
     });
   }, [detailsSnapshotForLocal, localCurrency]);
 
-  const showChequeSection = form.values.type === "CHEQUE";
+  const showChequeSection = form.values.type !== "CASH";
 
   const addDetailRow = () => {
     enableAutoCalculations();
@@ -1429,7 +1434,8 @@ export default function OverseasPaymentCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
@@ -1516,7 +1522,8 @@ export default function OverseasPaymentCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: "Dr",
       parties: details.map((d) => ({
         account_code: d.account_code ?? "",
@@ -2423,7 +2430,7 @@ export default function OverseasPaymentCreate({
               />
             </Grid.Col>
 
-            {/* CHEQUE section - only when Type is CHEQUE - same as Receipt */}
+            {/* Cheque fields - shown for all types except CASH */}
             {showChequeSection && (
               <>
                 <Grid.Col span={2}>
@@ -2465,6 +2472,24 @@ export default function OverseasPaymentCreate({
                     placeholder="Select date"
                     value={normalizeDate(form.values.cheque_date)}
                     onChange={(date) => form.setFieldValue("cheque_date", date)}
+                    disabled={headerDateDisabled}
+                    styles={
+                      headerDateDisabled
+                        ? useNonEditableStyleOnly
+                          ? reversalNonEditableStyles
+                          : readOnlyFieldStyles
+                        : undefined
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label="Cheque Cleared Date"
+                    placeholder="Select date"
+                    value={normalizeDate(form.values.chq_clrd_date)}
+                    onChange={(date) =>
+                      form.setFieldValue("chq_clrd_date", date)
+                    }
                     disabled={headerDateDisabled}
                     styles={
                       headerDateDisabled

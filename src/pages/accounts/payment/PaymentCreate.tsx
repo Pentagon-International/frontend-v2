@@ -262,6 +262,7 @@ type PaymentListItem = {
   bank?: string;
   branch?: string;
   cheque_no?: string;
+  cheque_date?: string | null;
   chq_clrd_date?: string | null;
   dr_cr?: string;
   parties?: Array<{
@@ -324,6 +325,7 @@ type PaymentFormValues = {
   branch: string;
   cheque_no: string;
   cheque_date: Date | null;
+  chq_clrd_date: Date | null;
   details: DetailRow[];
   adjustments: AdjustmentRow[];
   supporting_documents: SupportingDocument[];
@@ -585,6 +587,7 @@ export default function PaymentCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
+      chq_clrd_date: null,
       details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
@@ -733,7 +736,8 @@ export default function PaymentCreate({
     };
 
     const dateVal = parseDocumentDate(paymentFromState.date);
-    const chqDateVal = parseDocumentDate(paymentFromState.chq_clrd_date);
+    const chqClrdDateVal = parseDocumentDate(paymentFromState.chq_clrd_date);
+    const chequeDateVal = parseDocumentDate(paymentFromState.cheque_date);
     const roeVal = parseNum(paymentFromState.roe);
     const amountVal = parseNum(paymentFromState.amount);
     const localAmountVal = parseNum(paymentFromState.local_amount);
@@ -852,7 +856,8 @@ export default function PaymentCreate({
       bank: (paymentFromState.bank ?? "").toString(),
       branch: (paymentFromState.branch ?? "").toString(),
       cheque_no: (paymentFromState.cheque_no ?? "").toString(),
-      cheque_date: chqDateVal,
+      cheque_date: chequeDateVal,
+      chq_clrd_date: chqClrdDateVal,
       details,
       adjustments,
     });
@@ -1114,7 +1119,7 @@ export default function PaymentCreate({
     });
   }, [detailsSnapshotForLocal, localCurrency]);
 
-  const showChequeSection = form.values.type === "CHEQUE";
+  const showChequeSection = form.values.type !== "CASH";
 
   const addDetailRow = () => {
     setLoadedDetails(null);
@@ -1413,7 +1418,8 @@ export default function PaymentCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
@@ -1497,7 +1503,8 @@ export default function PaymentCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: "Dr",
       parties: details.map((d) => ({
         account_code: d.account_code ?? "",
@@ -1587,6 +1594,42 @@ export default function PaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    // Posted documents: only Cheque Cleared Date may be updated via PATCH.
+    const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
+    if (
+      !_isReversal &&
+      pathname.includes("/edit") &&
+      postedStatus === "POSTED" &&
+      saveResponse?.id != null
+    ) {
+      setIsSubmitting(true);
+      try {
+        const id = saveResponse.id;
+        await apiCallProtected.patch(
+          `${URL.payment}${id}/`,
+          {
+            id,
+            chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+          },
+          API_HEADER,
+        );
+        await queryClient.invalidateQueries({ queryKey: ["payment"] });
+        ToastNotification({
+          type: "success",
+          message: "Cheque Cleared Date updated successfully.",
+        });
+      } catch (e: unknown) {
+        console.error("Failed to update cheque cleared date", e);
+        ToastNotification({
+          type: "error",
+          message: "Failed to update Cheque Cleared Date.",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     const headerRoeToastError = validateRoeToast(values.currency, values.roe);
     if (headerRoeToastError) {
       form.setFieldError(
@@ -1988,6 +2031,12 @@ export default function PaymentCreate({
     reversePaymentSaveResponse?.status ?? "",
   ).toUpperCase();
   const isViewRoute = pathname.includes("/view");
+  // Posted edit: allow updating Cheque Cleared Date only (PATCH).
+  const isPostedChequeClearanceEdit =
+    !_isReversal &&
+    !isViewRoute &&
+    pathname.includes("/edit") &&
+    statusUpper === "POSTED";
   const isReadOnly =
     isViewRoute ||
     (!_isReversal && statusUpper === "POSTED") ||
@@ -1996,6 +2045,8 @@ export default function PaymentCreate({
   const inputStyles =
     isReadOnly || reversalFormDisabled ? readOnlyFieldStyles : fieldStyles;
   const headerDateDisabled = isReadOnly;
+  const chequeClearanceDateDisabled =
+    headerDateDisabled && !isPostedChequeClearanceEdit;
   const headerOtherDisabled = isReadOnly || reversalFormDisabled;
   const useNonEditableStyleOnly = isReadOnly || _isReversal;
   const headerFieldStyles = headerOtherDisabled
@@ -2175,7 +2226,9 @@ export default function PaymentCreate({
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            isReadOnly && !isPostedChequeClearanceEdit
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
           }
         >
           <Grid>
@@ -2325,8 +2378,8 @@ export default function PaymentCreate({
               />
             </Grid.Col>
 
-            {/* CHEQUE section - only when Type is CHEQUE - same as Receipt */}
-            {showChequeSection && (
+            {/* Cheque fields - shown for all types except CASH (also when editing posted clearance date) */}
+            {(showChequeSection || isPostedChequeClearanceEdit) && (
               <>
                 <Grid.Col span={2}>
                   <TextInput
@@ -2370,6 +2423,24 @@ export default function PaymentCreate({
                     disabled={headerDateDisabled}
                     styles={
                       headerDateDisabled
+                        ? useNonEditableStyleOnly
+                          ? reversalNonEditableStyles
+                          : readOnlyFieldStyles
+                        : undefined
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label="Cheque Cleared Date"
+                    placeholder="Select date"
+                    value={normalizeDate(form.values.chq_clrd_date)}
+                    onChange={(date) =>
+                      form.setFieldValue("chq_clrd_date", date)
+                    }
+                    disabled={chequeClearanceDateDisabled}
+                    styles={
+                      chequeClearanceDateDisabled
                         ? useNonEditableStyleOnly
                           ? reversalNonEditableStyles
                           : readOnlyFieldStyles
@@ -3500,7 +3571,7 @@ export default function PaymentCreate({
             >
               Cancel
             </Button>
-            {!isReadOnly && (
+            {(!isReadOnly || isPostedChequeClearanceEdit) && (
               <>
                 <Button
                   type="submit"
@@ -3514,37 +3585,40 @@ export default function PaymentCreate({
                     ? reversePaymentSaveResponse?.id
                       ? "Update Payment Reversal"
                       : "Save Payment Reversal"
-                    : saveResponse?.id
+                    : isPostedChequeClearanceEdit
                       ? "Update Payment"
-                      : "Save Payment"}
+                      : saveResponse?.id
+                        ? "Update Payment"
+                        : "Save Payment"}
                 </Button>
-                {_isReversal
-                  ? reversePaymentSaveResponse &&
-                    canPostDocuments &&
-                    reversalStatusUpper === "UNPOSTED" && (
-                      <Button
-                        type="button"
-                        color="black"
-                        variant="filled"
-                        loading={isPosting}
-                        onClick={handlePostPayment}
-                      >
-                        Post Payment Reversal
-                      </Button>
-                    )
-                  : saveResponse &&
-                    canPostDocuments &&
-                    statusUpper === "UNPOSTED" && (
-                      <Button
-                        type="button"
-                        color="black"
-                        variant="filled"
-                        loading={isPosting}
-                        onClick={handlePostPayment}
-                      >
-                        Post Payment
-                      </Button>
-                    )}
+                {!isPostedChequeClearanceEdit &&
+                  (_isReversal
+                    ? reversePaymentSaveResponse &&
+                      canPostDocuments &&
+                      reversalStatusUpper === "UNPOSTED" && (
+                        <Button
+                          type="button"
+                          color="black"
+                          variant="filled"
+                          loading={isPosting}
+                          onClick={handlePostPayment}
+                        >
+                          Post Payment Reversal
+                        </Button>
+                      )
+                    : saveResponse &&
+                      canPostDocuments &&
+                      statusUpper === "UNPOSTED" && (
+                        <Button
+                          type="button"
+                          color="black"
+                          variant="filled"
+                          loading={isPosting}
+                          onClick={handlePostPayment}
+                        >
+                          Post Payment
+                        </Button>
+                      ))}
               </>
             )}
           </Group>

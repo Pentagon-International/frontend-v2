@@ -699,7 +699,7 @@ export default function PaymentMaster() {
                     </Group>
                   </UnstyledButton>
                 </Box>
-                {isUnposted && (
+                {(isUnposted || isPosted) && (
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {

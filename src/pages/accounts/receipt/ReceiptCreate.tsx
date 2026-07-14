@@ -237,6 +237,7 @@ type ReceiptListItem = {
   bank?: string;
   branch?: string;
   cheque_no?: string;
+  cheque_date?: string | null;
   chq_clrd_date?: string | null;
   dr_cr?: string;
   /** Each party: subledger_name = UI label (Account Name), subledger_code = value for payload */
@@ -305,6 +306,7 @@ type ReceiptFormValues = {
   branch: string;
   cheque_no: string;
   cheque_date: Date | null;
+  chq_clrd_date: Date | null;
   details: DetailRow[];
   adjustments: AdjustmentRow[];
   supporting_documents: SupportingDocument[];
@@ -587,6 +589,7 @@ export default function ReceiptCreate({
       branch: "",
       cheque_no: "",
       cheque_date: null,
+      chq_clrd_date: null,
       details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
@@ -727,7 +730,8 @@ export default function ReceiptCreate({
     };
 
     const dateVal = parseDocumentDate(receiptFromState.date);
-    const chqDateVal = parseDocumentDate(receiptFromState.chq_clrd_date);
+    const chqClrdDateVal = parseDocumentDate(receiptFromState.chq_clrd_date);
+    const chequeDateVal = parseDocumentDate(receiptFromState.cheque_date);
     const roeVal = parseNum(receiptFromState.roe);
     const amountVal = parseNum(receiptFromState.amount);
     const localAmountVal = parseNum(receiptFromState.local_amount);
@@ -807,7 +811,8 @@ export default function ReceiptCreate({
       bank: (receiptFromState.bank ?? "").toString(),
       branch: (receiptFromState.branch ?? "").toString(),
       cheque_no: (receiptFromState.cheque_no ?? "").toString(),
-      cheque_date: chqDateVal,
+      cheque_date: chequeDateVal,
+      chq_clrd_date: chqClrdDateVal,
       details,
       adjustments,
     });
@@ -1029,7 +1034,7 @@ export default function ReceiptCreate({
     });
   }, [detailsSnapshotForLocal, localCurrency]);
 
-  const showChequeSection = form.values.type === "CHEQUE";
+  const showChequeSection = form.values.type !== "CASH";
 
   const addDetailRow = () => {
     setLoadedDetails(null);
@@ -1350,7 +1355,8 @@ export default function ReceiptCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
@@ -1429,7 +1435,8 @@ export default function ReceiptCreate({
       bank: values.bank ?? "",
       branch: values.branch ?? "",
       cheque_no: values.cheque_no ?? "",
-      chq_clrd_date: formatDateDDMMYYYY(values.cheque_date),
+      cheque_date: formatDateDDMMYYYY(values.cheque_date),
+      chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
       dr_cr: "Cr",
       // Party: label = customer_display; payload = subledger_code. dr_cr from UI (default Dr for reversal rows).
       parties: details.map((d) => ({
@@ -1531,6 +1538,42 @@ export default function ReceiptCreate({
   };
 
   const handleSubmit = async (values: ReceiptFormValues) => {
+    // Posted documents: only Cheque Cleared Date may be updated via PATCH.
+    const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
+    if (
+      !_isReversal &&
+      pathname.includes("/edit") &&
+      postedStatus === "POSTED" &&
+      saveResponse?.id != null
+    ) {
+      setIsSubmitting(true);
+      try {
+        const id = saveResponse.id;
+        await apiCallProtected.patch(
+          `${URL.receipt}${id}/`,
+          {
+            id,
+            chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+          },
+          API_HEADER,
+        );
+        await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+        ToastNotification({
+          type: "success",
+          message: "Cheque Cleared Date updated successfully.",
+        });
+      } catch (e: unknown) {
+        console.error("Failed to update cheque cleared date", e);
+        ToastNotification({
+          type: "error",
+          message: "Failed to update Cheque Cleared Date.",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     const headerRoeToastError = validateRoeToast(values.currency, values.roe);
     if (headerRoeToastError) {
       form.setFieldError(
@@ -1998,6 +2041,12 @@ export default function ReceiptCreate({
     reverseReceiptSaveResponse?.status ?? "",
   ).toUpperCase();
   const isViewRoute = pathname.includes("/view");
+  // Posted edit: allow updating Cheque Cleared Date only (PATCH).
+  const isPostedChequeClearanceEdit =
+    !_isReversal &&
+    !isViewRoute &&
+    pathname.includes("/edit") &&
+    statusUpper === "POSTED";
   // Read-only: view route, or receipt/reversal with status POSTED; same field styling as POSTED view
   const isReadOnly =
     isViewRoute ||
@@ -2008,6 +2057,8 @@ export default function ReceiptCreate({
   const inputStyles =
     isReadOnly || reversalFormDisabled ? readOnlyFieldStyles : fieldStyles;
   const headerDateDisabled = isReadOnly;
+  const chequeClearanceDateDisabled =
+    headerDateDisabled && !isPostedChequeClearanceEdit;
   const headerOtherDisabled = isReadOnly || reversalFormDisabled;
   // Receipt & receipt reversal: same unified non-editable style (styling-only, no disabled prop) for all read-only fields
   const useNonEditableStyleOnly = isReadOnly || _isReversal;
@@ -2218,7 +2269,9 @@ export default function ReceiptCreate({
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            isReadOnly && !isPostedChequeClearanceEdit
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
           }
         >
           <Grid>
@@ -2374,8 +2427,8 @@ export default function ReceiptCreate({
               />
             </Grid.Col>
 
-            {/* CHEQUE section - only when Type is CHEQUE */}
-            {showChequeSection && (
+            {/* Cheque fields - shown for all types except CASH (also when editing posted clearance date) */}
+            {(showChequeSection || isPostedChequeClearanceEdit) && (
               <>
                 <Grid.Col span={2}>
                   <TextInput
@@ -2411,13 +2464,6 @@ export default function ReceiptCreate({
                   />
                 </Grid.Col>
                 <Grid.Col span={2}>
-                  {/* <Box
-                    style={
-                      headerOtherDisabled
-                        ? reversalReadOnlyWrapperStyle
-                        : undefined
-                    }
-                  > */}
                   <SingleDateInput
                     label="Cheque Date"
                     placeholder="Select date"
@@ -2432,7 +2478,24 @@ export default function ReceiptCreate({
                         : undefined
                     }
                   />
-                  {/* </Box> */}
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label="Cheque Cleared Date"
+                    placeholder="Select date"
+                    value={normalizeDate(form.values.chq_clrd_date)}
+                    onChange={(date) =>
+                      form.setFieldValue("chq_clrd_date", date)
+                    }
+                    disabled={chequeClearanceDateDisabled}
+                    styles={
+                      chequeClearanceDateDisabled
+                        ? useNonEditableStyleOnly
+                          ? reversalNonEditableStyles
+                          : readOnlyFieldStyles
+                        : undefined
+                    }
+                  />
                 </Grid.Col>
               </>
             )}
@@ -3618,7 +3681,7 @@ export default function ReceiptCreate({
             >
               Cancel
             </Button>
-            {!isReadOnly && (
+            {(!isReadOnly || isPostedChequeClearanceEdit) && (
               <>
                 <Button
                   type="submit"
@@ -3632,11 +3695,14 @@ export default function ReceiptCreate({
                     ? reverseReceiptSaveResponse?.id
                       ? "Update Receipt Reversal"
                       : "Create Receipt Reversal"
-                    : saveResponse?.id
+                    : isPostedChequeClearanceEdit
                       ? "Update Receipt"
-                      : "Save Receipt"}
+                      : saveResponse?.id
+                        ? "Update Receipt"
+                        : "Save Receipt"}
                 </Button>
-                {_isReversal &&
+                {!isPostedChequeClearanceEdit &&
+                  _isReversal &&
                   reverseReceiptSaveResponse &&
                   canPostDocuments &&
                   String(
@@ -3652,7 +3718,11 @@ export default function ReceiptCreate({
                       Post Receipt Reversal
                     </Button>
                   )}
-                {!_isReversal && saveResponse && canPostDocuments && statusUpper === "UNPOSTED" && (
+                {!isPostedChequeClearanceEdit &&
+                  !_isReversal &&
+                  saveResponse &&
+                  canPostDocuments &&
+                  statusUpper === "UNPOSTED" && (
                   <Button
                     type="button"
                     color="black"
